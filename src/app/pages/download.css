@@ -1,0 +1,61 @@
+.downloadPage {
+  max-width: 56rem;
+}
+
+.dlHero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--glacier-space-4);
+  text-align: center;
+  padding-block: var(--glacier-space-6);
+}
+
+.dlHero .lede {
+  max-width: 40rem;
+}
+
+.dlHeroAction {
+  margin-block-start: var(--glacier-space-2);
+}
+
+.dlPlatforms {
+  display: flex;
+  gap: var(--glacier-space-5);
+  margin-block-start: var(--glacier-space-2);
+  color: var(--glacier-text-muted);
+}
+
+.dlPlatform {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--glacier-space-1);
+}
+
+.dlPerks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--glacier-space-4);
+}
+
+.dlPerk {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-5);
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-xl);
+  background: var(--glacier-surface);
+}
+
+.dlPerkIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: var(--glacier-radius-lg);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 16%, transparent);
+  color: var(--glacier-accent-text);
+}

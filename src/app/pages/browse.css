@@ -1,0 +1,170 @@
+/* Browse - the precon catalog. Tiles are physical objects: the commander card
+   rides a 3D DeckStack beside the deck's chrome; all chrome stays Glacier
+   tokens. The toolbar under the header carries search, WUBRG filter chips,
+   sort, and grouping in one aligned row. */
+
+.browseHead {
+  display: grid;
+  gap: var(--glacier-space-2);
+}
+
+/* One aligned toolbar: search grows, chip group and controls wrap as units. */
+.browseToolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-3) var(--glacier-space-4);
+}
+
+.browseSearch {
+  flex: 1 1 auto;
+  min-width: 14rem;
+}
+
+.browseColors {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+}
+
+.browseToolbarLabel {
+  margin-inline-end: var(--glacier-space-1);
+}
+
+.browseColorChip {
+  padding-inline: var(--glacier-space-2);
+}
+
+.browseYearHead {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  color: var(--glacier-accent-text);
+}
+
+.browseGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(25rem, 1fr));
+  gap: var(--glacier-space-4);
+}
+
+/* A tile: the 3D stack on the inline start, deck chrome filling the rest. The
+   commander's blurred art fills the surface behind it, so no tile reads as an
+   empty black slab. */
+.browseTile {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: var(--glacier-space-4);
+  padding: var(--glacier-space-4);
+  border-radius: var(--glacier-radius-xl);
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  background: var(--glacier-surface);
+  overflow: hidden;
+  isolation: isolate;
+  transition:
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    box-shadow var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+/* The blurred commander art crop, dimmed so it reads as ambience, not content;
+   the sharp card stack sits over its own artwork for depth. */
+.browseTileArt {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center 22%;
+  filter: blur(18px) saturate(1.2) brightness(0.5);
+  transform: scale(1.25);
+  transition: filter var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+/* Heavier toward the text end so the deck name, code, and button stay legible;
+   lighter on the start so the card's own art still glows through. */
+.browseTileScrim {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--glacier-surface) 55%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-surface) 78%, transparent) 42%,
+      color-mix(in oklch, var(--glacier-surface) 92%, transparent) 100%
+    );
+}
+
+[dir='rtl'] .browseTileScrim {
+  background:
+    linear-gradient(
+      -90deg,
+      color-mix(in oklch, var(--glacier-surface) 55%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-surface) 78%, transparent) 42%,
+      color-mix(in oklch, var(--glacier-surface) 92%, transparent) 100%
+    );
+}
+
+/* Content rides above the art + scrim. */
+.browseTile > .dsPerspective,
+.browseTile > .browseTileBody {
+  position: relative;
+  z-index: 1;
+}
+
+.browseTile:hover {
+  border-color: var(--glacier-border-strong);
+  box-shadow: var(--glacier-shadow-3);
+}
+
+.browseTile:hover .browseTileArt {
+  filter: blur(16px) saturate(1.3) brightness(0.58);
+}
+
+/* Owned badge riding the top card of the stack. */
+.browseOwnedPill {
+  position: absolute;
+  inset-block-start: var(--glacier-space-2);
+  inset-inline-end: var(--glacier-space-2);
+}
+
+.browseTileBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+}
+
+.browseTileTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-2);
+}
+
+.browseTileText {
+  display: grid;
+  gap: 2px;
+  margin-block-start: auto;
+}
+
+.browseTileName {
+  font-weight: var(--glacier-font-weight-semibold);
+  font-size: var(--glacier-font-size-md);
+  line-height: var(--glacier-leading-sm);
+}
+
+.browseTileCommander {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browseTileBody > button {
+  align-self: flex-start;
+}
+
+.browseTileBody > button svg {
+  margin-inline-end: var(--glacier-space-1);
+}

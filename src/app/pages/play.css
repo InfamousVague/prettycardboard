@@ -1,0 +1,192 @@
+/* Play lobby page: the saved-tables section that sits above the create/join
+   grid. Shares .page rhythm and the glassy card look from app.css. */
+
+.myTableList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-3);
+}
+
+.playPage .myTableRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-4);
+  background: color-mix(in oklch, var(--glacier-bg) 72%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  -webkit-backdrop-filter: blur(var(--glacier-blur-md));
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
+}
+
+.myTableInfo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  min-inline-size: 0;
+}
+
+.myTableTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  flex-wrap: wrap;
+}
+
+.myTableName {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.myTableMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-4);
+  flex-wrap: wrap;
+}
+
+.myTablePlayers {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  flex-wrap: wrap;
+}
+
+.myTablePlayer {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+.myTableActions {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  flex: none;
+}
+
+/* The lobby switch and its hint read as one field in the create card. */
+.myPersistentHint {
+  max-inline-size: 30rem;
+}
+
+/* ================= shared table link — join screen ================= */
+
+.joinPage {
+  min-height: calc(100vh - 8rem);
+  display: grid;
+  place-items: center;
+}
+
+.joinCardWrap {
+  width: min(30rem, 100%);
+}
+
+.joinCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--glacier-space-4);
+  padding: var(--glacier-space-7) var(--glacier-space-6);
+  text-align: center;
+}
+
+.joinCardIcon {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 18%, transparent);
+  color: var(--glacier-accent-text);
+}
+
+.joinMeta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--glacier-space-2);
+}
+
+.joinPlayers {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--glacier-space-3);
+}
+
+.joinPlayer {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+.joinDeck {
+  width: 100%;
+  align-items: stretch;
+  text-align: start;
+}
+
+.joinDeck > [role='combobox'],
+.joinDeck > button {
+  width: 100%;
+}
+
+.joinActions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  width: 100%;
+}
+
+.joinActions > button {
+  width: 100%;
+}
+
+.joinActions > button svg {
+  margin-inline-end: var(--glacier-space-1);
+}
+
+/* Match history: a compact list of games played. */
+.matchHistory {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-3);
+}
+
+.matchList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+}
+
+.matchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border-radius: var(--glacier-radius-md);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 45%, transparent);
+  background: color-mix(in oklch, var(--glacier-surface) 60%, transparent);
+}
+
+.matchRowMain {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.matchName {
+  font-weight: var(--glacier-font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.matchWith {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

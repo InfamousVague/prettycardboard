@@ -1,0 +1,90 @@
+/* Card-back skeletons and empty-state fans. */
+
+.skCard {
+  position: relative;
+  display: inline-block;
+  border-radius: 4.75%/3.41%;
+  overflow: hidden;
+  opacity: 0.55;
+}
+
+.skCard .skBackArt {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-image: var(--pc-card-back);
+  background-size: cover;
+  background-position: center;
+  filter: saturate(0.6) brightness(0.8);
+}
+
+.skSheen {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    color-mix(in oklch, var(--glacier-text) 14%, transparent) 50%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  animation: skSweep 1.6s ease-in-out infinite;
+}
+
+@keyframes skSweep {
+  from {
+    background-position-x: 130%;
+  }
+  to {
+    background-position-x: -30%;
+  }
+}
+
+.skRow {
+  display: flex;
+  gap: var(--glacier-space-4);
+  flex-wrap: wrap;
+}
+
+.skDelay {
+  display: inline-block;
+}
+
+.skEmpty {
+  display: grid;
+  justify-items: center;
+  gap: var(--glacier-space-4);
+  padding: var(--glacier-space-8) var(--glacier-space-5);
+}
+
+.skFan {
+  display: flex;
+}
+
+.skFan > :nth-child(1) {
+  transform: rotate(-12deg) translateX(14px) translateY(6px);
+}
+
+.skFan > :nth-child(3) {
+  transform: rotate(12deg) translateX(-14px) translateY(6px);
+}
+
+.skFan .skCard {
+  opacity: 0.4;
+}
+
+.skFan .skSheen {
+  animation: none;
+}
+
+.skQuip {
+  font-style: italic;
+  max-width: 24rem;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skSheen {
+    animation: none;
+  }
+}

@@ -1,0 +1,2579 @@
+/* The live table. A deep, vignetted felt under free-floating cards; layout is
+   column: top strip -> ribbon -> opponents -> my board, with the chat dock
+   absolutely positioned on the inline-end edge. Colors ride the Glacier
+   tokens but are biased dark - a card table is a stage, not a document. */
+
+.table {
+  --pc-settle: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* The bottom strip's fixed height; the dock locks its bottom edge to the
+     playmat with it. */
+  --pc-strip-h: 11.5rem;
+  position: relative;
+  /* Grow to fill the route frame; height:100% cannot resolve against the
+     frame's min-height and collapses the felt to content height. */
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--glacier-text);
+}
+
+.tableFelt {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  /* The player's playmat IS the table surface; the gradients above it keep the
+     accent wash and enough darkness for card readability on any mat. */
+  background:
+    radial-gradient(120% 90% at 50% 0%, color-mix(in oklch, var(--glacier-accent-solid) 12%, transparent), transparent 60%),
+    radial-gradient(140% 120% at 50% 110%, oklch(0.17 0.03 265 / 0.55), oklch(0.13 0.02 268 / 0.6) 55%, oklch(0.1 0.015 270 / 0.72) 100%),
+    var(--pc-playmat);
+  background-size: cover, cover, cover;
+  background-position: center;
+}
+
+.tableFelt::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(90% 70% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.4) 100%);
+}
+
+.tableTop,
+.ribbonRow,
+.tableMain,
+.tableSide {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- top strip ---- */
+
+.tableTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-4);
+  padding: var(--glacier-space-2) var(--glacier-space-5);
+}
+
+.tableMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+}
+
+.tableCode {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  background: none;
+  border: none;
+  padding: var(--glacier-space-1);
+  color: var(--glacier-text-muted);
+  cursor: pointer;
+  border-radius: var(--glacier-radius-sm);
+}
+
+.tableCode:hover {
+  color: var(--glacier-text);
+}
+
+.tableTopActions {
+  display: flex;
+  gap: var(--glacier-space-2);
+}
+
+/* ---- phase ribbon + turn chrome ---- */
+
+.ribbonRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--glacier-space-3);
+  padding: 0 var(--glacier-space-4) var(--glacier-space-2);
+  padding-inline-end: 18rem; /* clear the chat dock */
+  flex-wrap: wrap;
+}
+
+.markerChips {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+}
+
+.markerChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  font-size: var(--glacier-font-size-xs);
+  font-family: var(--glacier-font-mono);
+  color: var(--glacier-text-muted);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
+  background: color-mix(in oklch, oklch(0.2 0.02 265) 75%, transparent);
+  border-radius: var(--glacier-radius-full);
+  padding: 0.15rem 0.55rem;
+  backdrop-filter: blur(var(--glacier-blur-sm));
+}
+
+.markerChip[data-kind='monarch'] {
+  color: var(--glacier-warning-text);
+}
+
+.markerChip[data-kind='initiative'] {
+  color: var(--glacier-info-text);
+}
+
+.phaseRibbon {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, oklch(0.17 0.02 265) 82%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+}
+
+.phaseStop {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  border: none;
+  background: none;
+  color: var(--glacier-text-subtle);
+  font-family: var(--glacier-font-sans);
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-medium);
+  padding: 0.28rem 0.6rem;
+  border-radius: var(--glacier-radius-full);
+  cursor: pointer;
+  transition: color 140ms ease-out, background 140ms ease-out;
+}
+
+.phaseStop:hover:not(:disabled) {
+  color: var(--glacier-text);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 14%, transparent);
+}
+
+.phaseStop:disabled {
+  cursor: default;
+}
+
+.phaseStop[data-current] {
+  color: var(--glacier-accent-contrast);
+  background: var(--glacier-accent-solid);
+  box-shadow: 0 0 12px color-mix(in oklch, var(--glacier-accent-solid) 55%, transparent);
+}
+
+.phaseStop .phaseIcon {
+  display: inline-flex;
+}
+
+@media (max-width: 1400px) {
+  .phaseStop:not([data-current]) .phaseLabel {
+    display: none;
+  }
+}
+
+.turnCluster {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+.turnLabel {
+  font-family: var(--glacier-font-mono);
+  white-space: nowrap;
+}
+
+.turnLabel .turnWord {
+  text-transform: capitalize;
+}
+
+.endTurnWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+
+/* The SplitButton wrapper carries data-lit; give it the control radius so
+   the pulsing glow hugs the fused pair. */
+.endTurnBtn {
+  border-radius: var(--glacier-control-radius);
+}
+
+.endTurnBtn[data-lit] {
+  animation: pcEndTurnPulse 1.9s ease-in-out infinite;
+}
+
+@keyframes pcEndTurnPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--glacier-accent-solid) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 18px 3px color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent);
+  }
+}
+
+.endTurnMore {
+  display: inline-flex;
+  align-items: center;
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
+  border-radius: var(--glacier-radius-md);
+  background: color-mix(in oklch, oklch(0.22 0.02 265) 70%, transparent);
+  color: var(--glacier-text-muted);
+  padding: 0 0.3rem;
+  margin-inline-start: 2px;
+  cursor: pointer;
+}
+
+.endTurnMore:hover {
+  color: var(--glacier-text);
+}
+
+/* ---- main column ---- */
+
+.tableMain {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-inline-end: 17rem; /* chat dock */
+}
+
+/* ---- opponents ---- */
+
+.tableOpponents {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--glacier-space-3);
+  padding: 0 var(--glacier-space-4);
+}
+
+.tableOpponents[data-rows='2'] {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(3, 1fr);
+  grid-auto-columns: unset;
+}
+
+.tableWaiting {
+  display: grid;
+  place-content: center;
+  gap: var(--glacier-space-2);
+  text-align: center;
+  justify-items: center;
+  border: var(--glacier-hairline) dashed color-mix(in oklch, var(--glacier-border) 70%, transparent);
+  border-radius: var(--glacier-radius-xl);
+  margin: var(--glacier-space-2);
+}
+
+.oppBoard {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
+  border-radius: var(--glacier-radius-xl);
+  background-image:
+    linear-gradient(oklch(0.14 0.02 268 / 0.6), oklch(0.14 0.02 268 / 0.6)),
+    var(--pc-board-mat, linear-gradient(transparent, transparent));
+  background-size: auto, cover;
+  background-position: center;
+  background-color: color-mix(in oklch, oklch(0.2 0.02 265) 70%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  overflow: hidden;
+  transition: border-color 240ms ease-out, box-shadow 240ms ease-out;
+}
+
+/* Turn indicator: the active seat's frame glows. */
+.seatFrame[data-active] {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 65%, var(--glacier-border));
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent),
+    0 0 22px color-mix(in oklch, var(--glacier-accent-solid) 28%, transparent);
+  animation: pcSeatPulse 2.6s ease-in-out infinite;
+}
+
+@keyframes pcSeatPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent),
+      0 0 16px color-mix(in oklch, var(--glacier-accent-solid) 22%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in oklch, var(--glacier-accent-solid) 60%, transparent),
+      0 0 30px color-mix(in oklch, var(--glacier-accent-solid) 38%, transparent);
+  }
+}
+
+.oppHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border-block-end: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 45%, transparent);
+}
+
+.seatName {
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seatMarker {
+  display: inline-flex;
+  color: var(--glacier-warning-text);
+}
+
+.oppLife {
+  font-family: var(--glacier-font-mono);
+  font-weight: var(--glacier-font-weight-bold);
+  font-size: var(--glacier-font-size-lg);
+  color: var(--glacier-success-text);
+  margin-inline-start: auto;
+}
+
+.oppPoison,
+.oppHandCount {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+  font-family: var(--glacier-font-mono);
+}
+
+.oppPoison {
+  color: var(--glacier-warning-text);
+}
+
+.cmdChip {
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  background: var(--glacier-surface-sunken);
+  color: var(--glacier-text-muted);
+  border-radius: var(--glacier-radius-full);
+  font-size: var(--glacier-font-size-xs);
+  padding: 0.1rem 0.5rem;
+  cursor: pointer;
+}
+
+.cmdChip:hover {
+  color: var(--glacier-danger-text);
+  border-color: var(--glacier-danger-text);
+}
+
+.oppField {
+  position: relative;
+  flex: 1;
+  min-height: 6rem;
+}
+
+/* ---- my board ---- */
+
+.myBoard {
+  position: relative;
+  flex: 1.35;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* The playmat bleeds to the edges; the hand/zones/vitals float over its
+     bottom rather than living in a separate boxed strip below the field. */
+  padding: 0;
+}
+
+.myField {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  /* The board IS the continuous playmat (the full-bleed .tableFelt below): no
+     boxed border or inset mat, so the surface runs edge-to-edge to the bottom
+     of the screen and the hand/zones/vitals float over it. A soft top scrim
+     keeps battlefield cards readable against bright mats. */
+  border: none;
+  border-radius: 0;
+  background: linear-gradient(oklch(0.13 0.02 268 / 0.28), transparent 45%);
+  transition: box-shadow 240ms ease-out;
+}
+
+/* On your turn the field border warms to the accent; the screen-edge glow
+   (.turnEdgeGlow) now carries the loud part of the invitation. */
+.myBoard[data-my-turn] .myField {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-border));
+}
+
+/* Your turn, screen-wide: an accent glow hugs all four edges of the play
+   area and breathes. Center stays clear, so cards and chrome read normally. */
+.turnEdgeGlow {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  border-radius: inherit;
+  animation: pcTurnEdge 2.8s ease-in-out infinite;
+}
+
+@keyframes pcTurnEdge {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 55px 3px color-mix(in oklch, var(--glacier-accent-solid) 24%, transparent),
+      inset 0 0 130px 26px color-mix(in oklch, var(--glacier-accent-solid) 11%, transparent);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 74px 6px color-mix(in oklch, var(--glacier-accent-solid) 40%, transparent),
+      inset 0 0 165px 38px color-mix(in oklch, var(--glacier-accent-solid) 18%, transparent);
+  }
+}
+
+/* The one-shot "Your turn" pill, top-center under the ribbon. */
+.turnPill {
+  position: absolute;
+  top: 4.4rem;
+  inset-inline-start: 50%;
+  translate: -50%;
+  z-index: 66;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: 0.4rem 0.5rem 0.4rem 0.9rem;
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-accent-solid) 55%, var(--glacier-border));
+  background: color-mix(in oklch, var(--glacier-accent-solid) 22%, oklch(0.18 0.02 265 / 0.92));
+  color: var(--glacier-text);
+  font-weight: var(--glacier-font-weight-semibold);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  box-shadow: 0 10px 30px color-mix(in oklch, var(--glacier-accent-solid) 22%, transparent);
+}
+
+.turnPillText {
+  font-size: var(--glacier-font-size-sm);
+}
+
+.turnPillClose {
+  display: inline-grid;
+  place-items: center;
+  padding: 0.2rem;
+  border: none;
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--glacier-text) 10%, transparent);
+  color: var(--glacier-text-muted);
+  cursor: pointer;
+  transition: color 120ms ease-out, background 120ms ease-out;
+}
+
+@media (hover: hover) {
+  .turnPillClose:hover {
+    color: var(--glacier-text);
+    background: color-mix(in oklch, var(--glacier-text) 18%, transparent);
+  }
+}
+
+/* Touch: a real finger target for the dismiss control. */
+@media (pointer: coarse) {
+  .turnPillClose {
+    padding: 0.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turnEdgeGlow {
+    animation: none;
+    box-shadow:
+      inset 0 0 64px 4px color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent),
+      inset 0 0 150px 30px color-mix(in oklch, var(--glacier-accent-solid) 14%, transparent);
+  }
+}
+
+/* Rows-mode lane guides, visible while dragging. */
+.myField[data-lanes]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(to bottom, transparent calc(20% - 1px), color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent) 20%, transparent calc(20% + 1px)),
+    linear-gradient(to bottom, transparent calc(52% - 1px), color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent) 52%, transparent calc(52% + 1px)),
+    linear-gradient(to bottom, transparent calc(84% - 1px), color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent) 84%, transparent calc(84% + 1px));
+}
+
+/* combat banner */
+
+.combatBanner {
+  position: absolute;
+  top: calc(-1 * var(--glacier-space-1));
+  inset-inline-start: 50%;
+  translate: -50% -100%;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  /* One line always: pieces never wrap; the hint yields (ellipsis) first. */
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  max-width: min(92vw, 60rem);
+  padding: 0.3rem 0.9rem;
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-danger-solid) 45%, var(--glacier-border));
+  background: color-mix(in oklch, var(--glacier-danger-solid) 18%, oklch(0.18 0.02 265 / 0.9));
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  animation: pcBannerIn 260ms var(--pc-settle);
+}
+
+.combatBanner[data-mode='block'] {
+  border-color: color-mix(in oklch, var(--glacier-info-solid) 45%, var(--glacier-border));
+  background: color-mix(in oklch, var(--glacier-info-solid) 18%, oklch(0.18 0.02 265 / 0.9));
+}
+
+@keyframes pcBannerIn {
+  from {
+    opacity: 0;
+    translate: -50% -60%;
+    scale: 0.9;
+  }
+}
+
+/* ---- field cards ---- */
+
+.fieldCard {
+  position: absolute;
+  transform: translate(-50%, -50%) rotate(var(--rest-tilt, 0deg));
+  cursor: grab;
+  touch-action: none;
+}
+
+/* Generous hitbox: pointer targets reach 8px beyond the card's visual bounds. */
+.fieldCard::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+
+.fieldCardShell,
+.fieldCard > :first-child {
+  transition: transform 320ms var(--pc-settle);
+}
+
+.fieldCard:hover .fieldCardShell {
+  transform: translateY(-12px) scale(1.05);
+  transition: transform 150ms ease-out;
+}
+
+/* Pointerdown lift, before the 6px drag threshold arms. */
+.fieldCard:active > .fieldCardShell {
+  transform: translateY(-8px) scale(1.04);
+  transition: transform 90ms ease-out;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.5));
+}
+
+.fieldCard:hover {
+  z-index: 20 !important;
+}
+
+.fieldCard[data-dragging] {
+  cursor: grabbing;
+}
+
+.fieldCard[data-dragging] .fieldCardShell {
+  transform: rotate(var(--drag-tilt, 0deg)) scale(1.06);
+  transition: transform 90ms ease-out;
+  filter: drop-shadow(0 16px 26px rgba(0, 0, 0, 0.55));
+}
+
+/* Cards land with a pop. */
+.fieldCard {
+  animation: pcLand 340ms var(--pc-settle);
+}
+
+@keyframes pcLand {
+  0% {
+    opacity: 0;
+    scale: 0.72;
+  }
+  100% {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+/* Attachments tuck under their host: down-right, behind, slightly smaller. */
+.fieldCard[data-attachment] > .fieldCardShell,
+.fieldCard[data-attachment] > .gcPerspective {
+  scale: 0.94;
+}
+
+.fieldCard[data-attachment] {
+  filter: brightness(0.92);
+}
+
+/* Combat affordances: green invitation to attack, blue to block. */
+.fieldCard[data-affordance='attack']::before,
+.fieldCard[data-affordance='block']::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 12px;
+  pointer-events: none;
+  z-index: 3;
+  border: 2px solid var(--glacier-success-solid);
+  box-shadow: 0 0 14px color-mix(in oklch, var(--glacier-success-solid) 60%, transparent);
+  animation: pcAffordance 1.6s ease-in-out infinite;
+}
+
+.fieldCard[data-affordance='block']::before {
+  border-color: var(--glacier-info-solid);
+  box-shadow: 0 0 14px color-mix(in oklch, var(--glacier-info-solid) 60%, transparent);
+}
+
+.fieldCard[data-blocking]::before {
+  animation: none;
+  opacity: 1 !important;
+  border-width: 3px;
+}
+
+@keyframes pcAffordance {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Attackers step forward. */
+.myField .fieldCard[data-attacker] .fieldCardShell {
+  transform: translateY(-8px);
+}
+
+.oppField .fieldCard[data-attacker] {
+  translate: 0 6px;
+}
+
+.oppField .fieldCard[data-block-target] {
+  cursor: pointer;
+}
+
+.oppField .fieldCard[data-block-target]::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 10px;
+  pointer-events: none;
+  z-index: 3;
+  border: 2px dashed var(--glacier-info-solid);
+  animation: pcAffordance 1.2s ease-in-out infinite;
+}
+
+.attackBadge {
+  position: absolute;
+  top: -6px;
+  inset-inline-start: -6px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: var(--glacier-radius-full);
+  background: var(--glacier-danger-solid);
+  color: var(--glacier-danger-contrast, white);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+/* Blocker thumbs clustered beneath an attacker - no arrows. */
+.blockCluster {
+  position: absolute;
+  top: 100%;
+  inset-inline-start: 50%;
+  translate: -50% -20%;
+  display: flex;
+  gap: 2px;
+  z-index: 2;
+}
+
+.blockThumb {
+  width: 26px;
+  height: 36px;
+  padding: 0;
+  border: 1.5px solid var(--glacier-info-solid);
+  border-radius: 4px;
+  overflow: hidden;
+  background: oklch(0.2 0.02 265);
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.blockThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.blockThumbBack {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-image: var(--pc-card-back);
+  background-size: cover;
+  background-position: center;
+}
+
+/* ---- board tools (mode switch + dice/markers) ---- */
+
+.boardTools {
+  position: absolute;
+  bottom: var(--glacier-space-2);
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  opacity: 0.72;
+  transition: opacity 160ms ease-out;
+}
+
+.boardTools:hover {
+  opacity: 1;
+}
+
+.boardToolsStart {
+  inset-inline-start: var(--glacier-space-2);
+}
+
+.boardToolsEnd {
+  inset-inline-end: var(--glacier-space-2);
+}
+
+/* ---- the stack tray ---- */
+
+.stackTray {
+  position: absolute;
+  top: 38%;
+  inset-inline-start: 50%;
+  translate: -50% -50%;
+  z-index: 40;
+  display: grid;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-3);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-accent-solid) 35%, var(--glacier-border));
+  border-radius: var(--glacier-radius-xl);
+  background: color-mix(in oklch, oklch(0.16 0.02 265) 85%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  box-shadow: var(--glacier-shadow-4, 0 18px 48px rgba(0, 0, 0, 0.55));
+}
+
+.stackTrayHead {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  color: var(--glacier-text-muted);
+}
+
+.stackFan {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--glacier-space-2);
+}
+
+.stackEntry {
+  position: relative;
+  display: grid;
+  gap: var(--glacier-space-1);
+  justify-items: center;
+}
+
+.stackEntry[data-top] {
+  translate: 0 -6px;
+}
+
+.stackActions {
+  display: grid;
+  gap: 2px;
+  justify-items: stretch;
+  opacity: 0;
+  transition: opacity 140ms ease-out;
+}
+
+.stackEntry:hover .stackActions,
+.stackEntry[data-top] .stackActions {
+  opacity: 1;
+}
+
+.stackResolveSplit {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.stackZoneMore {
+  display: inline-flex;
+  align-items: center;
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
+  border-radius: var(--glacier-radius-sm);
+  background: color-mix(in oklch, oklch(0.24 0.02 265) 70%, transparent);
+  color: var(--glacier-text-muted);
+  padding: 0 0.25rem;
+  cursor: pointer;
+}
+
+.stackZoneMore:hover {
+  color: var(--glacier-text);
+}
+
+/* ---- bottom strip ---- */
+
+.myStrip {
+  /* Floats over the bottom of the playmat instead of a boxed section below it.
+     Empty gaps let clicks fall through to the battlefield; the piles, hand and
+     vitals re-enable pointer events on themselves. */
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 6;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--glacier-space-4);
+  padding: 0 var(--glacier-space-4) var(--glacier-space-3);
+  pointer-events: none;
+}
+
+.myStrip > * {
+  pointer-events: auto;
+}
+
+.zonePiles {
+  display: flex;
+  gap: var(--glacier-space-3);
+  /* Align card TOPS across every pile so the commander (which has no count
+     number beneath it) sits in the same slot as library/graveyard/exile
+     rather than dropping to their count row. */
+  align-items: flex-start;
+}
+
+.zonePiles:not([data-mine]) {
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+}
+
+.zonePile {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: var(--glacier-space-1);
+}
+
+/* Piles are buttons now (viewers, menus) - keep them looking like piles. */
+.pileBtn {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.zoneCommand {
+  display: flex;
+  gap: var(--glacier-space-2);
+  align-items: flex-start;
+}
+
+.cmdCard {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+
+.taxBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  font-size: 0.62rem;
+  font-family: var(--glacier-font-mono);
+  color: var(--glacier-warning-text);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-warning-solid, orange) 40%, transparent);
+  border-radius: var(--glacier-radius-full);
+  padding: 0 0.4rem;
+  background: color-mix(in oklch, oklch(0.2 0.02 265) 80%, transparent);
+  white-space: nowrap;
+}
+
+.pileCount {
+  font-family: var(--glacier-font-mono);
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle);
+}
+
+.pileEmpty {
+  aspect-ratio: 488 / 680;
+  border: var(--glacier-hairline) dashed color-mix(in oklch, var(--glacier-border) 60%, transparent);
+  border-radius: 8%;
+}
+
+/* hand fan */
+
+.myHand {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  min-width: 0;
+  border-radius: var(--glacier-radius-xl) var(--glacier-radius-xl) 0 0;
+  transition: box-shadow 160ms ease-out, background 160ms ease-out;
+}
+
+/* A battlefield card hovers the hand's buffer: light it up as a drop target. */
+.myHand[data-drop] {
+  background: color-mix(in oklch, var(--glacier-accent-solid) 12%, transparent);
+  box-shadow: inset 0 2px 0 var(--glacier-accent-solid), 0 -8px 24px color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent);
+}
+
+.handCard {
+  position: relative;
+  /* Overlap scales with the card so the fan keeps its shape at any size. */
+  margin-inline: calc(-22px * var(--card-scale, 1));
+  cursor: grab;
+  touch-action: none;
+}
+
+.handCard::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+
+/* The dock magnification (HandCard's motion values) scales from the card's
+   base so the bump grows upward out of the fan. */
+.handCardZoom {
+  transform-origin: bottom center;
+}
+
+/* Reduced motion opts out of the magnification springs; keep the old
+   instant lift so hover still answers. */
+@media (prefers-reduced-motion: reduce) {
+  .handCard:hover {
+    translate: 0 -26px;
+    z-index: 10;
+  }
+}
+
+/* pointer-following ghost while dragging out of the hand */
+
+.dragGhost {
+  position: fixed;
+  z-index: 95;
+  pointer-events: none;
+  transform: translate(-50%, -60%) rotate(var(--drag-tilt, 0deg)) scale(1.06);
+  filter: drop-shadow(0 18px 30px rgba(0, 0, 0, 0.6));
+}
+
+/* defender seat picker (multiplayer attacks) */
+
+.defenderPick {
+  position: fixed;
+  z-index: 96;
+  display: grid;
+  gap: var(--glacier-space-1);
+  min-width: 10rem;
+  padding: var(--glacier-space-2);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-danger-solid) 40%, var(--glacier-border));
+  border-radius: var(--glacier-radius-lg);
+  background: color-mix(in oklch, oklch(0.18 0.02 265) 92%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  box-shadow: var(--glacier-shadow-4, 0 12px 32px rgba(0, 0, 0, 0.5));
+  animation: pcBannerIn 200ms var(--pc-settle);
+}
+
+.defenderChip {
+  text-align: start;
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  background: var(--glacier-surface-sunken);
+  color: var(--glacier-text);
+  font-family: var(--glacier-font-sans);
+  font-size: var(--glacier-font-size-sm);
+  padding: var(--glacier-space-1) var(--glacier-space-2);
+  border-radius: var(--glacier-radius-md);
+  cursor: pointer;
+}
+
+.defenderChip:hover {
+  border-color: var(--glacier-danger-solid);
+  color: var(--glacier-danger-text);
+}
+
+/* vitals */
+
+.myVitals {
+  position: relative;
+  display: grid;
+  gap: var(--glacier-space-2);
+  justify-items: center;
+  padding: var(--glacier-space-3);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
+  border-radius: var(--glacier-radius-xl);
+  background: color-mix(in oklch, oklch(0.2 0.02 265) 72%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+}
+
+.lifeBlock {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+.lifeBig {
+  font-family: var(--glacier-font-mono);
+  font-size: 2.1rem;
+  font-weight: var(--glacier-font-weight-bold);
+  line-height: 1;
+  min-width: 2ch;
+  text-align: center;
+  display: inline-block;
+}
+
+.poisonChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  background: var(--glacier-surface-sunken);
+  color: var(--glacier-warning-text);
+  border-radius: var(--glacier-radius-full);
+  font-size: var(--glacier-font-size-xs);
+  font-family: var(--glacier-font-mono);
+  padding: 0.15rem 0.6rem;
+  cursor: pointer;
+}
+
+.convenience {
+  display: flex;
+  gap: var(--glacier-space-1);
+}
+
+.tokenForm {
+  display: flex;
+  gap: var(--glacier-space-1);
+}
+
+/* counters on cards */
+
+.counterBadges {
+  position: absolute;
+  top: 4%;
+  inset-inline-end: 4%;
+  display: flex;
+  gap: 2px;
+  z-index: 2;
+}
+
+.counterBadge {
+  display: grid;
+  place-items: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding-inline: 0.25rem;
+  border-radius: var(--glacier-radius-full);
+  background: var(--glacier-accent-solid);
+  color: var(--glacier-accent-contrast, white);
+  font-size: 0.62rem;
+  font-weight: var(--glacier-font-weight-bold);
+  font-family: var(--glacier-font-mono);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* ---- context menu ---- */
+
+.cardMenu {
+  position: fixed;
+  z-index: 90;
+  display: grid;
+  min-width: 12rem;
+  max-height: min(26rem, 80vh);
+  overflow-y: auto;
+  padding: var(--glacier-space-1);
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  border-radius: var(--glacier-radius-lg);
+  background: var(--glacier-surface-raised);
+  box-shadow: var(--glacier-shadow-4, 0 12px 32px rgba(0, 0, 0, 0.5));
+}
+
+.menuItem {
+  text-align: start;
+  border: none;
+  background: none;
+  color: var(--glacier-text);
+  font-family: var(--glacier-font-sans);
+  font-size: var(--glacier-font-size-sm);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border-radius: var(--glacier-radius-sm);
+  cursor: pointer;
+}
+
+.menuItem:hover {
+  background: var(--glacier-surface-sunken);
+}
+
+.menuExpander[data-open] {
+  background: var(--glacier-surface-sunken);
+}
+
+.menuInset {
+  display: grid;
+  margin-inline-start: var(--glacier-space-3);
+  border-inline-start: var(--glacier-hairline) solid var(--glacier-border);
+  padding-inline-start: var(--glacier-space-1);
+}
+
+.menuScroll {
+  max-height: 10rem;
+  overflow-y: auto;
+}
+
+.menuCustom {
+  display: flex;
+  gap: var(--glacier-space-1);
+  padding: var(--glacier-space-1) var(--glacier-space-2);
+}
+
+.menuRule {
+  border: none;
+  border-block-start: var(--glacier-hairline) solid var(--glacier-border);
+  margin: var(--glacier-space-1) 0;
+}
+
+/* ---- library viewers ---- */
+
+.libPeek {
+  display: grid;
+  gap: var(--glacier-space-3);
+}
+
+.libPeekRow {
+  display: flex;
+  gap: var(--glacier-space-2);
+  align-items: flex-start;
+  overflow-x: auto;
+  padding: var(--glacier-space-2) var(--glacier-space-1);
+  list-style: none;
+  margin: 0;
+}
+
+.libPeekCard {
+  position: relative;
+  cursor: grab;
+  flex: none;
+}
+
+.libPeekCard[data-selected]::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 2px solid var(--glacier-accent-solid);
+  border-radius: 10px;
+  z-index: 3;
+  pointer-events: none;
+  box-shadow: 0 0 12px color-mix(in oklch, var(--glacier-accent-solid) 55%, transparent);
+}
+
+.libIndex {
+  position: absolute;
+  top: -8px;
+  inset-inline-start: -4px;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: var(--glacier-radius-full);
+  background: var(--glacier-surface-raised);
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  font-size: 0.62rem;
+  font-family: var(--glacier-font-mono);
+  color: var(--glacier-text-muted);
+}
+
+.libActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-2);
+}
+
+.libSearch {
+  display: grid;
+  gap: var(--glacier-space-3);
+}
+
+.libSearchScroll {
+  max-height: 52vh;
+}
+
+.libSearchGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-1);
+}
+
+.libSearchCard {
+  display: grid;
+  gap: var(--glacier-space-1);
+  justify-items: center;
+}
+
+/* ---- pile browser ---- */
+
+.pileScroll {
+  max-height: 58vh;
+}
+
+.pileGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-1);
+}
+
+.pileCard {
+  display: grid;
+  gap: var(--glacier-space-1);
+  justify-items: center;
+}
+
+.pileActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px;
+}
+
+/* ---- mulligan overlay ---- */
+
+.mullOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklch, oklch(0.1 0.02 268) 70%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+}
+
+.mullPanel {
+  display: grid;
+  gap: var(--glacier-space-4);
+  justify-items: center;
+  padding: var(--glacier-space-6, 2rem);
+  max-width: min(92vw, 70rem);
+}
+
+.mullHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--glacier-space-3);
+}
+
+.mullFan {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.mullCard {
+  margin-inline: -16px;
+}
+
+.mullCard:hover {
+  z-index: 10;
+}
+
+.mullFan[data-picking] .mullCard {
+  cursor: pointer;
+}
+
+.mullActions {
+  display: flex;
+  gap: var(--glacier-space-3);
+}
+
+/* ---- commander return prompt ---- */
+
+.cmdChoiceCard {
+  display: grid;
+  place-items: center;
+  padding: var(--glacier-space-2);
+}
+
+/* ---- dice banner ---- */
+
+.rollBanner {
+  position: fixed;
+  top: 14%;
+  inset-inline-start: 50%;
+  translate: -50%;
+  z-index: 65;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: 0.5rem 1rem;
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border));
+  background: color-mix(in oklch, oklch(0.17 0.02 265) 88%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  font-family: var(--glacier-font-mono);
+  font-size: var(--glacier-font-size-sm);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+/* ---- flight clones (appended to body) ---- */
+
+.pcFlight {
+  position: fixed;
+  top: 0;
+  inset-inline-start: 0;
+  z-index: 120;
+  pointer-events: none;
+  border-radius: 4.75% / 3.41%;
+  background-size: cover;
+  background-position: center;
+  background-color: oklch(0.22 0.01 260);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.55);
+  will-change: transform;
+}
+
+.pcFlightBack {
+  background-image: var(--pc-card-back);
+}
+
+/* ---- side dock ---- */
+
+.tableSide {
+  position: absolute;
+  top: 4.4rem;
+  bottom: calc(var(--pc-strip-h) + 1rem);
+  inset-inline-end: var(--glacier-space-3);
+  width: 16rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-3);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
+  border-radius: var(--glacier-radius-xl);
+  background: color-mix(in oklch, oklch(0.18 0.02 265) 80%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+}
+
+.sidePreview {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+}
+
+.sidePreview[data-empty] {
+  border: var(--glacier-hairline) dashed color-mix(in oklch, var(--glacier-border) 50%, transparent);
+  border-radius: var(--glacier-radius-lg);
+}
+
+.sideScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+  padding-inline-end: var(--glacier-space-1);
+}
+
+.sideLine {
+  margin: 0;
+  font-size: var(--glacier-font-size-xs);
+  line-height: 1.45;
+  color: var(--glacier-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.sideLine strong {
+  color: var(--glacier-text);
+}
+
+.sideEmpty {
+  margin: 0;
+  padding: var(--glacier-space-3) var(--glacier-space-1);
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle);
+  text-align: center;
+}
+
+/* ---- side head: title + log toggle ---- */
+
+.sideHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-2);
+}
+
+.sideHeadTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--glacier-text-subtle);
+}
+
+/* ---- players list ---- */
+
+.sidePlayers {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+  padding-inline-end: var(--glacier-space-1);
+}
+
+.playerRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-2);
+  border: var(--glacier-hairline) solid transparent;
+  border-radius: var(--glacier-radius-lg);
+  transition:
+    background var(--glacier-duration-fast) var(--glacier-ease-out),
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.playerRow[data-me] {
+  background: color-mix(in oklch, var(--glacier-surface-sunken) 70%, transparent);
+}
+
+.playerRow[data-active] {
+  border-color: color-mix(in oklch, var(--glacier-info-solid) 55%, transparent);
+  background: color-mix(in oklch, var(--glacier-info-solid) 12%, transparent);
+}
+
+.playerBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.playerNameRow {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  min-width: 0;
+}
+
+.playerName {
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-medium);
+  color: var(--glacier-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playerYou {
+  flex: none;
+  font-size: 0.625rem;
+  font-weight: var(--glacier-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--glacier-text-subtle);
+  padding: 0 0.3rem;
+  border-radius: var(--glacier-radius-sm);
+  background: var(--glacier-surface-sunken);
+}
+
+.playerBadge {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  color: var(--glacier-text-subtle);
+}
+
+.playerBadgeMonarch {
+  color: var(--glacier-warning-solid, oklch(0.8 0.15 85));
+}
+
+.playerBadgeInit {
+  color: var(--glacier-info-solid);
+}
+
+.playerMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+.playerStat {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+
+.playerTurnDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--glacier-info-solid);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--glacier-info-solid) 25%, transparent);
+}
+
+.sideSpectators {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+  margin-top: var(--glacier-space-2);
+  padding-top: var(--glacier-space-2);
+  border-top: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 40%, transparent);
+}
+
+.spectatorName {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+  padding-inline: var(--glacier-space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tableSpectatorSpace {
+  flex: 0.2;
+}
+
+/* ---- reduced motion: everything degrades to fast fades ---- */
+
+@media (prefers-reduced-motion: reduce) {
+  .seatFrame[data-active],
+  .endTurnBtn[data-lit],
+  .fieldCard[data-affordance='attack']::before,
+  .fieldCard[data-affordance='block']::before,
+  .oppField .fieldCard[data-block-target]::before {
+    animation: none;
+  }
+
+  .fieldCard {
+    animation: pcFadeIn 120ms ease-out;
+  }
+
+  .fieldCardShell,
+  .fieldCard:hover .fieldCardShell,
+  .fieldCard[data-dragging] .fieldCardShell,
+  .handCard {
+    transition: none;
+  }
+
+  .fieldCard:hover .fieldCardShell {
+    transform: none;
+  }
+
+  .combatBanner,
+  .defenderPick {
+    animation: pcFadeIn 120ms ease-out;
+  }
+}
+
+@keyframes pcFadeIn {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Touch: zone/stack actions can't wait for hover. */
+@media (hover: none) {
+  .stackActions {
+    opacity: 1;
+  }
+}
+
+/* Host-only remove control on AI seats (pre-start). */
+.seatBotRemove {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0.1rem;
+  cursor: pointer;
+  color: var(--glacier-text-muted);
+  border-radius: var(--glacier-radius-sm);
+}
+
+.seatBotRemove:hover {
+  color: var(--glacier-danger-text);
+  background: color-mix(in oklch, var(--glacier-danger-solid) 18%, transparent);
+}
+
+/* Dock rows stage that player's board in the top strip. */
+.playerRow[data-focusable] {
+  cursor: pointer;
+}
+
+.playerRow[data-focusable]:hover {
+  background: color-mix(in oklch, var(--glacier-accent-solid) 10%, transparent);
+}
+
+/* In a running game the staged opponent board is a compact panel; MY board
+   is the star and takes everything else. */
+.tableOpponents[data-solo] {
+  flex: 0 0 clamp(10.5rem, 24vh, 16rem);
+  min-height: 0;
+}
+
+/* ---- staged board layout: one big board, minis on the rail ---- */
+
+.stageArea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  padding: 0 var(--glacier-space-4);
+}
+
+.stageArea .seatFrame[data-stage] {
+  flex: 1;
+  min-height: 0;
+}
+
+.myBoard[data-strip-only] {
+  flex: 0 0 auto;
+}
+
+/* ---- mini boards ---- */
+
+.miniBoards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  margin-block-end: var(--glacier-space-3);
+}
+
+.miniBoard {
+  appearance: none;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
+  border-radius: var(--glacier-radius-lg);
+  background: color-mix(in oklch, oklch(0.17 0.02 265) 78%, transparent);
+  cursor: pointer;
+  overflow: hidden;
+  text-align: start;
+  transition: border-color 160ms ease-out, box-shadow 160ms ease-out;
+}
+
+.miniBoard:hover {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 55%, var(--glacier-border));
+}
+
+.miniBoard[data-active] {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 65%, var(--glacier-border));
+  box-shadow: 0 0 10px color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent);
+}
+
+.miniHead {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-1) var(--glacier-space-2);
+}
+
+.miniName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.miniLife {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  font-family: var(--glacier-font-mono);
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+
+.miniViewport {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  border-block-start: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 40%, transparent);
+  background-image:
+    linear-gradient(oklch(0.13 0.02 268 / 0.45), oklch(0.13 0.02 268 / 0.45)),
+    var(--pc-board-mat, linear-gradient(transparent, transparent));
+  background-size: auto, cover;
+  background-position: center;
+}
+
+.miniSurface {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  transform-origin: top left;
+  display: block;
+}
+
+.miniCard {
+  position: absolute;
+  display: block;
+  width: 84px;
+  aspect-ratio: 488 / 680;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  transition: transform 200ms ease-out;
+}
+
+.miniCard[data-tapped] {
+  transform: rotate(90deg);
+}
+
+.miniCard img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.miniCardBack {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--pc-card-back, oklch(0.3 0.05 265)) center / cover;
+}
+
+.miniEmpty {
+  display: block;
+  height: 100%;
+}
+
+/* ---- ribbon merged into the top bar: one chrome row, more felt ---- */
+
+.tableTop .ribbonRow {
+  flex: 1;
+  min-width: 0;
+  justify-content: center;
+  padding: 0 var(--glacier-space-3);
+  flex-wrap: nowrap;
+}
+
+/* Compact in the shared row: only the current phase keeps its label. */
+.tableTop .phaseStop:not([data-current]) .phaseLabel {
+  display: none;
+}
+
+.tableTop .tableMeta {
+  min-width: 0;
+}
+
+.tableTop .tableMeta > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tableTop .phaseStop {
+  white-space: nowrap;
+}
+
+/* Narrow windows: the single chrome row wraps instead of crushing controls. */
+.tableTop {
+  flex-wrap: wrap;
+  row-gap: var(--glacier-space-2);
+}
+
+.tableTop .tableTopActions,
+.tableTop .endTurnWrap,
+.tableTop .turnCluster {
+  flex-shrink: 0;
+}
+
+.combatBanner > * {
+  flex-shrink: 0;
+}
+
+.combatBanner .combatHint {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Library trigger wrapper: anchors the actions menu while the inner button
+   handles draw (click) / menu (right-click, hold). */
+.pileTrigger {
+  display: inline-flex;
+}
+
+/* Vitals float over the playmat's top-end corner. */
+.myVitalsFloat {
+  position: absolute;
+  inset-block-start: var(--glacier-space-3);
+  inset-inline-end: var(--glacier-space-3);
+  z-index: 7;
+}
+
+/* My zone piles grow and bleed up into the playmat: real cards on the felt.
+   Transform (not margin) so the bottom-anchored strip layout is untouched. */
+.zonePiles[data-mine] {
+  position: relative;
+  z-index: 7;
+  transform: translateY(-3.25rem);
+  padding-inline-start: var(--glacier-space-2);
+}
+
+/* Turn timer: quiet mono clock beside the turn indicator. */
+.turnTimer {
+  margin-inline-start: 0.6em;
+  padding: 0.05rem 0.45rem;
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
+  color: var(--glacier-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- conceded players on the side panel ---- */
+
+.playerRow[data-dead] {
+  opacity: 0.55;
+}
+
+.playerRow[data-dead] .playerName {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in oklch, var(--glacier-text-subtle) 70%, transparent);
+}
+
+.playerBadgeDead {
+  color: var(--glacier-danger-text, oklch(0.72 0.19 25));
+}
+
+/* ---- post-match screen ---- */
+
+.pmOverlay {
+  position: fixed;
+  inset: 0;
+  /* Above every piece of floating table chrome (card menu 90, drag ghost 95,
+     defender pick 96); below only the pointer-transparent flight clones. */
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: var(--glacier-space-4);
+  background: color-mix(in oklch, oklch(0.1 0.02 268) 72%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+}
+
+.pmPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-4);
+  width: min(34rem, calc(100vw - 2rem));
+  max-height: min(88vh, 46rem);
+  padding: var(--glacier-space-5);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
+  border-radius: var(--glacier-radius-xl);
+  background: color-mix(in oklch, oklch(0.16 0.02 265) 92%, transparent);
+  box-shadow: 0 30px 80px rgb(0 0 0 / 0.55);
+}
+
+.pmHero {
+  display: grid;
+  justify-items: center;
+  gap: var(--glacier-space-1);
+  text-align: center;
+}
+
+.pmTrophy {
+  display: inline-grid;
+  place-items: center;
+  width: 3.4rem;
+  height: 3.4rem;
+  border-radius: 50%;
+  color: oklch(0.85 0.14 85);
+  background: color-mix(in oklch, oklch(0.75 0.14 85) 16%, transparent);
+  border: var(--glacier-hairline) solid color-mix(in oklch, oklch(0.8 0.14 85) 45%, transparent);
+  box-shadow: 0 0 26px color-mix(in oklch, oklch(0.8 0.14 85) 30%, transparent);
+}
+
+.pmTitle {
+  margin: 0;
+}
+
+.pmRows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  padding-inline-end: var(--glacier-space-1);
+}
+
+.pmRow {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-3);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 45%, transparent);
+  border-radius: var(--glacier-radius-lg);
+  background: color-mix(in oklch, var(--glacier-surface-sunken) 55%, transparent);
+}
+
+.pmRow[data-winner] {
+  border-color: color-mix(in oklch, oklch(0.8 0.14 85) 55%, transparent);
+  background: color-mix(in oklch, oklch(0.75 0.14 85) 10%, transparent);
+}
+
+.pmRow[data-dead] {
+  opacity: 0.65;
+}
+
+.pmBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pmNameRow {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  min-width: 0;
+}
+
+.pmName {
+  font-weight: var(--glacier-font-weight-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pmBadge {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+}
+
+.pmBadgeWin {
+  color: oklch(0.85 0.14 85);
+}
+
+.pmBadgeDead {
+  color: var(--glacier-danger-text, oklch(0.72 0.19 25));
+}
+
+.pmDeckName {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pmStats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--glacier-space-1) var(--glacier-space-3);
+}
+
+.pmStat {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle);
+  white-space: nowrap;
+}
+
+.pmStatSalt {
+  color: oklch(0.75 0.15 45);
+}
+
+.pmActionsCol {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--glacier-space-2);
+}
+
+.pmSaltRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.pmSaltLabel {
+  display: inline-grid;
+  place-items: center;
+  margin-inline-end: 2px;
+  color: var(--glacier-text-subtle);
+}
+
+.pmSaltStep {
+  display: inline-grid;
+  place-items: center;
+  padding: 0.28rem;
+  border: none;
+  border-radius: var(--glacier-radius-sm);
+  background: none;
+  color: color-mix(in oklch, var(--glacier-text-subtle) 55%, transparent);
+  cursor: pointer;
+  transition: color 120ms ease-out, transform 120ms ease-out;
+}
+
+@media (hover: hover) {
+  .pmSaltStep:hover {
+    color: oklch(0.75 0.15 45);
+    transform: scale(1.15);
+  }
+}
+
+.pmSaltStep[data-lit] {
+  color: oklch(0.72 0.17 40);
+}
+
+.pmFooter {
+  display: flex;
+  justify-content: center;
+  gap: var(--glacier-space-2);
+}
+
+/* Dismissed: a floating pill brings the results back. */
+.pmReopen {
+  position: fixed;
+  top: 3.1rem;
+  /* Physical left pairs with the physical translate: centered in RTL too. */
+  left: 50%;
+  translate: -50%;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.3rem 0.8rem;
+  font-size: var(--glacier-font-size-xs);
+  font-family: var(--glacier-font-sans);
+  color: oklch(0.85 0.14 85);
+  border: var(--glacier-hairline) solid color-mix(in oklch, oklch(0.8 0.14 85) 45%, transparent);
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, oklch(0.16 0.02 265) 88%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .pmReopen:hover {
+    background: color-mix(in oklch, oklch(0.75 0.14 85) 14%, transparent);
+  }
+}
+
+/* The salt prompt: whispered on desktop (tooltip carries the long form),
+   spelled out where there is no hover to discover it. */
+.pmSaltHintText {
+  display: none;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle);
+}
+
+@media (hover: none) {
+  .pmSaltHintText {
+    display: inline;
+    margin-inline-start: 3px;
+  }
+}
+
+/* Touch: the flame steps and the reopen pill need real finger targets. */
+@media (pointer: coarse) {
+  .pmSaltRow {
+    gap: 4px;
+  }
+
+  .pmSaltStep {
+    padding: 0.85rem 0.5rem;
+  }
+
+  .pmReopen {
+    padding: 0.6rem 1.1rem;
+  }
+}
+
+/* ---- combat v3: target picker, defender response, results ---- */
+
+.cbTargetBody {
+  display: flex;
+  gap: var(--glacier-space-4);
+  align-items: flex-start;
+}
+
+.cbTargetCard {
+  display: grid;
+  gap: var(--glacier-space-2);
+  justify-items: center;
+  flex: 0 0 auto;
+}
+
+.cbTargetCardMeta {
+  display: grid;
+  gap: var(--glacier-space-1);
+  justify-items: center;
+  max-width: 8rem;
+  text-align: center;
+}
+
+.cbTargetList {
+  display: grid;
+  gap: var(--glacier-space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.cbTargetRow {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  border-radius: var(--glacier-radius-lg);
+  background: var(--glacier-surface-sunken);
+  color: var(--glacier-text);
+  font-family: var(--glacier-font-sans);
+  font-size: var(--glacier-font-size-sm);
+  cursor: pointer;
+  text-align: start;
+}
+
+.cbTargetRow:hover {
+  border-color: var(--glacier-danger-solid);
+}
+
+.cbTargetName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.cbTargetLife {
+  font-variant-numeric: tabular-nums;
+  color: var(--glacier-text-muted);
+}
+
+.cbDefense {
+  display: grid;
+  gap: var(--glacier-space-3);
+}
+
+.cbDefenseHead {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+.cbDefenseHead > :last-child {
+  margin-inline-start: auto;
+}
+
+.cbAttackRow,
+.cbBlockerRow {
+  display: flex;
+  gap: var(--glacier-space-2);
+  flex-wrap: wrap;
+}
+
+.cbAttacker,
+.cbBlocker {
+  display: grid;
+  gap: var(--glacier-space-1);
+  justify-items: center;
+  padding: var(--glacier-space-2);
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  border-radius: var(--glacier-radius-lg);
+  background: var(--glacier-surface-sunken);
+  color: var(--glacier-text);
+  font-family: var(--glacier-font-sans);
+  cursor: pointer;
+}
+
+.cbAttacker[data-picked] {
+  border-color: var(--glacier-danger-solid);
+  box-shadow: 0 0 0 1px var(--glacier-danger-solid);
+}
+
+.cbBlocker[data-blocking] {
+  border-color: var(--glacier-success-solid, #4ade80);
+  box-shadow: 0 0 0 1px var(--glacier-success-solid, #4ade80);
+}
+
+.cbAttackerMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+}
+
+.cbPt {
+  font-size: var(--glacier-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--glacier-text-muted);
+}
+
+.cbBlockersLabel {
+  margin-block-start: var(--glacier-space-1);
+}
+
+.cbDefenseActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--glacier-space-2);
+  flex-wrap: wrap;
+  margin-block-start: var(--glacier-space-1);
+}
+
+.cbReturnChip {
+  position: absolute;
+  inset-block-start: 4.6rem;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  padding: var(--glacier-space-1) var(--glacier-space-3);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-danger-solid) 50%, var(--glacier-border));
+  border-radius: var(--glacier-radius-full, 999px);
+  background: color-mix(in oklch, oklch(0.18 0.02 265) 92%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  color: var(--glacier-text);
+  font-family: var(--glacier-font-sans);
+  font-size: var(--glacier-font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+  animation: pcBannerIn 200ms var(--pc-settle);
+}
+
+.cbReturnChip:hover {
+  border-color: var(--glacier-danger-solid);
+}
+
+.cbResults {
+  display: grid;
+  gap: var(--glacier-space-2);
+}
+
+.cbResultRow {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  flex-wrap: wrap;
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 70%, transparent);
+  border-radius: var(--glacier-radius-lg);
+  background: var(--glacier-surface-sunken);
+}
+
+.cbResultName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  font-weight: 600;
+  font-size: var(--glacier-font-size-sm);
+}
+
+.cbResultName[data-died],
+.cbResultBlocker[data-died] {
+  color: var(--glacier-danger-text);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.cbResultOutcome {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  flex-wrap: wrap;
+  margin-inline-start: auto;
+}
+
+.cbResultBlocker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+
+.cbResultTotals {
+  display: flex;
+  gap: var(--glacier-space-2);
+  flex-wrap: wrap;
+  padding-block-start: var(--glacier-space-1);
+}
+
+/* ---- pre-match matchup splash ---- */
+
+.preOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: var(--glacier-space-4);
+  background: color-mix(in oklch, oklch(0.1 0.02 268) 72%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+}
+
+.prePanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-5);
+  width: min(44rem, calc(100vw - 2rem));
+  max-height: min(88vh, 44rem);
+  overflow-y: auto;
+  padding: var(--glacier-space-6, 2rem);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
+  border-radius: var(--glacier-radius-xl);
+  background: color-mix(in oklch, oklch(0.16 0.02 265) 92%, transparent);
+  box-shadow: 0 30px 80px rgb(0 0 0 / 0.55);
+}
+
+.preHead {
+  display: grid;
+  justify-items: center;
+  gap: var(--glacier-space-1);
+  text-align: center;
+}
+
+.preMark {
+  display: inline-grid;
+  place-items: center;
+  width: 2.9rem;
+  height: 2.9rem;
+  border-radius: 50%;
+  color: var(--glacier-accent-text, var(--glacier-text));
+  background: color-mix(in oklch, var(--glacier-accent-solid) 16%, transparent);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent);
+}
+
+.preTitle {
+  margin: 0;
+}
+
+.preGrid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--glacier-space-5);
+}
+
+.prePlayer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  max-width: 9.5rem;
+  text-align: center;
+}
+
+.prePlayer[data-first] {
+  position: relative;
+}
+
+.preNoCommander {
+  display: grid;
+  place-items: center;
+  width: 120px;
+  height: 167px;
+  border-radius: var(--glacier-radius-lg);
+  border: var(--glacier-hairline) dashed color-mix(in oklch, var(--glacier-border) 60%, transparent);
+  background: color-mix(in oklch, var(--glacier-surface-sunken) 55%, transparent);
+}
+
+.preName {
+  margin-top: var(--glacier-space-2);
+  font-weight: var(--glacier-font-weight-semibold);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preDeck {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preFirst {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  margin-top: 2px;
+  padding: 0.1rem 0.5rem;
+  font-size: var(--glacier-font-size-xs);
+  color: oklch(0.85 0.14 85);
+  border: var(--glacier-hairline) solid color-mix(in oklch, oklch(0.8 0.14 85) 45%, transparent);
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, oklch(0.75 0.14 85) 12%, transparent);
+}
+
+.preFooter {
+  display: flex;
+  justify-content: center;
+}
+
+/* ================= opponent hand (face-down fan) ================= */
+
+/* Staged opponent (SeatFrame): a fan of card backs under their header so the
+   hand size reads at a glance, like sleeves across the table. */
+.oppHand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-block: var(--glacier-space-1);
+  min-height: 2.4rem;
+}
+
+.oppHandCard {
+  width: 1.55rem;
+  height: 2.15rem;
+  margin-inline: -0.5rem; /* overlap into a fan */
+  border-radius: 0.22rem;
+  background-image: var(--pc-card-back);
+  background-size: cover;
+  background-position: center;
+  border: var(--glacier-hairline) solid rgba(0, 0, 0, 0.5);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.45);
+}
+
+.oppHandCard:first-child {
+  margin-inline-start: 0;
+}
+
+.oppHandTally {
+  margin-inline-start: var(--glacier-space-2);
+  font-family: var(--glacier-font-mono);
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-bold);
+  color: var(--glacier-text);
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: var(--glacier-radius-full);
+  padding: 0.05rem 0.45rem;
+}
+
+/* MiniBoard: a tiny stack of backs + count in the header. */
+.miniHand {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: auto;
+}
+
+.miniHandCard {
+  width: 0.62rem;
+  height: 0.88rem;
+  margin-inline: -0.28rem;
+  border-radius: 0.1rem;
+  background-image: var(--pc-card-back);
+  background-size: cover;
+  background-position: center;
+  border: 1px solid rgba(0, 0, 0, 0.55);
+}
+
+.miniHandCard:first-child {
+  margin-inline-start: 0;
+}
+
+.miniHandTally {
+  margin-inline-start: 0.3rem;
+  font-family: var(--glacier-font-mono);
+  font-size: 0.62rem;
+  color: var(--glacier-text-muted);
+}
+
+/* ---- library as a 3D pile on the mat ---- */
+
+.libStack {
+  perspective: 640px;
+  perspective-origin: 50% 20%;
+}
+
+.libStack3d {
+  position: relative;
+  transform-style: preserve-3d;
+  /* The whole pile leans back a touch so the under-layers read as a stack
+     sitting on the felt, not a drop shadow. */
+  transform: rotateX(9deg) rotateZ(-2deg);
+}
+
+.libLayer,
+.libTop {
+  position: absolute;
+  inset: 0;
+  border-radius: 4.75% / 3.41%;
+  background-image: var(--pc-card-back);
+  background-size: cover;
+  background-position: center;
+}
+
+.libLayer {
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+}
+
+.libLayer:first-child {
+  /* The bottom of the pile grounds it on the mat. */
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.55);
+}
+
+.libTop {
+  transform: translateZ(1px);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.45);
+  border: 1px solid rgb(255 255 255 / 0.08);
+  transition: transform 200ms var(--pc-settle);
+}
+
+/* Draw affordance: your own pile lifts its top card toward the pointer. */
+.pileBtn:hover .libTop {
+  transform: translateZ(10px) translateY(-2px);
+}
+
+/* A staged opponent sits ACROSS the table: their zone piles (deck/graveyard/
+   exile/command) belong at the TOP with their hand — their side — not at the
+   bottom, where they collided with my own floating hand/zone strip and read as
+   duplicate decks. Reorder so their piles sit under the header, above the
+   field. My strip stays the sole thing at the bottom. */
+.seatFrame[data-stage] .zonePiles:not([data-mine]) {
+  order: 1;
+  align-self: flex-start;
+}
+.seatFrame[data-stage] .oppField {
+  order: 2;
+}

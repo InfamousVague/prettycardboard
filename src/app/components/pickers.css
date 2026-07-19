@@ -1,0 +1,112 @@
+/* Right-click customization modals: artwork printings + header card. */
+
+.pkBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: grid;
+  place-items: center;
+  padding: var(--glacier-space-6);
+  background: color-mix(in oklch, var(--glacier-bg) 55%, transparent);
+  backdrop-filter: blur(14px) saturate(1.05);
+  -webkit-backdrop-filter: blur(14px) saturate(1.05);
+}
+
+.pkPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-4);
+  width: min(46rem, calc(100vw - 3rem));
+  max-height: min(36rem, calc(100vh - 4rem));
+  padding: var(--glacier-space-5);
+  border-radius: var(--glacier-radius-xl);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  background: var(--glacier-glass-regular);
+  backdrop-filter: blur(var(--glacier-blur-lg)) saturate(var(--glacier-glass-saturate));
+  box-shadow: 0 28px 80px rgb(0 0 0 / 0.55);
+}
+
+.pkHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--glacier-space-3);
+}
+
+.pkHint {
+  margin-block-start: calc(var(--glacier-space-2) * -1);
+}
+
+.pkLoading {
+  padding: var(--glacier-space-4) 0;
+}
+
+.pkGrid {
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: var(--glacier-space-3);
+  padding-inline-end: var(--glacier-space-1);
+}
+
+.pkCard {
+  appearance: none;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+  text-align: start;
+  border-radius: var(--glacier-radius-md);
+}
+
+.pkCard img {
+  width: 100%;
+  aspect-ratio: 488 / 680;
+  object-fit: cover;
+  border-radius: 4.75%/3.41%;
+  border: 2px solid transparent;
+  transition:
+    transform var(--glacier-duration-fast) var(--glacier-ease-out),
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.pkCard:hover img {
+  transform: translateY(-3px);
+}
+
+.pkCard[data-current] img {
+  border-color: var(--glacier-accent-solid);
+  box-shadow: 0 0 14px color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent);
+}
+
+.pkCard:focus-visible img {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: 2px;
+}
+
+.pkCaption {
+  display: grid;
+  gap: 1px;
+  font-family: var(--glacier-font-sans);
+  padding-inline: 2px;
+}
+
+.pkSet {
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-medium);
+  color: var(--glacier-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pkMeta {
+  font-size: 0.68rem;
+  color: var(--glacier-text-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

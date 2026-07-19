@@ -1,0 +1,1181 @@
+/*
+ * Deck builder - library grid, editor panes, decklist rows, search results,
+ * mana/identity pips, and the mana-curve chart. Layout and chrome are Glacier
+ * tokens throughout; the only "colors" are the WUBRG pip fills, which map to
+ * the kit's amber/blue/gray/red/green ramps so they track the active theme.
+ * All box properties are logical (inline/block) for RTL.
+ */
+
+/* ---------- library ---------- */
+
+.decksPage {
+  /* width + padding come from .page */
+}
+
+.decksHead > div:first-child {
+  display: grid;
+  gap: var(--glacier-space-2);
+}
+
+.decksHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--glacier-space-4);
+  flex-wrap: wrap;
+}
+
+.decksActions {
+  display: inline-flex;
+  gap: var(--glacier-space-2);
+  padding-block-end: var(--glacier-space-1);
+}
+
+.decksActions button svg {
+  margin-inline-end: var(--glacier-space-1);
+}
+
+.deckGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: var(--glacier-space-5);
+}
+
+/* A tile is a plain button so the whole surface is one target. */
+.deckTile {
+  appearance: none;
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  background: var(--glacier-surface);
+  border-radius: var(--glacier-radius-xl);
+  padding: var(--glacier-space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  cursor: pointer;
+  text-align: center;
+  color: var(--glacier-text);
+  font-family: var(--glacier-font-sans);
+  transition:
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    box-shadow var(--glacier-duration-fast) var(--glacier-ease-out),
+    transform var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.deckTile:hover {
+  border-color: var(--glacier-border-strong);
+  box-shadow: var(--glacier-shadow-2);
+  transform: translateY(-2px);
+}
+
+.deckTile:focus-visible {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Room for the GameCard's absolute-positioned layers. */
+.deckTileArt {
+  padding-block: var(--glacier-space-2);
+}
+
+.deckTileInfo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  min-width: 0;
+  width: 100%;
+}
+
+.deckTileName {
+  font-weight: var(--glacier-font-weight-semibold);
+  font-size: var(--glacier-font-size-sm);
+  line-height: var(--glacier-leading-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.deckTileCommander {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.deckTileMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  margin-block-start: var(--glacier-space-1);
+}
+
+/* ---------- editor shell ---------- */
+
+.deckEditorPage {
+  gap: var(--glacier-space-5);
+  /* The old floating-card overhang is gone; a normal top gutter reads best. */
+  padding-block-start: var(--glacier-space-4);
+}
+
+.deckEditorLoading {
+  align-items: center;
+  justify-content: center;
+  gap: var(--glacier-space-4);
+  min-height: 50vh;
+}
+
+/* The hero header: the commander's art crop fills the band, dimmed under a
+   scrim so the editable name stays readable; the actual card floats at the
+   end edge, breaking the frame slightly for depth. */
+.deckHero {
+  position: relative;
+  margin-block-end: var(--glacier-space-2);
+  border-radius: var(--glacier-radius-xl);
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  overflow: visible;
+  /* Content-driven: the title rows plus the stats shelf set the height;
+     the floor only matters for empty decks. */
+  min-height: 13.5rem;
+  padding-block-end: 0;
+}
+
+.deckHeroArt {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center 25%;
+  filter: saturate(1.1);
+}
+
+.deckHeroScrim {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--glacier-bg) 92%, transparent) 0%, color-mix(in oklch, var(--glacier-bg) 72%, transparent) 55%, color-mix(in oklch, var(--glacier-bg) 35%, transparent) 100%);
+}
+
+[dir='rtl'] .deckHeroScrim {
+  background:
+    linear-gradient(-90deg, color-mix(in oklch, var(--glacier-bg) 92%, transparent) 0%, color-mix(in oklch, var(--glacier-bg) 72%, transparent) 55%, color-mix(in oklch, var(--glacier-bg) 35%, transparent) 100%);
+}
+
+.deckHero:not([data-has-art]) .deckHeroScrim {
+  background: var(--glacier-surface);
+}
+
+.deckHeroContent {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--glacier-space-5);
+  padding: var(--glacier-space-5);
+}
+
+.deckHeroCard {
+  flex: none;
+  align-self: flex-start;
+  filter: drop-shadow(0 10px 24px rgb(0 0 0 / 0.45));
+}
+
+.deckHeroCommander {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  color: var(--glacier-text-muted);
+}
+
+@media (max-width: 56rem) {
+  .deckHeroCard {
+    display: none;
+  }
+
+  .deckHeroContent {
+    padding-inline-end: var(--glacier-space-5);
+  }
+}
+
+.deckHeaderMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+}
+
+/* The deck name edits in place: chromeless until hovered or focused. */
+.deckNameInput {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--glacier-text);
+  font-family: var(--glacier-font-sans);
+  font-size: var(--glacier-font-size-xl);
+  line-height: var(--glacier-leading-xl);
+  font-weight: var(--glacier-font-weight-bold);
+  padding-block: var(--glacier-space-1);
+  padding-inline: var(--glacier-space-2);
+  margin-inline-start: calc(var(--glacier-space-2) * -1);
+  border-radius: var(--glacier-radius-md);
+  width: 100%;
+  min-width: 0;
+  /* Long names fade out instead of hard-clipping mid-letter. */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: background var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.deckNameInput:hover {
+  background: var(--glacier-hover);
+}
+
+.deckNameInput:focus-visible {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: 0;
+  background: var(--glacier-surface-sunken);
+}
+
+.deckHeaderMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  flex-wrap: wrap;
+}
+
+.deckSaveState {
+  min-width: 4rem;
+}
+
+.deckDelete {
+  flex: none;
+  color: var(--glacier-danger-text);
+}
+
+.deckDelete svg {
+  margin-inline-end: var(--glacier-space-1);
+}
+
+[dir='rtl'] .flipInRtl {
+  transform: scaleX(-1);
+}
+
+/* ---------- stats strip ---------- */
+
+/* The strip shares the page's content edges with the hero and the card grid
+   below (one vertical rhythm). One row, every tile the same height — the grid
+   stretch does the equalizing, so no tile towers over its neighbours and no
+   slot sits empty. */
+.deckStats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--glacier-space-4);
+  align-items: stretch;
+}
+
+
+.deckStatCurve {
+  grid-column: span 2;
+}
+
+@media (max-width: 72rem) {
+  .deckStatCurve {
+    grid-column: span 1;
+  }
+}
+
+/* Commander decks: exactly four tiles — curve | identity+size | bracket |
+   analytics — sized to their content weight. */
+.deckStats[data-commander] {
+  grid-template-columns: minmax(16rem, 1.6fr) minmax(10rem, 0.9fr) minmax(10rem, 1fr) minmax(13rem, 1.4fr);
+}
+
+.deckStats[data-commander] .deckStatCurve {
+  grid-column: auto;
+}
+
+@media (max-width: 64rem) {
+  .deckStats,
+  .deckStats[data-commander] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .deckStatCurve,
+  .deckStats[data-commander] .deckStatCurve {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 40rem) {
+  .deckStats,
+  .deckStats[data-commander] {
+    grid-template-columns: 1fr;
+  }
+}
+
+.deckStat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-4);
+  background: var(--glacier-surface);
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-lg);
+  min-width: 0;
+}
+
+.deckStatLabel {
+  text-transform: uppercase;
+  letter-spacing: var(--glacier-tracking-xs);
+}
+
+/* The deck-size block sits at the bottom of the identity tile, separated by a
+   hairline so the two facts read as neighbours, not a jumble. */
+.deckStatSizeBlock {
+  width: 100%;
+  margin-block-start: auto;
+  padding-block-start: var(--glacier-space-2);
+  border-block-start: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+}
+
+.deckStatSizeBlock > [role='progressbar'] {
+  width: 100%;
+}
+
+/* ---------- analytics panel ---------- */
+
+.deckStatAnalytics {
+  justify-content: flex-start;
+}
+
+.deckStatRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--glacier-space-2);
+  width: 100%;
+  min-width: 0;
+}
+
+.deckStatTypesRow {
+  align-items: center;
+  flex-wrap: wrap;
+  /* Types anchor to the tile's bottom edge, mirroring the size block in the
+     identity tile, so the strip's baselines line up. */
+  margin-block-start: auto;
+  padding-block-start: var(--glacier-space-2);
+  border-block-start: var(--glacier-hairline) solid var(--glacier-border-subtle);
+}
+
+.deckTypeRow {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-1) var(--glacier-space-3);
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.deckTypeStat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.deckTypeGlyph {
+  display: inline-grid;
+  place-items: center;
+  color: var(--glacier-accent-text);
+}
+
+/* The low-lands warning reads as flavor text, not a shout: let it wrap. */
+.landsWarnPill {
+  white-space: normal;
+  block-size: auto;
+  min-block-size: 0;
+  padding-block: var(--glacier-space-1);
+  line-height: 1.3;
+  text-align: start;
+}
+
+/* ---------- bracket estimate ---------- */
+
+.bracketPill {
+  max-width: 100%;
+}
+
+.bracketEstimate {
+  font-size: 0.85em;
+  font-weight: var(--glacier-font-weight-regular, 400);
+  opacity: 0.75;
+  margin-inline-start: 0.3em;
+}
+
+.bracketTip {
+  display: grid;
+  gap: var(--glacier-space-1);
+  max-inline-size: 16rem;
+  text-align: start;
+}
+
+.bracketTipHead {
+  font-weight: var(--glacier-font-weight-semibold);
+  text-transform: uppercase;
+  font-size: 0.85em;
+  letter-spacing: var(--glacier-tracking-xs);
+}
+
+.bracketTipList {
+  display: grid;
+  gap: 0.125rem;
+}
+
+.bracketTipNote {
+  opacity: 0.75;
+}
+
+/* ---------- curve chart ---------- */
+
+.curveChart {
+  display: flex;
+  align-items: stretch;
+  gap: var(--glacier-space-2);
+  width: 100%;
+  height: 4.5rem;
+  padding-block-start: var(--glacier-space-2);
+  padding-inline: var(--glacier-space-1);
+}
+
+.curveCol {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  min-width: 0;
+}
+
+.curveCount {
+  min-height: 1em;
+  padding-block-end: 2px;
+  min-height: 1.1rem;
+}
+
+.curveTrack {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  border-radius: var(--glacier-radius-sm);
+  background: var(--glacier-surface-sunken);
+}
+
+.curveBar {
+  width: 100%;
+  border-radius: var(--glacier-radius-sm);
+  background: var(--glacier-accent-solid);
+  transition: height var(--glacier-duration-normal) var(--glacier-ease-out);
+}
+
+.curveBar[data-empty] {
+  background: transparent;
+}
+
+.curveLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  min-height: 1rem;
+}
+
+/* ---------- editor panes ---------- */
+
+@media (max-width: 56rem) {
+    /* Single column: the search rail leads, per its top-of-page billing. */
+  
+}
+
+.deckList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-5);
+  min-width: 0;
+}
+
+.deckGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+}
+
+.deckGroupHead {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding-block-end: var(--glacier-space-1);
+  border-block-end: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  margin-block-end: var(--glacier-space-1);
+}
+
+.deckGroupIcon {
+  display: inline-grid;
+  place-items: center;
+  color: var(--glacier-accent-text);
+}
+
+.deckGroupEmpty {
+  padding-block: var(--glacier-space-2);
+}
+
+/* ---------- decklist rows ---------- */
+
+.deckRow {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding-block: var(--glacier-space-1);
+  padding-inline: var(--glacier-space-2);
+  border-radius: var(--glacier-radius-md);
+  min-width: 0;
+  transition: background var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.deckRow:hover {
+  background: var(--glacier-hover);
+}
+
+/* The art band: a slice of the card's own painting, cropped from the bundled
+   or CDN scan (art region of a modern frame ≈ x 7–93%, y 11–55%). */
+.deckRowArt {
+  flex: none;
+  width: 3.6rem;
+  height: 2.1rem;
+  border-radius: var(--glacier-radius-sm);
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  background-size: 118% auto;
+  background-position: center 18%;
+  background-color: var(--glacier-surface-sunken);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.25);
+}
+
+.deckRowQty {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.deckRowCount {
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+.deckRowName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--glacier-font-size-sm);
+}
+
+.deckRowWarn {
+  flex: none;
+}
+
+/* Quantity steppers and remove reveal on hover/focus to keep rows quiet. */
+.deckRow .deckRowQty button,
+.deckRowRemove {
+  opacity: 0;
+  transition: opacity var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.deckRow:hover .deckRowQty button,
+.deckRow:focus-within .deckRowQty button,
+.deckRow:hover .deckRowRemove,
+.deckRow:focus-within .deckRowRemove {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .deckRow .deckRowQty button,
+  .deckRowRemove {
+    opacity: 1;
+  }
+}
+
+/* ---------- floating hover preview ---------- */
+
+.deckPreview {
+  position: fixed;
+  z-index: 80;
+  pointer-events: none;
+  filter: drop-shadow(0 18px 40px rgb(0 0 0 / 0.45));
+}
+
+/* ---------- search pane ---------- */
+
+
+
+.cardSearch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-4);
+  background: var(--glacier-surface);
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-xl);
+}
+
+.cardSearchHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-2);
+}
+
+.cardSearchResults {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+  max-height: min(30rem, 55vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-inline: calc(var(--glacier-space-2) * -1);
+  padding-inline: var(--glacier-space-2);
+}
+
+.cardSearchHint {
+  padding-block: var(--glacier-space-2);
+}
+
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  min-width: 0;
+}
+
+.searchRowMain {
+  appearance: none;
+  border: none;
+  background: transparent;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-2);
+  border-radius: var(--glacier-radius-md);
+  cursor: pointer;
+  color: var(--glacier-text);
+  font-family: var(--glacier-font-sans);
+  text-align: start;
+  transition: background var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.searchRowMain:hover {
+  background: var(--glacier-hover);
+}
+
+.searchRowMain:focus-visible {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: -2px;
+}
+
+/* The thumbnail is its own button: click zooms the card in the lightbox,
+   while the rest of the row keeps the add action. */
+.searchRowPeek {
+  appearance: none;
+  border: none;
+  background: transparent;
+  flex: none;
+  display: inline-flex;
+  padding: var(--glacier-space-1);
+  border-radius: var(--glacier-radius-sm);
+  cursor: zoom-in;
+  transition: background var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.searchRowPeek:hover {
+  background: var(--glacier-hover);
+}
+
+.searchRowPeek:focus-visible {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: -1px;
+}
+
+.searchThumb {
+  flex: none;
+  width: 2.25rem;
+  aspect-ratio: 488 / 680;
+  object-fit: cover;
+  border-radius: var(--glacier-radius-xs);
+  background: var(--glacier-surface-sunken);
+}
+
+.searchRowText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.searchRowName {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-medium);
+  min-width: 0;
+}
+
+.searchRowTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchRowType {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchRowAdd {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  color: var(--glacier-text-subtle);
+  opacity: 0;
+  transition: opacity var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.searchRowMain:hover .searchRowAdd,
+.searchRowMain:focus-visible .searchRowAdd {
+  opacity: 1;
+}
+
+.searchRowCrown {
+  flex: none;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- import dialog ---------- */
+
+.importPane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-3);
+  padding-block-start: var(--glacier-space-3);
+}
+
+.importTextarea {
+  width: 100%;
+  font-family: var(--glacier-font-mono);
+  font-size: var(--glacier-font-size-sm);
+}
+
+.importActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--glacier-space-2);
+}
+
+/* ---------- mana + identity pips ---------- */
+
+.manaPips {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  flex: none;
+}
+
+.manaPip {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1rem;
+  height: 1rem;
+  padding-inline: 0.125rem;
+  border-radius: var(--glacier-radius-full);
+  font-family: var(--glacier-font-mono);
+  font-size: 0.625rem;
+  font-weight: var(--glacier-font-weight-semibold);
+  line-height: 1;
+  background: var(--glacier-gray-4);
+  color: var(--glacier-gray-12);
+  border: var(--glacier-hairline) solid var(--glacier-gray-6);
+}
+
+.manaPip[data-mana='W'] {
+  background: var(--glacier-amber-3);
+  color: var(--glacier-amber-12);
+  border-color: var(--glacier-amber-6);
+}
+
+.manaPip[data-mana='U'] {
+  background: var(--glacier-blue-4);
+  color: var(--glacier-blue-12);
+  border-color: var(--glacier-blue-7);
+}
+
+.manaPip[data-mana='B'] {
+  background: var(--glacier-gray-11);
+  color: var(--glacier-gray-1);
+  border-color: var(--glacier-gray-12);
+}
+
+.manaPip[data-mana='R'] {
+  background: var(--glacier-red-4);
+  color: var(--glacier-red-12);
+  border-color: var(--glacier-red-7);
+}
+
+.manaPip[data-mana='G'] {
+  background: var(--glacier-green-4);
+  color: var(--glacier-green-12);
+  border-color: var(--glacier-green-7);
+}
+
+.colorPips {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: none;
+}
+
+.colorPip {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid var(--glacier-border-strong);
+}
+
+.colorPip[data-color='W'] {
+  background: var(--glacier-amber-4);
+  border-color: var(--glacier-amber-8);
+}
+
+.colorPip[data-color='U'] {
+  background: var(--glacier-blue-9);
+  border-color: var(--glacier-blue-10);
+}
+
+.colorPip[data-color='B'] {
+  background: var(--glacier-gray-12);
+  border-color: var(--glacier-gray-11);
+}
+
+.colorPip[data-color='R'] {
+  background: var(--glacier-red-9);
+  border-color: var(--glacier-red-10);
+}
+
+.colorPip[data-color='G'] {
+  background: var(--glacier-green-9);
+  border-color: var(--glacier-green-10);
+}
+
+/* ---------- full-art card grid (the decklist) ---------- */
+
+.deckCardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: var(--glacier-space-4);
+}
+
+.deckCardCell {
+  position: relative;
+}
+
+/* Card faces open the universal lightbox. */
+.deckCardFace,
+.deckHeroCard .gcPerspective {
+  cursor: zoom-in;
+}
+
+/* Quantity as a badge riding the card's corner. */
+.deckCardQty {
+  position: absolute;
+  bottom: 6%;
+  inset-inline-end: -0.35rem;
+  z-index: 3;
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  padding-inline: 0.3rem;
+  border-radius: var(--glacier-radius-full);
+  background: var(--glacier-accent-solid);
+  color: var(--glacier-accent-on-solid, #fff);
+  font-family: var(--glacier-font-mono);
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-bold);
+  border: 2px solid var(--glacier-bg);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.45);
+  pointer-events: none;
+}
+
+.deckCardWarn {
+  position: absolute;
+  top: 4%;
+  inset-inline-start: 4%;
+  z-index: 3;
+  display: inline-grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--glacier-warning-text) 24%, var(--glacier-bg));
+  color: var(--glacier-warning-text);
+  border: var(--glacier-hairline) solid var(--glacier-warning-text);
+}
+
+/* Edit tools surface on hover as a glass strip over the card's foot. */
+.deckCardTools {
+  position: absolute;
+  bottom: 4%;
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  z-index: 2;
+  display: inline-flex;
+  gap: 1px;
+  padding: 2px;
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--glacier-bg) 82%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  opacity: 0;
+  transition: opacity var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+[dir='rtl'] .deckCardTools {
+  translate: 50% 0;
+}
+
+.deckCardCell:hover .deckCardTools,
+.deckCardCell:focus-within .deckCardTools {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .deckCardTools {
+    opacity: 1;
+  }
+}
+
+
+/* ---------- bracket panel ---------- */
+
+.deckStatBracket {
+  cursor: help;
+}
+
+/* Share the tile's spare height around the numeral instead of pooling it all
+   below — the tile reads centered, never half-empty. */
+.deckStatBracket .bracketBig {
+  margin-block: auto;
+}
+
+.bracketBig {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--glacier-space-2);
+}
+
+.bracketNumeral {
+  font-family: var(--glacier-font-mono);
+  font-size: 2rem;
+  font-weight: var(--glacier-font-weight-bold);
+  line-height: 1;
+  color: var(--glacier-accent-text);
+}
+
+.deckStatBracket[data-bracket='2'] .bracketNumeral {
+  color: var(--glacier-success-text);
+}
+
+.deckStatBracket[data-bracket='4'] .bracketNumeral {
+  color: var(--glacier-warning-text);
+}
+
+.bracketName {
+  font-size: var(--glacier-font-size-md);
+  font-weight: var(--glacier-font-weight-semibold);
+}
+
+
+/* ---------- search bar (full width, above the decklist) ---------- */
+
+.deckSearchBar {
+  position: relative;
+  z-index: 40;
+}
+
+.cardSearch {
+  position: relative;
+}
+
+.cardSearchField {
+  position: relative;
+}
+
+.cardSearchField > :first-child {
+  width: 100%;
+}
+
+.cardSearchSpin {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: var(--glacier-space-3);
+  translate: 0 -50%;
+}
+
+.cardSearchDrop {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(100% + var(--glacier-space-2));
+  max-height: 22rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--glacier-space-2);
+  border-radius: var(--glacier-radius-lg);
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  background: var(--glacier-surface-raised);
+  box-shadow: 0 18px 44px rgb(0 0 0 / 0.5);
+}
+
+.cardSearchHint {
+  padding: var(--glacier-space-3);
+}
+
+/* ---------- footer (danger zone) ---------- */
+
+.deckFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-4);
+  margin-block-start: var(--glacier-space-4);
+  padding-block-start: var(--glacier-space-4);
+  border-block-start: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
+}
+
+/* ---------- stats inside the hero: glass chips over the art ---------- */
+
+.deckHero .deckStats {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-2) var(--glacier-space-5) var(--glacier-space-5);
+  margin-inline-end: 0;
+}
+
+.deckHero .deckStat {
+  flex: 1 1 8.5rem;
+  min-width: 0;
+  background: color-mix(in oklch, var(--glacier-bg) 64%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  -webkit-backdrop-filter: blur(var(--glacier-blur-sm));
+  border-color: color-mix(in oklch, var(--glacier-border) 65%, transparent);
+}
+
+.deckHero .deckStatCurve {
+  flex: 1.6 1 11.5rem;
+}
+
+/* compact chip metrics inside the hero */
+.deckHero .deckStat {
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  gap: var(--glacier-space-1);
+}
+
+.deckHero .curveTrack {
+  height: 2rem;
+}
+
+/* the labeled back action rides just above the hero band, flush with its edge */
+.deckBack {
+  align-self: flex-start;
+  margin-inline-start: 0;
+  margin-block-end: calc(var(--glacier-space-2) * -1);
+}
+
+.deckBack svg {
+  margin-inline-end: var(--glacier-space-1);
+}
+
+/* ---------- the curve band (full-width, above the fact chips) ---------- */
+
+.deckHero .deckCurveBand {
+  position: relative;
+  width: 100%;
+  margin-block-start: var(--glacier-space-3);
+  padding: var(--glacier-space-2) var(--glacier-space-4);
+  background: color-mix(in oklch, var(--glacier-bg) 64%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  -webkit-backdrop-filter: blur(var(--glacier-blur-sm));
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
+  border-radius: var(--glacier-radius-lg);
+}
+
+.curveChartWrap {
+  width: 100%;
+}
+
+/* recharts glass tooltip */
+.curveTip {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border-radius: var(--glacier-radius-md);
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  background: var(--glacier-surface-raised);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+}
+
+.curveTipMv {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-family: var(--glacier-font-mono);
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle);
+}
+
+.curveTipCount {
+  font-family: var(--glacier-font-mono);
+  font-size: var(--glacier-font-size-sm);
+  color: var(--glacier-text);
+}
+
+/* Touch has no hover: the add glyph and steppers must always show. */
+@media (hover: none) {
+  .searchRowAdd {
+    opacity: 1;
+  }
+}

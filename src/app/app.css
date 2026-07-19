@@ -1,0 +1,794 @@
+/*
+ * App-level layout. Component look comes from Glacier; this file only arranges
+ * the shell and styles the two things the kit does not own: the custom window
+ * controls and the drag region. Every value is a Glacier token.
+ */
+
+/* App reset so padded, full-width layout containers behave predictably no
+   matter how the kit styles are delivered. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  /* The base typeface and text color for any plain content outside a kit
+     component. Components pin their own font, so this is just the backstop. */
+  font-family: var(--glacier-font-sans);
+  color: var(--glacier-text);
+  background: var(--glacier-bg);
+}
+
+/* The shell owns the viewport and scrolls its own content, so the root fills
+   the height exactly and never adds a window scrollbar. */
+#root {
+  height: 100vh;
+}
+
+/*
+ * The full-window desktop shell, composed by hand like GhostWire or Libre:
+ *   appWindow  = a vertical stack that fills the viewport
+ *     titleBar = a full-width strip spanning the very top, above the sidebar
+ *     appBody  = the row below it: the sidebar plus the scrolling content
+ */
+.appWindow {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--glacier-bg);
+  color: var(--glacier-text);
+}
+
+.appTitleBar {
+  flex: none;
+  /* Sits above the body so the sidebar preview flyout can spill over content. */
+  position: relative;
+  z-index: 60;
+}
+
+.appBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* The far-left activity rail: a slim icon column. The kit NavBar already sizes
+   itself (inline-size: space-12, block-size: 100%) and pins its end slot to the
+   bottom; this only adds the surface and a trailing hairline. */
+.appRail {
+  flex: none;
+  background: var(--glacier-surface);
+  border-inline-end: var(--glacier-hairline) solid var(--glacier-glass-border);
+  padding-block: var(--glacier-space-3);
+}
+
+/* The contextual sidebar: a fixed-width, full-height column with a trailing
+   hairline. The kit Sidebar fills it (width/height: 100%) and scrolls itself. */
+.appSidebar {
+  flex: none;
+  width: 15rem;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--glacier-surface);
+  border-inline-end: var(--glacier-hairline) solid var(--glacier-glass-border);
+}
+
+/* The content column: the only thing that scrolls. */
+.appContent {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Floating layout: the rail and the contextual sidebar both detach into
+   rounded cards, echoing the kit AppShell's floating mode. Content stays flush
+   and remains the scroll area. Logical margins keep the single gutter between
+   the panels correct under RTL. */
+.appWindow[data-layout='floating'] .appRail,
+.appWindow[data-layout='floating'] .appSidebar {
+  margin-block: var(--glacier-space-4);
+  height: calc(100% - var(--glacier-space-4) * 2);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  border-radius: var(--glacier-radius-xl);
+  box-shadow: var(--glacier-shadow-3);
+  overflow: hidden;
+}
+
+/* rail: outer gutter on the start edge, a single gutter to the sidebar */
+.appWindow[data-layout='floating'] .appRail {
+  margin-inline: var(--glacier-space-4);
+}
+
+/* sidebar: sits against the rail's trailing gutter (start margin 0), its own
+   gutter to the content on the end edge */
+.appWindow[data-layout='floating'] .appSidebar {
+  margin-inline-start: 0;
+  margin-inline-end: var(--glacier-space-4);
+}
+
+.titleBarDrag {
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
+}
+
+.titleBarDrag button,
+.titleBarDrag a,
+.titleBarDrag input,
+.titleBarDrag [data-no-drag] {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* The mock command search in the center of the title bar: a comfortable width
+   that yields on narrow windows. The field fills the wrapper. */
+.titleBarSearch {
+  display: flex;
+  width: min(24rem, 42vw);
+}
+
+.titleBarSearch > * {
+  width: 100%;
+}
+
+/* Notification and account details on the end of the title bar. */
+.titleBarActions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+/* Collapsed sidebar: hidden, with the content taking its place. It stays
+   reachable through the title bar toggle's hover preview. */
+.appWindow[data-sidebar='collapsed'] .appSidebar {
+  display: none;
+}
+
+/* The toggle and its hover preview share one hover region, so the pointer can
+   travel from the button into the preview without it closing. */
+.sidebarToggleWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+/* The preview flyout: a floating copy of the sidebar that fades in below the
+   toggle while the sidebar is collapsed. The transparent top padding keeps the
+   hover region continuous across the visual gap. */
+.sidebarPreview {
+  position: absolute;
+  top: 100%;
+  inset-inline-start: 0;
+  padding-top: var(--glacier-space-2);
+  z-index: 70;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-0.25rem);
+  pointer-events: none;
+  transition:
+    opacity var(--glacier-duration-fast) var(--glacier-ease-out),
+    transform var(--glacier-duration-fast) var(--glacier-ease-out),
+    visibility 0s linear var(--glacier-duration-fast);
+}
+
+.sidebarPreview[data-open] {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.sidebarPreviewCard {
+  width: 15rem;
+  height: min(26rem, calc(100vh - 5rem));
+  overflow: hidden;
+  background: var(--glacier-surface);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  border-radius: var(--glacier-radius-xl);
+  box-shadow: var(--glacier-shadow-4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebarPreview {
+    transition: none;
+  }
+}
+
+/* A titled block: the kit Heading carries no margin, so space it from the
+   content that follows it (the timeline, the card group). */
+.page section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-4);
+  min-width: 0;
+}
+
+.pageLede {
+  max-width: 42rem;
+}
+
+/* A brand lockup for the sidebar header. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding-inline: var(--glacier-space-2);
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-text);
+}
+
+.brandMark {
+  display: inline-grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--glacier-radius-md);
+  background: var(--glacier-accent-solid);
+  color: var(--glacier-accent-contrast);
+}
+
+/* A responsive metric row for the dashboard. Tiles carry an icon and a trailing
+   hint, so the floor leaves room for the value between them before wrapping. */
+.statRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--glacier-space-4);
+}
+
+/* Two-column split that collapses on narrow widths. */
+.split {
+  display: grid;
+  gap: var(--glacier-space-6);
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  align-items: start;
+}
+
+/* A stack of labelled form controls for the settings page. */
+.control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--glacier-space-2);
+}
+
+/* The kit SegmentedControl is content-width (inline-flex); in a stretching
+   column it would blow out to full width with the options packed left, so the
+   items keep their natural size. align-items above already prevents the
+   stretch; this guards it if a control is dropped somewhere that stretches. */
+.control > * {
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.accentSwatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-2);
+}
+
+.accentSwatch {
+  width: 1.75rem;
+  height: 1.75rem;
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  border-radius: var(--glacier-radius-full);
+  cursor: pointer;
+  padding: 0;
+  transition: transform var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.accentSwatch[data-selected] {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: 2px;
+}
+
+.accentSwatch:hover {
+  transform: scale(1.08);
+}
+
+/* ================= PrettyCardboard pages ================= */
+
+.appContent[data-full-bleed] {
+  overflow: hidden;
+  padding: 0;
+}
+
+
+/* ---- onboarding ---- */
+
+.onboarding {
+  position: relative;
+  height: 100vh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 80% at 50% -10%, color-mix(in oklch, var(--glacier-accent-solid) 16%, transparent), transparent 60%),
+    var(--glacier-bg);
+}
+
+.onboardingGlow {
+  position: absolute;
+  inset: auto -20% -40% -20%;
+  height: 70%;
+  background: radial-gradient(50% 60% at 50% 100%, color-mix(in oklch, var(--glacier-accent-solid) 22%, transparent), transparent 75%);
+  pointer-events: none;
+}
+
+.onboardingFan {
+  position: absolute;
+  top: 4vh;
+  display: flex;
+  justify-content: center;
+  gap: var(--glacier-space-3);
+}
+
+.onboardingFanCard {
+  transform-origin: 50% 120%;
+}
+
+.onboardingPanel {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: var(--glacier-space-4);
+  width: min(30rem, calc(100vw - 3rem));
+  margin-top: clamp(5rem, 30vh, 20rem);
+  padding: var(--glacier-space-8);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  border-radius: var(--glacier-radius-2xl, var(--glacier-radius-xl));
+  background: var(--glacier-glass-regular);
+  backdrop-filter: blur(var(--glacier-blur-lg)) saturate(var(--glacier-glass-saturate));
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.onboardingFields {
+  display: grid;
+  gap: var(--glacier-space-2);
+}
+
+.onboardingMode {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 18rem;
+}
+
+/* ---- shared page scaffolding ---- */
+
+.page {
+  /* One rhythm for every page: same width, same gutters, same section gap -
+     individual pages must not override these, so nothing reads as uneven. */
+  max-width: 76rem;
+  width: 100%;
+  margin-inline: auto;
+  padding: var(--glacier-space-6) var(--glacier-space-6) var(--glacier-space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-6);
+}
+
+.page > h1 {
+  margin-block-end: calc(var(--glacier-space-4) * -1); /* pull the lede close */
+}
+
+.page section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-4);
+}
+
+.page .lede {
+  max-width: 46rem;
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  align-items: flex-start;
+}
+
+.control > * {
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.control > .input,
+.control input {
+  align-self: stretch;
+}
+
+/* ---- play ---- */
+
+.playGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+  gap: var(--glacier-space-5);
+}
+
+.playPage .playCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-4);
+  /* Over the playmat art the raised surface reads too light; sit the tiles
+     on dark glass like the rest of the app. */
+  background: color-mix(in oklch, var(--glacier-bg) 72%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  -webkit-backdrop-filter: blur(var(--glacier-blur-md));
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
+  box-shadow: 0 14px 40px rgb(0 0 0 / 0.35);
+}
+
+.playCardIcon {
+  display: grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: var(--glacier-radius-lg);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 18%, transparent);
+  color: var(--glacier-accent-text);
+}
+
+.inviteList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-3);
+}
+
+.inviteCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-4);
+}
+
+.inviteActions {
+  display: flex;
+  gap: var(--glacier-space-2);
+}
+
+/* ---- friends ---- */
+
+.friendSearch {
+  max-width: 26rem;
+}
+
+.friendHits {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+}
+
+.friendRow {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+}
+
+.friendRowSpacer {
+  flex: 1;
+}
+
+/* ---- profile ---- */
+
+.profileHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-4);
+}
+
+.profileWho {
+  flex: 1;
+  display: grid;
+  gap: var(--glacier-space-1);
+}
+
+.preconGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
+  gap: var(--glacier-space-5);
+}
+
+.preconCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  border-radius: var(--glacier-radius-xl);
+  overflow: hidden;
+  background: var(--glacier-surface);
+}
+
+.preconHero {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center 20%;
+  filter: blur(18px) saturate(1.15) brightness(0.55);
+  transform: scale(1.2);
+}
+
+.preconBody {
+  position: relative;
+  flex: 1;
+  display: flex;
+  gap: var(--glacier-space-5);
+  padding: var(--glacier-space-5);
+  background: linear-gradient(180deg, transparent, color-mix(in oklch, var(--glacier-bg) 55%, transparent));
+}
+
+.preconArtCard {
+  flex: none;
+}
+
+.preconInfo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--glacier-space-2);
+}
+
+.preconPips {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.preconPips i {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+@media (max-height: 760px) {
+  .onboardingFan {
+    transform: scale(0.72);
+    transform-origin: top center;
+  }
+}
+
+.routeFrame {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- card-back picker (Settings) ---- */
+
+.backPicker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4.25rem, 1fr));
+  gap: var(--glacier-space-2);
+}
+
+.backSwatch {
+  appearance: none;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--glacier-radius-md);
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+  aspect-ratio: 488 / 680;
+  transition: transform var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.backSwatch img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: calc(var(--glacier-radius-md) - 2px);
+}
+
+.backSwatch:hover {
+  transform: translateY(-2px);
+}
+
+.backSwatch[data-selected] {
+  border-color: var(--glacier-accent-solid);
+  box-shadow: 0 0 12px color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent);
+}
+
+.backSwatch:focus-visible {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: 2px;
+}
+
+/* ---- brand logo ---- */
+
+.brandLogo {
+  /* The one place the wordmark lives (the title bar carries no logo), so it
+     gets room to breathe; capped by the sidebar width rather than a height. */
+  width: 100%;
+  max-width: 11rem;
+  height: auto;
+  display: block;
+  margin-block: var(--glacier-space-1);
+}
+
+.onboardingLogo {
+  width: min(22rem, 82%);
+  height: auto;
+  margin-inline: auto;
+  display: block;
+  filter: drop-shadow(0 4px 18px rgb(0 0 0 / 0.45));
+}
+
+/* ================= playmat backdrop + glass shell ================= */
+
+/* The chosen playmat fills the window behind everything; a bg-token scrim
+   gradient keeps content legible on bright mats. Sits under .appBody (which
+   stacks above via its own z-index context). */
+.appWindow {
+  position: relative;
+}
+
+.appBackdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image:
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--glacier-bg) 62%, transparent),
+      color-mix(in oklch, var(--glacier-bg) 82%, transparent)
+    ),
+    var(--pc-playmat);
+  background-size: cover, cover;
+  background-position: center;
+}
+
+.appBody,
+.appTitleBar {
+  position: relative;
+  z-index: 1;
+}
+
+/* With artwork behind the shell, the window itself must not paint over it. */
+.appWindow {
+  background: transparent;
+}
+
+/* The rail, the contextual sidebar, and the title bar become glass so the mat
+   glows through. The kit components paint opaque `--glacier-surface` via their
+   own hashed classes; these double-class selectors outrank them. */
+.appWindow .appRail,
+.appWindow .appSidebar,
+.appWindow .appTitleBar {
+  background: var(--glacier-glass-regular);
+  backdrop-filter: blur(var(--glacier-blur-lg)) saturate(var(--glacier-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glacier-blur-lg)) saturate(var(--glacier-glass-saturate));
+}
+
+/* The kit Sidebar inside the shell repaints surface; let the shell's glass
+   show through instead. */
+.appSidebar > * {
+  background: transparent;
+}
+
+/* ================= customize modal ================= */
+
+.customizeBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-5);
+}
+
+.matPicker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: var(--glacier-space-3);
+}
+
+.matSwatch {
+  appearance: none;
+  position: relative;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--glacier-radius-md);
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  transition: transform var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.matSwatch img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: calc(var(--glacier-radius-md) - 2px);
+}
+
+.matSwatchName {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  padding: var(--glacier-space-2) var(--glacier-space-2) var(--glacier-space-1);
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-medium);
+  color: white;
+  text-align: start;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.72));
+  pointer-events: none;
+}
+
+.matSwatch:hover {
+  transform: translateY(-2px);
+}
+
+.matSwatch[data-selected] {
+  border-color: var(--glacier-accent-solid);
+  box-shadow: 0 0 12px color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent);
+}
+
+.matSwatch:focus-visible {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: 2px;
+}
+
+.customizeFoot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Share-link invite banner on the auth gate. */
+.onboardingInvite {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border-radius: var(--glacier-radius-md);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-accent-solid) 40%, transparent);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 14%, transparent);
+  color: var(--glacier-accent-text);
+  text-align: center;
+}
+
+/* ================= touch / tablet support ================= */
+
+/* Kill the grey iOS tap flash everywhere; keep our own focus/active states. */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Cards are pressable objects, not images: no iOS "save image" callout on a
+   long-press (long-press is our secondary-action gesture instead). */
+.gcCard,
+.dsTop,
+.deckCardCell,
+.pkCard img,
+.backSwatch img,
+.matSwatch img {
+  -webkit-touch-callout: none;
+}
+
+/* On touch devices, controls that a mouse only reveals on hover must always be
+   reachable, and hover-only tap targets get comfortable hit areas. */
+@media (pointer: coarse) {
+  /* Icon buttons and small controls hit the 44px comfortable minimum. */
+  button,
+  [role='button'],
+  a {
+    touch-action: manipulation; /* removes the 300ms tap delay */
+  }
+
+  .appRail button,
+  .appRail [role='button'] {
+    min-block-size: 3rem;
+  }
+}
+
+/* The shell honors the device safe areas (iPad home indicator, notch). */
+.appWindow {
+  padding-block-end: env(safe-area-inset-bottom, 0);
+}

@@ -1,0 +1,129 @@
+/* GameCard - the premium card treatment. All layers are GPU-composited
+   (transform/opacity/background-position only) so a table full of cards stays
+   smooth. Geometry follows the 488x680 print scan ratio; the corner radius is
+   the print's 4.75% of width. */
+
+.gcPerspective {
+  perspective: 900px;
+  flex: none;
+  position: relative;
+}
+
+.gcCard {
+  position: absolute;
+  inset: 0;
+  border-radius: 4.75cqw;
+  border-radius: calc(100% * 0.0475 * (680 / 488)); /* fallback ratio-derived */
+  border-radius: 4.75%/3.41%;
+  overflow: hidden;
+  transform-style: preserve-3d;
+  background: oklch(0.22 0.01 260);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 6px 18px rgba(0, 0, 0, 0.35);
+  will-change: transform;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.gcCard[data-glow] {
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--glacier-accent-solid) 60%, transparent),
+    0 0 22px color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent),
+    0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.gcCard[data-selected] {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: 2px;
+}
+
+.gcArt {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+/* Face-down: the player's chosen PrettyCardboard back. */
+.gcBackFace {
+  background-image: var(--pc-card-back);
+  background-size: cover;
+  background-position: center;
+}
+
+/* Missing-image proxy: a readable name plate on card-stock texture. */
+.gcProxy {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 8%;
+  text-align: center;
+  background:
+    radial-gradient(120% 90% at 50% 0%, oklch(0.32 0.02 260), oklch(0.2 0.015 260));
+  color: var(--glacier-text);
+  font-family: var(--glacier-font-sans);
+  font-size: 0.72rem;
+  font-weight: var(--glacier-font-weight-semibold);
+  line-height: 1.25;
+}
+
+/* Holographic foil: two counter-angled rainbow gradients, blended over the
+   art, whose horizontal position sweeps with the pointer (backgroundPositionX
+   is driven from the component's spring). */
+.gcFoil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: color-dodge;
+  opacity: 0.5;
+  background-image:
+    linear-gradient(
+      115deg,
+      transparent 18%,
+      oklch(0.75 0.18 0 / 0.55) 32%,
+      oklch(0.8 0.16 90 / 0.55) 42%,
+      oklch(0.78 0.15 160 / 0.55) 52%,
+      oklch(0.75 0.17 250 / 0.55) 62%,
+      oklch(0.74 0.18 310 / 0.55) 72%,
+      transparent 86%
+    ),
+    repeating-linear-gradient(
+      -30deg,
+      rgba(255, 255, 255, 0) 0 6px,
+      rgba(255, 255, 255, 0.06) 6px 7px
+    );
+  background-size: 220% 100%, auto;
+  background-repeat: no-repeat, repeat;
+}
+
+.gcGlare {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  transition: opacity 240ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gcCard {
+    transition: none;
+  }
+}
+
+/* Overlay layer for corner badges (attack/counter): a sibling of the clipped
+   card face, so protruding badges are never cropped. Non-interactive by
+   default; badges re-enable pointer events for their tooltips. */
+.gcOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.gcOverlay > * {
+  pointer-events: auto;
+}

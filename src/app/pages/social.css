@@ -1,0 +1,192 @@
+/* Shared styling for the two social pages: the Friends roster and the Profile
+   showcase. Imported by FriendsPage.tsx and ProfilePage.tsx. */
+
+/* ================= friends ================= */
+
+/* Tightened rows: one consistent height for search hits, requests, and the
+   roster, everything on a single centered baseline. */
+.friendsPage .friendRow {
+  min-block-size: 3.75rem;
+  padding-block: var(--glacier-space-3);
+  padding-inline: var(--glacier-space-4);
+  align-items: center;
+}
+
+/* Presence ring: a box-shadow halo on the avatar wrapper, with a surface-color
+   gap so it reads as a ring, not a border. */
+.frAvatar {
+  display: inline-flex;
+  flex: none;
+  border-radius: var(--glacier-radius-full);
+}
+
+.frAvatar[data-presence='online'] {
+  box-shadow:
+    0 0 0 2px var(--glacier-surface-raised),
+    0 0 0 4px var(--glacier-success-solid);
+}
+
+.frAvatar[data-presence='ingame'] {
+  box-shadow:
+    0 0 0 2px var(--glacier-surface-raised),
+    0 0 0 4px var(--glacier-accent-solid);
+}
+
+.frAvatar[data-presence='offline'] {
+  box-shadow:
+    0 0 0 2px var(--glacier-surface-raised),
+    0 0 0 4px var(--glacier-border);
+}
+
+/* Name + status share one baseline; the name stays readable when cramped. */
+.frWho {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--glacier-space-2);
+  min-width: 0;
+}
+
+.frName {
+  font-weight: var(--glacier-font-weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Right-aligned action cluster. */
+.frActions {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  margin-inline-start: auto;
+}
+
+/* Section heading with the incoming-request count beside it. */
+.frHeadRow {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+/* ================= profile ================= */
+
+/* The showcase hero band: the chosen deck's cover art blurred under a
+   directional scrim, same recipe as the deck editor hero. */
+.pfHero {
+  position: relative;
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-xl);
+  overflow: hidden;
+}
+
+.pfHeroArt {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center 25%;
+  filter: blur(16px) saturate(1.15) brightness(0.75);
+  transform: scale(1.2);
+}
+
+.pfHeroScrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklch, var(--glacier-bg) 90%, transparent) 0%,
+    color-mix(in oklch, var(--glacier-bg) 70%, transparent) 55%,
+    color-mix(in oklch, var(--glacier-bg) 40%, transparent) 100%
+  );
+}
+
+[dir='rtl'] .pfHeroScrim {
+  background: linear-gradient(
+    -90deg,
+    color-mix(in oklch, var(--glacier-bg) 90%, transparent) 0%,
+    color-mix(in oklch, var(--glacier-bg) 70%, transparent) 55%,
+    color-mix(in oklch, var(--glacier-bg) 40%, transparent) 100%
+  );
+}
+
+.pfHero:not([data-has-art]) .pfHeroScrim {
+  background: var(--glacier-surface);
+}
+
+.pfHeroContent {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-4);
+  padding: var(--glacier-space-5) var(--glacier-space-5) var(--glacier-space-3);
+}
+
+/* When a showcase deck is set the avatar earns an accent ring. */
+.pfAvatar {
+  display: inline-flex;
+  flex: none;
+  border-radius: var(--glacier-radius-full);
+}
+
+.pfHero[data-has-art] .pfAvatar {
+  box-shadow:
+    0 0 0 2px var(--glacier-bg),
+    0 0 0 4px var(--glacier-accent-solid);
+}
+
+.pfShowcaseRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-3) var(--glacier-space-5);
+  padding: 0 var(--glacier-space-5) var(--glacier-space-5);
+}
+
+.pfShowcasePick {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--glacier-space-1);
+}
+
+/* The chosen deck: name + commander, one clickable block. */
+.pfShowcaseDeck {
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+  text-align: start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--glacier-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pfShowcaseName {
+  font-size: var(--glacier-font-size-lg);
+  font-weight: var(--glacier-font-weight-semibold);
+}
+
+.pfShowcaseDeck:hover .pfShowcaseName {
+  text-decoration: underline;
+}
+
+/* Stats on the page rhythm: value over label, no card chrome. */
+.pfStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-4) var(--glacier-space-8);
+}
+
+.pfStat {
+  display: grid;
+  gap: var(--glacier-space-1);
+}
+
+.pfStatValue {
+  font-size: var(--glacier-font-size-2xl);
+  font-weight: var(--glacier-font-weight-semibold);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}

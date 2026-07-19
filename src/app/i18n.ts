@@ -1,0 +1,891 @@
+import { useLocale, type Locale } from '@glacier/react';
+
+/**
+ * A deliberately small translation layer for the app's own strings.
+ *
+ * The kit already localizes its components and flips direction through
+ * LocaleProvider (see App.tsx). This module adds the app-level strings on top,
+ * reading the same active locale via useLocale() so there is a single source of
+ * truth. To add a language, extend AppLocale, LANGUAGES, and every entry below;
+ * to add a string, add one key. English is the fallback for any gap.
+ */
+export const APP_LOCALES = ['en', 'es', 'fr', 'ar'] as const;
+export type AppLocale = (typeof APP_LOCALES)[number];
+
+/** The languages the starter ships, in their own names, for the picker. */
+export const LANGUAGES: { code: AppLocale; label: string }[] = [
+  { code: 'en', label: 'English' },
+  { code: 'es', label: 'Español' },
+  { code: 'fr', label: 'Français' },
+  { code: 'ar', label: 'العربية' },
+];
+
+type Entry = Record<AppLocale, string>;
+
+export const messages = {
+  // nav rail (labels double as tooltips in the vertical rail)
+  navPlay: { en: 'Play', es: 'Jugar', fr: 'Jouer', ar: 'اللعب' },
+  navDecks: { en: 'Decks', es: 'Mazos', fr: 'Decks', ar: 'المجموعات' },
+  navBrowse: { en: 'Browse', es: 'Explorar', fr: 'Parcourir', ar: 'تصفح' },
+  navFriends: { en: 'Friends', es: 'Amigos', fr: 'Amis', ar: 'الأصدقاء' },
+  navProfile: { en: 'Profile', es: 'Perfil', fr: 'Profil', ar: 'الملف الشخصي' },
+  navSettings: { en: 'Settings', es: 'Ajustes', fr: 'Réglages', ar: 'الإعدادات' },
+  navCustomize: { en: 'Customize', es: 'Personalizar', fr: 'Personnaliser', ar: 'تخصيص' },
+
+  // customize modal
+  custTitle: { en: 'Set your table', es: 'Prepara tu mesa', fr: 'Dressez votre table', ar: 'جهّز طاولتك' },
+  custLede: {
+    en: 'Pick the playmat your games sit on and the back your cards wear. Changes apply live — you can revisit this any time from the Customize button.',
+    es: 'Elige el tapete de tus partidas y el dorso de tus cartas. Los cambios se aplican al instante; vuelve cuando quieras con el botón Personalizar.',
+    fr: 'Choisissez le tapis de vos parties et le dos de vos cartes. Les changements s’appliquent en direct — revenez quand vous voulez via le bouton Personnaliser.',
+    ar: 'اختر سجادة اللعب وظهر بطاقاتك. تُطبَّق التغييرات فورًا — عُد في أي وقت عبر زر التخصيص.',
+  },
+  custPlaymat: { en: 'Playmat', es: 'Tapete', fr: 'Tapis de jeu', ar: 'سجادة اللعب' },
+  custPlaymatHint: {
+    en: 'The artwork behind the whole app and under every game you play.',
+    es: 'El arte detrás de toda la aplicación y bajo cada partida.',
+    fr: 'L’illustration derrière toute l’application et sous chaque partie.',
+    ar: 'العمل الفني خلف التطبيق كله وتحت كل مباراة تلعبها.',
+  },
+  custDone: { en: 'Looks good', es: 'Se ve bien', fr: 'C’est parfait', ar: 'يبدو جيدًا' },
+  navPrimary: { en: 'Primary', es: 'Principal', fr: 'Principal', ar: 'التنقل الرئيسي' },
+
+  // onboarding
+  obTitle: { en: 'Claim your name', es: 'Reclama tu nombre', fr: 'Choisissez votre nom', ar: 'اختر اسمك' },
+  obLede: {
+    en: 'Pick a username and password. No email needed. The Final Fantasy precons are yours the moment you join.',
+    es: 'Elige un nombre de usuario y una contraseña, sin correo. Los precons de Final Fantasy son tuyos al entrar.',
+    fr: 'Choisissez un pseudo et un mot de passe, sans e-mail. Les précons Final Fantasy sont à vous dès l’entrée.',
+    ar: 'اختر اسم مستخدم وكلمة مرور، دون بريد. مجموعات فاينل فانتسي لك فور الانضمام.',
+  },
+  obPlaceholder: { en: 'Username', es: 'Nombre de usuario', fr: 'Pseudo', ar: 'اسم المستخدم' },
+  obPassword: { en: 'Password', es: 'Contraseña', fr: 'Mot de passe', ar: 'كلمة المرور' },
+  obSignUp: { en: 'Sign up', es: 'Crear cuenta', fr: 'Créer un compte', ar: 'إنشاء حساب' },
+  obLogIn: { en: 'Log in', es: 'Iniciar sesión', fr: 'Se connecter', ar: 'تسجيل الدخول' },
+  obLoginLede: {
+    en: 'Welcome back. Your decks and friends are where you left them.',
+    es: 'Bienvenido de nuevo. Tus mazos y amigos están donde los dejaste.',
+    fr: 'Bon retour. Vos decks et amis vous attendent.',
+    ar: 'مرحبًا بعودتك. مجموعاتك وأصدقاؤك حيث تركتهم.',
+  },
+  obPasswordShort: {
+    en: 'Password must be at least 6 characters.',
+    es: 'La contraseña debe tener al menos 6 caracteres.',
+    fr: 'Le mot de passe doit contenir au moins 6 caractères.',
+    ar: 'يجب ألا تقل كلمة المرور عن 6 أحرف.',
+  },
+  obBadCredentials: {
+    en: 'Wrong username or password.',
+    es: 'Usuario o contraseña incorrectos.',
+    fr: 'Pseudo ou mot de passe incorrect.',
+    ar: 'اسم المستخدم أو كلمة المرور غير صحيحة.',
+  },
+  obButton: { en: 'Enter the table', es: 'Entrar a la mesa', fr: 'Rejoindre la table', ar: 'ادخل إلى الطاولة' },
+  obTaken: { en: 'That name is taken.', es: 'Ese nombre está ocupado.', fr: 'Ce nom est pris.', ar: 'هذا الاسم محجوز.' },
+  obInvalid: {
+    en: '3–24 characters: letters, numbers, underscores.',
+    es: '3–24 caracteres: letras, números y guiones bajos.',
+    fr: '3–24 caractères : lettres, chiffres, tirets bas.',
+    ar: '3–24 حرفًا: أحرف وأرقام وشرطات سفلية.',
+  },
+  obOffline: {
+    en: 'Could not reach the server. Is it running?',
+    es: 'No se pudo contactar con el servidor. ¿Está en marcha?',
+    fr: 'Serveur injoignable. Est-il lancé ?',
+    ar: 'تعذّر الوصول إلى الخادم. هل هو قيد التشغيل؟',
+  },
+
+  // play (lobby)
+  playTitle: { en: 'Play', es: 'Jugar', fr: 'Jouer', ar: 'اللعب' },
+  playLede: {
+    en: 'Spin up a table, share the code, and battle. Freeform Commander for 2–6 players.',
+    es: 'Crea una mesa, comparte el código y a jugar. Commander libre para 2–6 jugadores.',
+    fr: 'Créez une table, partagez le code et jouez. Commander libre pour 2 à 6 joueurs.',
+    ar: 'أنشئ طاولة وشارك الرمز والعب. كوماندر حر من 2 إلى 6 لاعبين.',
+  },
+  playNewTable: { en: 'New table', es: 'Nueva mesa', fr: 'Nouvelle table', ar: 'طاولة جديدة' },
+  playTableName: { en: 'Table name', es: 'Nombre de la mesa', fr: 'Nom de la table', ar: 'اسم الطاولة' },
+  playSeats: { en: 'Seats', es: 'Asientos', fr: 'Places', ar: 'المقاعد' },
+  playCreate: { en: 'Create table', es: 'Crear mesa', fr: 'Créer la table', ar: 'إنشاء طاولة' },
+  playJoin: { en: 'Join with a code', es: 'Unirse con código', fr: 'Rejoindre avec un code', ar: 'انضم برمز' },
+  playJoinButton: { en: 'Join', es: 'Unirse', fr: 'Rejoindre', ar: 'انضمام' },
+  playCodePlaceholder: { en: 'Table code', es: 'Código de mesa', fr: 'Code de table', ar: 'رمز الطاولة' },
+  playPickDeck: { en: 'Deck', es: 'Mazo', fr: 'Deck', ar: 'المجموعة' },
+  playCodeBad: { en: 'No table with that code.', es: 'No hay mesa con ese código.', fr: 'Aucune table avec ce code.', ar: 'لا توجد طاولة بهذا الرمز.' },
+  playInvites: { en: 'Invites', es: 'Invitaciones', fr: 'Invitations', ar: 'الدعوات' },
+  playInviteFrom: { en: 'invited you to', es: 'te invitó a', fr: 'vous invite à', ar: 'دعاك إلى' },
+  playAccept: { en: 'Accept', es: 'Aceptar', fr: 'Accepter', ar: 'قبول' },
+  playDismiss: { en: 'Dismiss', es: 'Descartar', fr: 'Ignorer', ar: 'تجاهل' },
+
+  // shareable table links
+  tblShare: { en: 'Share', es: 'Compartir', fr: 'Partager', ar: 'مشاركة' },
+  tblShareHint: {
+    en: 'Copy an invite link to this table',
+    es: 'Copia un enlace de invitación a esta mesa',
+    fr: 'Copier un lien d’invitation vers cette table',
+    ar: 'انسخ رابط دعوة إلى هذه الطاولة',
+  },
+  tblLinkCopied: { en: 'Invite link copied', es: 'Enlace de invitación copiado', fr: 'Lien d’invitation copié', ar: 'تم نسخ رابط الدعوة' },
+  tblShareBlurb: {
+    en: 'Share the link and players jump straight in.',
+    es: 'Comparte el enlace y los jugadores entran directo.',
+    fr: 'Partagez le lien et les joueurs entrent directement.',
+    ar: 'شارك الرابط ويدخل اللاعبون مباشرة.',
+  },
+  joinAuthPrompt: {
+    en: 'You’ve been invited to a table — sign in to take your seat.',
+    es: 'Te han invitado a una mesa: inicia sesión para ocupar tu asiento.',
+    fr: 'Vous êtes invité à une table — connectez-vous pour prendre place.',
+    ar: 'تمت دعوتك إلى طاولة — سجّل الدخول لتأخذ مقعدك.',
+  },
+  joinFinding: { en: 'Finding the table…', es: 'Buscando la mesa…', fr: 'Recherche de la table…', ar: 'جارٍ إيجاد الطاولة…' },
+  joinInvited: { en: 'You’ve been invited to', es: 'Te han invitado a', fr: 'Vous êtes invité à', ar: 'تمت دعوتك إلى' },
+  joinInProgress: { en: 'In progress', es: 'En curso', fr: 'En cours', ar: 'قيد التقدم' },
+  joinTakeSeat: { en: 'Take a seat', es: 'Tomar asiento', fr: 'Prendre place', ar: 'خذ مقعدًا' },
+  joinSpectate: { en: 'Spectate', es: 'Observar', fr: 'Regarder', ar: 'مشاهدة' },
+  joinNotNow: { en: 'Not now', es: 'Ahora no', fr: 'Pas maintenant', ar: 'ليس الآن' },
+  joinFull: { en: 'This table is full.', es: 'Esta mesa está llena.', fr: 'Cette table est complète.', ar: 'هذه الطاولة ممتلئة.' },
+  joinDismissed: { en: 'Invite dismissed', es: 'Invitación descartada', fr: 'Invitation ignorée', ar: 'تم تجاهل الدعوة' },
+  joinNotFound: { en: 'Table not found', es: 'Mesa no encontrada', fr: 'Table introuvable', ar: 'الطاولة غير موجودة' },
+  joinNotFoundBody: {
+    en: 'This invite has expired or the table was closed.',
+    es: 'Esta invitación expiró o la mesa se cerró.',
+    fr: 'Cette invitation a expiré ou la table a été fermée.',
+    ar: 'انتهت صلاحية هذه الدعوة أو أُغلقت الطاولة.',
+  },
+  joinBackToPlay: { en: 'Back to Play', es: 'Volver a Jugar', fr: 'Retour au jeu', ar: 'العودة إلى اللعب' },
+
+  // decks
+  decksTitle: { en: 'Decks', es: 'Mazos', fr: 'Decks', ar: 'المجموعات' },
+  decksLede: {
+    en: 'Your library of Commander decks. The Final Fantasy precons are yours from the start.',
+    es: 'Tu biblioteca de mazos de Commander: los precons de Final Fantasy son tuyos desde el inicio.',
+    fr: 'Votre bibliothèque de decks Commander. Les précons Final Fantasy sont à vous dès le départ.',
+    ar: 'مكتبة مجموعات كوماندر. مجموعات فاينل فانتسي الجاهزة لك من البداية.',
+  },
+  decksNew: { en: 'New deck', es: 'Nuevo mazo', fr: 'Nouveau deck', ar: 'مجموعة جديدة' },
+  decksImport: { en: 'Import', es: 'Importar', fr: 'Importer', ar: 'استيراد' },
+  decksCards: { en: 'cards', es: 'cartas', fr: 'cartes', ar: 'بطاقة' },
+  decksEmpty: {
+    en: 'No decks yet. Import one or start from scratch.',
+    es: 'Aún no hay mazos. Importa uno o empieza desde cero.',
+    fr: 'Aucun deck pour l’instant. Importez-en un ou partez de zéro.',
+    ar: 'لا مجموعات بعد. استورد واحدة أو ابدأ من الصفر.',
+  },
+
+  // friends
+  frTitle: { en: 'Friends', es: 'Amigos', fr: 'Amis', ar: 'الأصدقاء' },
+  frLede: {
+    en: 'Find players by name, see who is online, and pull them into a game.',
+    es: 'Encuentra jugadores por nombre, mira quién está en línea e invítalos a jugar.',
+    fr: 'Trouvez des joueurs par leur nom, voyez qui est en ligne et invitez-les.',
+    ar: 'ابحث عن لاعبين بالاسم، وشاهد المتصلين، وادعُهم للعب.',
+  },
+  frSearch: { en: 'Find players', es: 'Buscar jugadores', fr: 'Chercher des joueurs', ar: 'ابحث عن لاعبين' },
+  frRequests: { en: 'Requests', es: 'Solicitudes', fr: 'Demandes', ar: 'الطلبات' },
+  frOnline: { en: 'Online', es: 'En línea', fr: 'En ligne', ar: 'متصل' },
+  frOffline: { en: 'Offline', es: 'Desconectado', fr: 'Hors ligne', ar: 'غير متصل' },
+  frInGame: { en: 'In game', es: 'En partida', fr: 'En partie', ar: 'في مباراة' },
+  frAdd: { en: 'Add', es: 'Añadir', fr: 'Ajouter', ar: 'إضافة' },
+  frSent: { en: 'Sent', es: 'Enviada', fr: 'Envoyée', ar: 'أُرسلت' },
+  frInvite: { en: 'Invite', es: 'Invitar', fr: 'Inviter', ar: 'دعوة' },
+  frSpectate: { en: 'Spectate', es: 'Observar', fr: 'Regarder', ar: 'مشاهدة' },
+  frRemove: { en: 'Remove', es: 'Eliminar', fr: 'Retirer', ar: 'إزالة' },
+  frNone: {
+    en: 'No friends yet. Search a name above.',
+    es: 'Aún no hay amigos: busca un nombre arriba.',
+    fr: 'Pas encore d’amis. Cherchez un nom ci-dessus.',
+    ar: 'لا أصدقاء بعد. ابحث عن اسم أعلاه.',
+  },
+
+  // profile
+  pfTitle: { en: 'Profile', es: 'Perfil', fr: 'Profil', ar: 'الملف الشخصي' },
+  pfPrecons: { en: 'Final Fantasy Commander precons', es: 'Precons de Commander de Final Fantasy', fr: 'Précons Commander Final Fantasy', ar: 'مجموعات فاينل فانتسي الجاهزة' },
+  pfPreconsLede: {
+    en: 'Four ready-to-play decks from across the saga. They are in your library from day one.',
+    es: 'Cuatro mazos listos para jugar de toda la saga. Están en tu biblioteca desde el primer día.',
+    fr: 'Quatre decks prêts à jouer issus de la saga. Dans votre bibliothèque dès le premier jour.',
+    ar: 'أربع مجموعات جاهزة للعب من عبر الملحمة. في مكتبتك من اليوم الأول.',
+  },
+  pfSignOut: { en: 'Sign out', es: 'Cerrar sesión', fr: 'Se déconnecter', ar: 'تسجيل الخروج' },
+  pfTempId: {
+    en: 'Signed in on this device',
+    es: 'Sesión iniciada en este dispositivo',
+    fr: 'Connecté sur cet appareil',
+    ar: 'مسجّل الدخول على هذا الجهاز',
+  },
+
+  // top bar
+  searchPlaceholder: { en: 'Search', es: 'Buscar', fr: 'Rechercher', ar: 'بحث' },
+  notifications: { en: 'Notifications', es: 'Notificaciones', fr: 'Notifications', ar: 'الإشعارات' },
+  toggleSidebar: { en: 'Toggle sidebar', es: 'Alternar barra lateral', fr: 'Basculer la barre latérale', ar: 'تبديل الشريط الجانبي' },
+  caughtUp: {
+    en: "You're all caught up.",
+    es: 'Estás al día.',
+    fr: 'Vous êtes à jour.',
+    ar: 'أنت مطّلع على كل الجديد.',
+  },
+
+  // browse (precon catalog)
+  brTitle: { en: 'Browse precons', es: 'Explorar precons', fr: 'Parcourir les précons', ar: 'تصفح المجموعات الجاهزة' },
+  brLede: {
+    en: 'Every official Commander precon since 2020: Bloomburrow, Final Fantasy, Fallout, Doctor Who, and the rest. Add any of them to your library with one click.',
+    es: 'Todos los precons oficiales de Commander desde 2020: Bloomburrow, Final Fantasy, Fallout, Doctor Who y más. Añade cualquiera a tu biblioteca con un clic.',
+    fr: 'Tous les précons Commander officiels depuis 2020 : Bloomburrow, Final Fantasy, Fallout, Doctor Who et plus. Ajoutez-en un à votre bibliothèque en un clic.',
+    ar: 'كل مجموعات كوماندر الرسمية الجاهزة منذ 2020: Bloomburrow وFinal Fantasy وFallout وDoctor Who وغيرها. أضِف أيًا منها إلى مكتبتك بنقرة واحدة.',
+  },
+  brSearch: { en: 'Search decks, commanders, sets…', es: 'Buscar mazos, comandantes, ediciones…', fr: 'Chercher decks, commandants, éditions…', ar: 'ابحث عن المجموعات والقادة والإصدارات…' },
+  brFeatured: { en: 'Featured', es: 'Destacados', fr: 'À la une', ar: 'مميّز' },
+  brAdd: { en: 'Add to my decks', es: 'Añadir a mis mazos', fr: 'Ajouter à mes decks', ar: 'أضِف إلى مجموعاتي' },
+  brAdded: { en: 'Added', es: 'Añadido', fr: 'Ajouté', ar: 'أُضيف' },
+
+  // contextual sidebar, per route
+  sbPlayTables: { en: 'Tables', es: 'Mesas', fr: 'Tables', ar: 'الطاولات' },
+  sbDecksLibrary: { en: 'Library', es: 'Biblioteca', fr: 'Bibliothèque', ar: 'المكتبة' },
+  sbBrowseCatalog: { en: 'Catalog', es: 'Catálogo', fr: 'Catalogue', ar: 'الكتالوج' },
+  sbFriendsPeople: { en: 'People', es: 'Personas', fr: 'Personnes', ar: 'الأشخاص' },
+  sbProfileYou: { en: 'You', es: 'Tú', fr: 'Vous', ar: 'أنت' },
+
+  // settings modal
+  setTitle: { en: 'Settings', es: 'Ajustes', fr: 'Réglages', ar: 'الإعدادات' },
+  setAppearance: { en: 'Appearance', es: 'Apariencia', fr: 'Apparence', ar: 'المظهر' },
+  setAppearanceHint: {
+    en: 'Theme, accent, and density, stamped as data attributes the token layer reads.',
+    es: 'Tema, acento y densidad, aplicados como atributos que lee la capa de tokens.',
+    fr: 'Thème, accent et densité, posés en attributs que lit la couche de tokens.',
+    ar: 'السمة واللون المميز والكثافة، تُطبَّق كسمات تقرؤها طبقة الرموز.',
+  },
+  setTheme: { en: 'Theme', es: 'Tema', fr: 'Thème', ar: 'السمة' },
+  setSystem: { en: 'System', es: 'Sistema', fr: 'Système', ar: 'النظام' },
+  setLight: { en: 'Light', es: 'Claro', fr: 'Clair', ar: 'فاتح' },
+  setDark: { en: 'Dark', es: 'Oscuro', fr: 'Sombre', ar: 'داكن' },
+  setDensity: { en: 'Density', es: 'Densidad', fr: 'Densité', ar: 'الكثافة' },
+  setComfortable: { en: 'Comfortable', es: 'Cómoda', fr: 'Confortable', ar: 'مريحة' },
+  setCompact: { en: 'Compact', es: 'Compacta', fr: 'Compacte', ar: 'مضغوطة' },
+  setAccent: { en: 'Accent', es: 'Acento', fr: 'Accent', ar: 'اللون المميز' },
+  setLanguage: { en: 'Language', es: 'Idioma', fr: 'Langue', ar: 'اللغة' },
+  setCardBack: { en: 'Card back', es: 'Dorso de las cartas', fr: 'Dos des cartes', ar: 'ظهر البطاقات' },
+  setCardBackHint: {
+    en: 'Your face-down art, everywhere a card shows its back.',
+    es: 'Tu arte para las cartas boca abajo, en toda la app.',
+    fr: 'Votre illustration pour les cartes face cachée, partout.',
+    ar: 'فنّ بطاقاتك المقلوبة في كل مكان.',
+  },
+  setLayout: { en: 'Layout', es: 'Disposición', fr: 'Disposition', ar: 'التخطيط' },
+  setLayoutHint: {
+    en: 'How the shell frames itself.',
+    es: 'Cómo se enmarca la interfaz.',
+    fr: 'Comment la coque se cadre.',
+    ar: 'كيف يؤطّر الهيكل نفسه.',
+  },
+  setSidebar: { en: 'Sidebar', es: 'Barra lateral', fr: 'Barre latérale', ar: 'الشريط الجانبي' },
+  setFloating: { en: 'Floating', es: 'Flotante', fr: 'Flottante', ar: 'عائم' },
+  setFullHeight: { en: 'Full height', es: 'Altura completa', fr: 'Pleine hauteur', ar: 'ارتفاع كامل' },
+  setHaptics: { en: 'Haptics', es: 'Vibración', fr: 'Retour haptique', ar: 'اهتزاز اللمس' },
+  setHapticsHint: {
+    en: 'Subtle taps on presses and toggles, where the platform supports it.',
+    es: 'Toques sutiles al pulsar y alternar, donde la plataforma lo permita.',
+    fr: 'Vibrations légères aux appuis et bascules, si la plateforme le permet.',
+    ar: 'نقرات خفيفة عند الضغط والتبديل، حيثما تدعمها المنصّة.',
+  },
+  setTypeface: { en: 'Typeface', es: 'Tipografía', fr: 'Police', ar: 'الخط' },
+  setMonospace: { en: 'Monospace', es: 'Monoespaciada', fr: 'Chasse fixe', ar: 'أحادي المسافة' },
+  setShape: { en: 'Shape & feel', es: 'Forma y estilo', fr: 'Forme et rendu', ar: 'الشكل والإحساس' },
+  setShapeHint: {
+    en: 'Corner rounding and glass frost scale every radius and blur token at once.',
+    es: 'El redondeo y el esmerilado escalan a la vez cada token de radio y desenfoque.',
+    fr: 'L’arrondi et le givrage ajustent d’un coup chaque jeton de rayon et de flou.',
+    ar: 'تدوير الزوايا وضبابية الزجاج يوسّعان كل رموز نصف القطر والتمويه دفعة واحدة.',
+  },
+  setRounding: { en: 'Corner rounding', es: 'Redondeo', fr: 'Arrondi', ar: 'تدوير الزوايا' },
+  setFrost: { en: 'Glass frost', es: 'Esmerilado', fr: 'Givrage du verre', ar: 'ضبابية الزجاج' },
+  setVisualFeedback: { en: 'Visual feedback', es: 'Respuesta visual', fr: 'Retour visuel', ar: 'ردّ فعل بصري' },
+  setVisualFeedbackHint: {
+    en: 'An on-screen effect on press, in lockstep with haptics; works with the mouse too.',
+    es: 'Un efecto en pantalla al pulsar, sincronizado con la vibración; también con el ratón.',
+    fr: 'Un effet à l’écran à l’appui, synchronisé avec le retour haptique ; fonctionne aussi à la souris.',
+    ar: 'تأثير على الشاشة عند الضغط، متزامن مع الاهتزاز؛ ويعمل مع الفأرة أيضًا.',
+  },
+  setEffect: { en: 'Effect', es: 'Efecto', fr: 'Effet', ar: 'التأثير' },
+  setIntensity: { en: 'Intensity', es: 'Intensidad', fr: 'Intensité', ar: 'الشدّة' },
+
+  // settings modal — tabs
+  setGeneral: { en: 'General', es: 'General', fr: 'Général', ar: 'عام' },
+  setTableTab: { en: 'Table', es: 'Mesa', fr: 'Table', ar: 'الطاولة' },
+  setAccount: { en: 'Account', es: 'Cuenta', fr: 'Compte', ar: 'الحساب' },
+  setAbout: { en: 'About', es: 'Acerca de', fr: 'À propos', ar: 'حول' },
+
+  // settings modal — general tab
+  setReduceMotion: { en: 'Reduce motion', es: 'Reducir movimiento', fr: 'Réduire les animations', ar: 'تقليل الحركة' },
+  setReduceMotionHint: {
+    en: 'Minimize animations and transitions across the app.',
+    es: 'Minimiza las animaciones y transiciones en toda la app.',
+    fr: 'Réduit les animations et les transitions dans toute l’application.',
+    ar: 'يقلّل الرسوم المتحركة والانتقالات في التطبيق كله.',
+  },
+
+  // settings modal — table tab
+  setCustomizeNote: {
+    en: 'Your playmat and card back live in Customize.',
+    es: 'Tu tapete y el dorso de las cartas están en Personalizar.',
+    fr: 'Votre tapis et le dos des cartes sont dans Personnaliser.',
+    ar: 'سجادتك وظهر بطاقاتك موجودان في التخصيص.',
+  },
+  setOpenCustomize: { en: 'Open Customize', es: 'Abrir Personalizar', fr: 'Ouvrir Personnaliser', ar: 'افتح التخصيص' },
+
+  // settings modal — about & updates tab
+  setVersion: { en: 'Version', es: 'Versión', fr: 'Version', ar: 'الإصدار' },
+  setCheckUpdates: { en: 'Check for updates', es: 'Buscar actualizaciones', fr: 'Rechercher des mises à jour', ar: 'التحقق من التحديثات' },
+  setChecking: { en: 'Checking…', es: 'Buscando…', fr: 'Recherche…', ar: 'جارٍ التحقق…' },
+  setUpToDate: { en: 'You’re up to date', es: 'Estás al día', fr: 'Vous êtes à jour', ar: 'أنت على أحدث إصدار' },
+  setUpdateAvailable: { en: 'Update available', es: 'Actualización disponible', fr: 'Mise à jour disponible', ar: 'يتوفّر تحديث' },
+  setUpdateInstall: { en: 'Update & restart', es: 'Actualizar y reiniciar', fr: 'Mettre à jour et redémarrer', ar: 'التحديث وإعادة التشغيل' },
+  setUpdating: { en: 'Updating…', es: 'Actualizando…', fr: 'Mise à jour…', ar: 'جارٍ التحديث…' },
+  setUpdateFailed: {
+    en: 'Update check failed. Try again later.',
+    es: 'La búsqueda de actualizaciones falló. Inténtalo más tarde.',
+    fr: 'Échec de la recherche de mise à jour. Réessayez plus tard.',
+    ar: 'فشل التحقق من التحديث. حاول لاحقًا.',
+  },
+  setDesktopAutoUpdates: {
+    en: 'The desktop app updates itself automatically.',
+    es: 'La app de escritorio se actualiza automáticamente.',
+    fr: 'L’application de bureau se met à jour automatiquement.',
+    ar: 'يُحدّث تطبيق سطح المكتب نفسه تلقائيًا.',
+  },
+  setDownloadDesktop: {
+    en: 'Download the desktop app',
+    es: 'Descargar la app de escritorio',
+    fr: 'Télécharger l’application de bureau',
+    ar: 'نزّل تطبيق سطح المكتب',
+  },
+  setCredits: {
+    en: 'Made with love at prettycardboard.com',
+    es: 'Hecho con cariño en prettycardboard.com',
+    fr: 'Fait avec soin sur prettycardboard.com',
+    ar: 'صُنع بحبّ على prettycardboard.com',
+  },
+
+  // settings modal — footer
+  setReset: { en: 'Reset', es: 'Restablecer', fr: 'Réinitialiser', ar: 'إعادة تعيين' },
+  setDone: { en: 'Done', es: 'Hecho', fr: 'Terminé', ar: 'تم' },
+  setResetToast: {
+    en: 'Settings reset to defaults',
+    es: 'Ajustes restablecidos',
+    fr: 'Réglages réinitialisés',
+    ar: 'أُعيدت الإعدادات إلى الوضع الافتراضي',
+  },
+
+  // desktop download prompt (web → desktop app)
+  dlGetDesktop: {
+    en: 'Get the desktop app',
+    es: 'Consigue la app de escritorio',
+    fr: 'Obtenir l’application de bureau',
+    ar: 'احصل على تطبيق سطح المكتب',
+  },
+  dlBannerBlurb: {
+    en: 'PrettyCardboard runs best as a desktop app — native window, auto-updates, and offline play.',
+    es: 'PrettyCardboard funciona mejor como app de escritorio: ventana nativa, actualizaciones automáticas y juego sin conexión.',
+    fr: 'PrettyCardboard est meilleur en application de bureau : fenêtre native, mises à jour automatiques et jeu hors ligne.',
+    ar: 'يعمل PrettyCardboard بأفضل شكل كتطبيق سطح مكتب — نافذة أصلية وتحديثات تلقائية ولعب دون اتصال.',
+  },
+  dlDownloadFor: { en: 'Download for', es: 'Descargar para', fr: 'Télécharger pour', ar: 'نزّل لـ' },
+  dlMac: { en: 'macOS', es: 'macOS', fr: 'macOS', ar: 'macOS' },
+  dlWindows: { en: 'Windows', es: 'Windows', fr: 'Windows', ar: 'Windows' },
+  dlLinuxDeb: { en: 'Linux (.deb)', es: 'Linux (.deb)', fr: 'Linux (.deb)', ar: 'Linux (.deb)' },
+  dlLinuxRpm: { en: 'Linux (.rpm)', es: 'Linux (.rpm)', fr: 'Linux (.rpm)', ar: 'Linux (.rpm)' },
+  dlAllVersions: { en: 'All versions', es: 'Todas las versiones', fr: 'Toutes les versions', ar: 'كل الإصدارات' },
+  dlOtherPlatforms: { en: 'Other platforms', es: 'Otras plataformas', fr: 'Autres plateformes', ar: 'منصّات أخرى' },
+  dlLinux: { en: 'Linux', es: 'Linux', fr: 'Linux', ar: 'Linux' },
+
+  // download landing page
+  dlHeroTag: { en: 'Desktop app', es: 'App de escritorio', fr: 'Application de bureau', ar: 'تطبيق سطح المكتب' },
+  dlHeroTitle: {
+    en: 'PrettyCardboard, at home on your desktop',
+    es: 'PrettyCardboard, como en casa en tu escritorio',
+    fr: 'PrettyCardboard, comme chez vous sur votre bureau',
+    ar: 'PrettyCardboard، في بيته على سطح مكتبك',
+  },
+  dlHeroLede: {
+    en: 'A native window, automatic updates, and smoother play. Install once and jump straight to the table.',
+    es: 'Una ventana nativa, actualizaciones automáticas y un juego más fluido. Instálalo una vez y ve directo a la mesa.',
+    fr: 'Une fenêtre native, des mises à jour automatiques et un jeu plus fluide. Installez une fois et rejoignez la table.',
+    ar: 'نافذة أصلية وتحديثات تلقائية ولعب أكثر سلاسة. ثبّته مرة واحدة وانتقل مباشرة إلى الطاولة.',
+  },
+  dlPerkUpdatesTitle: { en: 'Always up to date', es: 'Siempre actualizado', fr: 'Toujours à jour', ar: 'دائمًا محدّث' },
+  dlPerkUpdatesBody: {
+    en: 'New features and fixes install themselves in the background, signed and verified.',
+    es: 'Las novedades y correcciones se instalan solas en segundo plano, firmadas y verificadas.',
+    fr: 'Nouveautés et correctifs s’installent tout seuls en arrière-plan, signés et vérifiés.',
+    ar: 'تُثبَّت الميزات والإصلاحات الجديدة تلقائيًا في الخلفية، موقَّعة ومُتحقَّق منها.',
+  },
+  dlPerkSyncTitle: { en: 'Play anywhere', es: 'Juega donde sea', fr: 'Jouez partout', ar: 'العب في أي مكان' },
+  dlPerkSyncBody: {
+    en: 'Your decks, friends, and tables follow your account across every device you sign in on.',
+    es: 'Tus mazos, amigos y mesas siguen a tu cuenta en cada dispositivo donde inicies sesión.',
+    fr: 'Vos decks, amis et tables suivent votre compte sur chaque appareil connecté.',
+    ar: 'مجموعاتك وأصدقاؤك وطاولاتك تتبع حسابك على كل جهاز تسجّل الدخول منه.',
+  },
+  dlPerkNativeTitle: { en: 'Native and fast', es: 'Nativo y rápido', fr: 'Natif et rapide', ar: 'أصلي وسريع' },
+  dlPerkNativeBody: {
+    en: 'Real window chrome, crisp rendering, and animations that stay smooth at the table.',
+    es: 'Ventana nativa, renderizado nítido y animaciones fluidas en la mesa.',
+    fr: 'Fenêtre native, rendu net et animations fluides à la table.',
+    ar: 'إطار نافذة أصلي وعرض واضح ورسوم متحركة سلسة على الطاولة.',
+  },
+
+  // table
+  tblLeave: { en: 'Leave table', es: 'Salir de la mesa', fr: 'Quitter la table', ar: 'مغادرة الطاولة' },
+  tblStart: { en: 'Deal opening hands', es: 'Repartir manos iniciales', fr: 'Distribuer les mains', ar: 'وزّع الأيدي الافتتاحية' },
+
+  // concede + post-match
+  tblConcede: { en: 'Concede', es: 'Conceder', fr: 'Concéder', ar: 'استسلام' },
+  tblConcedeTitle: { en: 'Concede the game?', es: '¿Conceder la partida?', fr: 'Concéder la partie ?', ar: 'هل تستسلم في هذه المباراة؟' },
+  tblConcedeDesc: {
+    en: 'You are out of this game: turns skip you, your board stays put, and the last player standing wins.',
+    es: 'Quedas fuera de esta partida: los turnos te saltan, tu mesa se queda como está y gana el último en pie.',
+    fr: 'Vous quittez cette partie : les tours vous sautent, votre plateau reste en place et le dernier joueur debout gagne.',
+    ar: 'أنت خارج هذه اللعبة: تتخطاك الأدوار وتبقى ساحتك كما هي ويفوز آخر لاعب صامد.',
+  },
+  tblConceded: { en: 'Conceded', es: 'Concedió', fr: 'A concédé', ar: 'استسلم' },
+  pmResults: { en: 'Results', es: 'Resultados', fr: 'Résultats', ar: 'النتائج' },
+  pmWins: { en: 'wins the match!', es: '¡gana la partida!', fr: 'remporte la partie !', ar: 'يفوز بالمباراة!' },
+  pmWinner: { en: 'Winner', es: 'Ganador', fr: 'Vainqueur', ar: 'الفائز' },
+  pmTurnsWord: { en: 'turns', es: 'turnos', fr: 'tours', ar: 'أدوار' },
+  pmTurnsTaken: { en: 'Turns taken', es: 'Turnos jugados', fr: 'Tours joués', ar: 'الأدوار المُلعبة' },
+  pmAvgTurn: { en: 'Average time per turn', es: 'Tiempo medio por turno', fr: 'Temps moyen par tour', ar: 'متوسط الوقت لكل دور' },
+  pmRecord: { en: 'All-time record', es: 'Historial total', fr: 'Bilan global', ar: 'السجل الكامل' },
+  pmEndorseCount: { en: 'Endorsements', es: 'Reconocimientos', fr: 'Recommandations', ar: 'الإشادات' },
+  pmDeckWord: { en: 'deck', es: 'mazo', fr: 'deck', ar: 'مجموعة' },
+  pmDeckRecord: { en: 'Deck record', es: 'Historial del mazo', fr: 'Bilan du deck', ar: 'سجل المجموعة' },
+  pmSaltScore: { en: 'Deck salt score', es: 'Nivel de sal del mazo', fr: 'Score de sel du deck', ar: 'مستوى الملوحة للمجموعة' },
+  pmEndorse: { en: 'Endorse', es: 'Reconocer', fr: 'Recommander', ar: 'إشادة' },
+  pmEndorsed: { en: 'Endorsed', es: 'Reconocido', fr: 'Recommandé', ar: 'تمت الإشادة' },
+  pmSaltHint: { en: 'Did this deck make you salty?', es: '¿Este mazo te dejó salado?', fr: 'Ce deck vous a-t-il rendu salé ?', ar: 'هل أزعجتك هذه المجموعة؟' },
+  pmSaltShort: { en: 'Salty?', es: '¿Salado?', fr: 'Salé ?', ar: 'منزعج؟' },
+  pmPerTurn: { en: '/turn', es: '/turno', fr: '/tour', ar: '/دور' },
+  pmWinAbbr: { en: 'W', es: 'V', fr: 'V', ar: 'ف' },
+  pmLossAbbr: { en: 'L', es: 'D', fr: 'D', ar: 'خ' },
+  pmBack: { en: 'Back to table', es: 'Volver a la mesa', fr: 'Retour à la table', ar: 'العودة إلى الطاولة' },
+  pmLeave: { en: 'Leave table', es: 'Salir de la mesa', fr: 'Quitter la table', ar: 'مغادرة الطاولة' },
+
+  tblYourTurn: { en: 'Your turn', es: 'Tu turno', fr: 'À vous de jouer', ar: 'دورك' },
+
+  // card scale toolbar
+  gpCardsLarger: { en: 'Larger cards', es: 'Cartas más grandes', fr: 'Cartes plus grandes', ar: 'بطاقات أكبر' },
+  gpCardsSmaller: { en: 'Smaller cards', es: 'Cartas más pequeñas', fr: 'Cartes plus petites', ar: 'بطاقات أصغر' },
+
+  // pre-match matchup splash
+  preTitle: { en: 'The matchup', es: 'El enfrentamiento', fr: 'La confrontation', ar: 'المواجهة' },
+  preFirst: { en: 'goes first', es: 'empieza', fr: 'commence', ar: 'يبدأ أولًا' },
+  preDeal: { en: 'Deal me in', es: 'Repárteme', fr: 'Distribuez-moi', ar: 'وزّع لي' },
+  tblWaiting: { en: 'Waiting for players…', es: 'Esperando jugadores…', fr: 'En attente de joueurs…', ar: 'في انتظار اللاعبين…' },
+  tblCode: { en: 'Code', es: 'Código', fr: 'Code', ar: 'الرمز' },
+  tblSpectating: { en: 'Spectating', es: 'Observando', fr: 'En spectateur', ar: 'مشاهدة' },
+  tblDraw: { en: 'Draw', es: 'Robar', fr: 'Piocher', ar: 'اسحب' },
+  tblUntapAll: { en: 'Untap all', es: 'Enderezar todo', fr: 'Tout dégager', ar: 'أزل الاستعداد عن الكل' },
+  tblShuffle: { en: 'Shuffle', es: 'Barajar', fr: 'Mélanger', ar: 'اخلط' },
+  tblMulligan: { en: 'Mulligan', es: 'Mulligan', fr: 'Mulligan', ar: 'مولّيغان' },
+  tblToken: { en: 'Token', es: 'Ficha', fr: 'Jeton', ar: 'رمز' },
+  tblChat: { en: 'Chat', es: 'Chat', fr: 'Chat', ar: 'الدردشة' },
+  tblLog: { en: 'Log', es: 'Registro', fr: 'Journal', ar: 'السجل' },
+  tblLogEmpty: { en: 'Nothing has happened yet.', es: 'Aún no ha pasado nada.', fr: 'Rien ne s’est encore passé.', ar: 'لم يحدث شيء بعد.' },
+  tblPlayers: { en: 'Players', es: 'Jugadores', fr: 'Joueurs', ar: 'اللاعبون' },
+  tblYou: { en: 'You', es: 'Tú', fr: 'Vous', ar: 'أنت' },
+  tblHost: { en: 'Host', es: 'Anfitrión', fr: 'Hôte', ar: 'المضيف' },
+  tblSpectators: { en: 'Spectators', es: 'Espectadores', fr: 'Spectateurs', ar: 'المتفرجون' },
+  tblChatPlaceholder: { en: 'Say something…', es: 'Di algo…', fr: 'Dites quelque chose…', ar: 'قل شيئًا…' },
+  tblLife: { en: 'Life', es: 'Vida', fr: 'Vie', ar: 'الحياة' },
+  tblPoison: { en: 'Poison', es: 'Veneno', fr: 'Poison', ar: 'السم' },
+  tblHand: { en: 'Hand', es: 'Mano', fr: 'Main', ar: 'اليد' },
+  tblLibrary: { en: 'Library', es: 'Biblioteca', fr: 'Bibliothèque', ar: 'المكتبة' },
+  tblGraveyard: { en: 'Graveyard', es: 'Cementerio', fr: 'Cimetière', ar: 'المقبرة' },
+  tblExile: { en: 'Exile', es: 'Exilio', fr: 'Exil', ar: 'النفي' },
+  tblCommand: { en: 'Command', es: 'Comando', fr: 'Commandement', ar: 'القيادة' },
+
+  // deck builder
+  dbUntitled: { en: 'Untitled deck', es: 'Mazo sin título', fr: 'Deck sans titre', ar: 'مجموعة بلا اسم' },
+  dbBack: { en: 'Back to library', es: 'Volver a la biblioteca', fr: 'Retour à la bibliothèque', ar: 'العودة إلى المكتبة' },
+  dbDeckName: { en: 'Deck name', es: 'Nombre del mazo', fr: 'Nom du deck', ar: 'اسم المجموعة' },
+  dbDelete: { en: 'Delete deck', es: 'Eliminar mazo', fr: 'Supprimer le deck', ar: 'حذف المجموعة' },
+  dbDeleteBody: {
+    en: 'This permanently removes the deck from your library.',
+    es: 'Esto elimina el mazo de tu biblioteca de forma permanente.',
+    fr: 'Le deck sera définitivement retiré de votre bibliothèque.',
+    ar: 'سيؤدي هذا إلى إزالة المجموعة من مكتبتك نهائيًا.',
+  },
+  dbCancel: { en: 'Cancel', es: 'Cancelar', fr: 'Annuler', ar: 'إلغاء' },
+  dbSaving: { en: 'Saving…', es: 'Guardando…', fr: 'Enregistrement…', ar: 'جارٍ الحفظ…' },
+  dbSaved: { en: 'Saved', es: 'Guardado', fr: 'Enregistré', ar: 'تم الحفظ' },
+  dbSaveFailed: {
+    en: 'Save failed. It will retry on the next change.',
+    es: 'No se pudo guardar; se reintentará con el próximo cambio.',
+    fr: 'Échec de l’enregistrement. Nouvel essai au prochain changement.',
+    ar: 'فشل الحفظ. ستُعاد المحاولة مع التغيير التالي.',
+  },
+  dbCommander: { en: 'Commander', es: 'Comandante', fr: 'Commandant', ar: 'القائد' },
+  dbMain: { en: 'Main deck', es: 'Mazo principal', fr: 'Deck principal', ar: 'المجموعة الرئيسية' },
+  dbSide: { en: 'Sideboard', es: 'Banquillo', fr: 'Réserve', ar: 'الاحتياط' },
+  dbNoCommander: {
+    en: 'No commander yet. Crown a legendary creature from the search panel.',
+    es: 'Aún sin comandante: corona una criatura legendaria desde el buscador.',
+    fr: 'Pas encore de commandant. Couronnez une créature légendaire depuis la recherche.',
+    ar: 'لا قائد بعد. تَوِّج مخلوقًا أسطوريًا من لوحة البحث.',
+  },
+  dbSearch: { en: 'Card search', es: 'Buscar cartas', fr: 'Recherche de cartes', ar: 'بحث عن البطاقات' },
+  dbSearchPlaceholder: { en: 'Search every Magic card…', es: 'Busca cualquier carta de Magic…', fr: 'Cherchez n’importe quelle carte Magic…', ar: 'ابحث في كل بطاقات ماجيك…' },
+  dbSearchIdle: {
+    en: 'Type a name, type, or rules text to search Scryfall.',
+    es: 'Escribe un nombre, tipo o texto de reglas para buscar en Scryfall.',
+    fr: 'Saisissez un nom, un type ou un texte de règles pour chercher sur Scryfall.',
+    ar: 'اكتب اسمًا أو نوعًا أو نص قواعد للبحث في Scryfall.',
+  },
+  dbSearchNone: { en: 'No cards match.', es: 'Ninguna carta coincide.', fr: 'Aucune carte ne correspond.', ar: 'لا بطاقات مطابقة.' },
+  dbSearchFailed: { en: 'Search failed. Try again.', es: 'La búsqueda falló; inténtalo de nuevo.', fr: 'La recherche a échoué. Réessayez.', ar: 'فشل البحث. حاول مجددًا.' },
+  dbAdd: { en: 'Add', es: 'Añadir', fr: 'Ajouter', ar: 'إضافة' },
+  dbSetCommander: { en: 'Set as commander', es: 'Nombrar comandante', fr: 'Définir comme commandant', ar: 'تعيين قائدًا' },
+  dbRemove: { en: 'Remove', es: 'Quitar', fr: 'Retirer', ar: 'إزالة' },
+  dbCurve: { en: 'Mana curve', es: 'Curva de maná', fr: 'Courbe de mana', ar: 'منحنى المانا' },
+  dbIdentity: { en: 'Color identity', es: 'Identidad de color', fr: 'Identité colorée', ar: 'هوية الألوان' },
+  dbIdentityWarn: { en: 'Outside identity', es: 'Fuera de identidad', fr: 'Hors identité', ar: 'خارج الهوية' },
+  dbIdentityWarnSummary: {
+    en: 'outside the commander’s color identity',
+    es: 'fuera de la identidad de color del comandante',
+    fr: 'hors de l’identité colorée du commandant',
+    ar: 'خارج هوية ألوان القائد',
+  },
+  dbDeckSize: { en: 'Deck size', es: 'Tamaño del mazo', fr: 'Taille du deck', ar: 'حجم المجموعة' },
+  dbTypeCreature: { en: 'Creatures', es: 'Criaturas', fr: 'Créatures', ar: 'المخلوقات' },
+  dbTypeInstant: { en: 'Instants', es: 'Instantáneos', fr: 'Éphémères', ar: 'الفورية' },
+  dbTypeSorcery: { en: 'Sorceries', es: 'Conjuros', fr: 'Rituels', ar: 'الشعوذات' },
+  dbTypeArtifact: { en: 'Artifacts', es: 'Artefactos', fr: 'Artefacts', ar: 'الأدوات' },
+  dbTypeEnchantment: { en: 'Enchantments', es: 'Encantamientos', fr: 'Enchantements', ar: 'التعويذات' },
+  dbTypePlaneswalker: { en: 'Planeswalkers', es: 'Caminantes de planos', fr: 'Arpenteurs', ar: 'جوّابو الأبعاد' },
+  dbTypeBattle: { en: 'Battles', es: 'Batallas', fr: 'Batailles', ar: 'المعارك' },
+  dbTypeLand: { en: 'Lands', es: 'Tierras', fr: 'Terrains', ar: 'الأراضي' },
+  dbTypeOther: { en: 'Other', es: 'Otros', fr: 'Autres', ar: 'أخرى' },
+  dbImportTitle: { en: 'Import a deck', es: 'Importar un mazo', fr: 'Importer un deck', ar: 'استيراد مجموعة' },
+  dbImportTabText: { en: 'Text', es: 'Texto', fr: 'Texte', ar: 'نص' },
+  dbImportTabMoxfield: { en: 'Moxfield', es: 'Moxfield', fr: 'Moxfield', ar: 'Moxfield' },
+  dbImportPaste: {
+    en: 'Paste a decklist: one card per line, with optional Commander / Deck / Sideboard headers.',
+    es: 'Pega una lista: una carta por línea, con encabezados opcionales Commander / Deck / Sideboard.',
+    fr: 'Collez une liste : une carte par ligne, avec des en-têtes Commander / Deck / Sideboard facultatifs.',
+    ar: 'الصق قائمة: بطاقة في كل سطر، مع عناوين Commander / Deck / Sideboard اختيارية.',
+  },
+  dbImportUrl: { en: 'Moxfield URL or deck id', es: 'URL de Moxfield o id del mazo', fr: 'URL Moxfield ou id du deck', ar: 'رابط Moxfield أو معرّف المجموعة' },
+  dbImportRun: { en: 'Import deck', es: 'Importar mazo', fr: 'Importer le deck', ar: 'استيراد المجموعة' },
+  dbImportEmpty: { en: 'Nothing to import yet.', es: 'Aún no hay nada que importar.', fr: 'Rien à importer pour l’instant.', ar: 'لا شيء للاستيراد بعد.' },
+  dbImportNotFound: {
+    en: 'Some names were not recognized and were skipped:',
+    es: 'Algunos nombres no se reconocieron y se omitieron:',
+    fr: 'Certains noms n’ont pas été reconnus et ont été ignorés :',
+    ar: 'بعض الأسماء لم يتم التعرف عليها وتم تخطيها:',
+  },
+  dbImportBadRef: {
+    en: 'That does not look like a Moxfield deck URL or id.',
+    es: 'Eso no parece una URL o id de mazo de Moxfield.',
+    fr: 'Ceci ne ressemble pas à une URL ou un id de deck Moxfield.',
+    ar: 'هذا لا يبدو رابط مجموعة Moxfield أو معرّفها.',
+  },
+  dbImportMoxFail: {
+    en: 'Moxfield could not be reached from the app. It blocks some requests. Export the deck as text and use the Text tab instead.',
+    es: 'No se pudo contactar con Moxfield desde la app (bloquea algunas peticiones). Exporta el mazo como texto y usa la pestaña Texto.',
+    fr: 'Moxfield est injoignable depuis l’app. Certaines requêtes sont bloquées. Exportez le deck en texte et utilisez l’onglet Texte.',
+    ar: 'تعذّر الوصول إلى Moxfield من التطبيق. فهو يحجب بعض الطلبات. صدِّر المجموعة كنص واستخدم تبويب النص.',
+  },
+  dbImported: { en: 'Deck imported', es: 'Mazo importado', fr: 'Deck importé', ar: 'تم استيراد المجموعة' },
+  // home dashboard
+  navHome: { en: 'Home', es: 'Inicio', fr: 'Accueil', ar: 'الرئيسية' },
+  hmMorning: { en: 'Good morning', es: 'Buenos días', fr: 'Bonjour', ar: 'صباح الخير' },
+  hmAfternoon: { en: 'Good afternoon', es: 'Buenas tardes', fr: 'Bon après-midi', ar: 'مساء الخير' },
+  hmEvening: { en: 'Good evening', es: 'Buenas noches', fr: 'Bonsoir', ar: 'مساء الخير' },
+  hmLede: {
+    en: 'Your table is waiting. Grab a deck and go.',
+    es: 'Tu mesa te espera. Toma un mazo y adelante.',
+    fr: 'Votre table vous attend. Prenez un deck et jouez.',
+    ar: 'طاولتك في انتظارك. خذ مجموعة وانطلق.',
+  },
+  hmQuickPlay: { en: 'Quick play', es: 'Partida rápida', fr: 'Partie rapide', ar: 'لعب سريع' },
+  hmRecentDecks: { en: 'Recent decks', es: 'Mazos recientes', fr: 'Decks récents', ar: 'مجموعات حديثة' },
+  hmFriendsOnline: { en: 'Friends online', es: 'Amigos en línea', fr: 'Amis en ligne', ar: 'أصدقاء متصلون' },
+  hmFeatured: { en: 'From the catalog', es: 'Del catálogo', fr: 'Du catalogue', ar: 'من الكتالوج' },
+  hmViewAll: { en: 'View all', es: 'Ver todo', fr: 'Tout voir', ar: 'عرض الكل' },
+  hmNoFriendsOnline: {
+    en: 'Nobody online right now.',
+    es: 'Nadie en línea ahora mismo.',
+    fr: 'Personne en ligne pour le moment.',
+    ar: 'لا أحد متصل الآن.',
+  },
+
+  // spotlight (command palette)
+  spPlaceholder: {
+    en: 'Search decks, cards, precons, friends…',
+    es: 'Buscar mazos, cartas, precons, amigos…',
+    fr: 'Chercher decks, cartes, précons, amis…',
+    ar: 'ابحث عن مجموعات وبطاقات وأصدقاء…',
+  },
+  spDecks: { en: 'Your decks', es: 'Tus mazos', fr: 'Vos decks', ar: 'مجموعاتك' },
+  spCatalog: { en: 'Precon catalog', es: 'Catálogo de precons', fr: 'Catalogue de précons', ar: 'كتالوج المجموعات الجاهزة' },
+  spCards: { en: 'Cards', es: 'Cartas', fr: 'Cartes', ar: 'البطاقات' },
+  spFriends: { en: 'Friends', es: 'Amigos', fr: 'Amis', ar: 'الأصدقاء' },
+  spNoResults: { en: 'Nothing found.', es: 'No se encontró nada.', fr: 'Rien trouvé.', ar: 'لا نتائج.' },
+  spOpen: { en: 'Open', es: 'Abrir', fr: 'Ouvrir', ar: 'افتح' },
+  spAdd: { en: 'Add', es: 'Añadir', fr: 'Ajouter', ar: 'أضِف' },
+
+  // card popup
+  cpArtist: { en: 'Illustrated by', es: 'Ilustrado por', fr: 'Illustré par', ar: 'رسم' },
+  cpClose: { en: 'Close', es: 'Cerrar', fr: 'Fermer', ar: 'إغلاق' },
+  cpLoading: { en: 'Reading the card…', es: 'Leyendo la carta…', fr: 'Lecture de la carte…', ar: 'قراءة البطاقة…' },
+
+  // deck analytics + brackets
+  anAvgMv: { en: 'Avg. mana value', es: 'Valor de maná medio', fr: 'Valeur de mana moy.', ar: 'متوسط قيمة المانا' },
+  anLands: { en: 'Lands', es: 'Tierras', fr: 'Terrains', ar: 'الأراضي' },
+  anLowLands: {
+    en: 'Light on lands for a typical list.',
+    es: 'Pocas tierras para una lista típica.',
+    fr: 'Peu de terrains pour une liste typique.',
+    ar: 'أراضٍ قليلة مقارنة بالمعتاد.',
+  },
+  anTypes: { en: 'Card types', es: 'Tipos de carta', fr: 'Types de carte', ar: 'أنواع البطاقات' },
+  bkBracket: { en: 'Bracket', es: 'Bracket', fr: 'Bracket', ar: 'الفئة' },
+  bkEstimate: { en: 'estimate', es: 'estimación', fr: 'estimation', ar: 'تقدير' },
+  bk1: { en: 'Exhibition', es: 'Exhibición', fr: 'Exhibition', ar: 'استعراضي' },
+  bk2: { en: 'Core', es: 'Núcleo', fr: 'Core', ar: 'أساسي' },
+  bk3: { en: 'Upgraded', es: 'Mejorado', fr: 'Amélioré', ar: 'محسّن' },
+  bk4: { en: 'Optimized', es: 'Optimizado', fr: 'Optimisé', ar: 'مُحسَّن بالكامل' },
+  bk5: { en: 'cEDH', es: 'cEDH', fr: 'cEDH', ar: 'cEDH' },
+  bkGameChangers: { en: 'Game Changers', es: 'Game Changers', fr: 'Game Changers', ar: 'Game Changers' },
+  bkNote: {
+    en: 'Estimated from the official Game Changers list. Final call is your table’s.',
+    es: 'Estimado según la lista oficial de Game Changers. La última palabra la tiene tu mesa.',
+    fr: 'Estimé d’après la liste officielle des Game Changers. Le dernier mot revient à votre table.',
+    ar: 'تقدير وفق قائمة Game Changers الرسمية. القرار النهائي لطاولتك.',
+  },
+
+  // browse filters
+  brFilterColors: { en: 'Colors', es: 'Colores', fr: 'Couleurs', ar: 'الألوان' },
+  brSort: { en: 'Sort', es: 'Ordenar', fr: 'Trier', ar: 'ترتيب' },
+  brSortNew: { en: 'Newest', es: 'Más nuevos', fr: 'Récents', ar: 'الأحدث' },
+  brSortOld: { en: 'Oldest', es: 'Más antiguos', fr: 'Anciens', ar: 'الأقدم' },
+  brSortAz: { en: 'A to Z', es: 'A a Z', fr: 'A à Z', ar: 'أبجدي' },
+  brGroupBy: { en: 'Group', es: 'Agrupar', fr: 'Grouper', ar: 'تجميع' },
+  brGroupYear: { en: 'By year', es: 'Por año', fr: 'Par année', ar: 'حسب السنة' },
+  brGroupSet: { en: 'By set', es: 'Por edición', fr: 'Par édition', ar: 'حسب الإصدار' },
+  brOwned: { en: 'In your library', es: 'En tu biblioteca', fr: 'Dans votre bibliothèque', ar: 'في مكتبتك' },
+
+  // profile showcase
+  pfFavDeck: { en: 'Showcase deck', es: 'Mazo destacado', fr: 'Deck vitrine', ar: 'المجموعة المميزة' },
+  pfChooseFav: { en: 'Choose a showcase deck', es: 'Elige un mazo destacado', fr: 'Choisir un deck vitrine', ar: 'اختر مجموعة مميزة' },
+  pfMemberSince: { en: 'Playing since', es: 'Jugando desde', fr: 'Joue depuis', ar: 'يلعب منذ' },
+  pfDeckCount: { en: 'decks built', es: 'mazos creados', fr: 'decks créés', ar: 'مجموعات' },
+
+  // persistent tables
+  plPersistent: { en: 'Keep lobby alive', es: 'Mantener la sala activa', fr: 'Garder le salon actif', ar: 'إبقاء الصالة نشطة' },
+  plPersistentHint: {
+    en: 'Keeps the table around between sessions. Quick matches are saved too, but expire a day after everyone leaves.',
+    es: 'Mantiene la mesa entre sesiones. Las partidas rápidas también se guardan, pero caducan un día después de que todos se vayan.',
+    fr: 'Garde la table entre les sessions. Les parties rapides sont aussi sauvegardées, mais expirent un jour après le départ de tous.',
+    ar: 'تُبقي الطاولة بين الجلسات. تُحفظ المباريات السريعة أيضًا لكنها تنتهي بعد يوم من مغادرة الجميع.',
+  },
+  plHistory: { en: 'Match history', es: 'Historial de partidas', fr: 'Historique des parties', ar: 'سجل المباريات' },
+  plWith: { en: 'with', es: 'con', fr: 'avec', ar: 'مع' },
+  plSolo: { en: 'Solo game', es: 'Partida en solitario', fr: 'Partie solo', ar: 'مباراة فردية' },
+  plYourTables: { en: 'Your tables', es: 'Tus mesas', fr: 'Vos tables', ar: 'طاولاتك' },
+  plResume: { en: 'Resume', es: 'Reanudar', fr: 'Reprendre', ar: 'استئناف' },
+  plCloseTable: { en: 'Close table', es: 'Cerrar mesa', fr: 'Fermer la table', ar: 'إغلاق الطاولة' },
+  plTableClosed: {
+    en: 'This table was closed.',
+    es: 'Esta mesa fue cerrada.',
+    fr: 'Cette table a été fermée.',
+    ar: 'أُغلقت هذه الطاولة.',
+  },
+  plLobby: { en: 'Lobby', es: 'Sala', fr: 'Salon', ar: 'صالة' },
+  plNoTables: {
+    en: 'No saved tables. Start one and it will wait for you here.',
+    es: 'No hay mesas guardadas. Crea una y te esperará aquí.',
+    fr: 'Aucune table sauvegardée. Créez-en une et elle vous attendra ici.',
+    ar: 'لا طاولات محفوظة. أنشئ واحدة وستنتظرك هنا.',
+  },
+
+  // live notifications
+  ntFriendRequest: {
+    en: 'sent you a friend request',
+    es: 'te envió una solicitud de amistad',
+    fr: 'vous a envoyé une demande d’ami',
+    ar: 'أرسل إليك طلب صداقة',
+  },
+  ntFriendAccepted: {
+    en: 'accepted your friend request',
+    es: 'aceptó tu solicitud de amistad',
+    fr: 'a accepté votre demande d’ami',
+    ar: 'قبل طلب صداقتك',
+  },
+  ntInvited: {
+    en: 'invited you to',
+    es: 'te invitó a',
+    fr: 'vous invite à',
+    ar: 'دعاك إلى',
+  },
+
+  // formats
+  dbFormat: { en: 'Format', es: 'Formato', fr: 'Format', ar: 'الصيغة' },
+  dbCopyWarnSummary: {
+    en: 'over the copy limit',
+    es: 'sobre el límite de copias',
+    fr: 'au-delà de la limite de copies',
+    ar: 'فوق حد النسخ',
+  },
+  dbRuleWarn: {
+    en: 'Breaks this format’s rules.',
+    es: 'Rompe las reglas de este formato.',
+    fr: 'Enfreint les règles de ce format.',
+    ar: 'يخالف قواعد هذه الصيغة.',
+  },
+
+  // right-click customization
+  apArtwork: { en: 'Choose artwork', es: 'Elegir ilustración', fr: 'Choisir l’illustration', ar: 'اختر الرسم' },
+  apHeaderCard: { en: 'Header card', es: 'Carta de portada', fr: 'Carte d’en-tête', ar: 'بطاقة الغلاف' },
+  apHeaderHint: {
+    en: 'This card leads the deck: its art crowns the editor and the deck tile.',
+    es: 'Esta carta encabeza el mazo: su arte corona el editor y la ficha del mazo.',
+    fr: 'Cette carte mène le deck : son illustration couronne l’éditeur et la vignette.',
+    ar: 'هذه البطاقة تتصدر المجموعة: رسمها يعلو المحرر وبطاقة المجموعة.',
+  },
+  apRightClickHint: {
+    en: 'Right-click a card to change its artwork.',
+    es: 'Clic derecho en una carta para cambiar su ilustración.',
+    fr: 'Clic droit sur une carte pour changer son illustration.',
+    ar: 'انقر بزر الفأرة الأيمن على بطاقة لتغيير رسمها.',
+  },
+
+  // empty states + loading quips
+  esShuffling: { en: 'Shuffling up…', es: 'Barajando…', fr: 'On mélange…', ar: 'يجري الخلط…' },
+  esUntapped: {
+    en: 'All tapped out. Nothing here yet.',
+    es: 'Todo girado. Aún no hay nada aquí.',
+    fr: 'Tout est engagé. Rien ici pour l’instant.',
+    ar: 'لا شيء هنا بعد.',
+  },
+  esDrawStep: {
+    en: 'Your draw step awaits.',
+    es: 'Tu paso de robo te espera.',
+    fr: 'Votre pioche vous attend.',
+    ar: 'خطوة السحب في انتظارك.',
+  },
+  // gameplay v2: phases, combat, tools
+  phUpkeep: { en: 'Upkeep', es: 'Mantenimiento', fr: 'Entretien', ar: 'الصيانة' },
+  phMain1: { en: 'Main 1', es: 'Principal 1', fr: 'Principale 1', ar: 'رئيسية 1' },
+  phAttack: { en: 'Attack', es: 'Ataque', fr: 'Attaque', ar: 'هجوم' },
+  phBlock: { en: 'Block', es: 'Bloqueo', fr: 'Blocage', ar: 'صد' },
+  phDamage: { en: 'Damage', es: 'Daño', fr: 'Dégâts', ar: 'ضرر' },
+  phMain2: { en: 'Main 2', es: 'Principal 2', fr: 'Principale 2', ar: 'رئيسية 2' },
+  phEnd: { en: 'End', es: 'Final', fr: 'Fin', ar: 'النهاية' },
+  gpEndTurn: { en: 'End turn', es: 'Terminar turno', fr: 'Fin du tour', ar: 'إنهاء الدور' },
+  gpYourTurn: { en: 'Your turn', es: 'Tu turno', fr: 'Votre tour', ar: 'دورك' },
+  gpTurnOf: { en: 'turn', es: 'turno', fr: 'tour', ar: 'دور' },
+  gpGiveTurnTo: { en: 'Give turn to…', es: 'Dar el turno a…', fr: 'Donner le tour à…', ar: 'أعطِ الدور إلى…' },
+  gpStack: { en: 'The stack', es: 'La pila', fr: 'La pile', ar: 'الرصّة' },
+  gpResolve: { en: 'Resolve', es: 'Resolver', fr: 'Résoudre', ar: 'حلّ' },
+  gpCounterIt: { en: 'Counter', es: 'Contrarrestar', fr: 'Contrer', ar: 'أبطِل' },
+  gpAttackers: { en: 'Declare attackers', es: 'Declarar atacantes', fr: 'Déclarer les attaquants', ar: 'إعلان المهاجمين' },
+  gpBlockers: { en: 'Declare blockers', es: 'Declarar bloqueadores', fr: 'Déclarer les bloqueurs', ar: 'إعلان الصادّين' },
+  gpEndCombat: { en: 'End combat', es: 'Terminar combate', fr: 'Fin du combat', ar: 'إنهاء القتال' },
+  gpCmdTax: { en: 'Tax', es: 'Impuesto', fr: 'Taxe', ar: 'الضريبة' },
+  gpCmdReturn: { en: 'Return to command zone?', es: '¿Volver a la zona de mando?', fr: 'Retour en zone de commandement ?', ar: 'العودة إلى منطقة القيادة؟' },
+  gpDice: { en: 'Dice', es: 'Dados', fr: 'Dés', ar: 'النرد' },
+  gpMarkers: { en: 'Markers', es: 'Marcadores', fr: 'Marqueurs', ar: 'العلامات' },
+  gpMonarch: { en: 'Monarch', es: 'Monarca', fr: 'Monarque', ar: 'الملك' },
+  gpInitiative: { en: 'Initiative', es: 'Iniciativa', fr: 'Initiative', ar: 'المبادرة' },
+  gpDayNight: { en: 'Day / Night', es: 'Día / Noche', fr: 'Jour / Nuit', ar: 'نهار / ليل' },
+  gpStorm: { en: 'Storm', es: 'Tormenta', fr: 'Tempête', ar: 'العاصفة' },
+  gpPeek: { en: 'Look at top…', es: 'Mirar las primeras…', fr: 'Regarder le dessus…', ar: 'انظر إلى الأعلى…' },
+  gpSearchLib: { en: 'Search library', es: 'Buscar en la biblioteca', fr: 'Chercher dans la bibliothèque', ar: 'ابحث في المكتبة' },
+  gpRevealTop: { en: 'Reveal top…', es: 'Revelar las primeras…', fr: 'Révéler le dessus…', ar: 'اكشف الأعلى…' },
+  gpToBottom: { en: 'To bottom', es: 'Al fondo', fr: 'Au fond', ar: 'إلى الأسفل' },
+  gpMullTake: { en: 'Mulligan', es: 'Mulligan', fr: 'Mulligan', ar: 'مولّيغان' },
+  gpMullKeep: { en: 'Keep hand', es: 'Quedarse la mano', fr: 'Garder la main', ar: 'احتفظ باليد' },
+  gpMullBottom: {
+    en: 'Choose cards to put on the bottom',
+    es: 'Elige cartas para poner en el fondo',
+    fr: 'Choisissez des cartes à mettre au fond',
+    ar: 'اختر بطاقات لوضعها في الأسفل',
+  },
+  gpTableSettings: { en: 'Settings & customization', es: 'Ajustes y personalización', fr: 'Réglages et personnalisation', ar: 'الإعدادات والتخصيص' },
+  gpUndo: { en: 'Undo', es: 'Deshacer', fr: 'Annuler', ar: 'تراجع' },
+  gpAttackHint: { en: 'Click your creatures to send them in, then', es: 'Haz clic en tus criaturas para atacar, luego', fr: 'Cliquez sur vos créatures pour attaquer, puis', ar: 'انقر على مخلوقاتك لإرسالها للهجوم، ثم' },
+  gpChooseBlocker: { en: 'Block with…', es: 'Bloquear con…', fr: 'Bloquer avec…', ar: 'صد بواسطة…' },
+  gpNoCreatures: { en: 'No untapped creatures', es: 'Sin criaturas sin girar', fr: 'Aucune créature dégagée', ar: 'لا مخلوقات غير مستنفدة' },
+  gpBlockPrompt: { en: 'Being attacked, click an attacker to block it', es: 'Te atacan: haz clic en un atacante para bloquearlo', fr: 'Attaqué : cliquez sur un attaquant pour le bloquer', ar: 'أنت مُهاجَم، انقر على مهاجم لصدّه' },
+  gpBlockHint: { en: 'Click a creature, then the attacker it blocks', es: 'Haz clic en una criatura y luego en el atacante que bloquea', fr: 'Cliquez sur une créature, puis sur l\'attaquant bloqué', ar: 'انقر على مخلوق ثم على المهاجم الذي يصدّه' },
+  gpDeclared: { en: 'attacking', es: 'atacando', fr: 'à l\'attaque', ar: 'يهاجم' },
+
+  // combat v3: locked declarations, defender response, resolved results
+  cbChooseTarget: { en: 'Choose a target', es: 'Elige un objetivo', fr: 'Choisissez une cible', ar: 'اختر هدفًا' },
+  cbTargetLede: { en: 'Who does this creature attack?', es: '¿A quién ataca esta criatura?', fr: 'Qui cette créature attaque-t-elle ?', ar: 'من يهاجم هذا المخلوق؟' },
+  cbLockIn: { en: 'Lock in', es: 'Confirmar', fr: 'Verrouiller', ar: 'تثبيت' },
+  cbLockedWaiting: { en: 'Attack locked in, waiting on defenders', es: 'Ataque confirmado, esperando a los defensores', fr: 'Attaque verrouillée, en attente des défenseurs', ar: 'تم تثبيت الهجوم، بانتظار المدافعين' },
+  cbReadyCount: { en: 'ready', es: 'listos', fr: 'prêts', ar: 'جاهزون' },
+  cbIncoming: { en: 'Incoming attack', es: 'Ataque entrante', fr: 'Attaque entrante', ar: 'هجوم قادم' },
+  cbIncomingLede: {
+    en: 'Pick an attacker, then one of your creatures to block it. Or take the damage and move on.',
+    es: 'Elige un atacante y luego una de tus criaturas para bloquearlo. O recibe el daño y sigue.',
+    fr: 'Choisissez un attaquant puis une de vos créatures pour le bloquer. Ou subissez les dégâts.',
+    ar: 'اختر مهاجمًا ثم أحد مخلوقاتك لصدّه. أو تلقَّ الضرر وتابع.',
+  },
+  cbIncomingDamage: { en: 'Incoming damage', es: 'Daño entrante', fr: 'Dégâts entrants', ar: 'الضرر القادم' },
+  cbUnblocked: { en: 'Unblocked', es: 'Sin bloquear', fr: 'Non bloqué', ar: 'غير محجوب' },
+  cbYourCreatures: { en: 'Your creatures', es: 'Tus criaturas', fr: 'Vos créatures', ar: 'مخلوقاتك' },
+  cbTakeDamage: { en: 'Take the damage', es: 'Recibir el daño', fr: 'Subir les dégâts', ar: 'تلقّي الضرر' },
+  cbConfirmBlocks: { en: 'Confirm blocks', es: 'Confirmar bloqueos', fr: 'Confirmer les blocages', ar: 'تأكيد الصدّ' },
+  cbPreventAll: { en: 'Prevent all damage', es: 'Prevenir todo el daño', fr: 'Prévenir tous les dégâts', ar: 'منع كل الضرر' },
+  cbPreventHint: {
+    en: 'Played a fog or protection effect? Prevent all damage: no combat damage is dealt to you or by your blockers.',
+    es: '¿Jugaste una niebla o un efecto de protección? Prevenir todo el daño: no se hace daño de combate ni a ti ni por tus bloqueadores.',
+    fr: 'Un brouillard ou un effet de protection ? Prévenir tous les dégâts : aucun dégât de combat ne vous est infligé ni par vos bloqueurs.',
+    ar: 'هل لعبت تعويذة ضباب أو حماية؟ منع كل الضرر: لن يقع ضرر قتالي عليك ولا من صادّيك.',
+  },
+  cbRespond: { en: 'Play a response first', es: 'Responder primero', fr: 'Répondre d\'abord', ar: 'الرد أولًا' },
+  cbReturnCombat: { en: 'Return to combat', es: 'Volver al combate', fr: 'Retour au combat', ar: 'العودة إلى القتال' },
+  cbResultsTitle: { en: 'Combat results', es: 'Resultado del combate', fr: 'Résultats du combat', ar: 'نتائج القتال' },
+  cbResultsUndo: {
+    en: 'Freeform as always: undo within 10 seconds, or fix any card by hand from the piles.',
+    es: 'Libre como siempre: deshaz en 10 segundos o corrige cualquier carta a mano desde los montones.',
+    fr: 'Libre comme toujours : annulez sous 10 secondes ou corrigez une carte à la main depuis les piles.',
+    ar: 'حر كالعادة: تراجع خلال 10 ثوانٍ أو صحّح أي بطاقة يدويًا من الأكوام.',
+  },
+  cbPrevented: { en: 'Prevented', es: 'Prevenido', fr: 'Prévenu', ar: 'مُنع' },
+  cbDamageTo: { en: 'damage to', es: 'de daño a', fr: 'dégâts à', ar: 'ضرر إلى' },
+  cbNoDamage: { en: 'No damage', es: 'Sin daño', fr: 'Aucun dégât', ar: 'لا ضرر' },
+  cbWaitingOthers: { en: 'You are ready, waiting for the other defenders', es: 'Estás listo, esperando a los demás defensores', fr: 'Vous êtes prêt, en attente des autres défenseurs', ar: 'أنت جاهز، بانتظار بقية المدافعين' },
+  gpStage: { en: 'Show this board', es: 'Mostrar este tablero', fr: 'Afficher ce plateau', ar: 'اعرض هذه اللوحة' },
+  gpAddBot: { en: 'Add AI opponent', es: 'Añadir oponente IA', fr: 'Ajouter un adversaire IA', ar: 'أضف خصم ذكاء اصطناعي' },
+  gpBotChip: { en: 'AI', es: 'IA', fr: 'IA', ar: 'ذكاء' },
+  gpBotCasual: { en: 'Casual', es: 'Casual', fr: 'Décontracté', ar: 'عادي' },
+  gpBotAggro: { en: 'Aggressive', es: 'Agresivo', fr: 'Agressif', ar: 'هجومي' },
+  gpBotDefensive: { en: 'Defensive', es: 'Defensivo', fr: 'Défensif', ar: 'دفاعي' },
+  gpBotRandomDeck: { en: 'Random deck', es: 'Mazo aleatorio', fr: 'Deck aléatoire', ar: 'مجموعة عشوائية' },
+  gpRemoveBot: { en: 'Remove AI', es: 'Quitar IA', fr: 'Retirer l\'IA', ar: 'إزالة الخصم الآلي' },
+  gpBoardMode: { en: 'Board layout', es: 'Disposición del tablero', fr: 'Disposition du plateau', ar: 'تخطيط اللوحة' },
+  gpModeFree: { en: 'Free', es: 'Libre', fr: 'Libre', ar: 'حر' },
+  gpModeAssist: { en: 'Smart', es: 'Inteligente', fr: 'Assisté', ar: 'ذكي' },
+  gpModeRows: { en: 'Rows', es: 'Filas', fr: 'Rangées', ar: 'صفوف' },
+  gpModeGrid: { en: 'Grid', es: 'Cuadrícula', fr: 'Grille', ar: 'شبكة' },
+  gpTidy: { en: 'Tidy board', es: 'Ordenar tablero', fr: 'Ranger le plateau', ar: 'رتّب اللوحة' },
+} satisfies Record<string, Entry>;
+
+export type MessageKey = keyof typeof messages;
+
+/** Translate a key against the active locale, falling back to English. */
+export function useT(): (key: MessageKey) => string {
+  const locale = useLocale();
+  const active: AppLocale = (APP_LOCALES as readonly string[]).includes(locale)
+    ? (locale as AppLocale)
+    : 'en';
+  return (key) => messages[key][active] ?? messages[key].en;
+}
+
+/** The app locales are a subset of the kit's, so a plain widen is safe. */
+export function toKitLocale(locale: AppLocale): Locale {
+  return locale;
+}

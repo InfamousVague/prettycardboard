@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "prettycardboard-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "/Users/matt/Development/Apps/PrettyCardboard",
+      "port": 5240
+    }
+  ]
+}

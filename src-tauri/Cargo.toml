@@ -1,0 +1,29 @@
+[package]
+name = "app"
+version = "0.1.0"
+description = "A Glacier UI desktop app"
+authors = ["you"]
+edition = "2021"
+
+# The library the app binary links against; also what mobile targets build.
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+# Positions the native macOS traffic-light buttons so they sit centered in the
+# taller custom title bar (and re-applies the inset on resize). No-op elsewhere.
+tauri-plugin-decorum = "1"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+# Kept in sync with tauri.conf.json > app > security > csp.
+custom-protocol = ["tauri/custom-protocol"]

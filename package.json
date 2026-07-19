@@ -1,0 +1,45 @@
+{
+  "name": "prettycardboard",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "sync:precons": "node scripts/sync-precons.mjs",
+    "typecheck": "tsc --noEmit",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "sync:catalog": "node scripts/sync-catalog.mjs",
+    "redeploy": "node scripts/redeploy.mjs",
+    "redeploy:web": "node scripts/redeploy.mjs web",
+    "redeploy:api": "node scripts/redeploy.mjs api",
+    "release:mac": "node scripts/release-mac.mjs",
+    "release:manifest": "node scripts/build-updater-manifest.mjs"
+  },
+  "dependencies": {
+    "@glacier/icons": "file:./vendor/@glacier/icons",
+    "@glacier/react": "file:./vendor/@glacier/react",
+    "@glacier/tokens": "file:./vendor/@glacier/tokens",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.10.1",
+    "lucide-react": "^1.23.0",
+    "motion": "^12.42.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "recharts": "^3.9.2",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.0.0"
+  }
+}

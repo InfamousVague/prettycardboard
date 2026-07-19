@@ -1,0 +1,8 @@
+# PrettyCardboard reverse proxy — paste into the VPS Caddyfile and adjust the
+# hostname. Caddy proxies WebSocket upgrades (/api/ws) automatically; no extra
+# directives are needed. The server binds 127.0.0.1:8787, so only Caddy can
+# reach it.
+pc.example.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:8787
+}

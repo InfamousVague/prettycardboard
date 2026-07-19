@@ -1,0 +1,3 @@
+/* The kit stylesheet now flows LIVE from the vendored package instead of a
+   baked copy, so kit updates land without re-syncing this file. */
+@import "@glacier/react/styles.css";

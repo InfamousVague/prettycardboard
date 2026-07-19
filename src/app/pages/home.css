@@ -1,0 +1,333 @@
+/* Home dashboard: hero band, quick-play card, and the three shelves.
+   Section rhythm (width, gutters, gaps) comes from .page in app.css. */
+
+/* ---- hero ---- */
+
+/* The greeting as a band: a soft accent glow bleeding in from the corners. */
+.homeHero {
+  position: relative;
+  overflow: hidden;
+  padding: var(--glacier-space-6) var(--glacier-space-6);
+  border: 1px solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-xl);
+  background:
+    radial-gradient(
+      110% 160% at 8% -30%,
+      color-mix(in oklch, var(--glacier-accent-solid) 16%, transparent),
+      transparent 58%
+    ),
+    radial-gradient(
+      90% 130% at 96% 130%,
+      color-mix(in oklch, var(--glacier-accent-solid) 9%, transparent),
+      transparent 62%
+    ),
+    var(--glacier-surface);
+}
+
+.homeHero .lede {
+  margin-block-start: var(--glacier-space-2);
+}
+
+/* ---- shared shelf scaffolding ---- */
+
+/* Every section header sits on the same baseline: title left, view-all right. */
+.homeSectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-3);
+  min-block-size: 2rem;
+}
+
+/* ---- quick play ---- */
+
+.homeQuick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-4);
+}
+
+/* A compact inline form: labeled fields in a row, action button on the end. */
+.homeQuickRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--glacier-space-4);
+}
+
+.homeField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  min-inline-size: 0;
+}
+
+.homeField > * {
+  inline-size: 100%;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.homeQuickRow > button {
+  flex: none;
+  margin-inline-start: auto;
+}
+
+.homeFieldGrow {
+  flex: 1 1 12rem;
+  max-inline-size: 26rem;
+}
+
+.homeQuickDivider {
+  block-size: 1px;
+  background: var(--glacier-border-subtle);
+}
+
+/* ---- deck shelves (recent + featured) ---- */
+
+.homeStackRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-5) var(--glacier-space-4);
+  align-items: flex-start;
+}
+
+.homeStackItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--glacier-space-1);
+  /* DeckStack width 150 plus its 14px tilt padding. */
+  inline-size: 164px;
+}
+
+.homeStackName {
+  margin-block-start: var(--glacier-space-2);
+  font-weight: 600;
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.homeStackSub {
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- friends strip ---- */
+
+.homeFriendsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-3);
+}
+
+.homeFriend {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border: 1px solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-full);
+  background: var(--glacier-surface);
+}
+
+/* ---- quick play, gamified: two lobby tiles ---- */
+
+.qpGrid {
+  display: grid;
+  grid-template-columns: 1.55fr 1fr;
+  gap: var(--glacier-space-4);
+  align-items: stretch;
+}
+
+@media (max-width: 56rem) {
+  .qpGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.qpTile {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--glacier-radius-xl);
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  background: var(--glacier-surface);
+  transition:
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    box-shadow var(--glacier-duration-fast) var(--glacier-ease-out),
+    transform var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.qpTile:hover {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-border));
+  box-shadow: 0 10px 34px rgb(0 0 0 / 0.35);
+  transform: translateY(-2px);
+}
+
+/* the commander presides over the host tile */
+.qpHostArt {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center 20%;
+  filter: saturate(1.05);
+}
+
+.qpTileScrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    color-mix(in oklch, var(--glacier-bg) 96%, transparent) 0%,
+    color-mix(in oklch, var(--glacier-bg) 86%, transparent) 55%,
+    color-mix(in oklch, var(--glacier-bg) 45%, transparent) 100%
+  );
+}
+
+[dir='rtl'] .qpTileScrim {
+  background: linear-gradient(
+    -100deg,
+    color-mix(in oklch, var(--glacier-bg) 96%, transparent) 0%,
+    color-mix(in oklch, var(--glacier-bg) 86%, transparent) 55%,
+    color-mix(in oklch, var(--glacier-bg) 45%, transparent) 100%
+  );
+}
+
+.qpTileBody {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-4);
+  padding: var(--glacier-space-6);
+  height: 100%;
+}
+
+.qpTileTag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  align-self: flex-start;
+  padding: var(--glacier-space-1) var(--glacier-space-3);
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  background: color-mix(in oklch, var(--glacier-bg) 70%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--glacier-accent-text);
+}
+
+.qpField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  min-inline-size: 0;
+}
+
+.qpFieldGrow {
+  flex: 1;
+}
+
+.qpLabel {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.qpDeckRow {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  min-inline-size: 0;
+}
+
+.qpDeckRow > :last-child {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.qpDeckThumb {
+  flex: none;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: var(--glacier-radius-md);
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.4);
+}
+
+.qpRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--glacier-space-4);
+  flex-wrap: wrap;
+}
+
+.qpAction {
+  margin-block-start: auto;
+  inline-size: 100%;
+}
+
+.qpAction svg {
+  margin-inline-end: var(--glacier-space-2);
+}
+
+/* join tile: the code is the star */
+.qpJoin .qpTileBody {
+  align-items: center;
+  text-align: center;
+}
+
+.qpJoin .qpTileTag {
+  align-self: center;
+}
+
+.qpCode {
+  display: grid;
+  place-items: center;
+  padding-block: var(--glacier-space-2);
+}
+
+/* ---- jump back in: a resume banner above quick play ---- */
+
+.homeResume {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-4);
+  padding: var(--glacier-space-3) var(--glacier-space-4);
+  border: 1px solid color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border-subtle));
+  border-radius: var(--glacier-radius-xl);
+  background:
+    radial-gradient(
+      120% 180% at 0% -40%,
+      color-mix(in oklch, var(--glacier-accent-solid) 14%, transparent),
+      transparent 60%
+    ),
+    var(--glacier-surface);
+}
+
+.homeResumeInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  min-inline-size: 0;
+  color: var(--glacier-accent-text);
+}
+
+.homeResumeName {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.homeResume > button {
+  flex: none;
+}

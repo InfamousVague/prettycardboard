@@ -1,0 +1,33 @@
+# dependencies / build output
+node_modules
+dist
+dist-web
+src-tauri/target
+server/target
+
+# secrets — never commit
+.env
+.env.*
+!.env.example
+*.p12
+*.pem
+# tauri updater private key (kept in ~/.tauri, but guard against strays)
+*updater*.key
+
+# runtime data (SQLite with real accounts/decks)
+server/data
+
+# desktop build artifacts
+*.dmg
+*.msi
+*.exe
+*.deb
+*.rpm
+*.AppImage
+*.sig
+
+# OS / editor
+.DS_Store
+.vscode
+.idea
+*.log

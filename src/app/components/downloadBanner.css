@@ -1,0 +1,50 @@
+/* Slim install-the-desktop-app banner, pinned above the shell body on web. */
+.downloadBanner {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-2) var(--glacier-space-4);
+  border-block-end: var(--glacier-hairline) solid var(--glacier-glass-border);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 12%, var(--glacier-surface));
+  backdrop-filter: blur(var(--glacier-blur-sm));
+}
+
+.downloadBannerMark {
+  display: inline-grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  flex: none;
+  border-radius: var(--glacier-radius-md);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 22%, transparent);
+  color: var(--glacier-accent-text);
+}
+
+.downloadBannerText {
+  min-width: 0;
+}
+
+.downloadBannerAction {
+  margin-inline-start: auto;
+  flex: none;
+}
+
+/* The version chip inside the split button. */
+.dlVersion {
+  margin-inline-start: 0.35rem;
+  font-family: var(--glacier-font-mono);
+  font-size: 0.82em;
+  opacity: 0.7;
+}
+
+@media (max-width: 40rem) {
+  .downloadBannerText {
+    display: none;
+  }
+  .downloadBannerAction {
+    margin-inline-start: 0;
+  }
+}

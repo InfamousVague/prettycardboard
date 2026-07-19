@@ -1,0 +1,25 @@
+# PrettyCardboard game server — systemd unit for the future VPS.
+# Install: copy the release binary to /opt/prettycardboard/prettycardboard-server,
+# then: cp prettycardboard.service /etc/systemd/system/ && systemctl enable --now prettycardboard
+[Unit]
+Description=PrettyCardboard server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Environment=PC_PORT=8787
+# SQLite lives at <WorkingDirectory>/data/pc.db (created on first run).
+WorkingDirectory=/opt/prettycardboard
+ExecStart=/opt/prettycardboard/prettycardboard-server
+User=prettycardboard
+Group=prettycardboard
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/prettycardboard/data
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

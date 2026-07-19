@@ -1,0 +1,49 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "PrettyCardboard",
+  "version": "0.1.0",
+  "identifier": "com.mattssoftware.prettycardboard",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5240",
+    "beforeDevCommand": "node scripts/dev-server.mjs",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "PrettyCardboard",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 660,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "transparent": false,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.png"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/InfamousVague/prettycardboard/releases/latest/download/latest.json"
+      ],
+      "pubkey": "ZFc1MGNuVnpkR1ZrSUdOdmJXMWxiblE2SUcxcGJtbHphV2R1SUhCMVlteHBZeUJyWlhrNklFVTJOVFZCTkVGQ1EwTTVRVGc1UWpFS1VsZFRlR2xhY2sxeE5sSldOV2hOV0hOTlFuQnJaa2M0T1VrM0wyOVRWa0l3WTFBelpIUnRiREJ4Y1ZwQ01FMUVVMVJSUmtGSE1ua0s="
+    }
+  }
+}
