@@ -5,13 +5,11 @@ import { useT } from '../../i18n.ts';
 import type { RoomState } from '../../net/types.ts';
 
 /**
- * Turn cue for the seated player: an ambient accent glow hugging the screen
- * edges for the whole of your turn, plus a one-shot "Your turn" pill that
- * announces it and can be dismissed (it also self-dismisses after a moment).
- *
- * The glow is the persistent state; the pill is the attention grab. Both are
- * keyed to (turnNumber, activeSeat) so dismissing the pill silences it for the
- * current turn only - it returns the next time the turn comes back around.
+ * Turn cue for the seated player: a one-shot "Your turn" pill that announces
+ * your turn and can be dismissed (it also self-dismisses after a moment). Keyed
+ * to (turnNumber, activeSeat) so dismissing it silences it for the current turn
+ * only - it returns the next time the turn comes back around. The pulsing
+ * End-turn button carries the ongoing reminder from there.
  */
 export function TurnCue({ room, meSeat }: { room: RoomState; meSeat: number }) {
   const t = useT();
@@ -30,7 +28,6 @@ export function TurnCue({ room, meSeat }: { room: RoomState; meSeat: number }) {
 
   return (
     <>
-      {myTurn && <div className="turnEdgeGlow" aria-hidden />}
       <AnimatePresence>
         {showPill && (
           <motion.div

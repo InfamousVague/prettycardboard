@@ -8,6 +8,16 @@
   /* The bottom strip's fixed height; the dock locks its bottom edge to the
      playmat with it. */
   --pc-strip-h: 11.5rem;
+  /* The staged playmat card: shared radius + resting/active glow. */
+  --pc-mat-radius: 1.4rem;
+  --pc-mat-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--glacier-accent-solid) 10%, transparent),
+    0 20px 55px oklch(0.05 0.02 265 / 0.55),
+    0 0 42px color-mix(in oklch, var(--glacier-accent-solid) 16%, transparent);
+  --pc-mat-shadow-active:
+    inset 0 0 0 1px color-mix(in oklch, var(--glacier-accent-solid) 28%, transparent),
+    0 20px 55px oklch(0.05 0.02 265 / 0.55),
+    0 0 60px color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent);
   position: relative;
   /* Grow to fill the route frame; height:100% cannot resolve against the
      frame's min-height and collapses the felt to content height. */
@@ -93,7 +103,7 @@
   justify-content: center;
   gap: var(--glacier-space-3);
   padding: 0 var(--glacier-space-4) var(--glacier-space-2);
-  padding-inline-end: 18rem; /* clear the chat dock */
+  padding-inline-end: 19.5rem; /* clear the right rail */
   flex-wrap: wrap;
 }
 
@@ -241,7 +251,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding-inline-end: 17rem; /* chat dock */
+  padding-inline-end: 19.5rem; /* right rail */
 }
 
 /* ---- opponents ---- */
@@ -394,45 +404,26 @@
   position: relative;
   flex: 1;
   min-height: 0;
-  /* The board IS the continuous playmat (the full-bleed .tableFelt below): no
-     boxed border or inset mat, so the surface runs edge-to-edge to the bottom
-     of the screen and the hand/zones/vitals float over it. A soft top scrim
-     keeps battlefield cards readable against bright mats. */
-  border: none;
-  border-radius: 0;
-  background: linear-gradient(oklch(0.13 0.02 268 / 0.28), transparent 45%);
-  transition: box-shadow 240ms ease-out;
+  /* The playmat sits INSIDE a glowing card floating on the felt: its own mat
+     background, a rounded border, and an accent glow. The hand/deck/HUD float
+     over its lower band (which is reserved - no cards land there). */
+  margin: var(--glacier-space-3);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
+  border-radius: var(--pc-mat-radius);
+  overflow: hidden;
+  background-image:
+    linear-gradient(oklch(0.13 0.02 268 / 0.34), oklch(0.12 0.02 268 / 0.12) 42%, oklch(0.11 0.02 268 / 0.34)),
+    var(--pc-board-mat, linear-gradient(oklch(0.16 0.02 265), oklch(0.13 0.02 268)));
+  background-size: cover, cover;
+  background-position: center;
+  box-shadow: var(--pc-mat-shadow);
+  transition: box-shadow 240ms ease-out, border-color 240ms ease-out;
 }
 
-/* On your turn the field border warms to the accent; the screen-edge glow
-   (.turnEdgeGlow) now carries the loud part of the invitation. */
+/* On your turn the card's border and glow warm to the accent. */
 .myBoard[data-my-turn] .myField {
-  border-color: color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-border));
-}
-
-/* Your turn, screen-wide: an accent glow hugs all four edges of the play
-   area and breathes. Center stays clear, so cards and chrome read normally. */
-.turnEdgeGlow {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-  border-radius: inherit;
-  animation: pcTurnEdge 2.8s ease-in-out infinite;
-}
-
-@keyframes pcTurnEdge {
-  0%,
-  100% {
-    box-shadow:
-      inset 0 0 55px 3px color-mix(in oklch, var(--glacier-accent-solid) 24%, transparent),
-      inset 0 0 130px 26px color-mix(in oklch, var(--glacier-accent-solid) 11%, transparent);
-  }
-  50% {
-    box-shadow:
-      inset 0 0 74px 6px color-mix(in oklch, var(--glacier-accent-solid) 40%, transparent),
-      inset 0 0 165px 38px color-mix(in oklch, var(--glacier-accent-solid) 18%, transparent);
-  }
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 50%, var(--glacier-border));
+  box-shadow: var(--pc-mat-shadow-active);
 }
 
 /* The one-shot "Your turn" pill, top-center under the ribbon. */
@@ -482,15 +473,6 @@
 @media (pointer: coarse) {
   .turnPillClose {
     padding: 0.5rem;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .turnEdgeGlow {
-    animation: none;
-    box-shadow:
-      inset 0 0 64px 4px color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent),
-      inset 0 0 150px 30px color-mix(in oklch, var(--glacier-accent-solid) 14%, transparent);
   }
 }
 
@@ -731,9 +713,11 @@
 
 /* ---- board tools (mode switch + dice/markers) ---- */
 
+/* Board controls ride the TOP of the playmat, out of the way of the hand
+   and pile stacks along the bottom. */
 .boardTools {
   position: absolute;
-  bottom: var(--glacier-space-2);
+  top: var(--glacier-space-3);
   z-index: 8;
   display: flex;
   align-items: center;
@@ -747,11 +731,11 @@
 }
 
 .boardToolsStart {
-  inset-inline-start: var(--glacier-space-2);
+  inset-inline-start: var(--glacier-space-3);
 }
 
 .boardToolsEnd {
-  inset-inline-end: var(--glacier-space-2);
+  inset-inline-end: var(--glacier-space-3);
 }
 
 /* ---- the stack tray ---- */
@@ -839,7 +823,9 @@
   position: absolute;
   inset-inline: 0;
   bottom: 0;
-  z-index: 6;
+  /* Above battlefield cards (which reach z-30 while dragging) so the hand and
+     piles always sit over the board; still below the drag ghost (z-40). */
+  z-index: 34;
   box-sizing: border-box;
   display: flex;
   align-items: flex-end;
@@ -915,10 +901,32 @@
   color: var(--glacier-text-subtle);
 }
 
+/* Zone caption: which pile this is, plus its count. */
+.pileCaption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  line-height: 1.15;
+}
+
+.pileLabel {
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-medium);
+  color: var(--glacier-text-muted);
+}
+
 .pileEmpty {
   aspect-ratio: 488 / 680;
   border: var(--glacier-hairline) dashed color-mix(in oklch, var(--glacier-border) 60%, transparent);
   border-radius: 8%;
+}
+
+/* Empty graveyard/exile show their icon so the zone reads at a glance. */
+.pileEmptyIcon {
+  display: grid;
+  place-items: center;
+  color: color-mix(in oklch, var(--glacier-text-subtle) 80%, transparent);
 }
 
 /* hand fan */
@@ -930,7 +938,13 @@
   align-items: flex-end;
   min-width: 0;
   border-radius: var(--glacier-radius-xl) var(--glacier-radius-xl) 0 0;
-  transition: box-shadow 160ms ease-out, background 160ms ease-out;
+  /* Rests half off the bottom edge; peeks fully up on hover / while dragging. */
+  transform: translateY(50%);
+  transition: transform 280ms var(--pc-settle), box-shadow 160ms ease-out, background 160ms ease-out;
+}
+
+.myHand[data-peek] {
+  transform: translateY(0);
 }
 
 /* A battlefield card hovers the hand's buffer: light it up as a drop target. */
@@ -1358,12 +1372,27 @@
 
 /* ---- side dock ---- */
 
+/* The right rail is a transparent column of stacked cards: life, players, log. */
 .tableSide {
   position: absolute;
   top: 4.4rem;
-  bottom: calc(var(--pc-strip-h) + 1rem);
+  bottom: var(--glacier-space-3);
   inset-inline-end: var(--glacier-space-3);
-  width: 16rem;
+  width: 18.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  pointer-events: none;
+}
+
+.tableSide > * {
+  pointer-events: auto;
+}
+
+/* The log card fills whatever height the life + players cards leave. */
+.sideLogCard {
+  flex: 1;
+  min-height: 6rem;
   display: flex;
   flex-direction: column;
   gap: var(--glacier-space-2);
@@ -1372,17 +1401,7 @@
   border-radius: var(--glacier-radius-xl);
   background: color-mix(in oklch, oklch(0.18 0.02 265) 80%, transparent);
   backdrop-filter: blur(var(--glacier-blur-md));
-}
-
-.sidePreview {
-  display: grid;
-  place-items: center;
-  min-height: 240px;
-}
-
-.sidePreview[data-empty] {
-  border: var(--glacier-hairline) dashed color-mix(in oklch, var(--glacier-border) 50%, transparent);
-  border-radius: var(--glacier-radius-lg);
+  box-shadow: 0 12px 32px oklch(0.05 0.02 265 / 0.45);
 }
 
 .sideScroll {
@@ -1654,6 +1673,10 @@
 .stageArea .seatFrame[data-stage] {
   flex: 1;
   min-height: 0;
+  /* The opponent's staged playmat matches my own: a glowing floating card. */
+  margin: var(--glacier-space-3) 0;
+  border-radius: var(--pc-mat-radius);
+  box-shadow: var(--pc-mat-shadow);
 }
 
 .myBoard[data-strip-only] {
@@ -2522,12 +2545,16 @@
 /* ---- library as a 3D pile on the mat ---- */
 
 .libStack {
+  position: relative;
+  /* One card tall; the under-layers spill upward out of the box. */
+  overflow: visible;
   perspective: 640px;
-  perspective-origin: 50% 20%;
+  perspective-origin: 50% 80%;
 }
 
 .libStack3d {
-  position: relative;
+  position: absolute;
+  inset: 0;
   transform-style: preserve-3d;
   /* The whole pile leans back a touch so the under-layers read as a stack
      sitting on the felt, not a drop shadow. */
@@ -2565,15 +2592,38 @@
   transform: translateZ(10px) translateY(-2px);
 }
 
-/* A staged opponent sits ACROSS the table: their zone piles (deck/graveyard/
-   exile/command) belong at the TOP with their hand — their side — not at the
-   bottom, where they collided with my own floating hand/zone strip and read as
-   duplicate decks. Reorder so their piles sit under the header, above the
-   field. My strip stays the sole thing at the bottom. */
+/* A staged opponent sits ACROSS the table: their board is a MIRROR of mine.
+   Their full-size zone piles sit at the TOP (their far edge), and both the
+   piles and the battlefield are rotated 180deg so every card faces away -
+   upside down until you click one for the (upright) preview. */
 .seatFrame[data-stage] .zonePiles:not([data-mine]) {
   order: 1;
-  align-self: flex-start;
+  align-self: center;
+  padding: var(--glacier-space-2) var(--glacier-space-3) 0;
+  transform: rotate(180deg);
 }
 .seatFrame[data-stage] .oppField {
   order: 2;
+  transform: rotate(180deg);
+}
+
+/* ---- right rail cards: life (Vitals), players, log ---- */
+
+.playersCard {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--glacier-space-2);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
+  border-radius: var(--glacier-radius-xl);
+  background: color-mix(in oklch, oklch(0.18 0.02 265) 80%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  box-shadow: 0 12px 32px oklch(0.05 0.02 265 / 0.45);
+  max-height: 38vh;
+  overflow-y: auto;
+}
+
+/* In the rail the life card stretches to the rail width. */
+.tableSide .myVitals {
+  align-self: stretch;
 }
