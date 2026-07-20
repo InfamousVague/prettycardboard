@@ -1,12 +1,55 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { Button, FormSection, Modal, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
 import { useT } from './i18n.ts';
 import type { Preferences } from './preferences.ts';
-import { CARD_BACKS, cardBackUrl } from './data/cardBacks.ts';
+import { CARD_BACKS, DEFAULT_CARD_BACK, cardBackUrl } from './data/cardBacks.ts';
 import { PLAYMATS, playmatUrl } from './data/playmats.ts';
 import { presentThemes, THEME_LABEL_KEY, type AssetTheme } from './data/themes.ts';
+import { GameCard } from './components/GameCard.tsx';
+import { cardImage } from './data/cards.ts';
+import { cyberpunkImage } from './data/cyberpunk.ts';
 
 type Filter = 'all' | AssetTheme;
+
+// Bundled sample faces for the split preview (both ship in public/cache), so the
+// "in play" card shows a real Magic face on one half and a real Cyberpunk face
+// on the other with no network.
+const SAMPLE_MTG_ID = '2cfd4494-346c-4cbc-8072-e267254cefcc';
+const SAMPLE_CYBER_ID = '81a8dec7-9541-4020-93e1-7d798a57dcbc';
+
+/**
+ * The card preview strip: the vendor-default back, the player's chosen back
+ * (live), and a split card showing a real Magic face against a real Cyberpunk
+ * face — so a glance shows both what the back looks like and how the two games'
+ * cards read on the felt. A face-down GameCard paints whichever back its
+ * `--pc-card-back` is set to.
+ */
+function CardPreview({ back }: { back: string }) {
+  const t = useT();
+  const backStyle = (id: string): CSSProperties => ({
+    ['--pc-card-back' as string]: `url("${cardBackUrl(id)}")`,
+  });
+  return (
+    <div className="custPreview">
+      <figure className="custPreviewItem" style={backStyle(DEFAULT_CARD_BACK)}>
+        <GameCard name="" faceDown width={84} tilt={0} />
+        <figcaption>{t('custPreviewDefault')}</figcaption>
+      </figure>
+      <figure className="custPreviewItem" style={backStyle(back)}>
+        <GameCard name="" faceDown width={84} tilt={0} />
+        <figcaption>{t('custPreviewYours')}</figcaption>
+      </figure>
+      <figure className="custPreviewItem">
+        <div className="custSplit" role="img" aria-label={t('custPreviewSplit')}>
+          <img className="custSplitMtg" src={cardImage(SAMPLE_MTG_ID)} alt="" draggable={false} />
+          <img className="custSplitCyber" src={cyberpunkImage(SAMPLE_CYBER_ID)} alt="" draggable={false} />
+          <span className="custSplitSeam" aria-hidden />
+        </div>
+        <figcaption>{t('custPreviewSplit')}</figcaption>
+      </figure>
+    </div>
+  );
+}
 
 /**
  * A picker grid that filters by asset theme. The catalog now spans Magic, the
@@ -96,6 +139,10 @@ export function CustomizeModal({
         <Text size={Size.Small} tone={TextTone.Muted}>
           {t('custLede')}
         </Text>
+
+        <FormSection title={t('custPreview')} description={t('custPreviewHint')} divider>
+          <CardPreview back={preferences.cardBack} />
+        </FormSection>
 
         <FormSection title={t('custPlaymat')} description={t('custPlaymatHint')} divider>
           <ThemedPicker

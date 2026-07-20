@@ -5,7 +5,8 @@ import { Download, Layers, Plus } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useUi } from '../state/uiStore.ts';
-import { GAME_LIST, resolveCardImage } from '../data/games.ts';
+import { resolveCardImage } from '../data/games.ts';
+import { useVisibleGames } from '../hooks/useVisibleGames.ts';
 import type { DeckSummary } from '../net/types.ts';
 import { GameCard } from '../components/GameCard.tsx';
 import { GameTag } from '../components/GameTag.tsx';
@@ -28,11 +29,15 @@ export function DecksPage() {
 
 function DeckLibrary() {
   const t = useT();
-  const decks = useApp((state) => state.decks);
+  const allDecks = useApp((state) => state.decks);
   const refreshDecks = useApp((state) => state.refreshDecks);
   const selectDeck = useUi((state) => state.selectDeck);
   const [importOpen, setImportOpen] = useState(false);
   const [newDeckOpen, setNewDeckOpen] = useState(false);
+  // Cyberpunk is a WIP game — hide its decks entirely unless the dev toggle is on.
+  const games = useVisibleGames();
+  const cyberVisible = games.some((g) => g.id === 'cyberpunk');
+  const decks = cyberVisible ? allDecks : allDecks.filter((deck) => (deck.game || 'mtg') !== 'cyberpunk');
   // Which game's decks to show. 'all' spans every game.
   const [gameFilter, setGameFilter] = useState('all');
   const shown = gameFilter === 'all' ? decks : decks.filter((deck) => (deck.game || 'mtg') === gameFilter);
@@ -81,7 +86,7 @@ function DeckLibrary() {
             onValueChange={setGameFilter}
             options={[
               { value: 'all', label: t('decksAllGames') },
-              ...GAME_LIST.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') })),
+              ...games.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') })),
             ]}
           />
         </div>

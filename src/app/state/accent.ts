@@ -39,6 +39,16 @@ export function applyDeckTint(identity: string[]): void {
   else root.removeAttribute('data-accent');
 }
 
+/**
+ * Force a named accent ramp regardless of the user's preference — used to paint
+ * the whole app in the Cyberpunk yellow (`data-accent='cyberpunk'`) while in a
+ * Cyberpunk match. Restore afterwards with clearDeckTint(userAccent, default).
+ */
+export function applyAccentRamp(ramp: string): void {
+  tinted = true;
+  document.documentElement.setAttribute('data-accent', ramp);
+}
+
 /** Restore the user's configured accent (from preferences) after a tint. */
 export function clearDeckTint(userAccent: string, defaultAccent: string): void {
   if (!tinted) return;

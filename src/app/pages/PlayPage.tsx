@@ -26,7 +26,7 @@ import { useGame } from '../state/gameStore.ts';
 import * as api from '../net/api.ts';
 import * as ws from '../net/ws.ts';
 import type { MatchRow, MyRoom } from '../net/types.ts';
-import { GAME_LIST } from '../data/games.ts';
+import { useVisibleGames } from '../hooks/useVisibleGames.ts';
 import { GameTag, GameBadge } from '../components/GameTag.tsx';
 import './play.css';
 
@@ -74,6 +74,7 @@ export function PlayPage() {
   const [tableName, setTableName] = useState('');
   const [seats, setSeats] = useState('4');
   const [persistent, setPersistent] = useState(true);
+  const games = useVisibleGames();
   const [game, setGame] = useState('mtg');
   const [deckId, setDeckId] = useState<string>('');
   const [code, setCode] = useState('');
@@ -330,7 +331,7 @@ export function PlayPage() {
               aria-label={t('playGame')}
               value={game}
               onValueChange={setGame}
-              options={GAME_LIST.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') }))}
+              options={games.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') }))}
             />
           </div>
           <div className="control">

@@ -1,0 +1,59 @@
+/*
+ * The Cyberpunk-yellow accent ramp. Glacier's accent is a full 12-step OKLCH
+ * ramp swapped via [data-accent='name']; there's no built-in yellow, so this is
+ * the `amber` ramp retinted to hue 94.5 — the hue of the Cyberpunk game accent
+ * #f4d03f (oklch 0.864 0.159 94.5). Applied on the root while in a Cyberpunk
+ * match so the whole app's primary shifts from Glacier blue to the neon yellow
+ * (see accent.ts applyAccentRamp / the TablePage effect); restored on leave.
+ * accent-contrast stays dark (hue 260) — dark ink reads on yellow.
+ */
+
+[data-accent='cyberpunk'] {
+  --glacier-accent-1: oklch(0.993 0.009 94.5);
+  --glacier-accent-2: oklch(0.981 0.018 94.5);
+  --glacier-accent-3: oklch(0.96 0.0375 94.5);
+  --glacier-accent-4: oklch(0.936 0.06 94.5);
+  --glacier-accent-5: oklch(0.906 0.0825 94.5);
+  --glacier-accent-6: oklch(0.87 0.105 94.5);
+  --glacier-accent-7: oklch(0.822 0.1275 94.5);
+  --glacier-accent-8: oklch(0.755 0.15 94.5);
+  --glacier-accent-9: oklch(0.627 0.15 94.5);
+  --glacier-accent-10: oklch(0.578 0.15 94.5);
+  --glacier-accent-11: oklch(0.498 0.1275 94.5);
+  --glacier-accent-12: oklch(0.303 0.0825 94.5);
+  --glacier-accent-contrast: oklch(0.22 0.015 260);
+}
+
+[data-theme='dark'][data-accent='cyberpunk'] {
+  --glacier-accent-1: oklch(0.14 0.021 94.5);
+  --glacier-accent-2: oklch(0.17 0.03 94.5);
+  --glacier-accent-3: oklch(0.21 0.048 94.5);
+  --glacier-accent-4: oklch(0.248 0.0675 94.5);
+  --glacier-accent-5: oklch(0.285 0.087 94.5);
+  --glacier-accent-6: oklch(0.33 0.105 94.5);
+  --glacier-accent-7: oklch(0.39 0.1275 94.5);
+  --glacier-accent-8: oklch(0.485 0.15 94.5);
+  --glacier-accent-9: oklch(0.64 0.162 94.5);
+  --glacier-accent-10: oklch(0.7 0.162 94.5);
+  --glacier-accent-11: oklch(0.805 0.1275 94.5);
+  --glacier-accent-12: oklch(0.935 0.063 94.5);
+  --glacier-accent-contrast: oklch(0.22 0.015 260);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light'])[data-accent='cyberpunk'] {
+    --glacier-accent-1: oklch(0.14 0.021 94.5);
+    --glacier-accent-2: oklch(0.17 0.03 94.5);
+    --glacier-accent-3: oklch(0.21 0.048 94.5);
+    --glacier-accent-4: oklch(0.248 0.0675 94.5);
+    --glacier-accent-5: oklch(0.285 0.087 94.5);
+    --glacier-accent-6: oklch(0.33 0.105 94.5);
+    --glacier-accent-7: oklch(0.39 0.1275 94.5);
+    --glacier-accent-8: oklch(0.485 0.15 94.5);
+    --glacier-accent-9: oklch(0.64 0.162 94.5);
+    --glacier-accent-10: oklch(0.7 0.162 94.5);
+    --glacier-accent-11: oklch(0.805 0.1275 94.5);
+    --glacier-accent-12: oklch(0.935 0.063 94.5);
+    --glacier-accent-contrast: oklch(0.22 0.015 260);
+  }
+}

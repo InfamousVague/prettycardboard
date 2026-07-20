@@ -142,6 +142,9 @@ export interface TablePlayer {
   cardBack?: string | null;
   /** Cyberpunk Gig dice (the six d4-d20 in the Fixer); absent for other games. */
   gigDice?: GigDie[];
+  /** The last single die this player rolled (any game) — drives the 3D dice on
+   *  the mat. `seq` bumps every roll so a repeat value still animates. */
+  lastRoll?: { seq: number; sides: number; value: number };
   seat: number;
   life: number;
   poison: number;
@@ -330,7 +333,7 @@ export type GameActionV2 =
   | { kind: 'combat.end' }
   | { kind: 'cmd.cast'; iid: string; x: number; y: number }
   | { kind: 'cmd.return'; iid: string; accept: boolean }
-  | { kind: 'dice.roll'; sides: 6 | 20 | 2; count?: number }
+  | { kind: 'dice.roll'; sides: 2 | 4 | 6 | 8 | 10 | 12 | 20; count?: number }
   | { kind: 'marker.set'; marker: 'monarch' | 'initiative'; seat: number }
   | { kind: 'marker.day'; value: 'day' | 'night' | null }
   | { kind: 'marker.storm'; delta: number }

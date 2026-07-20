@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Button, IconButton, Input, Menu, MenuItem, Pill, Tooltip } from '@glacier/react';
 import {
   Cpu,
+  Dices,
   Hand as HandIcon,
   Minus,
   Paintbrush,
@@ -154,6 +155,35 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
          registry). A local play aid for banking mana tapped from lands. */}
       <ManaBar room={room} />
 
+      {/* Dice tray (non-Cyberpunk; Cyberpunk rolls from its Fixer panel). Rolls a
+         real 3D physics die on the mat and logs the result. */}
+      {!cyber && (
+        <div className="diceTray" role="group" aria-label={t('tblRollDice')}>
+          <span className="diceTrayLabel">
+            <Dices size={12} /> {t('tblDice')}
+          </span>
+          <div className="diceTrayDice">
+            {([20, 12, 10, 8, 6, 4] as const).map((sides) => (
+              <button
+                key={sides}
+                type="button"
+                className="diceTrayDie"
+                onClick={() => act({ kind: 'dice.roll', sides })}
+              >
+                d{sides}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="diceTrayDie diceTrayCoin"
+              onClick={() => act({ kind: 'dice.roll', sides: 2 })}
+            >
+              {t('tblCoin')}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Damage tracker: one row per commander (21 = lethal), then poison
          (10 = lethal), so several kinds of damage read the same way. */}
       <div className="dmgTrack">
@@ -232,6 +262,9 @@ function ManaBar({ room }: { room: RoomState }) {
   const addMana = useTableUi((s) => s.addMana);
   const clearAll = useTableUi((s) => s.clearMana);
   const holdRef = useRef<number | null>(null);
+  // Set once a press-and-hold has actually started spending, so the click that
+  // ends the hold doesn't also add one back.
+  const heldRef = useRef(false);
 
   if (!getGame(room.game).stats.some((s) => s.id === 'mana')) return null;
 
@@ -248,13 +281,16 @@ function ManaBar({ room }: { room: RoomState }) {
       holdRef.current = null;
     }
   };
-  // Press-and-hold the minus to auto-repeat, so paying a generic {N} is one press.
+  // Press-and-hold a pip to spend it (and auto-repeat, so paying a generic {N}
+  // is one press). Right-click spends one too; a plain tap adds one.
   const startHold = (c: ManaColor) => {
     endHold();
+    heldRef.current = false;
     holdRef.current = window.setTimeout(function tick() {
+      heldRef.current = true;
       addMana(c, -1);
-      holdRef.current = window.setTimeout(tick, 125);
-    }, 400);
+      holdRef.current = window.setTimeout(tick, 140);
+    }, 380);
   };
 
   return (
@@ -267,8 +303,19 @@ function ManaBar({ room }: { room: RoomState }) {
             className="manaPip"
             data-color={c}
             data-has={mana[c] > 0 || undefined}
-            aria-label={`${c}: ${mana[c]}`}
-            onClick={(e) => bump(c, +1, e.currentTarget)}
+            aria-label={`${c}: ${mana[c]} — tap to add, hold or right-click to spend`}
+            onPointerDown={() => startHold(c)}
+            onPointerUp={endHold}
+            onPointerLeave={endHold}
+            onPointerCancel={endHold}
+            onClick={(e) => {
+              // A hold already spent; don't add one back on the release-click.
+              if (heldRef.current) {
+                heldRef.current = false;
+                return;
+              }
+              bump(c, +1, e.currentTarget);
+            }}
             onContextMenu={(e) => {
               e.preventDefault();
               bump(c, -1);
@@ -283,50 +330,34 @@ function ManaBar({ room }: { room: RoomState }) {
               }
             }}
           >
-            <ManaSymbol symbol={c} size={active ? 20 : 16} />
+            <ManaSymbol symbol={c} size={active ? 24 : 20} />
             {mana[c] > 0 && <span className="manaCount">{mana[c]}</span>}
-            {active && mana[c] > 0 && (
-              <span
-                className="manaMinus"
-                role="button"
-                tabIndex={-1}
-                aria-hidden
-                onClick={(e) => {
-                  e.stopPropagation();
-                  bump(c, -1);
-                }}
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  startHold(c);
-                }}
-                onPointerUp={endHold}
-                onPointerLeave={endHold}
-                onPointerCancel={endHold}
-              >
-                <Minus size={9} />
-              </span>
-            )}
           </button>
         ))}
       </div>
-      {active && (
-        <Tooltip content={t('tblClearMana')}>
-          {/* One native Pill carries both the running total and, via its built-in
-             onRemove affordance, the clear-pool button - the "empties between
-             phases" gesture. Clicking the number does nothing; only the x clears,
-             so the pool is never nuked by accident. */}
-          <Pill
-            className="manaTotalPill"
-            size="sm"
-            tone="accent"
-            variant="soft"
-            onRemove={clearAll}
-            aria-label={`${t('tblFloatingTotal')}: ${total}`}
-          >
-            {total}
-          </Pill>
-        </Tooltip>
-      )}
+      {/* The tail row is always present (reserving its height) so banking the
+         first mana only fills it in rather than growing the bar and shoving the
+         poison row below it down. */}
+      <div className="manaTail">
+        {active && (
+          <Tooltip content={t('tblClearMana')}>
+            {/* One native Pill carries both the running total and, via its built-in
+               onRemove affordance, the clear-pool button - the "empties between
+               phases" gesture. Clicking the number does nothing; only the x clears,
+               so the pool is never nuked by accident. */}
+            <Pill
+              className="manaTotalPill"
+              size="sm"
+              tone="accent"
+              variant="soft"
+              onRemove={clearAll}
+              aria-label={`${t('tblFloatingTotal')}: ${total}`}
+            >
+              {total}
+            </Pill>
+          </Tooltip>
+        )}
+      </div>
     </div>
   );
 }

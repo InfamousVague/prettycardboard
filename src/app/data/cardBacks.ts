@@ -45,6 +45,8 @@ export const CARD_BACKS: CardBack[] = [
   { id: 'modern-monogram', name: 'Modern Monogram', theme: 'generic' },
   { id: 'nebula-orb', name: 'Nebula Orb', theme: 'generic' },
   { id: 'netrunner-glyph', name: 'Netrunner Glyph', theme: 'cyberpunk' },
+  { id: 'cyberpunk-cardback-1', name: 'Cyberpunk 01', theme: 'cyberpunk' },
+  { id: 'cyberpunk-cardback-2', name: 'Cyberpunk 02', theme: 'cyberpunk' },
 ];
 
 export const DEFAULT_CARD_BACK = 'classic';
@@ -56,7 +58,7 @@ export const DEFAULT_CARD_BACK = 'classic';
  */
 export const DEFAULT_CARD_BACK_BY_GAME: Record<string, string> = {
   mtg: DEFAULT_CARD_BACK,
-  cyberpunk: 'chrome-crest-neon-noir',
+  cyberpunk: 'cyberpunk-cardback-2',
 };
 
 /**

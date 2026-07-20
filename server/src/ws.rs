@@ -355,6 +355,8 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
         auto_untap: false,
         auto_draw: false,
         gig_dice,
+        roll_seq: 0,
+        last_roll: None,
         deck_id: deck_id.clone(),
         deck_name,
         conceded: false,

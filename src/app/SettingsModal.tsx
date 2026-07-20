@@ -16,12 +16,13 @@ import {
   useToast,
   type TabbedModalSection,
 } from '@glacier/react';
-import { CircleUserRound, Globe, Info, LayoutGrid, Palette, Wrench } from '@glacier/icons';
+import { CircleUserRound, Globe, Info, Keyboard, LayoutGrid, Palette, Wrench } from '@glacier/icons';
 import { accentSteps } from '@glacier/tokens';
 import { ACCENTS, DEFAULT_PREFERENCES, MONO_FONTS, SANS_FONTS, type Preferences } from './preferences.ts';
 import { LANGUAGES, useT, type AppLocale } from './i18n.ts';
 import { AccountTab } from './settings/AccountTab.tsx';
 import { AboutTab } from './settings/AboutTab.tsx';
+import { KeybindsTab } from './settings/KeybindsTab.tsx';
 
 function resolveTheme(theme: Preferences['theme']): 'light' | 'dark' {
   if (theme !== 'system') return theme;
@@ -76,6 +77,20 @@ export function SettingsModal({
           label={t('setReduceMotion')}
           checked={preferences.reduceMotion}
           onCheckedChange={(checked) => onChange({ reduceMotion: checked })}
+        />
+      </Fieldset>
+      <Fieldset
+        legend={
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4em' }}>
+            <Wrench size={15} /> {t('setDeveloper')}
+          </span>
+        }
+        description={t('setEnableWipHint')}
+      >
+        <Switch
+          label={t('setEnableWip')}
+          checked={preferences.enableWip}
+          onCheckedChange={(checked) => onChange({ enableWip: checked })}
         />
       </Fieldset>
     </div>
@@ -191,6 +206,20 @@ export function SettingsModal({
 
   const table = (
     <div style={{ display: 'grid', gap: 'var(--glacier-space-6)' }}>
+      <Fieldset legend={t('setCustomize')} description={t('setCustomizeHint')}>
+        <Button
+          variant="soft"
+          onClick={() => {
+            // Customize is its own modal (playmats + card backs + preview); hand
+            // off to it and close settings so only one modal is up.
+            onClose();
+            window.dispatchEvent(new Event('pc:open-customize'));
+          }}
+        >
+          <Palette size={16} /> {t('navCustomize')}
+        </Button>
+      </Fieldset>
+
       <div className="control">
         <Label>{t('setSidebar')}</Label>
         <SegmentedControl
@@ -314,6 +343,12 @@ export function SettingsModal({
     { id: 'general', label: t('setGeneral'), icon: <Globe size={18} />, content: general },
     { id: 'appearance', label: t('setAppearance'), icon: <Palette size={18} />, content: appearance },
     { id: 'table', label: t('setTableTab'), icon: <LayoutGrid size={18} />, content: table },
+    {
+      id: 'keybinds',
+      label: t('setKeybinds'),
+      icon: <Keyboard size={18} />,
+      content: <KeybindsTab preferences={preferences} onChange={onChange} />,
+    },
     {
       id: 'account',
       label: t('setAccount'),

@@ -47,7 +47,10 @@
   flex-direction: column;
   gap: var(--glacier-space-2);
   padding: var(--glacier-space-4);
-  border-radius: var(--glacier-radius-3);
+  /* Match the zoomed card's own corner exactly: the card rounds at 4.75% of its
+     320px width, and (unlike the app's radius tokens) is not scaled by the user's
+     rounding preference - so pin the same fixed value here to read as one piece. */
+  border-radius: calc(320px * 0.0475);
   background: var(--glacier-surface-raised, var(--glacier-surface));
   border: 1px solid var(--glacier-border-subtle, var(--glacier-border));
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);

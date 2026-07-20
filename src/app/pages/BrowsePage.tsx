@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Heading, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
 import { useT } from '../i18n.ts';
+import { useVisibleGames } from '../hooks/useVisibleGames.ts';
 import {
   CATALOG,
   catalogCardCount,
@@ -15,7 +16,6 @@ import {
   cyberpunkImage,
   cyberpunkStarters,
 } from '../data/cyberpunk.ts';
-import { GAME_LIST } from '../data/games.ts';
 import { artCrop, cardImage } from '../data/cards.ts';
 import { ColorIdentity, ManaSymbol } from '../components/Mana.tsx';
 import { BrowseCatalog, type BrowseDeck, type BrowseFacet } from '../components/BrowseCatalog.tsx';
@@ -53,11 +53,18 @@ export function BrowsePage() {
   const t = useT();
   // The initial game can be preset by a discover shelf (Home → Cyberpunk
   // starters); the choice is persisted so switching stays sticky.
+  const games = useVisibleGames();
   const [game, setGameState] = useState(() => sessionStorage.getItem('pc_browse_game') || 'mtg');
   const setGame = (value: string) => {
     sessionStorage.setItem('pc_browse_game', value);
     setGameState(value);
   };
+  // Cyberpunk is a WIP game: if it was the sticky choice but the dev toggle is
+  // off, fall back to Magic so the hidden game never renders.
+  const cyberVisible = games.some((g) => g.id === 'cyberpunk');
+  useEffect(() => {
+    if (game === 'cyberpunk' && !cyberVisible) setGame('mtg');
+  }, [game, cyberVisible]);
 
   const mtg: BrowseDeck[] = useMemo(
     () =>
@@ -143,7 +150,7 @@ export function BrowsePage() {
             aria-label={t('playGame')}
             value={game}
             onValueChange={setGame}
-            options={GAME_LIST.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') }))}
+            options={games.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') }))}
           />
         </div>
       </div>

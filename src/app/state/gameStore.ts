@@ -112,7 +112,15 @@ function applyEvent(room: RoomState, actor: string, action: GameAction & Record<
       case 'card.tap':
         return patchCard(player, action.iid, (card) => ({ ...card, tapped: action.tapped }));
       case 'card.face':
-        return patchCard(player, action.iid, (card) => ({ ...card, faceDown: action.faceDown }));
+        // Turning a card face up reveals its identity: the server attaches the
+        // full revealed card (`action.card`) to the event. For a hidden card the
+        // client never had that identity (e.g. a masked Cyberpunk Legend), so
+        // adopt the revealed card wholesale rather than just toggling the flag.
+        return patchCard(player, action.iid, (card) =>
+          !action.faceDown && action.card
+            ? (action.card as CardInst)
+            : { ...card, faceDown: action.faceDown },
+        );
       case 'card.counter':
         return patchCard(player, action.iid, (card) => ({
           ...card,

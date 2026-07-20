@@ -7,6 +7,7 @@ import { useApp } from '../../state/appStore.ts';
 import { useUi } from '../../state/uiStore.ts';
 import { FORMATS } from '../../data/formats.ts';
 import { GAME_LIST, getGame } from '../../data/games.ts';
+import { usePreference } from '../../hooks/usePreference.ts';
 import { cyberpunkCatalog, cyberpunkImage } from '../../data/cyberpunk.ts';
 import { GameBadge } from '../../components/GameTag.tsx';
 import type { DeckCard } from '../../net/types.ts';
@@ -22,6 +23,11 @@ export function NewDeckWizard({ open, onClose }: { open: boolean; onClose: () =>
   const t = useT();
   const refreshDecks = useApp((state) => state.refreshDecks);
   const selectDeck = useUi((state) => state.selectDeck);
+  const enableWip = usePreference('enableWip');
+  // With WIP features off, Cyberpunk is hidden and Magic is the only game — the
+  // game-picker step is then skipped straight to the deck kinds.
+  const games = enableWip ? GAME_LIST : GAME_LIST.filter((g) => g.id !== 'cyberpunk');
+  const sole = games.length === 1 ? games[0]!.id : null;
   const [game, setGame] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -47,7 +53,8 @@ export function NewDeckWizard({ open, onClose }: { open: boolean; onClose: () =>
     }
   };
 
-  const chosen = game ? getGame(game) : null;
+  const activeGame = game ?? sole;
+  const chosen = activeGame ? getGame(activeGame) : null;
 
   return (
     <Modal open={open} onClose={close} title={chosen ? t('ndwPickKind') : t('ndwPickGame')} size="md">
@@ -57,7 +64,7 @@ export function NewDeckWizard({ open, onClose }: { open: boolean; onClose: () =>
             {t('ndwPickGameHint')}
           </Text>
           <div className="ndwGames">
-            {GAME_LIST.map((g) => (
+            {games.map((g) => (
               <button
                 key={g.id}
                 type="button"
@@ -74,11 +81,13 @@ export function NewDeckWizard({ open, onClose }: { open: boolean; onClose: () =>
         </div>
       ) : (
         <div className="ndwStep">
-          <button type="button" className="ndwBack" onClick={reset}>
-            <ArrowLeft size={14} /> {chosen.name}
-          </button>
+          {!sole && (
+            <button type="button" className="ndwBack" onClick={reset}>
+              <ArrowLeft size={14} /> {chosen.name}
+            </button>
+          )}
           <div className="ndwKinds" aria-busy={busy || undefined}>
-            {game === 'cyberpunk'
+            {activeGame === 'cyberpunk'
               ? [
                   <button
                     key="blank"

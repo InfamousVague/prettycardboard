@@ -126,10 +126,16 @@ export function SeatFrame({
     const baseX = host ? host.x : card.x;
     const baseY = host ? host.y : card.y;
     const offset = host ? Math.round(18 * (stage ? cardScale : 0.6)) * (attachIndex + 1) : 0;
+    // The .fieldCard::after hitbox paints over the GameCard, so elementFromPoint
+    // lands on .fieldCard (no data-preview-src) and the hover preview never fires.
+    // Mirror the preview attrs onto the wrapper so the opponent's board previews too.
+    const cardPreview = card.faceDown ? undefined : card.imageUrl || cardImage(card.scryfallId);
     return (
       <div
         key={card.iid}
         className="fieldCard"
+        data-preview-src={cardPreview}
+        data-preview-name={cardPreview ? card.name : undefined}
         data-attacker={attacker ? '' : undefined}
         data-attachment={host ? '' : undefined}
         data-block-target={canAct && blockerIid && attacker ? '' : undefined}

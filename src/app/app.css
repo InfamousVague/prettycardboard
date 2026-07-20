@@ -743,6 +743,104 @@ body {
   gap: var(--glacier-space-5);
 }
 
+/* Card preview strip: default back, chosen back, and a split Magic/Cyberpunk face. */
+.custPreview {
+  display: flex;
+  gap: var(--glacier-space-5);
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.custPreviewItem {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+.custPreviewItem figcaption {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+
+/* The split card: one real Magic face, one real Cyberpunk face, diagonally cut. */
+.custSplit {
+  position: relative;
+  width: 84px;
+  aspect-ratio: 488 / 680;
+  border-radius: 4.75%/3.41%;
+  overflow: hidden;
+  background: oklch(0.22 0.01 260);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.45),
+    0 6px 18px rgb(0 0 0 / 0.35);
+}
+.custSplit img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.custSplitMtg {
+  clip-path: polygon(0 0, 60% 0, 40% 100%, 0 100%);
+}
+.custSplitCyber {
+  clip-path: polygon(60% 0, 100% 0, 100% 100%, 40% 100%);
+}
+.custSplitSeam {
+  position: absolute;
+  top: -8%;
+  bottom: -8%;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%) skewX(-8deg);
+  background: color-mix(in oklch, var(--glacier-border) 45%, #fff 55%);
+}
+
+/* Keybinds settings tab: one row per action, a key chip on the right. */
+.keybindRows {
+  display: grid;
+  gap: var(--glacier-space-1);
+}
+.keybindRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-3);
+  min-height: 2rem;
+  padding-block: var(--glacier-space-1);
+}
+.keybindChips {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+}
+/* The bindable key: a Kbd wrapped in a button so it captures the next keypress. */
+.kbChip {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: var(--glacier-radius-sm);
+  display: inline-flex;
+}
+.kbChip:focus-visible {
+  outline: 2px solid var(--glacier-ring);
+  outline-offset: 2px;
+}
+/* While listening, the chip pulses so it reads as "waiting for a key". */
+.keybindRow[data-listening] .kbChip {
+  outline: 2px solid var(--glacier-accent-solid);
+  outline-offset: 2px;
+  border-radius: var(--glacier-radius-sm);
+}
+/* A key double-booked in this game tints its chips (the banner explains). */
+.keybindRow[data-conflict] .kbChip :where(kbd) {
+  color: var(--glacier-warning-text, var(--glacier-text));
+  border-color: var(--glacier-warning-border, var(--glacier-border));
+}
+
 /* Theme filter above each picker grid. */
 .pickerFilter {
   margin-block-end: var(--glacier-space-3);

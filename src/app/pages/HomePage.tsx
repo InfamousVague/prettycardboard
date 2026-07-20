@@ -29,7 +29,7 @@ import * as ws from '../net/ws.ts';
 import type { MyRoom, UserStats } from '../net/types.ts';
 import { cardImage } from '../data/cards.ts';
 import { featuredDecks } from '../data/catalog.ts';
-import { GAME_LIST } from '../data/games.ts';
+import { useVisibleGames } from '../hooks/useVisibleGames.ts';
 import { cyberpunkImage, cyberpunkStarters } from '../data/cyberpunk.ts';
 import { deckSummaryArt, deckSummaryCover } from '../data/deckCover.ts';
 import { DeckStack } from '../components/DeckStack.tsx';
@@ -118,6 +118,8 @@ export function HomePage() {
     }
   }, [closedRoomId, ackClosed, toast, t]);
 
+  // Cyberpunk is a WIP game — its discover shelf only shows with the dev toggle on.
+  const showCyber = useVisibleGames().some((g) => g.id === 'cyberpunk');
   return (
     <div className="page homePage">
       <PlayerHero identity={identity} stats={stats} resume={resume} order={0} />
@@ -125,7 +127,7 @@ export function HomePage() {
       <QuickPlay order={2} />
       <RecentDecks order={3} />
       <Featured order={4} />
-      <CyberpunkStarters order={5} />
+      {showCyber && <CyberpunkStarters order={5} />}
     </div>
   );
 }
@@ -268,6 +270,7 @@ function QuickPlay({ order }: { order: number }) {
 
   const [tableName, setTableName] = useState('');
   const [seats, setSeats] = useState('4');
+  const games = useVisibleGames();
   const [game, setGame] = useState('mtg');
   const [deckId, setDeckId] = useState('');
   const [code, setCode] = useState('');
@@ -335,7 +338,7 @@ function QuickPlay({ order }: { order: number }) {
                 fullWidth
                 value={game}
                 onValueChange={setGame}
-                options={GAME_LIST.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') }))}
+                options={games.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') }))}
                 aria-label={t('playGame')}
               />
             </div>

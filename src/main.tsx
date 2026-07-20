@@ -9,6 +9,9 @@ import '@glacier/tokens/css/tokens.css';
 // the vendored scaffold ships the built styles.css and needs it.
 import './styles.css';
 import './app/app.css';
+// The Cyberpunk-yellow accent ramp ([data-accent='cyberpunk']), applied while in
+// a Cyberpunk match.
+import './app/cyberpunk-accent.css';
 import { App } from './app/App.tsx';
 
 createRoot(document.getElementById('root')!).render(

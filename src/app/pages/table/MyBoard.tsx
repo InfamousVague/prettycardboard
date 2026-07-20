@@ -605,11 +605,18 @@ export function MyBoard({
     const cardZ = z != null ? 10 + z : 5;
     const attacker = attackerEntry(card.iid);
     const affordance = attackMode && !card.tapped && isCreature(card) ? 'attack' : blockMode && !card.tapped && isCreature(card) ? 'block' : undefined;
+    // The .fieldCard::after hitbox (inset -8px, for a generous grab target) paints
+    // over the GameCard inside, so elementFromPoint lands on .fieldCard - which
+    // lacks GameCard's data-preview-src, breaking the hover preview. Mirror the
+    // preview attrs onto the wrapper so any hit on the card resolves an anchor.
+    const fieldPreview = card.faceDown ? undefined : card.imageUrl || cardImage(card.scryfallId);
 
     return (
       <div
         key={card.iid}
         className="fieldCard"
+        data-preview-src={fieldPreview}
+        data-preview-name={fieldPreview ? card.name : undefined}
         data-dragging={dragging || undefined}
         data-attacker={attacker ? '' : undefined}
         data-attachment={host ? '' : undefined}
@@ -880,10 +887,10 @@ export function MyBoard({
           the bottom strip. Magic keeps them floating over the strip. */}
       {!mtg && !hideField && <div className="matZones">{zonePilesEl}</div>}
 
-      {/* Cyberpunk: a Fixer die rolls in 3D (real polyhedral WebGL dice) over the
-          mat, landing on the server-chosen value. Falls back to a CSS cube if
-          WebGL is unavailable. */}
-      {!mtg && !hideField && <DiceRoll3D dice={me.gigDice} playerId={me.userId} />}
+      {/* Real polyhedral WebGL dice roll over the mat — Cyberpunk's Fixer dice and
+          Magic's sidebar dice both land here on the server-chosen value. Falls
+          back to a CSS cube if WebGL is unavailable. */}
+      {!hideField && <DiceRoll3D dice={me.gigDice} lastRoll={me.lastRoll} playerId={me.userId} />}
 
       {/* bottom strip: zones | hand | vitals */}
       <div className="myStrip">

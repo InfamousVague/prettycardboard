@@ -61,6 +61,17 @@ pub struct GigDie {
     pub from: Option<String>,
 }
 
+/// The most recent single die a player rolled (any game). Drives the 3D dice
+/// animation on the mat: `seq` bumps every roll so the client fires on change,
+/// even for a repeat of the same value.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiceRollResult {
+    pub seq: u64,
+    pub sides: u8,
+    pub value: u8,
+}
+
 /// The six Fixer dice, in printed order (largest first on the mat).
 pub const GIG_SIDES: [u8; 6] = [20, 12, 10, 8, 6, 4];
 
@@ -116,6 +127,11 @@ pub struct Player {
     /// Cyberpunk Gig dice (the six d4-d20 in the Fixer); empty for other games.
     #[serde(default)]
     pub gig_dice: Vec<GigDie>,
+    /// Monotonic roll counter + the last die rolled, for the 3D dice animation.
+    #[serde(default)]
+    pub roll_seq: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_roll: Option<DiceRollResult>,
     /// The deck this seat was taken with (None for deckless joins);
     /// captured at join so match results can attribute wins to a deck.
     #[serde(default)]
@@ -583,11 +599,13 @@ impl Room {
     }
 }
 
-/// A card as one specific viewer sees it: face-down cards owned by someone
-/// else are masked (identity hidden).
-fn card_view(card: &Card, owner_is_viewer: bool) -> Value {
+/// A card as one specific viewer sees it: a face-down card owned by someone else
+/// is masked (identity hidden). `hide_from_owner` masks it from the OWNER too —
+/// for Cyberpunk Legends, which are hidden information even from their own player
+/// (you don't know which Legend is which until you Call it).
+fn card_view(card: &Card, owner_is_viewer: bool, hide_from_owner: bool) -> Value {
     let mut v = serde_json::to_value(card).unwrap();
-    if card.face_down && !owner_is_viewer {
+    if card.face_down && (!owner_is_viewer || hide_from_owner) {
         let o = v.as_object_mut().unwrap();
         o.insert("name".into(), json!("Face-down card"));
         o.insert("imageUrl".into(), Value::Null);
@@ -610,8 +628,10 @@ impl Room {
             .iter()
             .map(|p| {
                 let own = viewer == Some(p.user_id.as_str());
+                // Cyberpunk Legends stay hidden even from their owner until Called.
+                let hide_legends = self.game == "cyberpunk";
                 let zone = |cards: &Vec<Card>| {
-                    Value::Array(cards.iter().map(|c| card_view(c, own)).collect())
+                    Value::Array(cards.iter().map(|c| card_view(c, own, false)).collect())
                 };
                 let cmd: serde_json::Map<String, Value> = p
                     .cmd_damage
@@ -633,12 +653,15 @@ impl Room {
                     "battlefield": zone(&p.battlefield),
                     "graveyard": zone(&p.graveyard),
                     "exile": zone(&p.exile),
-                    "command": zone(&p.command),
+                    "command": Value::Array(
+                        p.command.iter().map(|c| card_view(c, own, hide_legends)).collect(),
+                    ),
                     "online": p.online,
                     "handRevealed": p.hand_revealed,
                     "playmat": p.playmat,
                     "cardBack": p.card_back,
                     "gigDice": p.gig_dice,
+                    "lastRoll": p.last_roll,
                     "conceded": p.conceded,
                     "deckName": p.deck_name,
                 });
@@ -729,6 +752,10 @@ pub fn scryfall_image_url(scryfall_id: &str) -> String {
 pub fn build_zones(cards: &[DeckCard], flag_commanders: bool, game: &str) -> (Vec<Card>, Vec<Card>) {
     let mut command = Vec::new();
     let mut library = Vec::new();
+    // Cyberpunk rule: the three Legends start FACE-DOWN in a randomized order in
+    // the Legends area — hidden info even from their owner until Called (flipped)
+    // for 1 €$. Magic commanders stay face-up in the command zone.
+    let legends_hidden = game == "cyberpunk";
     for dc in cards {
         if dc.board == "side" {
             continue;
@@ -749,7 +776,7 @@ pub fn build_zones(cards: &[DeckCard], flag_commanders: bool, game: &str) -> (Ve
                     None
                 },
                 tapped: false,
-                face_down: false,
+                face_down: is_cmd && legends_hidden,
                 counters: BTreeMap::new(),
                 x: 0.5,
                 y: 0.5,
@@ -768,6 +795,10 @@ pub fn build_zones(cards: &[DeckCard], flag_commanders: bool, game: &str) -> (Ve
         }
     }
     library.shuffle(&mut rand::rng());
+    // Randomize the Legends' order so nobody knows which is which until Called.
+    if legends_hidden {
+        command.shuffle(&mut rand::rng());
+    }
     (command, library)
 }
 

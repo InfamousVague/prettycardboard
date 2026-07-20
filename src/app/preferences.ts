@@ -8,6 +8,7 @@ import type { VisualFeedbackVariant, VisualFeedbackIntensity } from '@glacier/re
  * reopened window remembers the user's choices.
  */
 import type { AppLocale } from './i18n.ts';
+import type { Keybinds } from './data/keybinds.ts';
 import { DEFAULT_CARD_BACK, cardBackUrl } from './data/cardBacks.ts';
 import { DEFAULT_PLAYMAT, playmatUrl } from './data/playmats.ts';
 
@@ -48,6 +49,13 @@ export interface Preferences {
   autoUntap: boolean;
   /** Automatically draw a card at the start of your turn (off by default). */
   autoDraw: boolean;
+  /** Developer / work-in-progress features (off by default). Gates everything
+   * that isn't production-ready — currently the whole Cyberpunk TCG game. */
+  enableWip: boolean;
+  /** Per-game table keyboard shortcuts (KeyboardEvent.code). Sparse: only
+   * user-changed entries; absent actions use the catalog defaults in
+   * data/keybinds.ts, so a new action never needs a stored migration. */
+  keybinds: Keybinds;
 }
 
 export const ACCENTS = accentOptions;
@@ -85,6 +93,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   mirrorOpponent: true,
   autoUntap: false,
   autoDraw: false,
+  enableWip: false,
+  keybinds: {},
 };
 
 const STORAGE_KEY = 'glacier-starter:preferences';

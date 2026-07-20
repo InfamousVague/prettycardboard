@@ -3,6 +3,7 @@ import * as api from '../net/api.ts';
 import * as ws from '../net/ws.ts';
 import type { DeckSummary, FriendsPayload, Identity, ServerMessage } from '../net/types.ts';
 import { cyberpunkStarters } from '../data/cyberpunk.ts';
+import { loadPreferences } from '../preferences.ts';
 
 /**
  * App-level state: the temporary identity, the social graph, and the deck
@@ -103,7 +104,9 @@ export const useApp = create<AppState>((set, get) => {
     // Seed the Cyberpunk starters once per account, robustly: only when the
     // account has no Cyberpunk decks yet (the server is the source of truth, so
     // this reaches existing accounts too and never double-seeds across devices).
-    if (!get().decks.some((deck) => deck.game === 'cyberpunk')) {
+    // Cyberpunk is a WIP game — only seed when the dev toggle is on (it seeds on
+    // the next login after a user enables it).
+    if (loadPreferences().enableWip && !get().decks.some((deck) => deck.game === 'cyberpunk')) {
       for (const starter of cyberpunkStarters()) {
         await api.createDeck(starter.name, 'standard', starter.cards, null, 'cyberpunk');
       }

@@ -5,6 +5,7 @@ import { useT } from './i18n.ts';
 import type { Route } from './router.ts';
 import { useApp } from './state/appStore.ts';
 import { useUi } from './state/uiStore.ts';
+import { useVisibleGames } from './hooks/useVisibleGames.ts';
 
 // The Browse catalog nav pulls in the 700KB bundled catalog, so it loads lazily
 // and only when the Browse route is showing - keeping it out of the shell.
@@ -27,7 +28,11 @@ const go = (route: string) => {
 export function RouteSidebar({ route, desktop }: { route: Route; desktop: boolean }) {
   const t = useT();
   const identity = useApp((state) => state.identity);
-  const decks = useApp((state) => state.decks);
+  const allDecks = useApp((state) => state.decks);
+  // Cyberpunk is a WIP game — its decks are hidden from the library unless the dev
+  // toggle is on.
+  const showCyber = useVisibleGames().some((g) => g.id === 'cyberpunk');
+  const decks = showCyber ? allDecks : allDecks.filter((d) => (d.game || 'mtg') !== 'cyberpunk');
   const friends = useApp((state) => state.friends);
   const selectedDeckId = useUi((state) => state.selectedDeckId);
   const selectDeck = useUi((state) => state.selectDeck);

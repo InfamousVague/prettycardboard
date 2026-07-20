@@ -9,6 +9,8 @@ import { cardBackUrl, effectiveCardBack } from '../data/cardBacks.ts';
 import { useEdgeColor } from '../data/edgeColor.ts';
 import { tableShareUrl } from '../data/pendingJoin.ts';
 import { usePreference } from '../hooks/usePreference.ts';
+import { resolveKeybinds, KEYBIND_DEF, type ActionId } from '../data/keybinds.ts';
+import type { GameId } from '../data/games.ts';
 import { GameCard } from '../components/GameCard.tsx';
 import { GameTag } from '../components/GameTag.tsx';
 import type { CardInst, GameAction, GameActionV2, RoomState, TablePlayer, Zone } from '../net/types.ts';
@@ -28,7 +30,8 @@ import { TimelineCard } from './table/TimelineCard.tsx';
 import { TurnCue } from './table/TurnCue.tsx';
 import { flightAnchor, flyCard } from './table/juice.ts';
 import { onStatus, send } from '../net/ws.ts';
-import { loadPreferences } from '../preferences.ts';
+import { DEFAULT_PREFERENCES, loadPreferences } from '../preferences.ts';
+import { applyAccentRamp, clearDeckTint } from '../state/accent.ts';
 import { installTableShims } from './table/shims.ts';
 import './table/table.css';
 import './table/cyberpunk-mat.css';
@@ -71,6 +74,10 @@ export function TablePage() {
   // scoped --pc-card-back override cascades to every face-down surface inside the
   // table without touching the global card-back preference.
   const cardBackPref = usePreference('cardBack');
+  // A staged opponent's board is flipped 180° when this is on; the spectate cue
+  // then floats at the bottom (their hand takes the top) instead of the top.
+  const mirrorOpponent = usePreference('mirrorOpponent');
+  const keybinds = usePreference('keybinds');
   const cardBackSrc = cardBackUrl(effectiveCardBack(cardBackPref, room?.game));
   const tableCardBack = `url("${cardBackSrc}")`;
   // The 3D library pile's cut edge wears the top card's own border colour,
@@ -85,11 +92,15 @@ export function TablePage() {
   // live (a reload into a running game skips straight to the table).
   const [preMatch, setPreMatch] = useState(false);
   const prevStarted = useRef<boolean | null>(null);
-  // Tracks the last hovered card for the T-to-tap hotkey.
+  // Tracks the last hovered card for the tap/flip/clone hotkeys.
   const hoverRef = useRef<CardInst | null>(null);
   const handleHover = (card: CardInst | null) => {
     hoverRef.current = card;
   };
+  // The active game's keybinds resolved to a code->action lookup. Kept in a ref
+  // so the keydown handler (mounted once) reads the current map without
+  // re-subscribing on every rebind or game switch.
+  const bindingsRef = useRef<Map<string, ActionId>>(new Map());
 
   useEffect(() => {
     installTableShims();
@@ -137,6 +148,15 @@ export function TablePage() {
     };
   }, [roomId, spectating]);
 
+  // In a Cyberpunk match, repaint the whole app's primary from Glacier blue to
+  // the Cyberpunk yellow; restore the user's configured accent on leave.
+  const roomGame = room?.game;
+  useEffect(() => {
+    if (roomGame !== 'cyberpunk') return;
+    applyAccentRamp('cyberpunk');
+    return () => clearDeckTint(loadPreferences().accent, DEFAULT_PREFERENCES.accent);
+  }, [roomGame]);
+
   // A manual board pin lasts until the turn moves on.
   const activeSeatNow = room?.activeSeat;
   useEffect(() => {
@@ -174,33 +194,101 @@ export function TablePage() {
     if (combatOn) setPinnedSeat(null);
   }, [combatOn]);
 
-  // Keyboard: Space passes the turn; T taps the hovered battlefield card.
-  // Both ignore typing surfaces, menus/dialogs, and focused controls.
+  // Rebuild the code->action lookup whenever the game or the user's bindings
+  // change. The keydown handler below reads bindingsRef, so it never needs these
+  // in its own deps (it stays mounted once for the life of the table).
+  useEffect(() => {
+    bindingsRef.current = resolveKeybinds(keybinds ?? {}, (roomGame as GameId) ?? 'mtg');
+  }, [keybinds, roomGame]);
 
+  // Keyboard: every table shortcut routes through the user's configurable
+  // bindings (Settings > Keybinds). A binding fires only when its action's guard
+  // passes; typing surfaces, open menus/dialogs, and Space-on-a-button are always
+  // skipped so the shortcuts never fight the UI.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
-      const isSpace = event.code === 'Space';
-      const isTap = event.key === 't' || event.key === 'T';
-      if (!isSpace && !isTap) return;
+      const action = bindingsRef.current.get(event.code);
+      if (!action) return;
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('input, textarea, select, [contenteditable], [role="dialog"], [role="menu"]')) return;
-      if (isSpace && target?.closest('button')) return;
+      // Space would also click a focused button; let the button win.
+      if (event.code === 'Space' && target?.closest('button')) return;
+
       const state = useGame.getState();
       const current = state.room;
-      const seatMe = current?.players.find((player) => player.userId === useApp.getState().identity?.userId);
-      if (!current?.started || current.matchResult || state.spectating || seatMe == null) return;
-      if (isSpace) {
-        if (current.activeSeat !== seatMe.seat) return;
-        event.preventDefault();
-        state.act({ kind: 'turn.pass' });
-        return;
-      }
+      if (!current) return;
+      const seatMe = current.players.find((player) => player.userId === useApp.getState().identity?.userId);
+      // The base capability: seated at a live, non-finished match, not spectating
+      // or scrubbing a replay. Every guard builds on this.
+      const canAct = current.started && !current.matchResult && !state.spectating && !state.replay.active && seatMe != null;
+      if (!canAct) return;
       const hovered = hoverRef.current;
-      const mine = hovered && seatMe.battlefield.find((card) => card.iid === hovered.iid);
-      if (!mine) return;
+      const mine = hovered ? seatMe!.battlefield.find((card) => card.iid === hovered.iid) : undefined;
+
+      const guard = KEYBIND_DEF[action].guard;
+      if (guard === 'myTurn' && current.activeSeat !== seatMe!.seat) return;
+      if (guard === 'hoveredMine' && mine == null) return;
+      if (guard === 'hoveredToken' && (mine == null || !mine.isToken)) return;
+      if (guard === 'combat' && current.combat == null) return;
+
       event.preventDefault();
-      state.act({ kind: 'card.tap', iid: mine.iid, tapped: !mine.tapped });
+      switch (action) {
+        case 'passTurn':
+          state.act({ kind: 'turn.pass' });
+          break;
+        case 'tapHovered':
+          state.act({ kind: 'card.tap', iid: mine!.iid, tapped: !mine!.tapped });
+          break;
+        case 'flipHovered':
+          state.act({ kind: 'card.face', iid: mine!.iid, faceDown: !mine!.faceDown });
+          break;
+        case 'cloneHovered':
+          state.act({ kind: 'token.clone', iid: mine!.iid, x: Math.min(0.95, mine!.x + 0.06), y: mine!.y });
+          break;
+        case 'draw':
+          state.act({ kind: 'draw', count: 1 });
+          break;
+        case 'shuffle':
+          state.act({ kind: 'shuffle' });
+          break;
+        case 'untapAll':
+          state.act({ kind: 'untap.all' });
+          break;
+        case 'createToken':
+          window.dispatchEvent(new Event('pc:create-token'));
+          break;
+        case 'rollD20':
+          state.act({ kind: 'dice.roll', sides: 20 });
+          break;
+        case 'lifeUp':
+          state.act({ kind: 'life.add', delta: 1 });
+          break;
+        case 'lifeDown':
+          state.act({ kind: 'life.add', delta: -1 });
+          break;
+        case 'secondaryUp':
+          state.act({ kind: 'poison.add', delta: 1 });
+          break;
+        case 'secondaryDown':
+          state.act({ kind: 'poison.add', delta: -1 });
+          break;
+        case 'endCombat':
+          state.act({ kind: 'combat.end' });
+          break;
+        case 'stormUp':
+          state.act({ kind: 'marker.storm', delta: 1 });
+          break;
+        case 'cycleDayNight': {
+          const cur = current.markers?.dayNight ?? null;
+          const next = cur === null ? 'day' : cur === 'day' ? 'night' : null;
+          state.act({ kind: 'marker.day', value: next });
+          break;
+        }
+        case 'concede':
+          setConfirmConcede(true);
+          break;
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -295,7 +383,7 @@ export function TablePage() {
         <div className="tableTopActions">
           <Tooltip content={t('tblShareHint')}>
             <Button size="sm" variant="soft" onClick={shareInvite}>
-              <Link2 size={15} /> {t('tblShare')}
+              <Link2 size={15} /> <span className="ttActionLabel">{t('tblShare')}</span>
             </Button>
           </Tooltip>
           {!spectating && onlineFriends.length > 0 && (
@@ -303,7 +391,7 @@ export function TablePage() {
               aria-label={t('tblInviteFriends')}
               trigger={
                 <Button size="sm" variant="soft">
-                  <UserPlus size={15} /> {t('tblInviteFriends')}
+                  <UserPlus size={15} /> <span className="ttActionLabel">{t('tblInviteFriends')}</span>
                 </Button>
               }
             >
@@ -322,13 +410,15 @@ export function TablePage() {
           )}
           {isHost && !room.started && !spectating && (
             <Button size="sm" onClick={start}>
-              <Sparkles size={15} /> {t('tblStart')}
+              <Sparkles size={15} /> <span className="ttActionLabel">{t('tblStart')}</span>
             </Button>
           )}
           {room.started && me && !spectating && !me.conceded && !room.matchResult && (
-            <Button size="sm" variant="ghost" onClick={() => setConfirmConcede(true)}>
-              <Flag size={15} /> {t('tblConcede')}
-            </Button>
+            <Tooltip content={t('tblConcede')}>
+              <Button size="sm" variant="ghost" onClick={() => setConfirmConcede(true)}>
+                <Flag size={15} /> <span className="ttActionLabel">{t('tblConcede')}</span>
+              </Button>
+            </Tooltip>
           )}
           <Tooltip content={t('setTitle')}>
             <Button
@@ -340,9 +430,11 @@ export function TablePage() {
               <Settings size={15} />
             </Button>
           </Tooltip>
-          <Button size="sm" variant="ghost" onClick={leave}>
-            <LogOut size={15} /> {t('tblLeave')}
-          </Button>
+          <Tooltip content={t('tblLeave')}>
+            <Button size="sm" variant="ghost" onClick={leave}>
+              <LogOut size={15} /> <span className="ttActionLabel">{t('tblLeave')}</span>
+            </Button>
+          </Tooltip>
         </div>
       </header>
 
@@ -420,7 +512,7 @@ export function TablePage() {
         {/* Watching another player's board (their turn, or you clicked their
             seat): a floating cue to jump back to your own. */}
         {room.started && stagedPlayer && !stagedIsMe && !spectating && me && (
-          <div className="spectateCue" role="status">
+          <div className="spectateCue" role="status" data-mirror={mirrorOpponent || undefined}>
             <Eye size={15} aria-hidden />
             <span className="spectateCueText">
               {t('tblSpectating')} · <b>{stagedPlayer.username}</b>

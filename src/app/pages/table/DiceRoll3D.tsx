@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
+import type DiceBoxType from '@3d-dice/dice-box-threejs';
 import type { GigDie } from '../../net/types.ts';
 import { CyberpunkDiceRoll } from './CyberpunkDiceRoll.tsx';
-import type { DiceScene } from './dice3d/diceScene.ts';
 import './dice3d/dice-roll-3d.css';
 
 /**
- * WebGL polyhedral-dice roll over the mat. Replaces the CSS cube with REAL dice
- * — a d20 is a 20-face icosahedron, a d10 a pentagonal trapezohedron, etc. — that
- * tumble and settle showing the server-chosen value (see DiceScene). three.js is
- * loaded lazily on the first roll, so Magic players never download it; if WebGL
- * is unavailable the component falls back to the lightweight CSS cube.
+ * The Fixer-die roll over the mat, powered by @3d-dice/dice-box-threejs — real
+ * Cannon-es physics so a d20 is a proper icosahedron that tumbles, bounces and
+ * settles flat on a face (never balanced on an edge). The result is the
+ * server-chosen value, forced via the library's predetermined `@` notation
+ * (`1d20@17`), so the physics is honest theatre over a decided outcome. three.js
+ * (the library's own copy) is lazy-loaded on the first roll, so Magic never pays
+ * for it; if it fails to load / init, we fall back to the lightweight CSS cube.
  *
  * Rolls are read off the synced `gigDice`: a die that flips inGig false→true (or
  * changes value while inGig) is a fresh roll, so every viewer of this mat sees
@@ -21,18 +23,27 @@ interface Roll {
   value: number;
 }
 
-export function DiceRoll3D({ dice, playerId }: { dice: GigDie[] | undefined; playerId: string }) {
+export function DiceRoll3D({
+  dice,
+  lastRoll,
+  playerId,
+}: {
+  dice: GigDie[] | undefined;
+  /** A generic single-die roll (Magic / any game) — animates on seq change. */
+  lastRoll?: { seq: number; sides: number; value: number };
+  playerId: string;
+}) {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const sceneRef = useRef<DiceScene | null>(null);
-  const rafRef = useRef<number | undefined>(undefined);
+  const boxRef = useRef<DiceBoxType | null>(null);
   const queue = useRef<Roll[]>([]);
   const loading = useRef(false);
-  const seed = useRef(1);
+  const clearTimer = useRef<number | undefined>(undefined);
   const [failed, setFailed] = useState(false);
+  // A stable, unique container id for the library's selector-based constructor.
+  const containerId = useRef(`pc-dicebox-${Math.random().toString(36).slice(2)}`);
 
-  // Roll detection — same diff as the CSS roller: a die newly in the Gig area (or
-  // re-rolled) is a fresh roll; a stage-switch (viewing another board) rebaselines.
+  // Roll detection — a die newly in the Gig area (or re-rolled) is a fresh roll;
+  // a stage-switch (viewing another board) rebaselines instead of firing.
   const prev = useRef<{ owner: string; map: Map<number, { inGig: boolean; value: number }> } | null>(null);
 
   useEffect(() => {
@@ -53,107 +64,127 @@ export function DiceRoll3D({ dice, playerId }: { dice: GigDie[] | undefined; pla
     prev.current = { owner: playerId, map };
     if (fresh.length === 0) return;
     queue.current.push(...fresh);
-    void ensureSceneAndFlush();
+    void ensureBoxAndFlush();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dice, playerId, failed]);
 
-  const startLoop = () => {
-    if (rafRef.current != null) return;
-    const loop = () => {
-      const scene = sceneRef.current;
-      if (!scene) {
-        rafRef.current = undefined;
-        return;
-      }
-      const alive = scene.tick(performance.now());
-      if (alive > 0) {
-        rafRef.current = requestAnimationFrame(loop);
-      } else {
-        rafRef.current = undefined;
-      }
-    };
-    rafRef.current = requestAnimationFrame(loop);
-  };
+  // Generic single-die rolls (Magic sidebar, or any game): a bumped seq is a
+  // fresh roll. A stage-switch rebaselines instead of firing.
+  const prevSeq = useRef<{ owner: string; seq: number } | null>(null);
+  useEffect(() => {
+    if (failed || !lastRoll) return;
+    if (!prevSeq.current || prevSeq.current.owner !== playerId) {
+      prevSeq.current = { owner: playerId, seq: lastRoll.seq };
+      return;
+    }
+    if (lastRoll.seq === prevSeq.current.seq) return;
+    prevSeq.current = { owner: playerId, seq: lastRoll.seq };
+    queue.current.push({ sides: lastRoll.sides, value: lastRoll.value });
+    void ensureBoxAndFlush();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastRoll?.seq, playerId, failed]);
 
   const flush = () => {
-    const scene = sceneRef.current;
-    if (!scene) return;
+    const box = boxRef.current;
+    if (!box) return;
     const batch = queue.current;
     queue.current = [];
-    const now = performance.now();
-    batch.forEach((roll, i) => {
-      scene.spawn(roll.sides, roll.value, i, batch.length, now, seed.current++);
-    });
-    if (batch.length > 0) startLoop();
+    if (batch.length === 0) return;
+    // Predetermined notation: `1d20@17` forces the physics to settle on 17.
+    // Several at once combine with `+` (rare — usually one Fixer die at a time).
+    const notation = batch.map((r) => `1d${r.sides}@${r.value}`).join('+');
+    box.roll(notation).catch(() => {});
+    // Let the result sit, then clear so the next roll starts clean.
+    window.clearTimeout(clearTimer.current);
+    clearTimer.current = window.setTimeout(() => boxRef.current?.clearDice(), 2600);
   };
 
-  const ensureSceneAndFlush = async () => {
-    if (sceneRef.current) {
+  const ensureBoxAndFlush = async () => {
+    if (boxRef.current) {
       flush();
       return;
     }
     if (loading.current || failed) return;
-    const canvas = canvasRef.current;
-    const wrap = wrapRef.current;
-    if (!canvas || !wrap) return;
+    if (!wrapRef.current) return;
     loading.current = true;
     try {
-      const { DiceScene } = await import('./dice3d/diceScene.ts');
+      const { default: DiceBox } = await import('@3d-dice/dice-box-threejs');
       const accent = resolveAccent();
-      const scene = new DiceScene(canvas, accent);
-      scene.resize(wrap.clientWidth || 1, wrap.clientHeight || 1);
-      sceneRef.current = scene;
+      const box = new DiceBox(`#${containerId.current}`, {
+        sounds: false,
+        shadows: true,
+        theme_surface: 'green-felt',
+        theme_material: 'plastic',
+        theme_texture: '',
+        theme_customColorset: {
+          background: accent,
+          foreground: inkFor(accent),
+          texture: 'none',
+          material: 'plastic',
+        },
+        gravity_multiplier: 500,
+        baseScale: 90,
+        strength: 1.6,
+      });
+      await box.initialize();
+      boxRef.current = box;
       flush();
     } catch {
-      // No WebGL / three failed to load — drop to the CSS cube.
+      // No WebGL / library failed — drop to the CSS cube.
       setFailed(true);
     } finally {
       loading.current = false;
     }
   };
 
-  // Keep the renderer sized to the mat.
-  useEffect(() => {
-    const wrap = wrapRef.current;
-    if (!wrap || failed) return;
-    const ro = new ResizeObserver(() => {
-      sceneRef.current?.resize(wrap.clientWidth || 1, wrap.clientHeight || 1);
-    });
-    ro.observe(wrap);
-    return () => ro.disconnect();
-  }, [failed]);
-
   useEffect(
     () => () => {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-      sceneRef.current?.dispose();
-      sceneRef.current = null;
+      window.clearTimeout(clearTimer.current);
+      try {
+        boxRef.current?.clearDice();
+      } catch {
+        /* ignore teardown races */
+      }
+      boxRef.current = null;
     },
     [],
   );
 
   if (failed) return <CyberpunkDiceRoll dice={dice} playerId={playerId} />;
 
-  return (
-    <div className="diceRoll3d" ref={wrapRef} aria-hidden>
-      <canvas ref={canvasRef} className="diceRoll3dCanvas" />
-    </div>
-  );
+  return <div className="diceRoll3d" id={containerId.current} ref={wrapRef} aria-hidden />;
 }
 
-/** Resolve `--glacier-accent` (any CSS colour format — hex/rgb/oklch) to a plain
- *  hex string three.js + the luminance check can read. */
+/** Resolve `--glacier-accent` (the Cyberpunk yellow while in a match) to a hex
+ *  string the library reads for the die colour. */
 function resolveAccent(): string {
-  const raw = getComputedStyle(document.documentElement).getPropertyValue('--glacier-accent').trim();
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--glacier-accent-solid').trim();
+  const hex = toHex(raw);
+  return hex ?? '#f4d03f';
+}
+
+/** Dark ink on a light die, light ink on a dark die. */
+function inkFor(hex: string): string {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!m) return '#141018';
+  const r = parseInt(m[1]!, 16) / 255;
+  const g = parseInt(m[2]!, 16) / 255;
+  const b = parseInt(m[3]!, 16) / 255;
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum > 0.55 ? '#141018' : '#f4f4f6';
+}
+
+/** Normalise any CSS colour (hex/rgb/oklch) to #rrggbb via the browser. */
+function toHex(raw: string): string | null {
   if (/^#[0-9a-f]{6}$/i.test(raw)) return raw;
-  // Let the browser normalise anything else to rgb() via a throwaway element.
+  if (!raw) return null;
   const probe = document.createElement('span');
-  probe.style.color = raw || '#f4d03f';
+  probe.style.color = raw;
   document.body.appendChild(probe);
-  const rgb = getComputedStyle(probe).color; // "rgb(r, g, b)"
+  const rgb = getComputedStyle(probe).color;
   probe.remove();
   const m = /(\d+),\s*(\d+),\s*(\d+)/.exec(rgb);
-  if (!m) return '#f4d03f';
-  const hex = (n: string) => Number(n).toString(16).padStart(2, '0');
-  return `#${hex(m[1]!)}${hex(m[2]!)}${hex(m[3]!)}`;
+  if (!m) return null;
+  const h = (n: string) => Number(n).toString(16).padStart(2, '0');
+  return `#${h(m[1]!)}${h(m[2]!)}${h(m[3]!)}`;
 }

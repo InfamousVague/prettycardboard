@@ -1,4 +1,6 @@
-use crate::rooms::{Attacker, Block, Card, Combat, GigDie, Mull, PendingCmd, Player, Room, StackEntry};
+use crate::rooms::{
+    Attacker, Block, Card, Combat, DiceRollResult, GigDie, Mull, PendingCmd, Player, Room, StackEntry,
+};
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -1479,11 +1481,18 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
         // --- dice + markers ---
 
         Action::DiceRoll { sides, count } => {
-            if !matches!(sides, 2 | 6 | 20) {
-                return Err(("invalid_dice", "sides must be 2, 6, or 20".to_string()));
+            if !matches!(sides, 2 | 4 | 6 | 8 | 10 | 12 | 20) {
+                return Err(("invalid_dice", "unsupported die".to_string()));
             }
             let count = count.unwrap_or(1).clamp(1, 10) as usize;
             let rolls: Vec<u32> = (0..count).map(|_| rand::random_range(1..=sides)).collect();
+            // Feed the 3D dice on the mat: the first die animates to its result.
+            {
+                let p = &mut room.players[pi];
+                p.roll_seq += 1;
+                p.last_roll = Some(DiceRollResult { seq: p.roll_seq, sides: sides as u8, value: rolls[0] as u8 });
+            }
+            resync = true;
             if sides == 2 {
                 let faces: Vec<&str> = rolls
                     .iter()

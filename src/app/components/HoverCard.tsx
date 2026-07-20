@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { GameCard } from './GameCard.tsx';
-import { CardDetailsBody, hasInstantDetails, primeDetails } from './cardDetails.tsx';
+import { CardDetailsBody, primeDetails } from './cardDetails.tsx';
 import './hovercard.css';
 
 /**
@@ -49,22 +49,43 @@ interface HoverState {
   details: boolean;
 }
 
+/** A card is previewable if it is small enough (skip already-big cards), and not
+ *  the fullscreen CardPopup nor the decorative login fan. offsetWidth is the true
+ *  layout width (getBoundingClientRect is rotation-inflated). */
+function previewable(el: Element | null): el is Element {
+  return (
+    !!el &&
+    (el as HTMLElement).offsetWidth <= MAX_ANCHOR_W &&
+    !el.closest('.cpStage') &&
+    !el.closest('.onboarding')
+  );
+}
+
 export function HoverCardLayer() {
   const [hover, setHover] = useState<HoverState | null>(null);
-  const anchorRef = useRef<Element | null>(null);
+  // The card currently on screen (null = nothing shown). Used to switch targets
+  // and to gate the scroll handler.
+  const shownEl = useRef<Element | null>(null);
   const revealTimer = useRef<number | undefined>(undefined);
+  const revealPending = useRef(false);
   const hideTimer = useRef<number | undefined>(undefined);
-  // Whether a preview is currently on screen (a ref so the document listeners
-  // read the latest value without re-subscribing).
-  const shown = useRef(false);
+  // The last previewable card the pointer was over — a fallback for elementFromPoint.
+  const currentCard = useRef<Element | null>(null);
+  // Live pointer position, so the reveal fires on whatever card is ACTUALLY under
+  // the pointer when the rest completes - not whichever element a churny
+  // pointerover last named. This is what makes the fanned hand work: its dock
+  // magnification constantly re-stacks overlapping cards under a resting pointer.
+  const pointer = useRef({ x: 0, y: 0 });
 
-  const clearReveal = useCallback(() => window.clearTimeout(revealTimer.current), []);
+  const clearReveal = useCallback(() => {
+    window.clearTimeout(revealTimer.current);
+    revealPending.current = false;
+  }, []);
   const cancelHide = useCallback(() => window.clearTimeout(hideTimer.current), []);
   const hide = useCallback(() => {
     clearReveal();
     cancelHide();
-    anchorRef.current = null;
-    shown.current = false;
+    shownEl.current = null;
     setHover(null);
   }, [clearReveal, cancelHide]);
   // Leave the card (or the preview): hide after a short grace so the pointer can
@@ -86,10 +107,7 @@ export function HoverCardLayer() {
       // attributes (src stays truthy, the portal would mount), but
       // getBoundingClientRect() is all-zeros, which would pin a stray preview to
       // the top-left corner - read by the player as "no preview appeared". Bail.
-      if (!(el as HTMLElement).isConnected) {
-        anchorRef.current = null;
-        return;
-      }
+      if (!(el as HTMLElement).isConnected) return;
       const src = el.getAttribute('data-preview-src');
       if (!src) return;
       const name = el.getAttribute('data-preview-name') ?? '';
@@ -103,53 +121,75 @@ export function HoverCardLayer() {
       const below = rect.top - previewH - GAP < 8;
       const y = below ? rect.bottom + GAP : rect.top - GAP;
       const id = idFromSrc(src);
-      // Prime the details cache for next time; only mount the panel now if we can
-      // fill it without a network round-trip (bundled Cyberpunk / cached MTG), so
-      // the panel never flashes in empty.
+      // Mount the details panel whenever the card has an id. Cyberpunk and cached
+      // MTG fill instantly; an uncached MTG card shows its name right away and the
+      // rules fill in a beat later (primeDetails + the panel's own fetch), so the
+      // details are always there to read/scroll rather than withheld on first rest.
       primeDetails(id);
-      const details = hasInstantDetails(id);
+      const details = !!id;
       // Put the details panel wherever there's more room next to the zoom.
       const roomRight = window.innerWidth - (x + PREVIEW_W / 2);
       const side: 'left' | 'right' = roomRight >= DETAIL_W + GAP + 8 ? 'right' : 'left';
-      shown.current = true;
+      shownEl.current = el;
       setHover({ name, image: src, id, x, y, below, side, details });
+    };
+
+    // Begin (or leave running) the rest countdown. It reveals whatever card is
+    // under the pointer WHEN IT FIRES - read fresh from elementFromPoint - so the
+    // hand fan's dock magnification churning the element under a resting pointer
+    // never prevents the reveal.
+    const startReveal = () => {
+      window.clearTimeout(revealTimer.current);
+      revealPending.current = true;
+      revealTimer.current = window.setTimeout(() => {
+        revealPending.current = false;
+        // Prefer whatever is ACTUALLY under the pointer now (so the hand's
+        // magnification churn is irrelevant). A null result means a degenerate
+        // zero-size viewport (only in tests) - trust the tracked card there.
+        const under = document.elementFromPoint(pointer.current.x, pointer.current.y);
+        const el = under ? (under.closest?.('[data-preview-src]') ?? null) : currentCard.current;
+        if (previewable(el)) reveal(el);
+      }, DELAY_MS);
+    };
+
+    const onMove = (event: PointerEvent) => {
+      pointer.current = { x: event.clientX, y: event.clientY };
     };
 
     const onOver = (event: PointerEvent) => {
       const target = event.target as Element | null;
-      // Over the preview itself (its zoom card or details panel): keep it alive,
-      // and never treat the zoom's own card as a fresh anchor.
+      // Over the preview itself (its zoom card or details panel): keep it alive.
       if (target?.closest?.('.hoverCard')) {
         cancelHide();
         return;
       }
       const el = target?.closest?.('[data-preview-src]') ?? null;
-      // Still resting on the same card: keep it (cancel any pending grace-hide).
-      if (el && el === anchorRef.current) {
+      if (previewable(el)) {
         cancelHide();
+        currentCard.current = el;
+        if (shownEl.current) {
+          // A preview is up. Switch only for a genuinely different card (the
+          // magnification churn re-fires this for the same one).
+          if (el !== shownEl.current) {
+            shownEl.current = null;
+            setHover(null);
+            startReveal();
+          }
+          return;
+        }
+        // No preview yet: start the countdown once, and do NOT restart it while it
+        // runs - that is what lets a rest on the fanned hand actually complete.
+        if (!revealPending.current) startReveal();
         return;
       }
-      clearReveal();
-      // A different previewable card. Skip already-big cards, the fullscreen
-      // CardPopup, and the login/onboarding fan (decorative). offsetWidth is the
-      // true layout width (getBoundingClientRect is rotation-inflated).
-      if (
-        el &&
-        (el as HTMLElement).offsetWidth <= MAX_ANCHOR_W &&
-        !el.closest('.cpStage') &&
-        !el.closest('.onboarding')
-      ) {
-        cancelHide();
-        anchorRef.current = el;
-        shown.current = false;
-        setHover(null);
-        revealTimer.current = window.setTimeout(() => reveal(el), DELAY_MS);
-      } else if (shown.current) {
-        // Left the cards but a preview is up: grace-hide so a move toward the
-        // preview can catch and keep it.
+      // Not over a previewable card and not over the preview.
+      if (shownEl.current) {
+        // Preview up: grace-hide so a move toward it can catch and keep it.
         scheduleHide();
-      } else {
-        anchorRef.current = null;
+      } else if (!revealPending.current) {
+        // Nothing pending: idle. (A pending countdown is left alone - it self-gates
+        // on elementFromPoint at fire time, so a transient off-card blip is fine.)
+        window.clearTimeout(revealTimer.current);
       }
     };
 
@@ -170,17 +210,19 @@ export function HoverCardLayer() {
     const onScroll = (event: Event) => {
       const scrolled = event.target as Node | null;
       if (scrolled instanceof Element && scrolled.closest('.hoverCard')) return;
-      const anchor = anchorRef.current;
+      const anchor = shownEl.current;
       if (!anchor || !scrolled || scrolled === document || (scrolled as Node).contains?.(anchor)) {
         hide();
       }
     };
 
+    document.addEventListener('pointermove', onMove, true);
     document.addEventListener('pointerover', onOver, true);
     document.addEventListener('pointerdown', onDown, true);
     window.addEventListener('scroll', onScroll, true);
     window.addEventListener('blur', hide);
     return () => {
+      document.removeEventListener('pointermove', onMove, true);
       document.removeEventListener('pointerover', onOver, true);
       document.removeEventListener('pointerdown', onDown, true);
       window.removeEventListener('scroll', onScroll, true);

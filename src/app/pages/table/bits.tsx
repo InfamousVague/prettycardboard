@@ -88,20 +88,27 @@ export function findFieldCard(room: RoomState, iid: string): CardInst | undefine
   return undefined;
 }
 
-/** Counter badges with a readable initial: "+3" for +1/+1, "L2" for loyalty... */
+/** Counter badges. +1/+1 and -1/-1 shift power AND toughness equally (and, being
+ *  state-based, annihilate), so they collapse into one two-sided P/T pill that
+ *  reads "+2 / +2" or "-1 / -1"; other counters (loyalty, charge…) stay compact
+ *  chips like "L2". */
 export function CounterBadges({ card }: { card: CardInst }) {
-  const entries = Object.entries(card.counters).filter(([, count]) => count > 0);
-  if (entries.length === 0) return null;
-  const label = (kind: string, count: number) => {
-    if (kind === '+1/+1') return `+${count}`;
-    if (kind === '-1/-1') return `-${count}`;
-    return `${kind.charAt(0).toUpperCase()}${count}`;
-  };
+  const pt = (card.counters['+1/+1'] ?? 0) - (card.counters['-1/-1'] ?? 0);
+  const others = Object.entries(card.counters).filter(
+    ([kind, count]) => count > 0 && kind !== '+1/+1' && kind !== '-1/-1',
+  );
+  if (pt === 0 && others.length === 0) return null;
+  const sign = (n: number) => (n > 0 ? `+${n}` : `${n}`);
   return (
     <span className="counterBadges">
-      {entries.map(([kind, count]) => (
+      {pt !== 0 && (
+        <span className="counterPill" data-tone={pt > 0 ? 'buff' : 'debuff'} title="+1/+1 counters">
+          {sign(pt)} <span className="counterPillSlash">/</span> {sign(pt)}
+        </span>
+      )}
+      {others.map(([kind, count]) => (
         <span key={kind} className="counterBadge" title={kind}>
-          {label(kind, count)}
+          {`${kind.charAt(0).toUpperCase()}${count}`}
         </span>
       ))}
     </span>
@@ -495,7 +502,14 @@ function CmdCard({
       clickTimer.current = null;
     }
   };
+  // A face-down Legend is hidden info even from its owner; single-click Calls it
+  // (flips it face-up to reveal). A face-up commander/Legend previews on click.
+  const call = () => act({ kind: 'card.face', iid: card.iid, faceDown: false });
   const onClick = () => {
+    if (card.faceDown) {
+      if (interactive) call();
+      return;
+    }
     if (!interactive) {
       preview();
       return;
@@ -520,7 +534,7 @@ function CmdCard({
       }}
       onClickCapture={longPress.onClickCapture}
       onDoubleClick={
-        interactive
+        interactive && !card.faceDown
           ? () => {
               clearClick();
               cast();
@@ -529,14 +543,15 @@ function CmdCard({
       }
       onContextMenu={interactive && onMenu ? (event) => onMenu(event, card.iid, 'command') : undefined}
     >
-      {/* No name tooltip — the hover preview (HoverCardLayer) now shows the card
-          and its full details on rest; commander tax stays on the badge below. */}
+      {/* No name tooltip — the hover preview (HoverCardLayer) shows a face-up
+          card on rest; a face-down Legend wears the card back (hidden info until
+          Called). Commander tax stays on the badge below. */}
       <GameCard
         name={card.name}
         imageUrl={card.imageUrl || cardImage(card.scryfallId)}
+        faceDown={card.faceDown}
         width={width}
         foil
-        tilt={0}
         onClick={onClick}
       />
       <TaxBadge value={tax} />

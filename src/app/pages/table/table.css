@@ -102,12 +102,33 @@
   justify-content: space-between;
   gap: var(--glacier-space-4);
   padding: var(--glacier-space-2) var(--glacier-space-5);
+  /* Query container so the bar can shed chrome as it narrows (laptop widths)
+     instead of the three clusters cramming/overlapping. */
+  container: tabletop / inline-size;
 }
 
 .tableMeta {
   display: flex;
   align-items: center;
   gap: var(--glacier-space-3);
+  min-width: 0;
+}
+
+/* The action labels collapse to icons first (tooltips carry the names), then the
+   room code and commander-damage read-out drop (both live elsewhere too), so the
+   turn/attack/end-turn ribbon and the essential buttons always fit one row. */
+@container tabletop (max-width: 1080px) {
+  .tableTopActions .ttActionLabel {
+    display: none;
+  }
+}
+@container tabletop (max-width: 860px) {
+  .tableTop .cmdBar {
+    display: none;
+  }
+  .tableCode kbd {
+    display: none;
+  }
 }
 
 .tableCode {
@@ -505,6 +526,12 @@
   box-shadow: var(--glacier-shadow-3);
   color: var(--glacier-text-muted);
   font-size: var(--glacier-font-size-sm);
+}
+/* Mirrored view: the opponent's hand now occupies the top edge, so drop the cue
+   to the bottom-centre of the playmat where it's clear of everything. */
+.spectateCue[data-mirror] {
+  top: auto;
+  bottom: 2.5rem;
 }
 .spectateCueText b {
   color: var(--glacier-text);
@@ -1006,6 +1033,15 @@
      deck/graveyard column. */
   position: relative;
   z-index: 12;
+  /* The frame is a full-width flex item, so its empty sides overlap the mat's
+     bottom-left Legends and would swallow their hover/click. Only the fan and
+     the pull-tab should catch the pointer; the empty frame stays transparent so
+     the Legends beneath stay interactive. */
+  pointer-events: none;
+}
+.myFan,
+.handTab {
+  pointer-events: auto;
 }
 
 .myFan {
@@ -1247,11 +1283,24 @@
   justify-content: center;
   gap: var(--glacier-space-1);
   flex-wrap: wrap;
+  /* The divider + padding are reserved even when collapsed (transparent border)
+     so banking the first mana does not add height and shove the rows below. */
+  padding-block-start: var(--glacier-space-1);
+  border-block-start: var(--glacier-hairline) solid transparent;
 }
 
 .manaBar[data-active] {
-  padding-block-start: var(--glacier-space-1);
-  border-block-start: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 40%, transparent);
+  border-block-start-color: color-mix(in oklch, var(--glacier-border) 40%, transparent);
+}
+
+/* Always-present tail row for the total pill: reserves its height so the pill
+   fades in without shifting the layout. */
+.manaTail {
+  flex-basis: 100%;
+  min-height: 1.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .manaPips {
@@ -1265,18 +1314,29 @@
   position: relative;
   display: inline-grid;
   place-items: center;
-  width: 1.9rem;
-  height: 1.9rem;
+  /* Roomier so the mana glyph sits comfortably inside its container instead of
+     spilling over the edge. */
+  width: 2.35rem;
+  height: 2.35rem;
+  padding: 0.28rem;
+  box-sizing: border-box;
   border: 0;
   background: transparent;
   cursor: pointer;
   border-radius: var(--glacier-radius-full);
   opacity: 0.45;
   filter: grayscale(0.35);
-  transition: opacity 120ms, transform 120ms, filter 120ms;
+  transition: opacity 120ms, transform 120ms, filter 120ms, background 120ms;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
   user-select: none;
+}
+.manaPip[data-has] {
+  background: color-mix(in oklch, var(--glacier-surface) 55%, transparent);
+}
+.manaPip > img {
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .manaBar[data-active] .manaPip,
@@ -1339,6 +1399,52 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Sidebar dice tray (Magic): compact d20…d4 + coin, rolling the 3D mat dice. */
+.diceTray {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+  padding-block-start: var(--glacier-space-2);
+  border-block-start: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 40%, transparent);
+}
+.diceTrayLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+.diceTrayDice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-1);
+}
+.diceTrayDie {
+  flex: 1 1 2.3rem;
+  min-width: 2.3rem;
+  padding: 0.28rem 0.3rem;
+  border-radius: var(--glacier-radius-md);
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  background: var(--glacier-surface-sunken);
+  color: var(--glacier-text);
+  font-family: var(--glacier-font-mono);
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, transform 80ms;
+}
+.diceTrayDie:hover {
+  border-color: var(--glacier-accent-border);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 12%, var(--glacier-surface-sunken));
+}
+.diceTrayDie:active {
+  transform: scale(0.94);
+}
+.diceTrayCoin {
+  flex-basis: 100%;
+}
+
 /* counters on cards */
 
 .counterBadges {
@@ -1363,6 +1469,33 @@
   font-weight: var(--glacier-font-weight-bold);
   font-family: var(--glacier-font-mono);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* The +1/+1 (or -1/-1) counter pill: a two-sided P/T read-out — "+2 / +2",
+   "-1 / -1" — larger and easier to read than the old single "+3" chip. */
+.counterPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  height: 1.45rem;
+  padding-inline: 0.5rem;
+  border-radius: var(--glacier-radius-full);
+  background: var(--glacier-accent-solid);
+  color: var(--glacier-accent-contrast, white);
+  font-size: 0.74rem;
+  font-weight: var(--glacier-font-weight-bold);
+  font-family: var(--glacier-font-mono);
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+.counterPill[data-tone='debuff'] {
+  background: var(--glacier-danger-solid, oklch(0.55 0.19 25));
+  color: var(--glacier-danger-contrast, #fff);
+}
+.counterPillSlash {
+  opacity: 0.55;
+  font-weight: var(--glacier-font-weight-medium);
 }
 
 /* ---- context menu ---- */
@@ -2884,17 +3017,31 @@
   pointer-events: auto;
 }
 
-/* Mirror mode (across the table): flip the fan 180deg on top of its rest/peek/
-   hide transform, so the cards read upside down while still hanging off + peeking
-   from the bottom edge. */
+/* Mirror mode (across the table): the whole board is flipped 180deg, so the
+   opponent's hand belongs at the TOP edge, hanging down toward the board — like
+   a player sitting opposite you. Anchor the strip to the top and peek the fan
+   (flipped 180deg) from the top edge; the pull-tab moves up with it. */
+.oppHandStrip[data-mirror] {
+  top: 0;
+  bottom: auto;
+  align-items: flex-start;
+}
+.oppHandStrip[data-mirror] .myHand {
+  align-items: flex-start;
+}
 .oppHandStrip[data-mirror] .myFan {
-  transform: translateY(50%) rotate(180deg);
+  border-radius: 0 0 var(--glacier-radius-xl) var(--glacier-radius-xl);
+  transform: translateY(-50%) rotate(180deg);
 }
 .oppHandStrip[data-mirror] .myFan[data-peek] {
   transform: translateY(0) rotate(180deg);
 }
 .oppHandStrip[data-mirror] .myFan[data-hidden] {
-  transform: translateY(95%) rotate(180deg);
+  transform: translateY(-95%) rotate(180deg);
+}
+.oppHandStrip[data-mirror] .handTab {
+  top: 0.6rem;
+  bottom: auto;
 }
 
 .oppHandTally {

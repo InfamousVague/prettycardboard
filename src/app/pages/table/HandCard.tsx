@@ -56,11 +56,21 @@ export function HandCard({
   const lift = useSpring(useTransform(bump, (v) => liftMax * v), { stiffness: 430, damping: 30 });
   const z = useTransform(bump, (v) => Math.round(v * 20));
 
+  // The dock magnification lifts the inner .handCardZoom (which carries GameCard's
+  // data-preview-src) up out of the fan, while the .handCard::after hit-buffer
+  // stays put on top of the base footprint - so a pointer on the card body lands on
+  // the buffer, whose closest('[data-preview-src]') is null, and only the lifted top
+  // edge pokes above it to reach the real anchor. Mirror the preview attrs onto the
+  // stable .handCard so the whole card previews, wherever the pointer rests.
+  const previewSrc = faceDown ? undefined : card.imageUrl || cardImage(card.scryfallId);
+
   return (
     <motion.div
       ref={ref}
       className="handCard"
       style={{ zIndex: z }}
+      data-preview-src={previewSrc}
+      data-preview-name={previewSrc ? card.name : undefined}
       initial={{ y: 60, opacity: 0 }}
       animate={{
         y: Math.abs(spread) * 6,
