@@ -33,6 +33,14 @@ enum ClientMsg {
     GameAction { action: game::Action },
     #[serde(rename = "playmat.set")]
     PlaymatSet { id: Option<String> },
+    /// My chosen card back, mirrored so every viewer paints my face-down cards
+    /// with it (their board wears their back, not mine).
+    #[serde(rename = "cardback.set")]
+    CardBackSet { id: Option<String> },
+    /// Per-player turn automation: untap/draw at the start of my turn (off by
+    /// default; synced from the client's settings).
+    #[serde(rename = "auto.set")]
+    AutoSet { untap: bool, draw: bool },
     // Replay scrubbing: viewer-local and read-only. These NEVER enter apply()
     // and never move the shared cursor - they only materialize a past frame
     // for the requesting connection.
@@ -158,6 +166,8 @@ fn handle_msg(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
         ClientMsg::InviteSend { to_user_id, room_id } => invite_send(app, user, &to_user_id, &room_id),
         ClientMsg::GameAction { action } => game_action(app, user, action, tx),
         ClientMsg::PlaymatSet { id } => playmat_set(app, user, id),
+        ClientMsg::CardBackSet { id } => card_back_set(app, user, id),
+        ClientMsg::AutoSet { untap, draw } => auto_set(app, user, untap, draw),
         ClientMsg::ReplaySeek { index } => replay_seek(app, user, index, tx),
     }
 }
@@ -309,17 +319,27 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
         return;
     };
 
-    // Starting life follows the ROOM's format: commander tables sit at 40,
-    // standard tables at 20. Commander-board cards are flagged isCommander
-    // only when the room's command-zone machinery is active.
+    // Starting vitals are game-driven. MTG life follows the format (commander 40,
+    // standard 20). Cyberpunk tracks Net + RAM (the `life`/`poison` slots,
+    // relabeled client-side) as freeform counters that both start at 0.
+    // Commander-board cards are flagged isCommander only when MTG command-zone
+    // machinery is active; a Cyberpunk Legend sits in the (relabeled) command
+    // zone without triggering tax/return.
     let is_commander_room = room.format == "commander";
-    let starting_life = if is_commander_room { 40 } else { 20 };
+    let starting_life = if room.game == "cyberpunk" {
+        0
+    } else if is_commander_room {
+        40
+    } else {
+        20
+    };
     // Snapshot the deck's name now: match results must survive a later
     // rename or delete of the deck row.
     let deck_name = deck.as_ref().map(|d| d.name.clone());
     let (command, library) = deck
-        .map(|d| rooms::build_zones(&d.cards(), is_commander_room))
+        .map(|d| rooms::build_zones(&d.cards(), is_commander_room, &room.game))
         .unwrap_or_default();
+    let gig_dice = rooms::new_gig_dice(&room.game);
     room.players.push(rooms::Player {
         user_id: user.id.clone(),
         username: user.username.clone(),
@@ -331,6 +351,10 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
         commander_tax: Default::default(),
         mulligan: None,
         playmat: None,
+        card_back: None,
+        auto_untap: false,
+        auto_draw: false,
+        gig_dice,
         deck_id: deck_id.clone(),
         deck_name,
         conceded: false,
@@ -515,8 +539,9 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
         return;
     }
     room.started = true;
+    let deal = crate::game::opening_hand(&room.game);
     for p in room.players.iter_mut() {
-        let n = 7.min(p.library.len());
+        let n = deal.min(p.library.len());
         let drawn: Vec<rooms::Card> = p.library.drain(0..n).collect();
         p.hand.extend(drawn);
         // Every seat starts in the London-mulligan decision (freeform: no
@@ -560,20 +585,21 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
                 &room.format,
                 &players_json,
                 room.seats as i64,
+                &room.game,
                 now,
             );
         }
     }
 
     // Seed the undo/redo/replay timeline with the opening state, so undo can
-    // reach all the way back to the deal.
-    room.history.clear();
-    room.cursor = 0;
+    // reach all the way back to the deal. hist_clear records any prior rows for
+    // deletion so a re-started persistent table does not leak an old timeline.
+    room.hist_clear();
     room.push_history(user.id.clone(), "Game started".to_string(), seq, None);
 
     rooms::touch(app, &mut room);
     room_send_states(app, &room);
-    room_log(app, &room, seq, "Game started: opening hands of 7 dealt; keep or mulligan");
+    room_log(app, &room, seq, &format!("Game started: opening hands of {deal} dealt; keep or mulligan"));
     send_undo_state(app, &room);
     send_timeline(app, &room);
 }
@@ -852,10 +878,12 @@ pub fn maybe_finish_match(app: &App, room: &mut Room) {
 
 /// The bundled playmat ids (client's src/app/data/playmats.ts); a player's
 /// chosen mat must be one of these.
-const PLAYMATS: [&str; 15] = [
+const PLAYMATS: [&str; 25] = [
     "arcane-study", "tavern", "house-felt", "plains", "island", "swamp", "mountain",
     "forest", "confluence", "marble", "boneyard", "forgefloor", "fae-glade",
     "planar-sky", "neon-grid",
+    "aurora-drift", "deep-field", "felted-field", "heirloom-table", "quarry-slab",
+    "back-alley", "corporate-arcology", "neon-megacity", "rain-ramen", "the-net",
 ];
 
 /// A player's chosen playmat, mirrored into the room so every client can show
@@ -876,6 +904,51 @@ fn playmat_set(app: &Arc<App>, user: &db::User, id: Option<String>) {
             p.playmat = valid;
             rooms::touch(app, &mut room);
             room_send_states(app, &room);
+        }
+    }
+}
+
+/// A player's chosen card back, mirrored so every viewer paints this player's
+/// face-down cards with it. The id is a free-form client asset name (validated
+/// client-side); we just relay it and broadcast so boards repaint.
+fn card_back_set(app: &Arc<App>, user: &db::User, id: Option<String>) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        return;
+    };
+    if rref.spectating {
+        return;
+    }
+    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
+        return;
+    };
+    if let Some(p) = room.players.iter_mut().find(|p| p.user_id == user.id) {
+        if p.card_back != id {
+            p.card_back = id;
+            rooms::touch(app, &mut room);
+            room_send_states(app, &room);
+        }
+    }
+}
+
+/// A player's turn-automation choices (untap/draw at their own turn start),
+/// mirrored onto their seat so `auto_turn_begin` honors them. Private per-player
+/// state, so no broadcast — the owner's client is the source of truth and
+/// re-syncs on join; persisting keeps it across reconnects.
+fn auto_set(app: &Arc<App>, user: &db::User, untap: bool, draw: bool) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        return;
+    };
+    if rref.spectating {
+        return;
+    }
+    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
+        return;
+    };
+    if let Some(p) = room.players.iter_mut().find(|p| p.user_id == user.id) {
+        if p.auto_untap != untap || p.auto_draw != draw {
+            p.auto_untap = untap;
+            p.auto_draw = draw;
+            rooms::touch(app, &mut room);
         }
     }
 }

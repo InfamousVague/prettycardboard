@@ -235,7 +235,7 @@ async function main() {
   const bobCmdIid = alice.lastState().players.find((p) => p.seat === 1).command[0].iid;
   m = alice.mark();
   alice.act({ kind: 'cmd.damage', fromSeat: 1, delta: 6, commanderIid: bobCmdIid });
-  await alice.expectLog(/pt_bob deals 6 commander damage to pt_alice \(6 total\)/, 'commander damage logged with source', { since: m });
+  await alice.expectLog(/pt_bob deals 6 commander damage to pt_alice \(6 total, \d+ life\)/, 'commander damage logged with source', { since: m });
   st = await alice.expectState(
     (s) => alice.me(s).cmdDamage['1'] === 6 && alice.me(s).cmdDamageByCommander[bobCmdIid] === 6,
     'cmdDamage by seat and by commander both tally 6',
@@ -375,7 +375,7 @@ async function main() {
   await alice.expectState((s) => alice.me(s).battlefield.find((c) => c.iid === auraIid)?.tapped === true, 'card tapped', 5000, { since: m });
   m = alice.mark();
   alice.act({ kind: 'undo' });
-  await alice.expectLog(/pt_alice undoes their last action/, 'undo logged', { since: m });
+  await alice.expectLog(/pt_alice undoes(:| the last move)/, 'undo logged', { since: m });
   await alice.expectState((s) => alice.me(s).battlefield.find((c) => c.iid === auraIid)?.tapped === false, 'undo reverted the tap', 5000, { since: m });
 
   // --- reveal top 2 -----------------------------------------------------------------

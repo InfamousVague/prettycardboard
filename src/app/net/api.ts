@@ -1,5 +1,5 @@
 import { isTauri } from '../tauri.ts';
-import type { Deck, DeckCard, DeckSummary, FriendsPayload, Identity, MatchRow, MatchStatsPlayer, MyRoom, RoomInfo, UserHit } from './types.ts';
+import type { Deck, DeckCard, DeckSummary, FriendsPayload, Identity, MatchRow, MatchStatsPlayer, MyRoom, RoomInfo, UserHit, UserStats } from './types.ts';
 
 /**
  * REST client for the PrettyCardboard server (see PROTOCOL.md). Where it points:
@@ -111,8 +111,9 @@ export function createDeck(
   format: string,
   cards: DeckCard[],
   header?: string | null,
+  game?: string,
 ): Promise<{ id: string }> {
-  return request('POST', '/api/decks', { name, format, cards, header });
+  return request('POST', '/api/decks', { name, format, cards, header, game });
 }
 
 export function updateDeck(
@@ -135,8 +136,9 @@ export function createRoom(
   name: string,
   seats: number,
   persistent?: boolean,
+  opts?: { format?: string; game?: string },
 ): Promise<{ roomId: string; code: string }> {
-  return request('POST', '/api/rooms', { name, seats, persistent });
+  return request('POST', '/api/rooms', { name, seats, persistent, ...opts });
 }
 
 export function getRoomByCode(code: string): Promise<RoomInfo> {
@@ -151,6 +153,11 @@ export function myRooms(): Promise<MyRoom[]> {
 /** The caller's recent games, newest first. */
 export function matches(): Promise<MatchRow[]> {
   return request('GET', '/api/matches');
+}
+
+/** The caller's all-time aggregate stats (wins/losses/endorsements/avg turn). */
+export function myStats(): Promise<UserStats> {
+  return request('GET', '/api/me/stats');
 }
 
 // --- post-match: endorsements, salt, stats ---

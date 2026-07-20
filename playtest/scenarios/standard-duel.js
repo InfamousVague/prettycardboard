@@ -131,13 +131,14 @@ async function main() {
   alice.act({ kind: 'combat.begin' });
   await alice.expectState((s) => s.combat && s.phase === 'attack', 'combat begun', 5000, { since: m });
   m = alice.mark();
+  const mBobAtk = bob.mark();
   alice.act({ kind: 'combat.attack', iid: permIid });
   await alice.expectLog(/ attacks, tapped/, 'attack declared without defenderSeat, auto-tapped', { since: m });
   st = await bob.expectState(
     (s) => s.combat?.attackers.length === 1 && s.combat.attackers[0].iid === permIid && s.combat.attackers[0].defenderSeat === undefined,
     'attacker registered with no defenderSeat',
     5000,
-    { since: m },
+    { since: mBobAtk },
   );
   m = alice.mark();
   alice.act({ kind: 'combat.end' });

@@ -17,6 +17,12 @@ import {
 
 export type LibIntent = 'peek' | 'search' | null;
 
+/** Floating-mana pool colors (WUBRG + colorless), the pip order in the bar. */
+export type ManaColor = 'W' | 'U' | 'B' | 'R' | 'G' | 'C';
+export const MANA_ORDER: ManaColor[] = ['W', 'U', 'B', 'R', 'G', 'C'];
+export type ManaPool = Record<ManaColor, number>;
+const EMPTY_MANA: ManaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
+
 interface TableUiState {
   boardMode: BoardMode;
   /** Load the persisted mode once the seat owner is known. */
@@ -39,6 +45,16 @@ interface TableUiState {
   /** Public pile browser (any player's graveyard/exile). */
   pileView: { userId: string; zone: 'graveyard' | 'exile' } | null;
   setPileView: (view: { userId: string; zone: 'graveyard' | 'exile' } | null) => void;
+
+  /**
+   * Floating-mana pool (MTG only) - a client-only play aid, deliberately NOT
+   * persisted and NOT server-synced. It is high-frequency and ephemeral (mana
+   * empties between phases), so restoring a stale pool would be actively wrong.
+   */
+  mana: ManaPool;
+  addMana: (c: ManaColor, delta?: number) => void;
+  clearMana: () => void;
+  clearManaColor: (c: ManaColor) => void;
 }
 
 export const useTableUi = create<TableUiState>((set) => ({
@@ -65,4 +81,10 @@ export const useTableUi = create<TableUiState>((set) => ({
 
   pileView: null,
   setPileView: (view) => set({ pileView: view }),
+
+  mana: { ...EMPTY_MANA },
+  addMana: (c, delta = 1) =>
+    set((s) => ({ mana: { ...s.mana, [c]: Math.max(0, s.mana[c] + delta) } })),
+  clearMana: () => set({ mana: { ...EMPTY_MANA } }),
+  clearManaColor: (c) => set((s) => ({ mana: { ...s.mana, [c]: 0 } })),
 }));

@@ -1,4 +1,4 @@
-import { PRECONS } from './cards.ts';
+import { PRECONS } from './precons.ts';
 
 /**
  * Scryfall client + the app's known-card metadata registry.

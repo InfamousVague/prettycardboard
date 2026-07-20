@@ -1,32 +1,39 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { motion } from 'motion/react';
 import {
   Avatar,
   Button,
-  Card,
+  Carousel,
   Heading,
   Input,
   Kbd,
   OtpField,
+  Pill,
+  ProgressRing,
   SegmentedControl,
   Select,
   Size,
+  StatTile,
   StatusDot,
   Text,
   TextTone,
   useToast,
 } from '@glacier/react';
-import { Play, Plus, Swords, Ticket } from '@glacier/icons';
+import { Compass, Heart, Layers, Play, Plus, Sparkles, Swords, Ticket, Trophy } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
 import { useUi } from '../state/uiStore.ts';
 import * as api from '../net/api.ts';
 import * as ws from '../net/ws.ts';
-import type { MyRoom } from '../net/types.ts';
-import { cardImage, coverArtCrop } from '../data/cards.ts';
+import type { MyRoom, UserStats } from '../net/types.ts';
+import { cardImage } from '../data/cards.ts';
 import { featuredDecks } from '../data/catalog.ts';
+import { GAME_LIST } from '../data/games.ts';
+import { cyberpunkImage, cyberpunkStarters } from '../data/cyberpunk.ts';
+import { deckSummaryArt, deckSummaryCover } from '../data/deckCover.ts';
 import { DeckStack } from '../components/DeckStack.tsx';
+import { GameTag } from '../components/GameTag.tsx';
 import { CardRowSkeleton, EmptyFan } from '../components/Skeletons.tsx';
 import './home.css';
 
@@ -67,37 +74,26 @@ function SectionHead({ title, onViewAll, viewAllLabel }: { title: string; onView
 }
 
 export function HomePage() {
-  return (
-    <div className="page homePage">
-      <JumpBackIn order={0} />
-      <QuickPlay order={1} />
-      <RecentDecks order={2} />
-      <FriendsOnline order={3} />
-      <Featured order={4} />
-    </div>
-  );
-}
-
-/**
- * Jump back in: if a table with your seat is already underway, one banner-style
- * card above Quick play resumes it (most recent started room only). The seat
- * still holds the deck, so the join carries no deckId.
- */
-function JumpBackIn({ order }: { order: number }) {
   const t = useT();
   const { toast } = useToast();
-  const join = useGame((state) => state.join);
+  const identity = useApp((state) => state.identity);
   const closedRoomId = useGame((state) => state.closedRoomId);
   const ackClosed = useGame((state) => state.ackClosed);
-  const [room, setRoom] = useState<MyRoom | null>(null);
+  const [stats, setStats] = useState<UserStats | null>(null);
+  const [resume, setResume] = useState<MyRoom | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      // The list arrives newest activity first; the first started room wins.
-      const rooms = await api.myRooms();
-      setRoom(rooms.find((candidate) => candidate.started) ?? null);
+      setStats(await api.myStats());
     } catch {
-      // Offline: keep (or stay without) the banner.
+      // Offline: keep whatever we had.
+    }
+    try {
+      // Newest activity first; the first started room is what "Continue" resumes.
+      const rooms = await api.myRooms();
+      setResume(rooms.find((candidate) => candidate.started) ?? null);
+    } catch {
+      // Offline.
     }
   }, []);
 
@@ -114,7 +110,7 @@ function JumpBackIn({ order }: { order: number }) {
     };
   }, [refresh]);
 
-  // Landed back here because the table we sat at was closed; say so once.
+  // Landed here because the table we sat at was closed; say so once.
   useEffect(() => {
     if (closedRoomId) {
       toast({ tone: 'info', message: t('plTableClosed') });
@@ -122,21 +118,139 @@ function JumpBackIn({ order }: { order: number }) {
     }
   }, [closedRoomId, ackClosed, toast, t]);
 
-  if (!room) return null;
   return (
-    <Section order={order}>
-      <div className="homeResume">
-        <div className="homeResumeInfo">
-          <Play size={18} aria-hidden />
-          <Text as="span" className="homeResumeName">
-            {room.name}
-          </Text>
-          <Kbd>{room.code}</Kbd>
+    <div className="page homePage">
+      <PlayerHero identity={identity} stats={stats} resume={resume} order={0} />
+      <StatStrip stats={stats} order={1} />
+      <QuickPlay order={2} />
+      <RecentDecks order={3} />
+      <Featured order={4} />
+      <CyberpunkStarters order={5} />
+    </div>
+  );
+}
+
+/** Flavor rank titles, unlocked by lifetime games played; level is sqrt-scaled. */
+const RANKS: { at: number; title: string }[] = [
+  { at: 0, title: 'Fresh Meat' },
+  { at: 1, title: 'Rookie' },
+  { at: 10, title: 'Regular' },
+  { at: 30, title: 'Sharp' },
+  { at: 75, title: 'Veteran' },
+  { at: 150, title: 'Ringer' },
+  { at: 300, title: 'Legend' },
+];
+function rankFor(played: number): { title: string; level: number } {
+  let title = RANKS[0]!.title;
+  for (const rank of RANKS) if (played >= rank.at) title = rank.title;
+  return { title, level: Math.floor(Math.sqrt(played)) + 1 };
+}
+
+/**
+ * The gamified header: a player card (avatar, rank, level, at-a-glance line +
+ * a win-rate ring) beside a big Continue / Start-a-table call to action.
+ */
+function PlayerHero({
+  identity,
+  stats,
+  resume,
+  order,
+}: {
+  identity: { username: string } | null;
+  stats: UserStats | null;
+  resume: MyRoom | null;
+  order: number;
+}) {
+  const t = useT();
+  const decks = useApp((state) => state.decks);
+  const friends = useApp((state) => state.friends);
+  const join = useGame((state) => state.join);
+  const played = stats?.played ?? 0;
+  const winRate = played > 0 ? Math.round(((stats?.wins ?? 0) / played) * 100) : null;
+  const rank = rankFor(played);
+  const online = friends.friends.filter((friend) => friend.online).length;
+
+  return (
+    <Section order={order} className="homeHeroRow">
+      <div className="heroCard">
+        <div className="heroPlayer">
+          <span className="heroAvatar">
+            <Avatar name={identity?.username} size="xl" />
+            <StatusDot tone="success" pulse className="heroPresence" />
+          </span>
+          <div className="heroIdentity">
+            <span className="heroRank">{rank.title}</span>
+            <Heading level={1} noMargin className="heroName">
+              {identity?.username}
+            </Heading>
+            <div className="heroMeta">
+              <Pill size="sm" tone="accent" variant="soft">
+                {t('hmLevel')} {rank.level}
+              </Pill>
+              <Text as="span" size={Size.Small} tone={TextTone.Muted}>
+                {played} {t('hmGames')} · {decks.length} {t('decksTitle')} · {online} {t('frOnline')}
+              </Text>
+            </div>
+          </div>
         </div>
-        <Button size="sm" onClick={() => join(room.roomId)}>
-          {t('plResume')}
-        </Button>
+        {winRate != null && (
+          <div className="heroRing">
+            <ProgressRing
+              value={winRate}
+              max={100}
+              size={104}
+              thickness={9}
+              tone={winRate >= 50 ? 'success' : 'accent'}
+              showValue
+              aria-label={t('hmWinRate')}
+            />
+            <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="heroRingLabel">
+              {t('hmWinRate')}
+            </Text>
+          </div>
+        )}
       </div>
+
+      {resume ? (
+        <button type="button" className="heroSide heroResume2" onClick={() => join(resume.roomId)}>
+          <span className="heroResumeTag">
+            <Play size={14} /> {t('hmContinue')}
+            <GameTag game={resume.game} showName={false} />
+          </span>
+          <span className="heroResumeName">{resume.name}</span>
+          <span className="heroResumeGo">{t('plResume')} →</span>
+        </button>
+      ) : (
+        <button type="button" className="heroSide heroPlayCta" onClick={() => (window.location.hash = '/play')}>
+          <Swords size={26} />
+          <span className="heroCtaTitle">{t('hmStartTable')}</span>
+          <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+            {t('hmStartTableSub')}
+          </Text>
+        </button>
+      )}
+    </Section>
+  );
+}
+
+/** The KPI strip: wins, games, endorsements, decks. */
+function StatStrip({ stats, order }: { stats: UserStats | null; order: number }) {
+  const t = useT();
+  const decks = useApp((state) => state.decks);
+  const played = stats?.played ?? 0;
+  const winRate = played > 0 ? Math.round(((stats?.wins ?? 0) / played) * 100) : null;
+  return (
+    <Section order={order} className="homeStats">
+      <StatTile
+        glass
+        icon={<Trophy size={18} />}
+        value={stats?.wins ?? 0}
+        label={t('hmWins')}
+        hint={winRate != null ? `${winRate}% ${t('hmWinRate')}` : undefined}
+      />
+      <StatTile glass icon={<Swords size={18} />} value={played} label={t('hmGames')} />
+      <StatTile glass icon={<Heart size={18} />} value={stats?.endorsements ?? 0} label={t('hmEndorse')} />
+      <StatTile glass icon={<Layers size={18} />} value={decks.length} label={t('decksTitle')} />
     </Section>
   );
 }
@@ -154,17 +268,26 @@ function QuickPlay({ order }: { order: number }) {
 
   const [tableName, setTableName] = useState('');
   const [seats, setSeats] = useState('4');
+  const [game, setGame] = useState('mtg');
   const [deckId, setDeckId] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const chosenDeck = deckId || decks[0]?.id || '';
+  // Only the chosen game's decks are eligible; fall back to its first deck.
+  const gameDecks = decks.filter((deck) => (deck.game || 'mtg') === game);
+  const chosenDeck = (deckId && gameDecks.some((deck) => deck.id === deckId) ? deckId : gameDecks[0]?.id) || '';
   const chosen = decks.find((deck) => deck.id === chosenDeck);
+  const chosenArt = chosen ? deckSummaryArt(chosen) : '';
 
   const create = async () => {
     setBusy(true);
     try {
-      const room = await api.createRoom(tableName || `${t('playTitle')} - ${new Date().toLocaleTimeString()}`, Number(seats));
+      const room = await api.createRoom(
+        tableName || `${t('playTitle')} - ${new Date().toLocaleTimeString()}`,
+        Number(seats),
+        undefined,
+        { game },
+      );
       join(room.roomId, chosenDeck || undefined);
     } catch {
       toast({ tone: 'danger', message: t('obOffline') });
@@ -193,30 +316,44 @@ function QuickPlay({ order }: { order: number }) {
       <div className="qpGrid">
         {/* HOST: the chosen commander presides over the tile */}
         <div className="qpTile qpHost">
-          {chosen?.coverImageUrl && (
-            <div className="qpHostArt" style={{ backgroundImage: `url(${coverArtCrop(chosen.coverImageUrl)})` }} aria-hidden />
+          {chosenArt && (
+            <div className="qpHostArt" style={{ backgroundImage: `url(${chosenArt})` }} aria-hidden />
           )}
           <div className="qpTileScrim" aria-hidden />
           <div className="qpTileBody">
             <span className="qpTileTag">
               <Swords size={14} aria-hidden />
               {t('playNewTable')}
+              <GameTag game={game} />
             </span>
+
+            <div className="qpField">
+              <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="qpLabel">
+                {t('playGame')}
+              </Text>
+              <SegmentedControl
+                fullWidth
+                value={game}
+                onValueChange={setGame}
+                options={GAME_LIST.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') }))}
+                aria-label={t('playGame')}
+              />
+            </div>
 
             <div className="qpField">
               <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="qpLabel">
                 {t('playPickDeck')}
               </Text>
               <div className="qpDeckRow">
-                {chosen?.coverImageUrl && (
-                  <span className="qpDeckThumb" style={{ backgroundImage: `url(${coverArtCrop(chosen.coverImageUrl)})` }} aria-hidden />
+                {chosenArt && (
+                  <span className="qpDeckThumb" style={{ backgroundImage: `url(${chosenArt})` }} aria-hidden />
                 )}
                 <Select
                   fullWidth
                   value={chosenDeck}
                   onValueChange={setDeckId}
-                  options={decks.map((deck) => ({ value: deck.id, label: deck.name }))}
-                  placeholder={t('playPickDeck')}
+                  options={gameDecks.map((deck) => ({ value: deck.id, label: deck.name }))}
+                  placeholder={gameDecks.length === 0 ? t('playNoDecksForGame') : t('playPickDeck')}
                   aria-label={t('playPickDeck')}
                 />
               </div>
@@ -309,22 +446,26 @@ function RecentDecks({ order }: { order: number }) {
     selectDeck(null);
     window.location.hash = '/decks';
   };
+  const newDeck = () => {
+    useUi.getState().requestNewDeck();
+    window.location.hash = '/decks';
+  };
 
   return (
     <Section order={order}>
       <SectionHead title={t('hmRecentDecks')} onViewAll={goDecks} viewAllLabel={t('hmViewAll')} />
       {recent.length > 0 ? (
-        <div className="homeStackRow">
+        <Carousel className="homeCarousel" gap="var(--glacier-space-4)" aria-label={t('hmRecentDecks')}>
           {recent.map((deck) => (
             <div key={deck.id} className="homeStackItem">
               <DeckStack
                 name={deck.name}
-                imageUrl={deck.coverImageUrl || undefined}
+                imageUrl={deckSummaryCover(deck)}
                 width={150}
                 onClick={() => openDeck(deck.id)}
               />
               <Text size={Size.Small} className="homeStackName">
-                {deck.name}
+                <GameTag game={deck.game} showName={false} /> {deck.name}
               </Text>
               {deck.commander && (
                 <Text size={Size.XSmall} tone={TextTone.Subtle} className="homeStackSub">
@@ -333,12 +474,12 @@ function RecentDecks({ order }: { order: number }) {
               )}
             </div>
           ))}
-        </div>
+        </Carousel>
       ) : settled ? (
         <EmptyFan
           quip={t('esDrawStep')}
           action={
-            <Button size="sm" onClick={goDecks}>
+            <Button size="sm" onClick={newDeck}>
               <Plus size={16} />
               {t('decksNew')}
             </Button>
@@ -346,48 +487,6 @@ function RecentDecks({ order }: { order: number }) {
         />
       ) : (
         <CardRowSkeleton count={4} width={150} />
-      )}
-    </Section>
-  );
-}
-
-/** Who is at the table right now: a strip of online friends. */
-function FriendsOnline({ order }: { order: number }) {
-  const t = useT();
-  const friends = useApp((state) => state.friends);
-  const refreshFriends = useApp((state) => state.refreshFriends);
-
-  useEffect(() => {
-    refreshFriends().catch(() => {
-      // Presence keeps flowing over the socket either way.
-    });
-  }, [refreshFriends]);
-
-  const online = friends.friends.filter((friend) => friend.online);
-
-  return (
-    <Section order={order}>
-      <SectionHead
-        title={t('hmFriendsOnline')}
-        onViewAll={() => {
-          window.location.hash = '/friends';
-        }}
-        viewAllLabel={t('hmViewAll')}
-      />
-      {online.length === 0 ? (
-        <Text tone={TextTone.Muted}>{t('hmNoFriendsOnline')}</Text>
-      ) : (
-        <div className="homeFriendsRow">
-          {online.map((friend) => (
-            <div key={friend.userId} className="homeFriend">
-              <Avatar name={friend.username} size="sm" />
-              <Text as="span" size={Size.Small}>
-                {friend.username}
-              </Text>
-              <StatusDot tone={friend.roomId ? 'accent' : 'success'} size="sm" />
-            </div>
-          ))}
-        </div>
       )}
     </Section>
   );
@@ -404,7 +503,7 @@ function Featured({ order }: { order: number }) {
   return (
     <Section order={order}>
       <SectionHead title={t('hmFeatured')} onViewAll={goBrowse} viewAllLabel={t('hmViewAll')} />
-      <div className="homeStackRow">
+      <Carousel className="homeCarousel" gap="var(--glacier-space-4)" aria-label={t('hmFeatured')}>
         {featured.map((deck) => {
           const commander = deck.commanders[0];
           return (
@@ -426,7 +525,37 @@ function Featured({ order }: { order: number }) {
             </div>
           );
         })}
-      </div>
+      </Carousel>
+    </Section>
+  );
+}
+
+/** Discover shelf for the other game: the Cyberpunk starter decks, linking into
+ * the Browse page's Cyberpunk tab. */
+function CyberpunkStarters({ order }: { order: number }) {
+  const t = useT();
+  const starters = useMemo(() => cyberpunkStarters(), []);
+  const goBrowse = () => {
+    sessionStorage.setItem('pc_browse_game', 'cyberpunk');
+    window.location.hash = '/browse';
+  };
+  if (starters.length === 0) return null;
+  return (
+    <Section order={order}>
+      <SectionHead title={t('hmCyberStarters')} onViewAll={goBrowse} viewAllLabel={t('hmViewAll')} />
+      <Carousel className="homeCarousel" gap="var(--glacier-space-4)" aria-label={t('hmCyberStarters')}>
+        {starters.map((starter) => (
+          <div key={starter.id} className="homeStackItem">
+            <DeckStack name={starter.legend.displayName} imageUrl={cyberpunkImage(starter.legend.id)} width={150} onClick={goBrowse} />
+            <Text size={Size.Small} className="homeStackName">
+              <GameTag game="cyberpunk" showName={false} /> {starter.name}
+            </Text>
+            <Text size={Size.XSmall} tone={TextTone.Subtle} className="homeStackSub">
+              {starter.legend.displayName}
+            </Text>
+          </div>
+        ))}
+      </Carousel>
     </Section>
   );
 }

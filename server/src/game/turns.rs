@@ -89,18 +89,39 @@ pub fn auto_turn_begin(room: &mut Room, seat: usize) -> Vec<String> {
     let Some(p) = room.players.iter_mut().find(|p| p.seat == seat) else {
         return Vec::new();
     };
-    for c in p.battlefield.iter_mut() {
-        c.tapped = false;
+    // Untap and draw are per-player conveniences, OFF by default (the client
+    // syncs each player's choice via `auto.set`). A player who leaves them off
+    // untaps and draws by hand.
+    let do_untap = p.auto_untap;
+    // The starting player's very first turn skips its draw (standard / 2-player).
+    let do_draw = p.auto_draw && !skip;
+
+    if do_untap {
+        for c in p.battlefield.iter_mut() {
+            c.tapped = false;
+        }
     }
-    if skip {
-        vec![format!("{} untaps (first draw skipped)", p.username)]
-    } else if p.library.is_empty() {
-        vec![format!("{} untaps, no cards left to draw", p.username)]
-    } else {
+
+    let drew = if do_draw && !p.library.is_empty() {
         let card = p.library.remove(0);
         p.hand.push(card);
         p.hand_revealed = false;
         p.peeked.clear();
+        true
+    } else {
+        false
+    };
+    let empty = do_draw && !drew; // wanted to draw but the library was empty
+
+    if do_untap && drew {
         vec![format!("{} untaps and draws a card", p.username)]
+    } else if do_untap && empty {
+        vec![format!("{} untaps, no cards left to draw", p.username)]
+    } else if do_untap {
+        vec![format!("{} untaps", p.username)]
+    } else if drew {
+        vec![format!("{} draws a card", p.username)]
+    } else {
+        Vec::new()
     }
 }

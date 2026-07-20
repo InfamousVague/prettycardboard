@@ -15,6 +15,7 @@ import {
 import { useT } from '../../i18n.ts';
 import { isCreature } from './boardModes.ts';
 import { useGame } from '../../state/gameStore.ts';
+import { getGame } from '../../data/games.ts';
 import type { Phase, RoomState, TablePlayer } from '../../net/types.ts';
 import { juicePulse } from './juice.ts';
 
@@ -77,7 +78,9 @@ export function PhaseRibbon({
   const turnSecs = Math.max(0, Math.floor((Date.now() - turnStartRef.current) / 1000));
   const turnClock = `${Math.floor(turnSecs / 60)}:${String(turnSecs % 60).padStart(2, '0')}`;
 
-  if (room.phase == null) return null;
+  // Hide the phase strip for games with no turn phases (e.g. Cyberpunk plays
+  // freeform - the turn still passes, but there is no upkeep/main/combat ribbon).
+  if (room.phase == null || getGame(room.game).phases.length === 0) return null;
 
   return (
     <div className="ribbonRow" data-my-turn={myTurn || undefined}>

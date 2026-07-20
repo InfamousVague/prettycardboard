@@ -19,9 +19,14 @@ export interface DeckSummary {
   id: string;
   name: string;
   format: string;
+  /** Which card game this deck is for ("mtg" | "cyberpunk"). */
+  game: string;
   commander: string;
   cardCount: number;
-  coverImageUrl: string;
+  /** MTG cover (Scryfall scan URL); null for Cyberpunk (resolve from coverCardId). */
+  coverImageUrl: string | null;
+  /** The cover card's id, for game-aware art resolution. */
+  coverCardId?: string | null;
   updatedAt: string;
 }
 
@@ -29,6 +34,8 @@ export interface Deck {
   id: string;
   name: string;
   format: string;
+  /** Which card game this deck is for ("mtg" | "cyberpunk"). */
+  game: string;
   cards: DeckCard[];
   /** Scryfall id of the chosen header/cover card, when customized. */
   header?: string | null;
@@ -65,9 +72,19 @@ export interface RoomInfo {
 export interface MatchRow {
   name: string | null;
   format: string | null;
+  game?: string;
   players: { username: string; isBot?: boolean }[];
   seats: number | null;
   playedAt: number;
+}
+
+/** GET /api/me/stats — the caller's all-time aggregates for the Home dashboard. */
+export interface UserStats {
+  wins: number;
+  losses: number;
+  played: number;
+  endorsements: number;
+  avgTurnMs: number;
 }
 
 export interface MyRoom {
@@ -77,6 +94,7 @@ export interface MyRoom {
   seats: number;
   persistent: boolean;
   started: boolean;
+  game?: string;
   updatedAt: string;
   players: { userId: string; username: string; online: boolean }[];
 }
@@ -100,6 +118,17 @@ export interface CardInst {
   revealed?: boolean;
 }
 
+/** A Cyberpunk Gig die: one of the six d4-d20 in the Fixer. `inGig` = rolled
+ * into the player's Gig area (the count of those is the win tracker). */
+export interface GigDie {
+  sides: number;
+  value: number;
+  inGig: boolean;
+  /** Stolen from a rival (lets your Gig count exceed six); carries its origin. */
+  stolen?: boolean;
+  from?: string;
+}
+
 export interface TablePlayer {
   commanderTax?: Record<string, number>;
   cmdDamageByCommander?: Record<string, number>;
@@ -108,6 +137,11 @@ export interface TablePlayer {
   username: string;
   /** The seat's chosen playmat id; the felt shows the active player's mat. */
   playmat?: string | null;
+  /** The seat's chosen card-back id; every viewer paints THIS player's
+   * face-down cards with it (so an opponent's board wears their own back). */
+  cardBack?: string | null;
+  /** Cyberpunk Gig dice (the six d4-d20 in the Fixer); absent for other games. */
+  gigDice?: GigDie[];
   seat: number;
   life: number;
   poison: number;
@@ -126,6 +160,9 @@ export interface TablePlayer {
   conceded?: boolean;
   /** Name of the deck this seat was taken with (snapshotted at join). */
   deckName?: string | null;
+  /** The deck id this seat plays (own seat only) - used to look up which tokens
+   * the deck can produce. */
+  deckId?: string | null;
 }
 
 /** One seat's line in a finished match (part of RoomState.matchResult). */
@@ -186,6 +223,10 @@ export interface RoomState {
   hostUserId: string;
   players: TablePlayer[];
   spectators: { userId: string; username: string }[];
+  /** Which card game this table plays ("mtg" | "cyberpunk"); drives zone labels,
+   * vitals, phases, and card-art resolution. Absent on pre-multigame snapshots
+   * (treat as "mtg"). */
+  game?: string;
   // gameplay v2 (absent on pre-v2 snapshots)
   format?: 'commander' | 'standard';
   turnNumber?: number;
@@ -293,6 +334,10 @@ export type GameActionV2 =
   | { kind: 'marker.set'; marker: 'monarch' | 'initiative'; seat: number }
   | { kind: 'marker.day'; value: 'day' | 'night' | null }
   | { kind: 'marker.storm'; delta: number }
+  | { kind: 'library.play'; x: number; y: number }
+  | { kind: 'gig.roll'; sides: number }
+  | { kind: 'gig.return'; sides: number }
+  | { kind: 'gig.steal'; from: string }
   | { kind: 'library.peek'; count: number }
   | { kind: 'library.reorder'; iids: string[] }
   | { kind: 'library.bottom'; iids: string[] }

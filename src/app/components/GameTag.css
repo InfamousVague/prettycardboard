@@ -1,0 +1,37 @@
+.gameTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.16em 0.5em;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--game-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--game-accent) 15%, transparent);
+  color: var(--game-accent);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.gameTag svg {
+  flex: none;
+}
+
+.gameTagName {
+  letter-spacing: 0.01em;
+}
+
+/* A square "logo" tile of the game's mark, for table/deck rows. */
+.gameBadge {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--glacier-radius-md);
+  color: var(--game-accent);
+  background: color-mix(in srgb, var(--game-accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--game-accent) 42%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--game-accent) 10%, transparent);
+}

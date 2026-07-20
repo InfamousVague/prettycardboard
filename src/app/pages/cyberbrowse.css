@@ -1,0 +1,125 @@
+/* Cyberpunk browse: starter decks + card gallery. */
+
+.cyberStarterRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+}
+
+.cyberStarterTile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: 150px;
+}
+
+.cyberStarterInfo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  text-align: center;
+}
+
+.cyberStarterName {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.cyberStarterSub {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cyberCount {
+  font-family: var(--glacier-font-mono, ui-monospace, monospace);
+  font-size: 0.85rem;
+  color: var(--glacier-text-subtle, #8a8f98);
+  font-weight: 500;
+}
+
+.cyberFilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.cyberChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+/* Color chips wear their faction accent when selected. */
+.cyberColorChip[data-selected='true'],
+.cyberColorChip[aria-pressed='true'] {
+  border-color: var(--game-accent);
+  color: var(--game-accent);
+}
+
+.cyberCardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(clamp(96px, 14vw, 150px), 1fr));
+  gap: 0.85rem;
+}
+
+.cyberCardCell {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 4.7% / 3.35%;
+  transition: transform 0.16s ease;
+}
+
+.cyberCardCell:hover {
+  transform: translateY(-3px) scale(1.02);
+}
+
+.cyberCardCell:focus-visible {
+  outline: 2px solid var(--glacier-focus, #7c6cf0);
+  outline-offset: 3px;
+}
+
+/* Cyberpunk card search inside the deck editor's side pane. */
+.cyberSearch {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
+  min-height: 0;
+}
+.cyberSearchChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.cyberSearchScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+.cyberSearchGrid {
+  grid-template-columns: repeat(auto-fill, minmax(clamp(78px, 30%, 118px), 1fr));
+}
+.cyberCardCell {
+  position: relative;
+}
+/* Legend marker on a search result. */
+.cyberSearchLegend {
+  position: absolute;
+  top: 0.25rem;
+  left: 0.25rem;
+  display: inline-flex;
+  padding: 0.15rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, #f4d03f 26%, rgba(0, 0, 0, 0.55));
+  color: #f4d03f;
+}

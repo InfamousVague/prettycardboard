@@ -1,296 +1,175 @@
 import { useMemo, useState } from 'react';
-import { motion } from 'motion/react';
-import {
-  Button,
-  FilterChip,
-  Heading,
-  Pill,
-  SearchField,
-  SegmentedControl,
-  Size,
-  Text,
-  TextTone,
-  useToast,
-} from '@glacier/react';
-import { Check, Plus, Sparkles } from '@glacier/icons';
+import { Heading, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
 import { useT } from '../i18n.ts';
-import * as api from '../net/api.ts';
-import { useApp } from '../state/appStore.ts';
-import { useUi } from '../state/uiStore.ts';
-import { artCrop, cardImage } from '../data/cards.ts';
 import {
   CATALOG,
-  catalogByYear,
   catalogCardCount,
   catalogDeckCards,
   catalogIdentity,
   featuredDecks,
-  type CatalogDeck,
 } from '../data/catalog.ts';
+import {
+  CYBERPUNK_COLORS,
+  CYBERPUNK_COLOR_HEX,
+  cyberpunkCatalog,
+  cyberpunkImage,
+  cyberpunkStarters,
+} from '../data/cyberpunk.ts';
+import { GAME_LIST } from '../data/games.ts';
+import { artCrop, cardImage } from '../data/cards.ts';
 import { ColorIdentity, ManaSymbol } from '../components/Mana.tsx';
-import { DeckStack } from '../components/DeckStack.tsx';
-import { EmptyFan } from '../components/Skeletons.tsx';
-import { useCardPopup } from '../components/CardPopup.tsx';
+import { BrowseCatalog, type BrowseDeck, type BrowseFacet } from '../components/BrowseCatalog.tsx';
 import './browse.css';
 
 /**
- * Browse: every Commander precon of recent years (2020→) as 3D deck stacks
- * with one-click "add to my decks". A toolbar filters by name, color identity
- * (contains every selected color), sorts within groups, and regroups the
- * catalog by year or by set code. Decks already in the library wear an owned
- * badge; the stack itself opens the commander in the card popup.
+ * Browse: one shared discover layout (BrowseCatalog) for every card game. A game
+ * switcher picks which catalog to show; each game adapts its own decks (MTG
+ * precons by year/set, Cyberpunk per-Legend decks by color) into the common
+ * BrowseDeck shape, so the toolbar, featured shelf, grouped grids, and
+ * add-to-my-decks tiles are identical across games.
  */
 
 const WUBRG = ['W', 'U', 'B', 'R', 'G'] as const;
 
-type SortMode = 'new' | 'old' | 'az';
-type GroupMode = 'year' | 'set';
-
-function sortDecks(decks: CatalogDeck[], sort: SortMode): CatalogDeck[] {
-  const sorted = [...decks];
-  if (sort === 'az') sorted.sort((a, b) => a.name.localeCompare(b.name));
-  else if (sort === 'old') sorted.sort((a, b) => a.date.localeCompare(b.date));
-  else sorted.sort((a, b) => b.date.localeCompare(a.date));
-  return sorted;
+/** Split a Cyberpunk identity label ("Red / Green") into its colours. */
+function splitColors(color: string): string[] {
+  return color
+    .split('/')
+    .map((c) => c.trim())
+    .filter(Boolean);
 }
 
-/** By-set groups: keyed by set code, newest release in each set first. */
-function catalogBySet(): { code: string; decks: CatalogDeck[] }[] {
-  const groups = new Map<string, CatalogDeck[]>();
-  for (const deck of CATALOG) {
-    const list = groups.get(deck.code);
-    if (list) list.push(deck);
-    else groups.set(deck.code, [deck]);
-  }
-  return [...groups.entries()]
-    .map(([code, decks]) => ({ code, decks }))
-    .sort((a, b) => {
-      const newest = (decks: CatalogDeck[]) => decks.reduce((max, deck) => (deck.date > max ? deck.date : max), '');
-      return newest(b.decks).localeCompare(newest(a.decks));
-    });
+function ColorSwatch({ color }: { color: string }) {
+  const parts = splitColors(color);
+  // A single colour fills flat; a dual identity splits the swatch diagonally.
+  const background =
+    parts.length > 1
+      ? `linear-gradient(135deg, ${parts.map((c) => CYBERPUNK_COLOR_HEX[c] ?? 'transparent').join(', ')})`
+      : (CYBERPUNK_COLOR_HEX[parts[0] ?? color] ?? 'transparent');
+  return <span className="cyberSwatch" style={{ background }} aria-hidden />;
 }
 
 export function BrowsePage() {
   const t = useT();
-  const [query, setQuery] = useState('');
-  const [colors, setColors] = useState<string[]>([]);
-  const [sort, setSort] = useState<SortMode>('new');
-  const [group, setGroup] = useState<GroupMode>('year');
-  const ownedDecks = useApp((state) => state.decks);
-
-  const featured = useMemo(() => featuredDecks(), []);
-  const ownedNames = useMemo(() => new Set(ownedDecks.map((deck) => deck.name.toLowerCase())), [ownedDecks]);
-
-  const q = query.trim().toLowerCase();
-  const filtersActive = q.length > 0 || colors.length > 0;
-
-  const matches = (deck: CatalogDeck) => {
-    if (
-      q.length > 0 &&
-      !deck.name.toLowerCase().includes(q) &&
-      !deck.code.toLowerCase().includes(q) &&
-      !deck.commanders.some((commander) => commander.name.toLowerCase().includes(q))
-    ) {
-      return false;
-    }
-    if (colors.length > 0) {
-      const identity = catalogIdentity(deck);
-      if (!colors.every((color) => identity.includes(color))) return false;
-    }
-    return true;
+  // The initial game can be preset by a discover shelf (Home → Cyberpunk
+  // starters); the choice is persisted so switching stays sticky.
+  const [game, setGameState] = useState(() => sessionStorage.getItem('pc_browse_game') || 'mtg');
+  const setGame = (value: string) => {
+    sessionStorage.setItem('pc_browse_game', value);
+    setGameState(value);
   };
 
-  const sections = useMemo(() => {
-    const raw =
-      group === 'year'
-        ? catalogByYear().map(({ year, decks }) => ({ id: `browse-${year}`, title: year, decks }))
-        : catalogBySet().map(({ code, decks }) => ({ id: `browse-${code}`, title: code, decks }));
-    return raw
-      .map((section) => ({ ...section, decks: sortDecks(section.decks.filter(matches), sort) }))
-      .filter((section) => section.decks.length > 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [group, sort, q, colors]);
+  const mtg: BrowseDeck[] = useMemo(
+    () =>
+      CATALOG.map((deck) => {
+        const commander = deck.commanders[0];
+        const identity = catalogIdentity(deck);
+        const extra = deck.commanders.length > 1 ? ` +${deck.commanders.length - 1}` : '';
+        return {
+          id: deck.id,
+          name: deck.name,
+          subtitle: commander ? `${commander.name}${extra}` : undefined,
+          cover: commander ? cardImage(commander.sid) : undefined,
+          art: commander ? artCrop(commander.sid) : undefined,
+          badge: deck.code,
+          identity: <ColorIdentity colors={identity} />,
+          metaText: `${catalogCardCount(deck)} ${t('decksCards')} · ${deck.date.slice(0, 7)}`,
+          cardId: commander?.sid,
+          cardName: commander?.name,
+          facets: identity,
+          groups: { year: deck.date.slice(0, 4), set: deck.code },
+          sortDate: deck.date,
+          cards: catalogDeckCards(deck),
+          game: 'mtg',
+          format: 'Commander',
+        };
+      }),
+    [t],
+  );
 
-  const toggleColor = (color: string, selected: boolean) => {
-    setColors((current) => (selected ? [...current, color] : current.filter((entry) => entry !== color)));
+  const cyber: BrowseDeck[] = useMemo(
+    () =>
+      cyberpunkCatalog().map((deck) => {
+        const count = deck.cards.reduce((sum, card) => sum + card.quantity, 0);
+        const image = cyberpunkImage(deck.legend.id);
+        return {
+          id: deck.id,
+          name: deck.name,
+          subtitle: deck.legend.classifications.join(', ') || deck.color,
+          cover: image,
+          art: image,
+          badge: deck.color,
+          identity: <ColorSwatch color={deck.color} />,
+          metaText: `${count} ${t('decksCards')}`,
+          cardId: deck.legend.id,
+          cardName: deck.legend.displayName,
+          facets: splitColors(deck.color),
+          groups: { color: deck.color },
+          sortDate: '',
+          cards: deck.cards,
+          game: 'cyberpunk',
+          format: 'standard',
+        };
+      }),
+    [t],
+  );
+
+  const mtgFacet: BrowseFacet = {
+    label: t('brFilterColors'),
+    options: WUBRG.map((color) => ({
+      value: color,
+      node: <ManaSymbol symbol={color} size="1.05em" />,
+      ariaLabel: `${t('brFilterColors')} ${color}`,
+    })),
+  };
+  const cyberFacet: BrowseFacet = {
+    label: t('brFilterColors'),
+    options: CYBERPUNK_COLORS.map((color) => ({
+      value: color,
+      node: <ColorSwatch color={color} />,
+      ariaLabel: color,
+    })),
   };
 
   return (
     <div className="page browsePage">
       <div className="browseHead">
-        <Heading level={1}>{t('brTitle')}</Heading>
+        <Heading level={1}>{game === 'cyberpunk' ? t('brTitleCyber') : t('brTitle')}</Heading>
         <Text size={Size.Large} tone={TextTone.Muted} className="lede">
-          {t('brLede')}
+          {game === 'cyberpunk' ? t('brLedeCyber') : t('brLede')}
         </Text>
+        <div className="browseGameSwitch">
+          <SegmentedControl
+            aria-label={t('playGame')}
+            value={game}
+            onValueChange={setGame}
+            options={GAME_LIST.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') }))}
+          />
+        </div>
       </div>
 
-      <div className="browseToolbar" role="group" aria-label={t('brTitle')}>
-        <div className="browseSearch">
-          <SearchField value={query} onValueChange={setQuery} placeholder={t('brSearch')} aria-label={t('brSearch')} />
-        </div>
-        <div className="browseColors" role="group" aria-label={t('brFilterColors')}>
-          <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="browseToolbarLabel">
-            {t('brFilterColors')}
-          </Text>
-          {WUBRG.map((color) => (
-            <FilterChip
-              key={color}
-              size="sm"
-              selected={colors.includes(color)}
-              onSelectedChange={(selected) => toggleColor(color, selected)}
-              aria-label={`${t('brFilterColors')} ${color}`}
-              className="browseColorChip"
-            >
-              <ManaSymbol symbol={color} size="1.05em" />
-            </FilterChip>
-          ))}
-        </div>
-        <SegmentedControl
-          size="sm"
-          aria-label={t('brSort')}
-          value={sort}
-          onValueChange={(value) => setSort(value as SortMode)}
-          options={[
-            { value: 'new', label: t('brSortNew') },
-            { value: 'old', label: t('brSortOld') },
-            { value: 'az', label: t('brSortAz') },
-          ]}
+      {game === 'cyberpunk' ? (
+        <BrowseCatalog
+          decks={cyber}
+          featuredIds={cyberpunkStarters().map((starter) => starter.id)}
+          facet={cyberFacet}
+          groupModes={[{ id: 'color', label: t('brFilterColors') }]}
+          searchPlaceholder={t('brSearch')}
+          emptyQuip={t('esUntapped')}
         />
-        <SegmentedControl
-          size="sm"
-          aria-label={t('brGroupBy')}
-          value={group}
-          onValueChange={(value) => setGroup(value as GroupMode)}
-          options={[
-            { value: 'year', label: t('brGroupYear') },
-            { value: 'set', label: t('brGroupSet') },
-          ]}
-        />
-      </div>
-
-      {!filtersActive && featured.length > 0 && (
-        <section>
-          <div className="browseYearHead">
-            <Sparkles size={15} aria-hidden />
-            <Heading level={2} noMargin>
-              {t('brFeatured')}
-            </Heading>
-          </div>
-          <div className="browseGrid">
-            {featured.map((deck, index) => (
-              <PreconTile key={deck.id} deck={deck} index={index} owned={ownedNames.has(deck.name.toLowerCase())} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {sections.length === 0 ? (
-        <EmptyFan quip={t('esUntapped')} />
       ) : (
-        sections.map((section) => (
-          <section key={section.id} id={section.id}>
-            <div className="browseYearHead">
-              <Heading level={2} noMargin>
-                {section.title}
-              </Heading>
-              <Text as="span" size={Size.Small} tone={TextTone.Subtle} mono>
-                {section.decks.length}
-              </Text>
-            </div>
-            <div className="browseGrid">
-              {section.decks.map((deck, index) => (
-                <PreconTile key={deck.id} deck={deck} index={index} owned={ownedNames.has(deck.name.toLowerCase())} />
-              ))}
-            </div>
-          </section>
-        ))
+        <BrowseCatalog
+          decks={mtg}
+          featuredIds={featuredDecks().map((deck) => deck.id)}
+          facet={mtgFacet}
+          groupModes={[
+            { id: 'year', label: t('brGroupYear') },
+            { id: 'set', label: t('brGroupSet') },
+          ]}
+          searchPlaceholder={t('brSearch')}
+          emptyQuip={t('esUntapped')}
+        />
       )}
     </div>
-  );
-}
-
-function PreconTile({ deck, index, owned }: { deck: CatalogDeck; index: number; owned: boolean }) {
-  const t = useT();
-  const { toast } = useToast();
-  const popup = useCardPopup();
-  const refreshDecks = useApp((state) => state.refreshDecks);
-  const selectDeck = useUi((state) => state.selectDeck);
-  const [adding, setAdding] = useState(false);
-  const [added, setAdded] = useState(false);
-
-  const commander = deck.commanders[0];
-  const identity = catalogIdentity(deck);
-  const inLibrary = owned || added;
-
-  const add = async () => {
-    setAdding(true);
-    try {
-      const { id } = await api.createDeck(deck.name, 'Commander', catalogDeckCards(deck));
-      await refreshDecks();
-      setAdded(true);
-      toast({ tone: 'success', message: `${deck.name} → ${t('decksTitle')}` });
-      selectDeck(id);
-      window.location.hash = '/decks';
-    } catch {
-      toast({ tone: 'danger', message: t('obOffline') });
-    } finally {
-      setAdding(false);
-    }
-  };
-
-  return (
-    <motion.article
-      className="browseTile"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: 'easeOut', delay: Math.min(index, 10) * 0.03 }}
-    >
-      {/* The commander's own art, blurred, fills the tile's empty space; a
-          scrim keeps the chrome and text on the end side readable. */}
-      {commander && (
-        <div
-          className="browseTileArt"
-          style={{ backgroundImage: `url(${artCrop(commander.sid)})` }}
-          aria-hidden
-        />
-      )}
-      <div className="browseTileScrim" aria-hidden />
-      <DeckStack
-        name={commander?.name ?? deck.name}
-        imageUrl={commander ? cardImage(commander.sid) : undefined}
-        width={150}
-        onClick={commander ? () => popup.open({ scryfallId: commander.sid, name: commander.name }) : undefined}
-      >
-        {inLibrary && (
-          <Pill size="sm" tone="success" className="browseOwnedPill" title={t('brOwned')} aria-label={t('brOwned')}>
-            <Check size={12} aria-hidden />
-          </Pill>
-        )}
-      </DeckStack>
-      <div className="browseTileBody">
-        <div className="browseTileTop">
-          <Pill size="sm" variant="outline" className="browseTileCode">
-            {deck.code}
-          </Pill>
-          <ColorIdentity colors={identity} />
-        </div>
-        <div className="browseTileText">
-          <span className="browseTileName">{deck.name}</span>
-          {commander && (
-            <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="browseTileCommander">
-              {commander.name}
-              {deck.commanders.length > 1 ? ` +${deck.commanders.length - 1}` : ''}
-            </Text>
-          )}
-          <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} mono>
-            {catalogCardCount(deck)} {t('decksCards')} · {deck.date.slice(0, 7)}
-          </Text>
-        </div>
-        <Button size="sm" variant={inLibrary ? 'soft' : 'solid'} loading={adding} onClick={add}>
-          {inLibrary ? <Check size={14} /> : <Plus size={14} />}
-          {inLibrary ? t('brAdded') : t('brAdd')}
-        </Button>
-      </div>
-    </motion.article>
   );
 }

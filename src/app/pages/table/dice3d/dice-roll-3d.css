@@ -1,0 +1,17 @@
+/* WebGL dice overlay — spans the mat, never intercepts pointer input. The canvas
+   is transparent (the scene clears to alpha 0) so the playmat shows through. */
+.diceRoll3d {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.diceRoll3dCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}

@@ -165,6 +165,32 @@
   align-self: flex-start;
 }
 
-.browseTileBody > button svg {
+/* Preview + Add sit side by side; Add takes the lead (grows), Preview is compact. */
+.browseTileActions {
+  display: flex;
+  gap: var(--glacier-space-2);
+  align-items: center;
+}
+.browseTileActions > button:last-child {
+  flex: 1;
+  justify-content: center;
+}
+
+.browseTileBody button svg {
   margin-inline-end: var(--glacier-space-1);
+}
+
+/* Game switcher (MTG | Cyberpunk) under the Browse header. */
+.browseGameSwitch {
+  margin-top: 0.85rem;
+}
+
+/* Faction color swatch used as the Cyberpunk identity chip (mirrors MTG's mana pips). */
+.cyberSwatch {
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+  vertical-align: middle;
 }

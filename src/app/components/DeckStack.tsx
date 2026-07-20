@@ -1,5 +1,6 @@
 import { useRef, type PointerEvent, type ReactNode } from 'react';
 import { motion, useMotionValue, useSpring, useTransform } from 'motion/react';
+import { useEdgeColor } from '../data/edgeColor.ts';
 import './deckstack.css';
 
 /**
@@ -49,11 +50,14 @@ export function DeckStack({
   };
 
   const height = Math.round(width * (680 / 488));
+  // The stack's cut edge wears the top card's own border colour (sampled from
+  // the cover art) so a deck reads as its real cards, not a generic brown pile.
+  const edge = useEdgeColor(imageUrl);
 
   return (
     <div
       className="dsPerspective"
-      style={{ width: width + 14, height: height + 14 }}
+      style={{ width: width + 14, height: height + 14, ['--ds-edge' as string]: edge }}
       onPointerMove={onPointerMove}
       onPointerLeave={reset}
       onClick={onClick}

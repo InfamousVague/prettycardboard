@@ -219,6 +219,21 @@ export function SettingsModal({
         />
       </div>
 
+      <Fieldset legend={t('setAutoTurn')} description={t('setAutoTurnHint')}>
+        <div style={{ display: 'grid', gap: 'var(--glacier-space-3)' }}>
+          <Switch
+            label={t('setAutoUntap')}
+            checked={preferences.autoUntap}
+            onCheckedChange={(checked) => onChange({ autoUntap: checked })}
+          />
+          <Switch
+            label={t('setAutoDraw')}
+            checked={preferences.autoDraw}
+            onCheckedChange={(checked) => onChange({ autoDraw: checked })}
+          />
+        </div>
+      </Fieldset>
+
       <Fieldset legend={t('setMirror')} description={t('setMirrorHint')}>
         <Switch
           label={t('setMirror')}

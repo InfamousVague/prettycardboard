@@ -1,0 +1,139 @@
+/* New-deck wizard (NewDeckWizard.tsx): a two-step game -> deck-kind picker. */
+
+.ndwStep {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-4);
+}
+
+/* Step 1: the game cards. */
+.ndwGames {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--glacier-space-3);
+}
+
+.ndwGameCard {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-4);
+  border-radius: var(--glacier-radius-lg);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--game-accent) 40%, var(--glacier-border));
+  background: color-mix(in oklch, var(--game-accent) 8%, var(--glacier-surface));
+  cursor: pointer;
+  text-align: start;
+  transition: transform var(--glacier-duration-fast) var(--glacier-ease-out), border-color var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+.ndwGameCard:hover {
+  transform: translateY(-2px);
+  border-color: var(--game-accent);
+}
+.ndwGameCard:focus-visible {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: 2px;
+}
+.ndwGameName {
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-text);
+}
+.ndwGameTagline {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+
+/* Step 2: the deck-kind list. */
+.ndwBack {
+  appearance: none;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  padding: 0.2rem 0.5rem;
+  border: none;
+  background: none;
+  color: var(--glacier-text-muted);
+  font: inherit;
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-medium);
+  cursor: pointer;
+  border-radius: var(--glacier-radius-md);
+}
+.ndwBack:hover {
+  color: var(--glacier-text);
+  background: var(--glacier-surface-hover);
+}
+
+.ndwKinds {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: var(--glacier-space-2);
+  max-height: 24rem;
+  overflow-y: auto;
+}
+.ndwKinds[aria-busy] {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.ndwKind {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border-radius: var(--glacier-radius-md);
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  background: var(--glacier-surface);
+  cursor: pointer;
+  text-align: start;
+  transition: border-color var(--glacier-duration-fast) var(--glacier-ease-out), background var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+.ndwKind:hover {
+  border-color: color-mix(in oklch, var(--game-accent, var(--glacier-accent-solid)) 60%, transparent);
+  background: color-mix(in oklch, var(--game-accent, var(--glacier-accent-solid)) 8%, var(--glacier-surface));
+}
+.ndwKind:focus-visible {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: 2px;
+}
+
+.ndwKindIcon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: var(--glacier-radius-md);
+  color: var(--game-accent, var(--glacier-accent-solid));
+  background: color-mix(in oklch, var(--game-accent, var(--glacier-accent-solid)) 14%, transparent);
+}
+.ndwKindArt {
+  flex: none;
+  width: 2.6rem;
+  height: 3.4rem;
+  border-radius: var(--glacier-radius-sm);
+  background-size: cover;
+  background-position: center 22%;
+  border: var(--glacier-hairline) solid var(--glacier-border);
+}
+.ndwKindBody {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.ndwKindName {
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ndwKindDesc {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+  text-transform: capitalize;
+}

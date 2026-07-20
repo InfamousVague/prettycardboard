@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Avatar, Button, Pill, Text, Size, TextTone, Tooltip } from '@glacier/react';
-import { BookCopy, Check, Crown, Hand as HandIcon, Shield, Skull, Zap } from '@glacier/icons';
+import { BookCopy, Check, Cpu, Crown, Hand as HandIcon, Shield, Skull, Zap } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
@@ -12,7 +12,10 @@ import { AttackBadge, BlockCluster, CounterBadges, ZonePiles, groupAttachments }
 import { restTilt } from './juice.ts';
 import { effectivePT, isCreature } from './boardModes.ts';
 import { playmatUrl } from '../../data/playmats.ts';
+import { cardBackUrl, effectiveCardBack } from '../../data/cardBacks.ts';
+import { useEdgeColor } from '../../data/edgeColor.ts';
 import { usePreference } from '../../hooks/usePreference.ts';
+import { getGame, zoneLabel } from '../../data/games.ts';
 
 /**
  * An opponent's seat: identity + vitals in the frame header, their battlefield
@@ -48,6 +51,17 @@ export function SeatFrame({
   const mirrorOpponent = usePreference('mirrorOpponent');
 
   const combat = room.combat;
+  // Opponent vitals are game-driven: Cyberpunk relabels the life/poison slots as
+  // Net / RAM (with a chip icon) and the library as the Deck.
+  const cyber = room.game === 'cyberpunk';
+  const gdef = getGame(room.game);
+  // This seat's face-down cards wear THEIR chosen back (falling back to the
+  // game-appropriate default), scoped to their board so it overrides the
+  // table-wide (viewer's) back. The pile-edge colour is sampled from it too.
+  const seatBackSrc = cardBackUrl(effectiveCardBack(player.cardBack ?? undefined, room.game));
+  const seatBackEdge = useEdgeColor(seatBackSrc);
+  const lifeLabel = gdef.resources.find((r) => r.primary)?.label ?? t('tblLife');
+  const secLabel = gdef.resources.find((r) => !r.primary)?.label ?? t('tblPoison');
   const isActiveSeat = room.started && room.activeSeat === player.seat;
   const markers = room.markers ?? {};
   // Commander damage I've taken from THIS opponent's commander (21 = lethal);
@@ -160,7 +174,11 @@ export function SeatFrame({
       data-active={isActiveSeat || undefined}
       data-stage={stage || undefined}
       data-mirror={mirrorOpponent || undefined}
-      style={player.playmat ? { ['--pc-board-mat' as string]: `url("${playmatUrl(player.playmat)}")` } : undefined}
+      style={{
+        ['--pc-card-back' as string]: `url("${seatBackSrc}")`,
+        ['--pc-card-back-edge' as string]: seatBackEdge,
+        ...(player.playmat ? { ['--pc-board-mat' as string]: `url("${playmatUrl(player.playmat)}")` } : {}),
+      }}
     >
       {iAmDefender && stage && (
         <div className="combatBanner" data-mode="block">
@@ -206,59 +224,24 @@ export function SeatFrame({
             {player.mulligan.state === 'kept' ? t('gpMullKeep') : `${t('tblMulligan')}…`}
           </Pill>
         )}
-        <span className="oppLife" title={t('tblLife')}>
+        <span className="oppLife" title={cyber ? lifeLabel : t('tblLife')}>
           {player.life}
         </span>
         {player.poison > 0 && (
-          <span className="oppPoison" title={t('tblPoison')}>
-            <Skull size={11} /> {player.poison}
+          <span className="oppPoison" title={secLabel}>
+            {cyber ? <Cpu size={11} /> : <Skull size={11} />} {player.poison}
           </span>
         )}
         <span className="oppHandCount" title={t('tblHand')}>
           <HandIcon size={11} /> {player.handCount}
         </span>
-        <span className="oppHandCount" title={t('tblLibrary')}>
+        <span className="oppHandCount" title={cyber ? zoneLabel(room.game, 'library') : t('tblLibrary')}>
           <BookCopy size={11} /> {player.libraryCount}
         </span>
       </header>
-      {/* Their hand: a fan hanging from the top edge (their side of the table).
-          Hidden cards are backs; cards they REVEAL (whole hand, or a single card
-          via reveal.card) show their face so the table can read them. */}
-      {stage && player.handCount > 0 && (() => {
-        const revealed = player.hand ?? player.revealedHand ?? [];
-        const shownReveals = revealed.slice(0, 12);
-        const backs = Math.max(0, Math.min(player.handCount, 12) - shownReveals.length);
-        const total = shownReveals.length + backs;
-        const spreadAt = (i: number) => i - (total - 1) / 2;
-        return (
-          <div className="oppHand" title={`${t('tblHand')}: ${player.handCount}`} aria-label={`${t('tblHand')}: ${player.handCount}`}>
-            {shownReveals.map((card, index) => {
-              const spread = spreadAt(index);
-              return (
-                <div
-                  key={card.iid}
-                  className="oppHandCard oppHandReveal"
-                  style={{ transform: `translateY(${Math.abs(spread) * 6}px) rotate(${spread * 4}deg)` }}
-                  onClick={() => popup.open({ scryfallId: card.scryfallId, name: card.name, imageUrl: card.imageUrl })}
-                >
-                  <GameCard name={card.name} imageUrl={card.imageUrl || cardImage(card.scryfallId)} width={56} tilt={0} />
-                </div>
-              );
-            })}
-            {Array.from({ length: backs }).map((_, i) => {
-              const spread = spreadAt(shownReveals.length + i);
-              return (
-                <div
-                  key={`back-${i}`}
-                  className="oppHandCard"
-                  style={{ transform: `translateY(${Math.abs(spread) * 6}px) rotate(${spread * 4}deg)` }}
-                  aria-hidden
-                />
-              );
-            })}
-          </div>
-        );
-      })()}
+      {/* Their hand renders at the screen level (OpponentHand, mounted by
+          TablePage) so it can hang off the very bottom edge exactly like mine,
+          rather than being trapped inside this board's border. */}
       <div className="oppField">
         {hosts.map((card) => (
           <span key={card.iid} style={{ display: 'contents' }}>

@@ -8,12 +8,13 @@ import {
   type ReactNode,
 } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Heading, IconButton, Size, Spinner, Text, TextTone } from '@glacier/react';
+import { IconButton } from '@glacier/react';
 import { X } from '@glacier/icons';
 import { useT } from '../i18n.ts';
-import { PRECONS, cardImage } from '../data/cards.ts';
-import { ManaCost, ManaSymbol, parseCost } from './Mana.tsx';
+import { cardImage } from '../data/cards.ts';
+import { cyberpunkCard, cyberpunkImage } from '../data/cyberpunk.ts';
 import { GameCard } from './GameCard.tsx';
+import { CardDetailsBody } from './cardDetails.tsx';
 import './cardpopup.css';
 
 /**
@@ -23,7 +24,7 @@ import './cardpopup.css';
  *
  * Mount CardPopupProvider once near the root; call useCardPopup().open(...)
  * from any card. Details resolve from the bundled precon data first, then a
- * cached Scryfall lookup.
+ * cached Scryfall lookup (both handled by CardDetailsBody).
  */
 
 export interface PopupCard {
@@ -31,94 +32,6 @@ export interface PopupCard {
   name: string;
   imageUrl?: string;
   foil?: boolean;
-}
-
-interface CardDetails {
-  typeLine?: string;
-  manaCost?: string;
-  oracleText?: string;
-  flavorText?: string;
-  artist?: string;
-  setName?: string;
-  power?: string;
-  toughness?: string;
-}
-
-const DETAILS = new Map<string, CardDetails>();
-
-// The bundled precons carry full rules text; no network for the starter decks.
-for (const precon of PRECONS) {
-  for (const card of precon.cards) {
-    DETAILS.set(card.id, {
-      typeLine: card.typeLine,
-      manaCost: card.manaCost,
-      oracleText: card.oracleText,
-      flavorText: card.flavorText,
-      artist: card.artist,
-      power: card.power,
-      toughness: card.toughness,
-    });
-  }
-}
-
-async function fetchDetails(scryfallId: string): Promise<CardDetails> {
-  const cached = DETAILS.get(scryfallId);
-  if (cached) return cached;
-  const response = await fetch(`https://api.scryfall.com/cards/${scryfallId}`, {
-    headers: { Accept: 'application/json' },
-  });
-  if (!response.ok) throw new Error(String(response.status));
-  const card = (await response.json()) as {
-    type_line?: string;
-    mana_cost?: string;
-    oracle_text?: string;
-    flavor_text?: string;
-    artist?: string;
-    set_name?: string;
-    power?: string;
-    toughness?: string;
-    card_faces?: {
-      type_line?: string;
-      mana_cost?: string;
-      oracle_text?: string;
-      flavor_text?: string;
-      power?: string;
-      toughness?: string;
-    }[];
-  };
-  const face = card.card_faces?.[0];
-  const details: CardDetails = {
-    typeLine: card.type_line ?? face?.type_line,
-    manaCost: card.mana_cost ?? face?.mana_cost,
-    oracleText: card.oracle_text ?? face?.oracle_text,
-    flavorText: card.flavor_text ?? face?.flavor_text,
-    artist: card.artist,
-    setName: card.set_name,
-    power: card.power ?? face?.power,
-    toughness: card.toughness ?? face?.toughness,
-  };
-  DETAILS.set(scryfallId, details);
-  return details;
-}
-
-/** Rules text with inline {W}{U}{T} symbols rendered as the real glyphs. */
-function OracleText({ text }: { text: string }) {
-  const paragraphs = text.split('\n');
-  return (
-    <div className="cpOracle">
-      {paragraphs.map((paragraph, index) => (
-        <p key={index}>
-          {paragraph.split(/(\{[^}]+\})/g).map((chunk, chunkIndex) =>
-            /^\{[^}]+\}$/.test(chunk) ? (
-              <ManaSymbol key={chunkIndex} symbol={chunk} size="0.95em" />
-            ) : (
-              <span key={chunkIndex}>{chunk}</span>
-            ),
-          )}
-        </p>
-      ))}
-    </div>
-  );
 }
 
 const CardPopupContext = createContext<{ open: (card: PopupCard) => void }>({ open: () => {} });
@@ -152,28 +65,10 @@ export function CardPopupProvider({ children }: { children: ReactNode }) {
 
 function Popup({ card, onClose }: { card: PopupCard; onClose: () => void }) {
   const t = useT();
-  const [details, setDetails] = useState<CardDetails | null>(
-    card.scryfallId ? (DETAILS.get(card.scryfallId) ?? null) : null,
-  );
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    if (details || !card.scryfallId) return;
-    let cancelled = false;
-    fetchDetails(card.scryfallId)
-      .then((loaded) => {
-        if (!cancelled) setDetails(loaded);
-      })
-      .catch(() => {
-        if (!cancelled) setFailed(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [card.scryfallId, details]);
-
-  const image = card.imageUrl || cardImage(card.scryfallId);
-  const costSymbols = parseCost(details?.manaCost);
+  // A Cyberpunk card is recognized by its id living in the bundled catalog; its
+  // full art ships with the app, so we never hit Scryfall for it.
+  const cyber = card.scryfallId ? cyberpunkCard(card.scryfallId) : undefined;
+  const image = cyber ? cyberpunkImage(cyber.id) : card.imageUrl || cardImage(card.scryfallId);
 
   return (
     <motion.div
@@ -209,49 +104,7 @@ function Popup({ card, onClose }: { card: PopupCard; onClose: () => void }) {
           exit={{ opacity: 0, x: 12 }}
           transition={{ type: 'spring', stiffness: 180, damping: 22, delay: 0.16 }}
         >
-          <div className="cpTitleRow">
-            <Heading level={2} noMargin>
-              {card.name}
-            </Heading>
-            {costSymbols.length > 0 && <ManaCost cost={details?.manaCost} size="1.05rem" />}
-          </div>
-          {details?.typeLine && (
-            <Text size={Size.Small} tone={TextTone.Muted} className="cpTypeLine">
-              {details.typeLine}
-              {details.power != null && details.toughness != null && (
-                <span className="cpPT">
-                  {details.power}/{details.toughness}
-                </span>
-              )}
-            </Text>
-          )}
-          {details?.oracleText ? (
-            <OracleText text={details.oracleText} />
-          ) : failed ? null : card.scryfallId ? (
-            <div className="cpLoading">
-              <Spinner size="sm" aria-label={t('cpLoading')} />
-              <Text size={Size.Small} tone={TextTone.Subtle}>
-                {t('cpLoading')}
-              </Text>
-            </div>
-          ) : null}
-          {details?.flavorText && (
-            <Text size={Size.Small} tone={TextTone.Subtle} className="cpFlavor">
-              {details.flavorText}
-            </Text>
-          )}
-          <div className="cpFooter">
-            {details?.artist && (
-              <Text size={Size.XSmall} tone={TextTone.Subtle}>
-                {t('cpArtist')} {details.artist}
-              </Text>
-            )}
-            {details?.setName && (
-              <Text size={Size.XSmall} tone={TextTone.Subtle}>
-                {details.setName}
-              </Text>
-            )}
-          </div>
+          <CardDetailsBody scryfallId={card.scryfallId} name={card.name} />
         </motion.aside>
 
         <IconButton className="cpClose" variant="ghost" aria-label={t('cpClose')} onClick={onClose}>

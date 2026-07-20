@@ -1,0 +1,107 @@
+/* The floating hover-zoom preview: pinned to the viewport, above everything.
+   It is INTERACTIVE (pointer-events on) so the pointer can slide off the card
+   up into the zoom and across to the details panel to scroll it. The card is
+   the sizing box; the details panel floats to whichever side has room. */
+.hoverCard {
+  position: fixed;
+  z-index: 9000;
+  pointer-events: auto;
+  filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.55));
+  transform-origin: center bottom;
+  animation: hoverCardIn 130ms ease-out;
+}
+
+.hoverCard[data-below] {
+  transform-origin: center top;
+}
+
+/* Invisible bridge across the gap between the anchor card and the zoom, so the
+   pointer can travel from one to the other without crossing a dead zone that
+   would trip the grace-hide. Above-placement: bridge downward to the card;
+   below-placement: bridge upward. */
+.hoverCard::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 18px;
+}
+.hoverCard[data-below]::after {
+  top: auto;
+  bottom: 100%;
+}
+
+/* Card details beside the zoom — same content as the fullscreen CardPopup,
+   read-only. Anchored to the top edge of the card, on the roomy side. */
+.hoverDetails {
+  position: absolute;
+  top: 0;
+  /* A fixed cap (~the 446px zoom height) rather than 100%, which does not
+     resolve against the content-sized zoom - so long rules text reliably
+     scrolls within roughly the card's height. rem resolves everywhere. */
+  max-height: 27.5rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-4);
+  border-radius: var(--glacier-radius-3);
+  background: var(--glacier-surface-raised, var(--glacier-surface));
+  border: 1px solid var(--glacier-border-subtle, var(--glacier-border));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  animation: hoverDetailsIn 130ms ease-out;
+  scrollbar-width: thin;
+}
+.hoverCard[data-side='right'] .hoverDetails {
+  left: 100%;
+  margin-left: 0.75rem;
+}
+.hoverCard[data-side='left'] .hoverDetails {
+  right: 100%;
+  margin-right: 0.75rem;
+}
+/* Invisible bridge across the gap between the zoom and the details panel, so
+   sliding the pointer sideways onto the panel never crosses a dead zone. */
+.hoverDetails::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1rem;
+}
+.hoverCard[data-side='right'] .hoverDetails::before {
+  right: 100%;
+}
+.hoverCard[data-side='left'] .hoverDetails::before {
+  left: 100%;
+}
+
+@keyframes hoverDetailsIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Scale-only entrance (no opacity ramp) so the preview is fully visible the
+   instant it mounts, even if the entrance is interrupted. */
+@keyframes hoverCardIn {
+  from {
+    scale: 0.92;
+  }
+  to {
+    scale: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hoverCard {
+    animation: none;
+  }
+}

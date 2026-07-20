@@ -100,6 +100,10 @@ export const GameCard = memo(function GameCard({
       style={{ ...sizing, ...style }}
       onClick={onClick}
       onContextMenu={onContextMenu}
+      // Front-facing cards opt into the global hover-zoom (HoverCardLayer):
+      // resting the pointer on the card floats a larger copy above it.
+      data-preview-src={!faceDown && imageUrl ? imageUrl : undefined}
+      data-preview-name={!faceDown && imageUrl ? name : undefined}
     >
       <motion.div
         ref={ref}

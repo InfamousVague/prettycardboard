@@ -1,0 +1,58 @@
+/*
+ * Cyberpunk mat LAYOUT: the zones sit in the official mat quadrants instead of
+ * the shared bottom strip — Field (centre), Deck+Trash (right rail), Legends+
+ * Eddies (bottom tray). The Fixer dice + Gig objective live in the right sidebar
+ * (CyberpunkDicePanel), so the mat itself stays clean. All app-theme tokens.
+ */
+
+/* Carve the battlefield down to the central FIELD rectangle so cards never land
+   under the rails. fieldPos reads this element's rect, so placement follows the
+   inset automatically: right gap = Deck/Trash rail, bottom = Legends/Eddies. */
+.myBoard[data-game='cyberpunk'] .myField {
+  margin: 1rem 8rem 8.5rem 1rem;
+}
+
+/* The zones overlay spans the whole board (the field shows behind); only the
+   piles catch the pointer. */
+.matZones {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+}
+.matZones .zonePiles[data-mat] {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: auto 1fr 7.5rem;
+  grid-template-rows: 1fr auto;
+  grid-template-areas:
+    'field  field  deck'
+    'legend eddies trash';
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-3);
+  pointer-events: none;
+}
+.matZones .zonePiles[data-mat] > * {
+  pointer-events: auto;
+}
+.zonePiles[data-mat] [data-zone='deck'] {
+  grid-area: deck;
+  align-self: start;
+  justify-self: center;
+}
+.zonePiles[data-mat] [data-zone='trash'] {
+  grid-area: trash;
+  align-self: end;
+  justify-self: center;
+}
+.zonePiles[data-mat] [data-zone='legends'] {
+  grid-area: legend;
+  align-self: end;
+  justify-self: start;
+}
+.zonePiles[data-mat] [data-zone='eddies'] {
+  grid-area: eddies;
+  align-self: end;
+  justify-self: start;
+}

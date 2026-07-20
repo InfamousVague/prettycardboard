@@ -18,6 +18,14 @@
   border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
 }
 
+/* Leading group: the game logo tile + the table's info column. */
+.myTableLead {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  min-inline-size: 0;
+}
+
 .myTableInfo {
   display: flex;
   flex-direction: column;
@@ -216,4 +224,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Create-table card header: title + game tag on one row. */
+.playCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Avatar, Button, Text, Size, TextTone, Tooltip } from '@glacier/react';
-import { Crown, Flame, LogOut, Skull, ThumbsUp, Timer, Trophy } from '@glacier/icons';
+import { Crown, LogOut, Skull, ThumbsUp, Timer, Trophy } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import * as api from '../../net/api.ts';
+import { SaltPile } from '../../components/SaltPile.tsx';
 import type { MatchStatsPlayer, RoomState } from '../../net/types.ts';
 
 /**
@@ -12,7 +13,7 @@ import type { MatchStatsPlayer, RoomState } from '../../net/types.ts';
  * dismissing it leaves a floating Results pill to bring it back.
  *
  * Social layer: endorse fellow players (good sport, great game) and rate how
- * salty their DECK made you (1-5 flames). Both are per-match, server-deduped,
+ * salty their DECK made you (1-5 salt piles). Both are per-match, server-deduped,
  * and feed the all-time numbers shown on every row (W-L record, endorsements,
  * average turn pace, per-deck record + salt score).
  */
@@ -227,7 +228,7 @@ export function PostMatch({
                     )}
                     {s?.deck && s.deck.saltCount > 0 && (
                       <span className="pmStat pmStatSalt" title={t('pmSaltScore')}>
-                        <Flame size={12} /> {s.deck.salt.toFixed(1)}
+                        <SaltPile size={12} /> {s.deck.salt.toFixed(1)}
                       </span>
                     )}
                   </span>
@@ -245,26 +246,25 @@ export function PostMatch({
                       </Button>
                     )}
                     {canSalt && p.deckId && (
-                      <div className="pmSaltRow">
-                        <Tooltip content={t('pmSaltHint')}>
-                          <span className="pmSaltLabel">
-                            <Flame size={12} />
-                            <span className="pmSaltHintText">{t('pmSaltShort')}</span>
-                          </span>
-                        </Tooltip>
-                        {SALT_STEPS.map((step) => (
-                          <button
-                            key={step}
-                            type="button"
-                            className="pmSaltStep"
-                            data-lit={saltValue != null && step <= saltValue ? '' : undefined}
-                            aria-label={`${t('pmSaltHint')} ${step}/5`}
-                            onClick={() => rateSalt(p.deckId!, step)}
-                          >
-                            <Flame size={13} />
-                          </button>
-                        ))}
-                      </div>
+                      // One tooltip over the whole row: hovering ANY pile (or the
+                      // touch-only "Salty?" label) reveals the saltiness prompt.
+                      <Tooltip content={t('pmSaltHint')}>
+                        <div className="pmSaltRow">
+                          <span className="pmSaltHintText">{t('pmSaltShort')}</span>
+                          {SALT_STEPS.map((step) => (
+                            <button
+                              key={step}
+                              type="button"
+                              className="pmSaltStep"
+                              data-lit={saltValue != null && step <= saltValue ? '' : undefined}
+                              aria-label={`${t('pmSaltHint')} ${step}/5`}
+                              onClick={() => rateSalt(p.deckId!, step)}
+                            >
+                              <SaltPile size={13} />
+                            </button>
+                          ))}
+                        </div>
+                      </Tooltip>
                     )}
                   </div>
                 )}

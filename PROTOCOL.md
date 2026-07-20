@@ -358,3 +358,27 @@ undo truncates the redo tail (single linear branch). All three resync via
 
 RoomState is unchanged. Undo/redo/replay all reuse the existing full-state
 resync path, so no per-action inverse deltas exist on the wire.
+
+## Multi-game addendum (`mtg` | `cyberpunk`)
+
+The engine is game-agnostic (it moves cards between zones and never judges
+legality), so a "game" is defined by presentation + defaults, not new engine
+rules. A `game` field tags rooms and decks; the client reads it to relabel
+zones, pick vitals, hide phases, and resolve card art. Default `"mtg"`, so every
+pre-multigame room/deck/snapshot reads back unchanged.
+
+- `POST /api/rooms` body gains `game?: "mtg" | "cyberpunk"` (default `mtg`).
+  Cyberpunk rooms are forced to `format: "standard"`.
+- `POST /api/decks` / `PUT` body gains `game?`; `GET /api/decks` items gain
+  `game` + `coverCardId` (Cyberpunk art is client-resolved from the id, so
+  `coverImageUrl` is null for Cyberpunk).
+- `RoomState` gains `game`.
+- Starting vitals are game-driven: MTG `life` 40/20 + `poison`; Cyberpunk reuses
+  the `life`/`poison` slots as **Net** + **RAM** counters, both starting at 0.
+- Zones map onto the same six physical slots; Cyberpunk relabels them
+  Deck / Hand / In-Play / Trash / Eddies / Legend (the Legend rides the
+  `commander` board slot, so it deals into the command zone without MTG tax).
+- Cyberpunk cards carry a bundled art path in `imageUrl`
+  (`/cache/cyberpunk/<id>.webp`); MTG still sends `imageUrl: null` and the client
+  resolves Scryfall from the id. Card identity for Cyberpunk is the Netdeck UUID,
+  stored in the same `scryfallId` slot.

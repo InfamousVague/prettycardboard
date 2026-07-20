@@ -5,12 +5,19 @@ import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
 import { cardImage } from '../data/cards.ts';
+import { cardBackUrl, effectiveCardBack } from '../data/cardBacks.ts';
+import { useEdgeColor } from '../data/edgeColor.ts';
 import { tableShareUrl } from '../data/pendingJoin.ts';
+import { usePreference } from '../hooks/usePreference.ts';
 import { GameCard } from '../components/GameCard.tsx';
+import { GameTag } from '../components/GameTag.tsx';
 import type { CardInst, GameAction, GameActionV2, RoomState, TablePlayer, Zone } from '../net/types.ts';
 import { useTableUi } from './table/tableUi.ts';
-import { MyBoard, Vitals } from './table/MyBoard.tsx';
+import { MyBoard } from './table/MyBoard.tsx';
+import { Vitals } from './table/Vitals.tsx';
 import { SeatFrame } from './table/SeatFrame.tsx';
+import { OpponentHand } from './table/OpponentHand.tsx';
+import { CyberpunkDicePanel } from './table/CyberpunkDicePanel.tsx';
 import { PhaseRibbon } from './table/PhaseRibbon.tsx';
 import { StackTray } from './table/StackTray.tsx';
 import { CmdChoiceDialog, LibraryViewer, MulliganOverlay, PileViewer, RollBanner } from './table/overlays.tsx';
@@ -24,6 +31,7 @@ import { onStatus, send } from '../net/ws.ts';
 import { loadPreferences } from '../preferences.ts';
 import { installTableShims } from './table/shims.ts';
 import './table/table.css';
+import './table/cyberpunk-mat.css';
 
 /**
  * The live table. Freeform, server-authoritative, 2-6 seats: your board runs
@@ -58,6 +66,16 @@ export function TablePage() {
   const act = useGame((state) => state.act);
   const leave = useGame((state) => state.leave);
   const start = useGame((state) => state.start);
+  // Face-down cards on this table wear the game-appropriate default back when the
+  // player left the default on (Cyberpunk shows its crest, not Magic's back). A
+  // scoped --pc-card-back override cascades to every face-down surface inside the
+  // table without touching the global card-back preference.
+  const cardBackPref = usePreference('cardBack');
+  const cardBackSrc = cardBackUrl(effectiveCardBack(cardBackPref, room?.game));
+  const tableCardBack = `url("${cardBackSrc}")`;
+  // The 3D library pile's cut edge wears the top card's own border colour,
+  // sampled from that back, so a deck's stack no longer reads as generic brown.
+  const cardBackEdge = useEdgeColor(cardBackSrc);
   const friends = useApp((state) => state.friends.friends);
 
   const [menu, setMenu] = useState<Menu | null>(null);
@@ -95,12 +113,18 @@ export function TablePage() {
     }
   }, [combatActive]);
 
-  // Mirror my playmat choice into the room (the felt wears the active
-  // player's mat), on join and whenever preferences change.
+  // Mirror my playmat choice and turn-automation settings into the room (the
+  // felt wears the active player's mat; the server honors my auto untap/draw at
+  // my turn), on join and whenever preferences change.
   const roomId = room?.roomId;
   useEffect(() => {
     if (!roomId || spectating) return;
-    const share = () => send({ type: 'playmat.set', id: loadPreferences().playmat });
+    const share = () => {
+      const prefs = loadPreferences();
+      send({ type: 'playmat.set', id: prefs.playmat });
+      send({ type: 'cardback.set', id: prefs.cardBack });
+      send({ type: 'auto.set', untap: prefs.autoUntap, draw: prefs.autoDraw });
+    };
     share();
     window.addEventListener('pc:preferences', share);
     // Reconnects rejoin the room server-side; re-share the mat afterward.
@@ -133,7 +157,12 @@ export function TablePage() {
   // overlay (the deal animation) waits until it is dismissed.
   const startedNow = room?.started ?? null;
   useEffect(() => {
-    if (prevStarted.current === false && startedNow === true) setPreMatch(true);
+    if (prevStarted.current === false && startedNow === true) {
+      setPreMatch(true);
+      // A fresh deal starts with an empty floating-mana pool (it is a local,
+      // per-phase aid; carrying a stale pool into a new game would be wrong).
+      useTableUi.getState().clearMana();
+    }
     prevStarted.current = startedNow;
   }, [startedNow]);
 
@@ -224,7 +253,15 @@ export function TablePage() {
   };
 
   return (
-    <div className="table" data-replay={replay.active || undefined} onContextMenu={(event) => event.preventDefault()}>
+    <div
+      className="table"
+      data-replay={replay.active || undefined}
+      style={{
+        ['--pc-card-back' as string]: tableCardBack,
+        ['--pc-card-back-edge' as string]: cardBackEdge,
+      }}
+      onContextMenu={(event) => event.preventDefault()}
+    >
       <div className="tableFelt" aria-hidden />
 
       {/* ---- your-turn cue: edge glow + dismissable pill ---- */}
@@ -236,6 +273,7 @@ export function TablePage() {
           <Text as="span" weight="semibold">
             {room.name}
           </Text>
+          <GameTag game={room.game} />
           <Tooltip content={`${t('tblCode')}: ${room.code}`}>
             <button
               type="button"
@@ -372,6 +410,24 @@ export function TablePage() {
               onHover={handleHover}
               stage
             />
+          </div>
+        )}
+        {/* The staged opponent's hand renders at the screen bottom (like mine). */}
+        {room.started && stagedPlayer && !stagedIsMe && !spectating && (
+          <OpponentHand key={`hand-${stagedPlayer.userId}`} player={stagedPlayer} />
+        )}
+
+        {/* Watching another player's board (their turn, or you clicked their
+            seat): a floating cue to jump back to your own. */}
+        {room.started && stagedPlayer && !stagedIsMe && !spectating && me && (
+          <div className="spectateCue" role="status">
+            <Eye size={15} aria-hidden />
+            <span className="spectateCueText">
+              {t('tblSpectating')} · <b>{stagedPlayer.username}</b>
+            </span>
+            <Button size="sm" variant="soft" onClick={() => setPinnedSeat(me.seat)}>
+              {t('tblViewMyBoard')}
+            </Button>
           </div>
         )}
 
@@ -640,6 +696,9 @@ function SidePanel({
   return (
     <aside className="tableSide">
       {room.started && me && !spectating && <Vitals me={me} room={room} />}
+      {room.started && me && !spectating && room.game === 'cyberpunk' && (
+        <CyberpunkDicePanel me={me} others={room.players.filter((p) => p.userId !== me.userId)} />
+      )}
       {room.started && me && !spectating && <TimelineCard />}
       <PlayersCard room={room} meId={meId} onFocusSeat={onFocusSeat} />
 

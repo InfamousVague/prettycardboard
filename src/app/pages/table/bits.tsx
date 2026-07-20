@@ -1,9 +1,10 @@
-import { useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { AlertDialog, Menu, MenuItem, MenuSub, Tooltip } from '@glacier/react';
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { AlertDialog, Menu, MenuItem, MenuSub } from '@glacier/react';
 import { Ban, Crown, Skull, Swords } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
+import { zoneLabel } from '../../data/games.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import type { CardInst, CombatState, RoomState, TablePlayer, Zone } from '../../net/types.ts';
@@ -181,6 +182,7 @@ export function ZonePiles({
   player,
   mine,
   big,
+  mat,
   canAct,
   onMenu,
   onHover,
@@ -192,12 +194,17 @@ export function ZonePiles({
   mine?: boolean;
   /** Full-size piles for a staged opponent (a mirror of my own board). */
   big?: boolean;
+  /** Cyberpunk mat mode: each pile is tagged (data-zone) so CSS can place it in
+   * the mat quadrants (Deck/Trash right rail, Legends/Eddies bottom tray). */
+  mat?: boolean;
   /** Seated, started, not spectating - gates every affordance. */
   canAct?: boolean;
   onMenu?: (event: ReactPointerEvent | React.MouseEvent, iid: string, zone: Zone) => void;
   onHover?: (card: CardInst | null) => void;
-  /** Start dragging the pile's top card back out onto the board (my piles). */
-  onDragOut?: (event: ReactPointerEvent, card: CardInst, zone: 'graveyard' | 'exile') => void;
+  /** Start dragging the pile's top card out onto the board (my piles). For the
+   * library the card is a face-down placeholder — the server plays the real top
+   * card, since the client never holds the hidden library. */
+  onDragOut?: (event: ReactPointerEvent, card: CardInst, zone: 'graveyard' | 'exile' | 'library') => void;
   /** True right after a drag/long-press so the pile's click (open viewer) is suppressed. */
   dragSuppressed?: () => boolean;
   /** The zone a card is currently being dragged over, for a drop-target ring. */
@@ -211,6 +218,14 @@ export function ZonePiles({
   const cardScale = useTableUi((state) => state.cardScale);
   const [confirmShuffle, setConfirmShuffle] = useState(false);
   const [libMenuOpen, setLibMenuOpen] = useState(false);
+  // Zone rail labels are game-driven: MTG keeps its localized strings, Cyberpunk
+  // relabels the physical slots (Deck / Trash / Eddies / Legend) from the registry.
+  const gameId = useGame((state) => state.room?.game);
+  const cyber = gameId === 'cyberpunk';
+  const libLabel = cyber ? zoneLabel(gameId, 'library') : t('tblLibrary');
+  const graveLabel = cyber ? zoneLabel(gameId, 'graveyard') : t('tblGraveyard');
+  const exileLabel = cyber ? zoneLabel(gameId, 'exile') : t('tblExile');
+  const cmdLabel = cyber ? zoneLabel(gameId, 'command') : t('tblCommand');
 
   const graveTop = player.graveyard[player.graveyard.length - 1];
   const exileTop = player.exile[player.exile.length - 1];
@@ -233,40 +248,52 @@ export function ZonePiles({
   };
 
   const libraryPile = (
-    <div className="zonePile" data-drop={dropHint === 'library' || undefined} title={`${t('tblLibrary')}: ${player.libraryCount}`}>
+    <div className="zonePile" data-drop={dropHint === 'library' || undefined} title={`${libLabel}: ${player.libraryCount}`}>
       <LibraryStack count={player.libraryCount} width={width} userId={player.userId} />
       <span className="pileCount">{player.libraryCount}</span>
     </div>
   );
 
   return (
-    <div className="zonePiles" data-mine={mine || undefined}>
+    <div className="zonePiles" data-mine={mine || undefined} data-mat={mat || undefined}>
       {/* library: mine opens the actions menu, theirs is a plain pile */}
       {interactive ? (
         <>
           <Menu
-            aria-label={t('tblLibrary')}
+            aria-label={libLabel}
             placement="top-start"
             open={libMenuOpen}
             onOpenChange={setLibMenuOpen}
             trigger={
-              <span className="pileTrigger">
+              <span className="pileTrigger" data-zone="deck">
                 <button
                   type="button"
                   className="pileBtn"
-                  aria-label={`${t('tblLibrary')} — ${t('tblDraw')} 1`}
+                  aria-label={`${libLabel} — ${t('tblDraw')} 1`}
                   title={`${t('tblDraw')} 1`}
                   onClick={(event) => {
                     // Left-click draws; stop the click from reaching the Menu
-                    // trigger (which would otherwise toggle the menu open).
+                    // trigger (which would otherwise toggle the menu open). A drag
+                    // just happened → it played the top card, so don't also draw.
                     event.stopPropagation();
+                    if (dragSuppressed?.()) return;
                     drawOne();
                   }}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setLibMenuOpen(true);
                   }}
-                  onPointerDown={libLongPress.onPointerDown}
+                  onPointerDown={(event) => {
+                    libLongPress.onPointerDown(event);
+                    // Drag off the top of the deck to play it onto the felt.
+                    if (onDragOut) {
+                      onDragOut(
+                        event,
+                        { iid: `libtop:${player.userId}`, name: '', imageUrl: '', tapped: false, faceDown: true, counters: {}, x: 0, y: 0, isToken: false },
+                        'library',
+                      );
+                    }
+                  }}
                   onPointerMove={libLongPress.onPointerMove}
                   onPointerUp={libLongPress.onPointerUp}
                   onPointerLeave={libLongPress.onPointerLeave}
@@ -313,7 +340,7 @@ export function ZonePiles({
             open={confirmShuffle}
             onClose={() => setConfirmShuffle(false)}
             title={t('tblShuffle')}
-            description={`${t('tblLibrary')}: ${player.libraryCount}`}
+            description={`${libLabel}: ${player.libraryCount}`}
             actionLabel={t('tblShuffle')}
             cancelLabel={t('dbCancel')}
             dismissible
@@ -331,8 +358,9 @@ export function ZonePiles({
       <button
         type="button"
         className="pileBtn zonePile"
+        data-zone="trash"
         data-drop={dropHint === 'graveyard' || undefined}
-        title={t('tblGraveyard')}
+        title={graveLabel}
         onClick={() => {
           // A drag/long-press just happened - don't also open the viewer.
           if (dragSuppressed?.()) return;
@@ -366,7 +394,7 @@ export function ZonePiles({
           )}
         </div>
         <span className="pileCaption">
-          <span className="pileLabel">{t('tblGraveyard')}</span>
+          <span className="pileLabel">{graveLabel}</span>
           <span className="pileCount">{player.graveyard.length}</span>
         </span>
       </button>
@@ -375,8 +403,9 @@ export function ZonePiles({
       <button
         type="button"
         className="pileBtn zonePile"
+        data-zone="eddies"
         data-drop={dropHint === 'exile' || undefined}
-        title={t('tblExile')}
+        title={exileLabel}
         onClick={() => {
           if (dragSuppressed?.()) return;
           if (player.exile.length > 0) setPileView({ userId: player.userId, zone: 'exile' });
@@ -396,13 +425,13 @@ export function ZonePiles({
           )}
         </div>
         <span className="pileCaption">
-          <span className="pileLabel">{t('tblExile')}</span>
+          <span className="pileLabel">{exileLabel}</span>
           <span className="pileCount">{player.exile.length}</span>
         </span>
       </button>
 
       {/* command zone */}
-      <div className="zonePile zoneCommand" data-drop={dropHint === 'command' || undefined} title={t('tblCommand')} ref={(el) => setFlightAnchor(`cmd:${player.userId}`, el)}>
+      <div className="zonePile zoneCommand" data-zone="legends" data-drop={dropHint === 'command' || undefined} title={cmdLabel} ref={(el) => setFlightAnchor(`cmd:${player.userId}`, el)}>
         {player.command.map((card) => (
           <CmdCard
             key={card.iid}
@@ -447,6 +476,37 @@ function CmdCard({
     if (interactive && onMenu) onMenu(menuEventFrom(info), card.iid, 'command');
   });
 
+  const preview = () => popup.open({ scryfallId: card.scryfallId, name: card.name, imageUrl: card.imageUrl });
+  const cast = () => {
+    act({ kind: 'cmd.cast', iid: card.iid, x: 0.55, y: 0.55 });
+    flyFromAnchor(`cmd:${userId}`, flightAnchor('field:mine'), {
+      imageUrl: card.imageUrl || cardImage(card.scryfallId),
+      width: 92,
+    });
+  };
+
+  // A single click PREVIEWS the commander (like every other card); casting it is
+  // a deliberate double-click (or a drag onto the field). We hold the click for a
+  // moment so a double-click can cancel the preview and cast instead.
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearClick = () => {
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+    }
+  };
+  const onClick = () => {
+    if (!interactive) {
+      preview();
+      return;
+    }
+    if (clickTimer.current) return; // second click of a double — dblclick handles it
+    clickTimer.current = setTimeout(() => {
+      clickTimer.current = null;
+      preview();
+    }, 220);
+  };
+
   return (
     <div
       className="cmdCard"
@@ -459,30 +519,26 @@ function CmdCard({
         longPress.onPointerLeave(event);
       }}
       onClickCapture={longPress.onClickCapture}
+      onDoubleClick={
+        interactive
+          ? () => {
+              clearClick();
+              cast();
+            }
+          : undefined
+      }
       onContextMenu={interactive && onMenu ? (event) => onMenu(event, card.iid, 'command') : undefined}
     >
-      <Tooltip content={tax > 0 ? `${t('gpCmdTax')}: ${tax}` : card.name}>
-        <div>
-          <GameCard
-            name={card.name}
-            imageUrl={card.imageUrl || cardImage(card.scryfallId)}
-            width={width}
-            foil
-            tilt={0}
-            onClick={
-              interactive
-                ? () => {
-                    act({ kind: 'cmd.cast', iid: card.iid, x: 0.55, y: 0.55 });
-                    flyFromAnchor(`cmd:${userId}`, flightAnchor('field:mine'), {
-                      imageUrl: card.imageUrl || cardImage(card.scryfallId),
-                      width: 92,
-                    });
-                  }
-                : () => popup.open({ scryfallId: card.scryfallId, name: card.name, imageUrl: card.imageUrl })
-            }
-          />
-        </div>
-      </Tooltip>
+      {/* No name tooltip — the hover preview (HoverCardLayer) now shows the card
+          and its full details on rest; commander tax stays on the badge below. */}
+      <GameCard
+        name={card.name}
+        imageUrl={card.imageUrl || cardImage(card.scryfallId)}
+        width={width}
+        foil
+        tilt={0}
+        onClick={onClick}
+      />
       <TaxBadge value={tax} />
     </div>
   );

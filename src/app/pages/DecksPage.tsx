@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Button, EmptyState, Heading, Menu, MenuItem, Pill, Size, Text, TextTone, useToast } from '@glacier/react';
+import { Button, EmptyState, Heading, Pill, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
 import { Download, Layers, Plus } from '@glacier/icons';
 import { useT } from '../i18n.ts';
-import * as api from '../net/api.ts';
 import { useApp } from '../state/appStore.ts';
 import { useUi } from '../state/uiStore.ts';
-import { FORMATS } from '../data/formats.ts';
+import { GAME_LIST, resolveCardImage } from '../data/games.ts';
 import type { DeckSummary } from '../net/types.ts';
 import { GameCard } from '../components/GameCard.tsx';
+import { GameTag } from '../components/GameTag.tsx';
 import { DeckEditor } from './deckbuilder/DeckEditor.tsx';
 import { ImportDialog } from './deckbuilder/ImportDialog.tsx';
+import { NewDeckWizard } from './deckbuilder/NewDeckWizard.tsx';
 import '../components/gamecard.css';
 import './deckbuilder/decks.css';
 
@@ -27,12 +28,14 @@ export function DecksPage() {
 
 function DeckLibrary() {
   const t = useT();
-  const { toast } = useToast();
   const decks = useApp((state) => state.decks);
   const refreshDecks = useApp((state) => state.refreshDecks);
   const selectDeck = useUi((state) => state.selectDeck);
   const [importOpen, setImportOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [newDeckOpen, setNewDeckOpen] = useState(false);
+  // Which game's decks to show. 'all' spans every game.
+  const [gameFilter, setGameFilter] = useState('all');
+  const shown = gameFilter === 'all' ? decks : decks.filter((deck) => (deck.game || 'mtg') === gameFilter);
 
   useEffect(() => {
     refreshDecks().catch(() => {
@@ -40,18 +43,15 @@ function DeckLibrary() {
     });
   }, [refreshDecks]);
 
-  const createDeck = async (format: string) => {
-    setCreating(true);
-    try {
-      const { id } = await api.createDeck(t('dbUntitled'), format, []);
-      await refreshDecks();
-      selectDeck(id);
-    } catch {
-      toast({ tone: 'danger', message: t('obOffline') });
-    } finally {
-      setCreating(false);
+  // A "New deck" action from elsewhere (sidebar, home) opens the wizard here.
+  const newDeckIntent = useUi((state) => state.newDeckIntent);
+  const clearNewDeckIntent = useUi((state) => state.clearNewDeckIntent);
+  useEffect(() => {
+    if (newDeckIntent) {
+      setNewDeckOpen(true);
+      clearNewDeckIntent();
     }
-  };
+  }, [newDeckIntent, clearNewDeckIntent]);
 
   return (
     <div className="page decksPage">
@@ -67,23 +67,25 @@ function DeckLibrary() {
             <Download size={16} />
             {t('decksImport')}
           </Button>
-          <Menu
-            aria-label={t('decksNew')}
-            trigger={
-              <Button loading={creating}>
-                <Plus size={16} />
-                {t('decksNew')}
-              </Button>
-            }
-          >
-            {FORMATS.map((format) => (
-              <MenuItem key={format.id} onSelect={() => void createDeck(format.name)}>
-                {format.name}
-              </MenuItem>
-            ))}
-          </Menu>
+          <Button onClick={() => setNewDeckOpen(true)}>
+            <Plus size={16} />
+            {t('decksNew')}
+          </Button>
         </div>
       </div>
+
+      {decks.length > 0 && (
+        <div className="decksFilter">
+          <SegmentedControl
+            value={gameFilter}
+            onValueChange={setGameFilter}
+            options={[
+              { value: 'all', label: t('decksAllGames') },
+              ...GAME_LIST.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') })),
+            ]}
+          />
+        </div>
+      )}
 
       {decks.length === 0 ? (
         <EmptyState
@@ -91,27 +93,33 @@ function DeckLibrary() {
           title={t('decksTitle')}
           description={t('decksEmpty')}
           action={
-            <Button onClick={() => void createDeck('Commander')} loading={creating}>
+            <Button onClick={() => setNewDeckOpen(true)}>
               <Plus size={16} />
               {t('decksNew')}
             </Button>
           }
         />
+      ) : shown.length === 0 ? (
+        <EmptyState icon={<Layers size={22} />} title={t('decksTitle')} description={t('playNoDecksForGame')} />
       ) : (
         <div className="deckGrid">
-          {decks.map((deck, index) => (
+          {shown.map((deck, index) => (
             <DeckTile key={deck.id} deck={deck} index={index} onOpen={() => selectDeck(deck.id)} />
           ))}
         </div>
       )}
 
       <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
+      <NewDeckWizard open={newDeckOpen} onClose={() => setNewDeckOpen(false)} />
     </div>
   );
 }
 
 function DeckTile({ deck, index, onOpen }: { deck: DeckSummary; index: number; onOpen: () => void }) {
   const t = useT();
+  // MTG ships a Scryfall cover URL; Cyberpunk resolves its bundled art from the
+  // cover card id.
+  const cover = deck.coverImageUrl || (deck.coverCardId ? resolveCardImage(deck.game, deck.coverCardId) : undefined);
   return (
     <motion.button
       type="button"
@@ -122,13 +130,8 @@ function DeckTile({ deck, index, onOpen }: { deck: DeckSummary; index: number; o
       transition={{ duration: 0.24, ease: 'easeOut', delay: Math.min(index, 8) * 0.035 }}
     >
       <div className="deckTileArt">
-        <GameCard
-          name={deck.commander || deck.name}
-          imageUrl={deck.coverImageUrl || undefined}
-          width={168}
-          foil
-          tilt={7}
-        />
+        <GameCard name={deck.commander || deck.name} imageUrl={cover} width={168} foil tilt={7} />
+        <GameTag game={deck.game} showName={false} className="deckTileGame" />
       </div>
       <div className="deckTileInfo">
         <span className="deckTileName">{deck.name}</span>

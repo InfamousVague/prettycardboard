@@ -77,9 +77,15 @@
 }
 
 .cpPT {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   font-family: var(--glacier-font-mono);
   font-weight: var(--glacier-font-weight-bold);
   color: var(--glacier-text);
+}
+.cpPT > svg {
+  opacity: 0.7;
 }
 
 .cpOracle {
@@ -116,6 +122,20 @@
   border-block-start: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 50%, transparent);
 }
 
+/* Footer meta chips (artist, set) — an icon + value pair. */
+.cpMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+.cpMeta > svg {
+  flex: none;
+  opacity: 0.65;
+}
+
 .cpClose {
   position: absolute;
   top: calc(var(--glacier-space-4) * -1);
@@ -143,4 +163,68 @@
     transform: scale(0.78);
     transform-origin: center;
   }
+}
+
+/* --- Cyberpunk card details (structured, from the bundled catalog) --- */
+.cpCyberStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.15rem 0 0.35rem;
+}
+.cpStat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--glacier-surface-2, #1b1e24) 70%, transparent);
+  border: 1px solid var(--glacier-border, rgba(255, 255, 255, 0.08));
+  font-size: 0.8rem;
+}
+.cpStatIcon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--glacier-text-muted, #9aa);
+}
+.cpStatLabel {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--glacier-text-muted, #9aa);
+}
+.cpStatVal {
+  font-family: var(--glacier-font-mono, ui-monospace, monospace);
+  font-weight: 700;
+}
+.cpEddie {
+  color: #f4d03f;
+  border-color: color-mix(in srgb, #f4d03f 40%, transparent);
+  background: color-mix(in srgb, #f4d03f 12%, transparent);
+  font-weight: 700;
+}
+.cpRules {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.cpRuleLine {
+  margin: 0;
+}
+/* Rules tokens like {Call}, {Tap}, {Four Cost}. */
+.cpToken {
+  display: inline-block;
+  padding: 0.03em 0.42em;
+  margin: 0 0.12em;
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, #f4d03f 16%, transparent);
+  border: 1px solid color-mix(in srgb, #f4d03f 34%, transparent);
+  color: #f4d03f;
+  font-size: 0.82em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const OUTPUT = join(ROOT, 'src', 'data', 'precons.json');
+const ID_MANIFEST = join(ROOT, 'src', 'data', 'precon-ids.json');
 const IMAGE_DIR = join(ROOT, 'public', 'cache', 'cards');
 const ART_DIR = join(ROOT, 'public', 'cache', 'art');
 const USER_AGENT = 'PrettyCardboard/0.1 (local-first precon browser)';
@@ -236,6 +237,18 @@ async function main() {
     decks,
   };
   writeFileSync(OUTPUT, `${JSON.stringify(output, null, 2)}\n`);
+
+  // Also emit the tiny id manifest the app reads eagerly (data/cards.ts) to
+  // decide bundled-cache vs CDN for a card's image, WITHOUT loading the full
+  // 850KB precons payload up front. The heavy precons.json is imported lazily.
+  const allIds = [...new Set(decks.flatMap((deck) => deck.cards.map((card) => card.id)))];
+  const commanderIds = [
+    ...new Set(
+      decks.flatMap((deck) => deck.cards.filter((card) => card.board === 'commander').map((card) => card.id)),
+    ),
+  ];
+  writeFileSync(ID_MANIFEST, `${JSON.stringify({ ids: allIds, commanderIds })}\n`);
+  console.log(`Wrote id manifest (${allIds.length} ids) to ${ID_MANIFEST}`);
 
   const uniqueCards = [...new Map(decks.flatMap((deck) => deck.cards).map((card) => [card.id, card])).values()];
   console.log(`Caching ${uniqueCards.length} full-card images locally...`);

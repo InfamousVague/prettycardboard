@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { Button, Heading, Input, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
 import { motion } from 'motion/react';
 import { Ticket } from '@glacier/icons';
@@ -6,7 +6,9 @@ import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useUi } from '../state/uiStore.ts';
 import { ApiError } from '../net/api.ts';
-import { PRECONS, cardImage, preconCommander } from '../data/cards.ts';
+import { cardImage } from '../data/cards.ts';
+import { PRECONS, preconCommander } from '../data/precons.ts';
+import { cyberpunkImage, cyberpunkLegends } from '../data/cyberpunk.ts';
 import { GameCard } from '../components/GameCard.tsx';
 
 const NAME_RE = /^[A-Za-z0-9_]{3,24}$/;
@@ -29,7 +31,27 @@ export function OnboardingPage({ desktop }: { desktop: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const commanders = PRECONS.map((deck) => preconCommander(deck));
+  // The fanned arc mixes both games now: MTG commanders and Cyberpunk legends,
+  // interleaved so the spread alternates.
+  const fanCards = useMemo(() => {
+    const mtg = PRECONS.map((deck) => {
+      const commander = preconCommander(deck);
+      return { key: `mtg-${commander.id}`, name: commander.name, image: cardImage(commander.id) };
+    });
+    const cyber = cyberpunkLegends().map((card) => ({
+      key: `cp-${card.id}`,
+      name: card.displayName,
+      image: cyberpunkImage(card.id),
+    }));
+    const out: { key: string; name: string; image: string }[] = [];
+    for (let i = 0; out.length < 6 && i < Math.max(mtg.length, cyber.length); i++) {
+      const m = mtg[i];
+      const c = cyber[i];
+      if (m) out.push(m);
+      if (c && out.length < 6) out.push(c);
+    }
+    return out;
+  }, []);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -60,17 +82,17 @@ export function OnboardingPage({ desktop }: { desktop: boolean }) {
     <div className="onboarding" data-tauri-drag-region={desktop ? '' : undefined}>
       <div className="onboardingGlow" aria-hidden />
       <div className="onboardingFan" aria-hidden>
-        {commanders.map((commander, index) => {
-          const spread = index - (commanders.length - 1) / 2; // -1.5..1.5
+        {fanCards.map((card, index) => {
+          const spread = index - (fanCards.length - 1) / 2;
           return (
             <motion.div
-              key={commander.id}
+              key={card.key}
               className="onboardingFanCard"
               initial={{ y: 120, opacity: 0, rotate: 0 }}
-              animate={{ y: Math.abs(spread) * 26, opacity: 1, rotate: spread * 9 }}
-              transition={{ type: 'spring', stiffness: 120, damping: 16, delay: 0.15 + index * 0.09 }}
+              animate={{ y: Math.abs(spread) * 22, opacity: 1, rotate: spread * 7 }}
+              transition={{ type: 'spring', stiffness: 120, damping: 16, delay: 0.15 + index * 0.08 }}
             >
-              <GameCard name={commander.name} imageUrl={cardImage(commander.id)} width={210} foil glow tilt={12} />
+              <GameCard name={card.name} imageUrl={card.image} width={210} foil glow tilt={12} />
             </motion.div>
           );
         })}

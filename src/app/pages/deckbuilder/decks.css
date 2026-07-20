@@ -406,6 +406,35 @@
   text-align: start;
 }
 
+/* ---------- Cyberpunk deck stats ---------- */
+
+/* RAM budget + colour spread chips replace the MTG curve/lands/types row. */
+.cyberChipRow {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-1) var(--glacier-space-2);
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.cyberChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--glacier-radius-pill, 999px);
+  background: var(--glacier-surface-sunken, var(--glacier-surface));
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+}
+
+.cyberDot {
+  inline-size: 0.6rem;
+  block-size: 0.6rem;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25) inset;
+}
+
 /* ---------- bracket estimate ---------- */
 
 .bracketPill {
@@ -1178,4 +1207,21 @@
   .searchRowAdd {
     opacity: 1;
   }
+}
+
+/* Game filter row above the deck grid. */
+.decksFilter {
+  margin-bottom: 1rem;
+}
+
+/* Game badge tucked into the corner of a deck tile's art. */
+.deckTileArt {
+  position: relative;
+}
+.deckTileGame {
+  position: absolute;
+  top: 0.4rem;
+  left: 0.4rem;
+  z-index: 2;
+  backdrop-filter: blur(6px);
 }

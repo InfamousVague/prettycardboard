@@ -44,6 +44,39 @@ pub struct Mull {
     pub taken: u32,
 }
 
+/// One of the Cyberpunk Gig dice a player holds. The base six (d4..d20) come
+/// from their Fixer; extra dice are STOLEN from rivals (+1 Gig per full 10 Power
+/// dealt), which is how a player pushes past six toward the 7-die win. `value`
+/// 0 = unrolled (still in the Fixer); `in_gig` = moved to the Gig area; `stolen`
+/// dice carry their origin (`from`) and are always in the Gig area.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GigDie {
+    pub sides: u8,
+    pub value: u8,
+    pub in_gig: bool,
+    #[serde(default)]
+    pub stolen: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
+}
+
+/// The six Fixer dice, in printed order (largest first on the mat).
+pub const GIG_SIDES: [u8; 6] = [20, 12, 10, 8, 6, 4];
+
+/// A fresh Fixer set for a Cyberpunk game (empty for other games — MTG has no
+/// dice board).
+pub fn new_gig_dice(game: &str) -> Vec<GigDie> {
+    if game == "cyberpunk" {
+        GIG_SIDES
+            .iter()
+            .map(|&sides| GigDie { sides, value: 0, in_gig: false, stolen: false, from: None })
+            .collect()
+    } else {
+        Vec::new()
+    }
+}
+
 /// Full player state. Serde here is for SQLite persistence only; the wire
 /// RoomState is built by hand in `state_for` (hands/libraries stay filtered).
 #[derive(Serialize, Deserialize)]
@@ -67,6 +100,22 @@ pub struct Player {
     /// mat as the shared table felt.
     #[serde(default)]
     pub playmat: Option<String>,
+    /// The player's chosen card-back id; every viewer paints THIS player's
+    /// face-down cards with it (so an opponent's board wears their back, not
+    /// yours). Synced from the client via `cardback.set`.
+    #[serde(default)]
+    pub card_back: Option<String>,
+    /// Per-player turn conveniences, OFF by default and synced from the client
+    /// via `auto.set`: when set, this player's permanents untap and/or one card
+    /// is drawn automatically at the start of their turn. (Bots, when present,
+    /// should set these true so they keep playing without a human's clicks.)
+    #[serde(default)]
+    pub auto_untap: bool,
+    #[serde(default)]
+    pub auto_draw: bool,
+    /// Cyberpunk Gig dice (the six d4-d20 in the Fixer); empty for other games.
+    #[serde(default)]
+    pub gig_dice: Vec<GigDie>,
     /// The deck this seat was taken with (None for deckless joins);
     /// captured at join so match results can attribute wins to a deck.
     #[serde(default)]
@@ -242,6 +291,9 @@ pub fn result_player(p: &Player) -> MatchResultPlayer {
 fn default_format() -> String {
     "commander".to_string()
 }
+fn default_game() -> String {
+    "mtg".to_string()
+}
 fn default_phase() -> String {
     "main1".to_string()
 }
@@ -255,7 +307,9 @@ fn default_true() -> bool {
 /// One point in a room's undo/redo/replay history: the full game state
 /// serialized to JSON (connection/live fields are serde-skipped, so this is
 /// pure game state and can be re-derived losslessly), plus who caused it and a
-/// human label for the scrubber. Live-only; not persisted across restart.
+/// human label for the scrubber. Persisted to its own `room_history` table
+/// (never nested in the Room's state_json, which would recurse) so the timeline
+/// survives a server/database restart; see `push_history` and `flush_dirty`.
 pub struct Snapshot {
     pub json: String,
     pub actor: String,
@@ -266,6 +320,11 @@ pub struct Snapshot {
     /// The public face (name + art) of the card this move concerns, for the
     /// timeline thumbnail. None for cardless moves or hidden/face-down cards.
     pub card: Option<serde_json::Value>,
+    /// Stable, monotonically-increasing id within the room. Never reused, so a
+    /// snapshot maps to the same `room_history` row across drains/truncations,
+    /// letting the write-behind sync deltas (insert new, delete gone) instead of
+    /// rewriting the whole multi-MB timeline every flush.
+    pub hid: u64,
 }
 
 /// How many snapshots a room keeps. Bounds memory (~60KB each) and how far
@@ -290,6 +349,12 @@ pub struct Room {
     /// whether command-zone machinery is active.
     #[serde(default = "default_format")]
     pub format: String,
+    /// Which card game this room plays ("mtg" | "cyberpunk"). The freeform
+    /// engine is game-agnostic; the client reads this to relabel zones, pick
+    /// vitals, and resolve card art. Default "mtg" so pre-multigame rooms
+    /// deserialize unchanged.
+    #[serde(default = "default_game")]
+    pub game: String,
     #[serde(default = "default_turn")]
     pub turn_number: u64,
     #[serde(default)]
@@ -336,13 +401,32 @@ pub struct Room {
     #[serde(skip)]
     pub spectators: Vec<UserRef>,
     /// Undo/redo/replay timeline: one full-state snapshot per action, oldest
-    /// first. `cursor` is the index of the currently-live state. Live-only
-    /// (serde-skip) so it is excluded from both persistence and its own
-    /// snapshots (no recursion) and resets on restart.
+    /// first. `cursor` is the index of the currently-live state. Serde-skip so
+    /// it is excluded from the Room's own state_json (each snapshot already
+    /// contains a full serialized Room - nesting it there would recurse). It is
+    /// persisted OUT-OF-BAND in the `room_history` table instead (see
+    /// `flush_dirty` / `history_load`) so undo survives a restart.
     #[serde(skip)]
     pub history: Vec<Snapshot>,
     #[serde(skip)]
     pub cursor: usize,
+    /// Next `Snapshot.hid` to hand out. Monotonic; never reset (hist_clear and
+    /// restart both carry it forward) so ids are never reused.
+    #[serde(skip)]
+    pub hist_next_hid: u64,
+    /// Highest `hid` already written to `room_history` (None = nothing saved).
+    /// The flush inserts only snapshots newer than this, so each action writes
+    /// one row rather than the whole timeline.
+    #[serde(skip)]
+    pub hist_saved_hi: Option<u64>,
+    /// Hids dropped from `history` (drained oldest / truncated redo tail /
+    /// cleared) since the last flush; the flush deletes exactly these rows.
+    #[serde(skip)]
+    pub hist_removed: Vec<u64>,
+    /// The timeline changed since the last flush (new snapshot, moved cursor, or
+    /// a removal) and needs syncing to `room_history`.
+    #[serde(skip)]
+    pub hist_dirty: bool,
 }
 
 impl Room {
@@ -351,18 +435,53 @@ impl Room {
     /// cursor), so history stays a single linear branch.
     pub fn push_history(&mut self, actor: String, label: String, seq: u64, card: Option<serde_json::Value>) {
         if !self.history.is_empty() && self.cursor + 1 < self.history.len() {
-            self.history.truncate(self.cursor + 1);
+            self.hist_truncate_to(self.cursor + 1);
         }
         let json = match serde_json::to_string(self) {
             Ok(j) => j,
             Err(_) => return,
         };
-        self.history.push(Snapshot { json, actor, label, seq, ts: crate::now_ms(), card });
+        let hid = self.hist_next_hid;
+        self.hist_next_hid += 1;
+        self.history.push(Snapshot { json, actor, label, seq, ts: crate::now_ms(), card, hid });
         if self.history.len() > MAX_HISTORY {
             let drop = self.history.len() - MAX_HISTORY;
-            self.history.drain(0..drop);
+            self.hist_drain_front(drop);
         }
         self.cursor = self.history.len() - 1;
+        self.hist_dirty = true;
+    }
+
+    /// Keep only the first `new_len` snapshots, recording the removed hids so the
+    /// next flush deletes exactly those `room_history` rows.
+    pub fn hist_truncate_to(&mut self, new_len: usize) {
+        if new_len >= self.history.len() {
+            return;
+        }
+        let removed: Vec<u64> = self.history[new_len..].iter().map(|s| s.hid).collect();
+        self.hist_removed.extend(removed);
+        self.history.truncate(new_len);
+        self.hist_dirty = true;
+    }
+
+    /// Drop the oldest `count` snapshots (over the MAX_HISTORY cap), recording
+    /// their hids for deletion.
+    fn hist_drain_front(&mut self, count: usize) {
+        let removed: Vec<u64> = self.history[..count].iter().map(|s| s.hid).collect();
+        self.hist_removed.extend(removed);
+        self.history.drain(0..count);
+        self.hist_dirty = true;
+    }
+
+    /// Wipe the whole timeline (e.g. reseeding at game start), recording every
+    /// hid for deletion. `hist_next_hid` still advances so reseeded snapshots get
+    /// fresh ids that never collide with the deleted rows.
+    pub fn hist_clear(&mut self) {
+        let removed: Vec<u64> = self.history.iter().map(|s| s.hid).collect();
+        self.hist_removed.extend(removed);
+        self.history.clear();
+        self.cursor = 0;
+        self.hist_dirty = true;
     }
 
     /// A card's public face (name + art) for the timeline thumbnail, if it is
@@ -433,6 +552,13 @@ impl Room {
         restored.spectators = std::mem::take(&mut self.spectators);
         restored.history = std::mem::take(&mut self.history);
         restored.cursor = target;
+        // The timeline itself is live state, not part of the restored snapshot
+        // (which serde-skips it); carry the persistence bookkeeping across too so
+        // the next flush only writes the moved cursor, not the whole history.
+        restored.hist_next_hid = self.hist_next_hid;
+        restored.hist_saved_hi = self.hist_saved_hi;
+        restored.hist_removed = std::mem::take(&mut self.hist_removed);
+        restored.hist_dirty = true;
         // Re-anchor absolute wall-clock timers to now: a rewind restarts the
         // active player's turn clock and any pending-commander window from the
         // rewind point rather than inheriting stale (possibly already-expired)
@@ -511,9 +637,16 @@ impl Room {
                     "online": p.online,
                     "handRevealed": p.hand_revealed,
                     "playmat": p.playmat,
+                    "cardBack": p.card_back,
+                    "gigDice": p.gig_dice,
                     "conceded": p.conceded,
                     "deckName": p.deck_name,
                 });
+                // The viewer's own deck id, so the client can look up which
+                // tokens the deck can produce (never leaked for other seats).
+                if own {
+                    pv["deckId"] = json!(p.deck_id);
+                }
                 if own || (p.hand_revealed && viewer.is_some()) {
                     pv["hand"] = Value::Array(
                         p.hand.iter().map(|c| serde_json::to_value(c).unwrap()).collect(),
@@ -562,6 +695,7 @@ impl Room {
             "hostUserId": self.host,
             "seq": self.seq,
             "format": self.format,
+            "game": self.game,
             "turnNumber": self.turn_number,
             "activeSeat": self.active_seat,
             "phase": self.phase,
@@ -592,7 +726,7 @@ pub fn scryfall_image_url(scryfall_id: &str) -> String {
 /// are left out of the game. Commander-board cards (partners included) are
 /// flagged `isCommander` when the room's format is commander. Returns
 /// (command, library).
-pub fn build_zones(cards: &[DeckCard], flag_commanders: bool) -> (Vec<Card>, Vec<Card>) {
+pub fn build_zones(cards: &[DeckCard], flag_commanders: bool, game: &str) -> (Vec<Card>, Vec<Card>) {
     let mut command = Vec::new();
     let mut library = Vec::new();
     for dc in cards {
@@ -605,9 +739,15 @@ pub fn build_zones(cards: &[DeckCard], flag_commanders: bool) -> (Vec<Card>, Vec
                 iid: crate::hex_id(8),
                 scryfall_id: Some(dc.scryfall_id.clone()),
                 name: dc.name.clone(),
-                // No URL: the client resolves art itself (bundled cache
-                // first, then the CDN), which keeps image traffic local.
-                image_url: None,
+                // MTG: no URL - the client resolves Scryfall art from the id
+                // (bundled cache first, then CDN). Cyberpunk: art is a bundled
+                // local file keyed by the card id, so stamp its deterministic
+                // path (the client has no Scryfall fallback for a Netdeck id).
+                image_url: if game == "cyberpunk" {
+                    Some(format!("/cache/cyberpunk/{}.webp", dc.scryfall_id))
+                } else {
+                    None
+                },
                 tapped: false,
                 face_down: false,
                 counters: BTreeMap::new(),
@@ -669,19 +809,56 @@ pub fn room_row(room: &Room) -> db::RoomRow {
     }
 }
 
-/// Write every dirty room to SQLite. Rows are snapshotted under the DashMap
-/// ref first, then written under one db lock (never both locks at once).
+/// Drain the timeline changes that need persisting for one room and advance its
+/// bookkeeping. Inserts only snapshots newer than what is already saved (usually
+/// one per action); deletes exactly the hids dropped since the last flush; and
+/// records the current cursor. Returns None when nothing timeline-related
+/// changed.
+fn take_history_delta(room: &mut Room) -> Option<db::HistoryDelta> {
+    if !room.hist_dirty {
+        return None;
+    }
+    let removed = std::mem::take(&mut room.hist_removed);
+    let mut inserts: Vec<db::HistoryRow> = Vec::new();
+    for s in &room.history {
+        if room.hist_saved_hi.map_or(true, |hi| s.hid > hi) {
+            inserts.push(db::HistoryRow {
+                hid: s.hid,
+                actor: s.actor.clone(),
+                label: s.label.clone(),
+                seq: s.seq,
+                ts: s.ts,
+                card_json: s.card.as_ref().map(|c| c.to_string()),
+                state_json: s.json.clone(),
+            });
+        }
+    }
+    if let Some(max) = room.history.iter().map(|s| s.hid).max() {
+        room.hist_saved_hi = Some(room.hist_saved_hi.map_or(max, |hi| hi.max(max)));
+    }
+    let cursor_hid = room.history.get(room.cursor).map(|s| s.hid as i64).unwrap_or(-1);
+    room.hist_dirty = false;
+    Some(db::HistoryDelta { room_id: room.id.clone(), removed, inserts, cursor_hid })
+}
+
+/// Write every dirty room to SQLite. Rows and timeline deltas are snapshotted
+/// under the DashMap ref first, then written under one db lock (never both locks
+/// at once).
 pub fn flush_dirty(app: &App) {
     let ids: Vec<String> = app.dirty.iter().map(|e| e.key().clone()).collect();
     if ids.is_empty() {
         return;
     }
     let mut rows: Vec<db::RoomRow> = Vec::new();
+    let mut deltas: Vec<db::HistoryDelta> = Vec::new();
     for id in ids {
         // Remove first so a concurrent mutation re-marks it for the next pass.
         app.dirty.remove(&id);
-        if let Some(room) = app.rooms.get(&id) {
+        if let Some(mut room) = app.rooms.get_mut(&id) {
             rows.push(room_row(&room));
+            if let Some(delta) = take_history_delta(&mut room) {
+                deltas.push(delta);
+            }
         }
     }
     if rows.is_empty() {
@@ -690,6 +867,9 @@ pub fn flush_dirty(app: &App) {
     let conn = app.db.lock().unwrap();
     for row in &rows {
         db::room_save(&conn, row);
+    }
+    for delta in &deltas {
+        db::history_apply(&conn, delta);
     }
 }
 

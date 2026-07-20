@@ -37,19 +37,24 @@ import type { Deck, DeckCard } from '../../net/types.ts';
 import { useApp } from '../../state/appStore.ts';
 import { useUi } from '../../state/uiStore.ts';
 import { artCrop, cardImage } from '../../data/cards.ts';
+import { resolveCardImage } from '../../data/games.ts';
 import { aliasCardMeta, getCardMeta, hydrateCardMeta, type ScryCard } from '../../data/scryfall.ts';
 import { bracketKey, estimateBracket } from '../../data/brackets.ts';
 import { FORMATS, formatFor, formatTarget, isBasicLand } from '../../data/formats.ts';
 import { applyDeckTint, clearDeckTint } from '../../state/accent.ts';
 import { DEFAULT_PREFERENCES, loadPreferences } from '../../preferences.ts';
 import { GameCard } from '../../components/GameCard.tsx';
+import { GameTag } from '../../components/GameTag.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import { CardRowSkeleton } from '../../components/Skeletons.tsx';
 import { ArtPicker, HeaderCardPicker } from '../../components/ArtPicker.tsx';
 import { useLongPress } from '../../hooks/useLongPress.ts';
 import { CardSearch } from './CardSearch.tsx';
+import { CyberpunkCardSearch } from './CyberpunkCardSearch.tsx';
+import type { CyberpunkCard } from '../../data/cyberpunk.ts';
 import { ManaCurveChart } from './ManaCurveChart.tsx';
 import { ColorPips, ManaPips, TYPE_LABEL, TYPE_ORDER, typeBucket, type TypeBucket } from './shared.tsx';
+import { cyberColorHex, cyberDeckStats, cyberTypeIcon } from './cyberDeck.tsx';
 
 /**
  * The deck editor: decklist on the start side, Scryfall search on the end
@@ -181,6 +186,20 @@ export function DeckEditor({ deckId }: { deckId: string }) {
       // The previous commander steps down into the main deck, never vanishing.
       const demoted = rest.map((c) => (c.board === 'commander' ? { ...c, board: 'main' as const } : c));
       return [{ scryfallId: card.id, name: card.name, quantity: 1, board: 'commander' }, ...demoted];
+    });
+
+  // Cyberpunk add: a Legend takes the anchor (command) slot, replacing any
+  // existing one; everything else stacks in the main deck.
+  const addCyberCard = (card: CyberpunkCard) =>
+    editCards((cards) => {
+      if (card.type === 'Legend') {
+        const rest = cards.filter((c) => c.scryfallId !== card.id);
+        const demoted = rest.map((c) => (c.board === 'commander' ? { ...c, board: 'main' as const } : c));
+        return [{ scryfallId: card.id, name: card.displayName, quantity: 1, board: 'commander' }, ...demoted];
+      }
+      const existing = cards.find((c) => c.scryfallId === card.id && c.board === 'main');
+      if (existing) return cards.map((c) => (c === existing ? { ...c, quantity: c.quantity + 1 } : c));
+      return [...cards, { scryfallId: card.id, name: card.displayName, quantity: 1, board: 'main' }];
     });
 
   const changeQuantity = (target: DeckCard, delta: number) =>
@@ -404,6 +423,11 @@ export function DeckEditor({ deckId }: { deckId: string }) {
 
   const fmt = derived.fmt;
   const sizeTarget = formatTarget(fmt);
+  // Cyberpunk decks reuse the MTG "standard" format shell but have no mana curve,
+  // color identity, or bracket, so those MTG-only stats are hidden. Instead the
+  // view reads through Legends' RAM budget, colour spread, and avg Cost/Power.
+  const cyber = deck.game === 'cyberpunk';
+  const cyberStats = cyber ? cyberDeckStats(deck) : null;
 
   const heroCommander = derived.commanderCards[0];
   const heroMeta = heroCommander ? getCardMeta(heroCommander.scryfallId) : undefined;
@@ -464,7 +488,7 @@ export function DeckEditor({ deckId }: { deckId: string }) {
           >
             <GameCard
               name={headerCard.name}
-              imageUrl={cardImage(headerCard.scryfallId)}
+              imageUrl={resolveCardImage(deck?.game, headerCard.scryfallId)}
               width={224}
               foil
               tilt={9}
@@ -487,15 +511,19 @@ export function DeckEditor({ deckId }: { deckId: string }) {
             />
             <div className="deckHeaderMeta">
               <span className="deckFormatSelect">
-                <Select
-                  size="sm"
-                  value={fmt.id}
-                  onValueChange={(value) =>
-                    mutate((d) => ({ ...d, format: FORMATS.find((f) => f.id === value)?.name ?? value }))
-                  }
-                  options={FORMATS.map((f) => ({ value: f.id, label: f.name }))}
-                  aria-label={t('dbFormat')}
-                />
+                {cyber ? (
+                  <GameTag game="cyberpunk" />
+                ) : (
+                  <Select
+                    size="sm"
+                    value={fmt.id}
+                    onValueChange={(value) =>
+                      mutate((d) => ({ ...d, format: FORMATS.find((f) => f.id === value)?.name ?? value }))
+                    }
+                    options={FORMATS.map((f) => ({ value: f.id, label: f.name }))}
+                    aria-label={t('dbFormat')}
+                  />
+                )}
               </span>
               {heroCommander && (
                 <span className="deckHeroCommander">
@@ -503,10 +531,10 @@ export function DeckEditor({ deckId }: { deckId: string }) {
                   <Text as="span" size={Size.Small} tone={TextTone.Muted}>
                     {heroCommander.name}
                   </Text>
-                  {heroMeta?.manaCost && <ManaPips cost={heroMeta.manaCost} />}
+                  {!cyber && heroMeta?.manaCost && <ManaPips cost={heroMeta.manaCost} />}
                 </span>
               )}
-              <ColorPips colors={derived.deckIdentity} label={t('dbIdentity')} />
+              {!cyber && <ColorPips colors={derived.deckIdentity} label={t('dbIdentity')} />}
               <Text as="span" size={Size.Small} tone={TextTone.Muted} mono>
                 {derived.total} {t('decksCards')}
               </Text>
@@ -526,18 +554,23 @@ export function DeckEditor({ deckId }: { deckId: string }) {
                 ) : null}
               </span>
             </div>
-            <div className="deckCurveBand deckStat">
-              <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="deckStatLabel">
-                {t('dbCurve')}
-              </Text>
-              <ManaCurveChart buckets={derived.curve} />
-            </div>
+            {!cyber && (
+              <div className="deckCurveBand deckStat">
+                <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="deckStatLabel">
+                  {t('dbCurve')}
+                </Text>
+                <ManaCurveChart buckets={derived.curve} />
+              </div>
+            )}
           </div>
         </div>
       {/* the fact chips share the row below */}
       <div className="deckStats" data-commander={fmt.hasCommander ? '' : undefined}>
         {/* identity + size share one tile: both are small facts, and merging
-            them keeps the strip a single balanced row */}
+            them keeps the strip a single balanced row. Hidden for Cyberpunk
+            (no color identity / mana size target; the card count is in the
+            header row). */}
+        {!cyber && (
         <div className="deckStat deckStatIdentity">
           <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="deckStatLabel">
             {t('dbIdentity')}
@@ -578,6 +611,7 @@ export function DeckEditor({ deckId }: { deckId: string }) {
             </div>
           )}
         </div>
+        )}
         {fmt.brackets && (
           <Tooltip
             content={
@@ -617,6 +651,62 @@ export function DeckEditor({ deckId }: { deckId: string }) {
             </div>
           </Tooltip>
         )}
+        {cyber && cyberStats ? (
+          <div className="deckStat deckStatAnalytics deckStatCyber">
+            <div className="deckStatRow deckStatTypesRow">
+              <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="deckStatLabel">
+                {t('dbRamBudget')}
+              </Text>
+              <span className="cyberChipRow">
+                {cyberStats.ramBudget.length === 0 ? (
+                  <Text as="span" size={Size.Small} tone={TextTone.Subtle} mono>
+                    —
+                  </Text>
+                ) : (
+                  cyberStats.ramBudget.map((b) => (
+                    <span key={b.color} className="cyberChip" title={`${b.color}: ${b.ram} RAM`}>
+                      <span className="cyberDot" style={{ background: cyberColorHex(b.color) }} aria-hidden />
+                      <Text as="span" size={Size.XSmall} mono>
+                        {b.ram}
+                      </Text>
+                    </span>
+                  ))
+                )}
+              </span>
+            </div>
+            <div className="deckStatRow deckStatTypesRow">
+              <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="deckStatLabel">
+                {t('dbColors')}
+              </Text>
+              <span className="cyberChipRow">
+                {cyberStats.colorCounts.map((c) => (
+                  <span key={c.color} className="cyberChip" title={`${c.color}: ${c.count}`}>
+                    <span className="cyberDot" style={{ background: cyberColorHex(c.color) }} aria-hidden />
+                    <Text as="span" size={Size.XSmall} tone={TextTone.Muted} mono>
+                      {c.count}
+                    </Text>
+                  </span>
+                ))}
+              </span>
+            </div>
+            <div className="deckStatRow">
+              <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="deckStatLabel">
+                {t('dbAvgCost')}
+              </Text>
+              <Text as="span" size={Size.Small} mono>
+                {cyberStats.avgCost.toFixed(1)}
+              </Text>
+            </div>
+            <div className="deckStatRow">
+              <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="deckStatLabel">
+                {t('dbAvgPower')}
+              </Text>
+              <Text as="span" size={Size.Small} mono>
+                {cyberStats.avgPower.toFixed(1)}
+              </Text>
+            </div>
+          </div>
+        ) : (
         <div className="deckStat deckStatAnalytics">
           <div className="deckStatRow">
             <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="deckStatLabel">
@@ -663,15 +753,56 @@ export function DeckEditor({ deckId }: { deckId: string }) {
             </span>
           </div>
         </div>
+        )}
       </div>
       </header>
 
       {/* the search bar spans the page, right above the list */}
       <div className="deckSearchBar">
-        <CardSearch onAdd={addCard} onSetCommander={setCommander} allowCommander={fmt.hasCommander} />
+        {cyber ? (
+          <CyberpunkCardSearch onAdd={addCyberCard} />
+        ) : (
+          <CardSearch onAdd={addCard} onSetCommander={setCommander} allowCommander={fmt.hasCommander} />
+        )}
       </div>
 
       <div className="deckList">
+          {cyber && cyberStats ? (
+            /* Cyberpunk: Legends anchor group, then mains grouped by printed type
+               (Unit / Gear / Program …) instead of the MTG card-type buckets. */
+            <>
+              {cyberStats.legends.length > 0 && (
+                <DeckGroup title={t('dbLegends')} count={cyberStats.legendCount} icon={<Crown size={13} />}>
+                  <CardGrid
+                    game={deck?.game}
+                    cards={cyberStats.legends}
+                    violations={derived.ruleWarnings}
+                    foil
+                    onQuantity={changeQuantity}
+                    onRemove={removeCard}
+                    onHover={showPreview}
+                    onLeave={hidePreview}
+                    onArt={openArtPicker}
+                  />
+                </DeckGroup>
+              )}
+              {cyberStats.groups.map((group) => (
+                <DeckGroup key={group.type} title={group.type} count={group.count} icon={cyberTypeIcon(group.type)}>
+                  <CardGrid
+                    game={deck?.game}
+                    cards={group.cards}
+                    violations={derived.ruleWarnings}
+                    onQuantity={changeQuantity}
+                    onRemove={removeCard}
+                    onHover={showPreview}
+                    onLeave={hidePreview}
+                    onArt={openArtPicker}
+                  />
+                </DeckGroup>
+              ))}
+            </>
+          ) : (
+            <>
           {derived.fmt.hasCommander && (
             <DeckGroup title={t('dbCommander')} icon={<Crown size={13} />}>
               {derived.commanderCards.length === 0 ? (
@@ -680,6 +811,7 @@ export function DeckEditor({ deckId }: { deckId: string }) {
                 </Text>
               ) : (
                 <CardGrid
+                  game={deck?.game}
                   cards={derived.commanderCards}
                   violations={derived.ruleWarnings}
                   foil
@@ -700,6 +832,7 @@ export function DeckEditor({ deckId }: { deckId: string }) {
             return (
               <DeckGroup key={bucket} title={t(TYPE_LABEL[bucket])} count={count} icon={TYPE_ICON[bucket]}>
                 <CardGrid
+                  game={deck?.game}
                   cards={cards}
                   violations={derived.ruleWarnings}
                   onQuantity={changeQuantity}
@@ -711,10 +844,13 @@ export function DeckEditor({ deckId }: { deckId: string }) {
               </DeckGroup>
             );
           })}
+            </>
+          )}
 
           {derived.sideCards.length > 0 && (
             <DeckGroup title={t('dbSide')} count={derived.sideCards.reduce((sum, c) => sum + c.quantity, 0)}>
               <CardGrid
+                game={deck?.game}
                 cards={derived.sideCards}
                 violations={derived.ruleWarnings}
                 onQuantity={changeQuantity}
@@ -776,7 +912,7 @@ export function DeckEditor({ deckId }: { deckId: string }) {
             transition={{ duration: 0.14, ease: 'easeOut' }}
             style={{ left: preview.x, top: preview.y }}
           >
-            <GameCard name={preview.name} imageUrl={cardImage(preview.scryfallId)} width={PREVIEW_WIDTH} tilt={0} />
+            <GameCard name={preview.name} imageUrl={resolveCardImage(deck?.game, preview.scryfallId)} width={PREVIEW_WIDTH} tilt={0} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -846,6 +982,7 @@ function CardGrid({
   cards,
   violations,
   foil,
+  game,
   onQuantity,
   onRemove,
   onHover,
@@ -855,6 +992,7 @@ function CardGrid({
   cards: DeckCard[];
   violations: Set<string>;
   foil?: boolean;
+  game?: string;
   onQuantity: (card: DeckCard, delta: number) => void;
   onRemove: (card: DeckCard) => void;
   onHover: (card: DeckCard) => (event: PointerEvent<HTMLElement>) => void;
@@ -869,6 +1007,7 @@ function CardGrid({
             key={`${card.board}-${card.scryfallId}`}
             card={card}
             foil={foil}
+            game={game}
             warns={violations.has(card.scryfallId)}
             onQuantity={onQuantity}
             onRemove={onRemove}
@@ -886,6 +1025,7 @@ function CardCell({
   card,
   foil,
   warns,
+  game,
   onQuantity,
   onRemove,
   onHover,
@@ -895,6 +1035,7 @@ function CardCell({
   card: DeckCard;
   foil?: boolean;
   warns: boolean;
+  game?: string;
   onQuantity: (card: DeckCard, delta: number) => void;
   onRemove: (card: DeckCard) => void;
   onHover: (card: DeckCard) => (event: PointerEvent<HTMLElement>) => void;
@@ -929,7 +1070,7 @@ function CardCell({
     >
       <GameCard
         name={card.name}
-        imageUrl={cardImage(card.scryfallId)}
+        imageUrl={resolveCardImage(game, card.scryfallId)}
         fluid
         foil={foil}
         tilt={5}

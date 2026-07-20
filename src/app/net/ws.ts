@@ -13,6 +13,8 @@ export type ClientMessage =
   | { type: 'room.leave' }
   | { type: 'room.start' }
   | { type: 'playmat.set'; id?: string }
+  | { type: 'cardback.set'; id?: string }
+  | { type: 'auto.set'; untap: boolean; draw: boolean }
   | { type: 'chat.send'; text: string }
   | { type: 'invite.send'; toUserId: string; roomId: string }
   | { type: 'game.action'; action: GameAction | GameActionV2 }

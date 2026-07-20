@@ -26,6 +26,8 @@ import { useGame } from '../state/gameStore.ts';
 import * as api from '../net/api.ts';
 import * as ws from '../net/ws.ts';
 import type { MatchRow, MyRoom } from '../net/types.ts';
+import { GAME_LIST } from '../data/games.ts';
+import { GameTag, GameBadge } from '../components/GameTag.tsx';
 import './play.css';
 
 /**
@@ -72,6 +74,7 @@ export function PlayPage() {
   const [tableName, setTableName] = useState('');
   const [seats, setSeats] = useState('4');
   const [persistent, setPersistent] = useState(true);
+  const [game, setGame] = useState('mtg');
   const [deckId, setDeckId] = useState<string>('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -80,7 +83,10 @@ export function PlayPage() {
   const [confirmClose, setConfirmClose] = useState<MyRoom | null>(null);
   const [closing, setClosing] = useState(false);
 
-  const chosenDeck = deckId || decks[0]?.id || '';
+  // Only decks for the chosen game are eligible; if the current pick belongs to
+  // another game (or none), fall back to the first deck of this game.
+  const gameDecks = decks.filter((deck) => (deck.game || 'mtg') === game);
+  const chosenDeck = (deckId && gameDecks.some((deck) => deck.id === deckId) ? deckId : gameDecks[0]?.id) || '';
 
   const refreshRooms = useCallback(async () => {
     try {
@@ -125,6 +131,7 @@ export function PlayPage() {
         tableName || `${t('playTitle')} - ${new Date().toLocaleTimeString()}`,
         Number(seats),
         persistent,
+        { game },
       );
       join(room.roomId, chosenDeck || undefined);
       void refreshRooms();
@@ -205,7 +212,9 @@ export function PlayPage() {
           <div className="myTableList">
             {(rooms ?? []).map((room) => (
               <Card key={room.roomId} elevation={2} className="myTableRow">
-                <div className="myTableInfo">
+                <div className="myTableLead">
+                  <GameBadge game={room.game} />
+                  <div className="myTableInfo">
                   <div className="myTableTitle">
                     <Text as="span" className="myTableName">
                       {room.name}
@@ -238,6 +247,7 @@ export function PlayPage() {
                     <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
                       {relativeUpdatedAt(room.updatedAt, locale)}
                     </Text>
+                  </div>
                   </div>
                 </div>
                 <div className="myTableActions">
@@ -277,9 +287,9 @@ export function PlayPage() {
               return (
                 <div key={`${match.playedAt}-${index}`} className="matchRow">
                   <div className="matchRowMain">
-                    <Text as="span" className="matchName">
-                      {match.name || t('playTitle')}
-                    </Text>
+                    <span className="matchName">
+                      <GameTag game={match.game} showName={false} /> {match.name || t('playTitle')}
+                    </span>
                     <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="matchWith">
                       {others.length > 0 ? `${t('plWith')} ${others.join(', ')}` : t('plSolo')}
                     </Text>
@@ -299,14 +309,29 @@ export function PlayPage() {
           <div className="playCardIcon" aria-hidden>
             <Swords size={22} />
           </div>
-          <Heading level={3} noMargin>
-            {t('playNewTable')}
-          </Heading>
+          <div className="playCardHead">
+            <Heading level={3} noMargin>
+              {t('playNewTable')}
+            </Heading>
+            <GameTag game={game} />
+          </div>
           <div className="control">
             <Text as="span" size={Size.Small} tone={TextTone.Muted}>
               {t('playTableName')}
             </Text>
             <Input value={tableName} onChange={(event) => setTableName(event.target.value)} placeholder="Friday pod" />
+          </div>
+          <div className="control">
+            <Text as="span" size={Size.Small} tone={TextTone.Muted}>
+              {t('playGame')}
+            </Text>
+            <SegmentedControl
+              fullWidth
+              aria-label={t('playGame')}
+              value={game}
+              onValueChange={setGame}
+              options={GAME_LIST.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') }))}
+            />
           </div>
           <div className="control">
             <Text as="span" size={Size.Small} tone={TextTone.Muted}>
@@ -324,8 +349,8 @@ export function PlayPage() {
               {t('plPersistentHint')}
             </Text>
           </div>
-          <DeckPicker value={chosenDeck} onChange={setDeckId} />
-          <Button onClick={create} loading={busy} disabled={decks.length === 0}>
+          <DeckPicker value={chosenDeck} onChange={setDeckId} game={game} />
+          <Button onClick={create} loading={busy} disabled={gameDecks.length === 0}>
             {t('playCreate')}
           </Button>
         </Card>
@@ -370,9 +395,11 @@ export function PlayPage() {
   );
 }
 
-function DeckPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+function DeckPicker({ value, onChange, game }: { value: string; onChange: (id: string) => void; game?: string }) {
   const t = useT();
   const decks = useApp((state) => state.decks);
+  // When a game is specified (create form), only that game's decks are eligible.
+  const eligible = game ? decks.filter((deck) => (deck.game || 'mtg') === game) : decks;
   return (
     <div className="control">
       <Text as="span" size={Size.Small} tone={TextTone.Muted}>
@@ -381,8 +408,8 @@ function DeckPicker({ value, onChange }: { value: string; onChange: (id: string)
       <Select
         value={value}
         onValueChange={onChange}
-        options={decks.map((deck) => ({ value: deck.id, label: deck.name }))}
-        placeholder={t('playPickDeck')}
+        options={eligible.map((deck) => ({ value: deck.id, label: deck.name }))}
+        placeholder={eligible.length === 0 ? t('playNoDecksForGame') : t('playPickDeck')}
       />
     </div>
   );

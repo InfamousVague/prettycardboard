@@ -12,25 +12,22 @@ Run it locally with `cargo run` from `server/` (listens on `PC_PORT`, default
 
 | File | Responsibility |
 |------|----------------|
-| `main.rs` | Process entry: builds the `App` state, opens the DB, restores persisted rooms, mounts the axum router, and spawns the background tasks (`rooms::sweeper`, `bot::scheduler`). |
+| `main.rs` | Process entry: builds the `App` state, opens the DB, restores persisted rooms, mounts the axum router, and spawns the background `rooms::sweeper`. |
 | `api.rs` | The REST surface: register/login, decks, friends, rooms list/create/delete, match history, endorsements. Token auth middleware lives here. |
-| `ws.rs` | The WebSocket surface and the **fan-out pipeline**. One connection per socket; `dispatch_action` is the single choke point every game action (human or bot) flows through. Room membership, presence, join/leave/spectate, and message scoping live here. |
-| `game.rs` | The **rules engine**: the `Action` enum (the whole gameplay protocol), `apply()` (the authoritative dispatcher), and the shared card/zone/turn helpers. |
-| `game/combat.rs` | Combat v3 resolution: turning a locked combat into damage, deaths, and the `combat.results` broadcast. |
+| `ws.rs` | The WebSocket surface and the **fan-out pipeline**. One connection per socket; `dispatch_action` is the single choke point every game action flows through. Room membership, presence, join/leave/spectate, and message scoping live here. |
+| `game.rs` | The **rules engine**: the `Action` enum (the whole gameplay protocol), `apply()` (the authoritative dispatcher), combat resolution, and the shared card/zone/turn helpers. |
 | `game/turns.rs` | Turn order, the per-seat turn clock, and auto-turn (untap + draw) bookkeeping. |
-| `bot.rs` | The heuristic AI: an 800 ms scheduler that drives each seated bot through the *same* `dispatch_action` pipeline humans use. Gated behind a client dev toggle; see below. |
 | `rooms.rs` | The `Room`/`Player`/`Card`/`Combat` data model, per-viewer state filtering (`state_for`), persistence (write-behind to SQLite), and the room-expiry sweeper. |
 | `db.rs` | SQLite schema + queries: users, decks, friends, rooms, match history, endorsements. |
 
 ## The action pipeline (the thing to understand first)
 
-Every gameplay mutation — a human dragging a card, a bot attacking, an
+Every gameplay mutation — dragging a card, declaring an attacker, an
 auto-pass — goes through **one** function: `ws::dispatch_action`.
 
 ```
-client WS msg ─▶ ws::game_action ─┐
-bot scheduler  ─▶ dispatch_action ─┼─▶ game::apply(room, actor, action) ─▶ Applied
-maintain_room  ─▶ dispatch_action ─┘                                          │
+client WS msg ─▶ ws::game_action ─▶ dispatch_action ─▶ game::apply(room, actor, action) ─▶ Applied
+                                                                              │
                                                                               ▼
                               ws::dispatch_action fans `Applied` out to viewers
 ```
@@ -84,27 +81,6 @@ Invariant: a **locked** combat never stashes `room.last_combat` (it resolves
 server-side); only the legacy un-locked flow does. Breaking this double-applies
 damage.
 
-## Bots (AI opponents)
-
-`bot.rs` runs one `tokio` task for the whole server. Every ~800 ms it, per
-bot-containing room:
-
-1. `maintain_room` — eliminates players at ≤0 life, force-resolves a locked
-   combat whose defender won't answer, and auto-passes an offline seat's turn.
-   This is what lets a table finish (or keep moving) no matter who is online.
-2. Lets each bot `decide()` an action and dispatches it. With a live human at
-   the table a bot takes **one** action per tick (watchable pace); in a
-   bots-only remainder it may play its whole turn in one tick so the match
-   finishes quickly.
-
-Bots go through the identical `dispatch_action` path as humans, so there is no
-second rules implementation to keep in sync.
-
-**Gating:** the feature is server-resident but hidden. The client only exposes
-the "Add AI opponent" control when the `aiOpponents` developer preference is on
-(Settings → Developer). The server always accepts `bot.add`/`bot.remove`; if no
-client ever sends them, no bot is ever seated and the scheduler idles.
-
 ## Testing
 
 `playtest/` is a Node harness that speaks the real protocol over WebSocket. See
@@ -113,7 +89,6 @@ client ever sends them, no bot is ever seated and the scheduler idles.
 ```
 cd playtest
 node run-all.js          # seed + commander-pod + standard-duel + chaos-monkey + locked-combat
-npm run aimatch          # a full autonomous bot match (dev AI feature)
 ```
 
 Point it at a non-default server with `PC_BASE=http://127.0.0.1:8798`.

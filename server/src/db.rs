@@ -33,6 +33,9 @@ pub struct DeckRow {
     pub updated_at: i64,
     /// Scryfall id of the deck's chosen header/cover card, when customized.
     pub header: Option<String>,
+    /// Which card game this deck belongs to ("mtg" | "cyberpunk"). Pre-multigame
+    /// decks read back as "mtg".
+    pub game: String,
 }
 
 impl DeckRow {
@@ -65,7 +68,8 @@ CREATE TABLE IF NOT EXISTS decks(
     name TEXT NOT NULL,
     format TEXT NOT NULL,
     cards_json TEXT NOT NULL,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    game TEXT
 );
 CREATE TABLE IF NOT EXISTS rooms(
     id TEXT PRIMARY KEY,
@@ -79,6 +83,22 @@ CREATE TABLE IF NOT EXISTS rooms(
     created_at INTEGER,
     updated_at INTEGER
 );
+CREATE TABLE IF NOT EXISTS room_history(
+    room_id TEXT NOT NULL,
+    hid INTEGER NOT NULL,
+    actor TEXT,
+    label TEXT,
+    seq INTEGER,
+    ts INTEGER,
+    card_json TEXT,
+    state_json TEXT NOT NULL,
+    PRIMARY KEY(room_id, hid)
+);
+CREATE INDEX IF NOT EXISTS idx_room_history ON room_history(room_id, hid);
+CREATE TABLE IF NOT EXISTS room_history_meta(
+    room_id TEXT PRIMARY KEY,
+    cursor_hid INTEGER
+);
 CREATE TABLE IF NOT EXISTS match_history(
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -87,6 +107,7 @@ CREATE TABLE IF NOT EXISTS match_history(
     format TEXT,
     players_json TEXT,
     seats INTEGER,
+    game TEXT,
     played_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_match_user ON match_history(user_id, played_at);
@@ -144,6 +165,8 @@ pub fn open(path: &std::path::Path) -> Connection {
     // (they keep working via their stored token but cannot log back in).
     let _ = conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT", []);
     let _ = conn.execute("ALTER TABLE decks ADD COLUMN header TEXT", []);
+    let _ = conn.execute("ALTER TABLE decks ADD COLUMN game TEXT", []);
+    let _ = conn.execute("ALTER TABLE match_history ADD COLUMN game TEXT", []);
     conn
 }
 
@@ -217,12 +240,13 @@ pub fn match_record(
     format: &str,
     players_json: &str,
     seats: i64,
+    game: &str,
     played_at: i64,
 ) {
     let _ = conn.execute(
-        "INSERT OR IGNORE INTO match_history(id, user_id, room_id, room_name, format, players_json, seats, played_at)
-         VALUES(?,?,?,?,?,?,?,?)",
-        params![id, user_id, room_id, room_name, format, players_json, seats, played_at],
+        "INSERT OR IGNORE INTO match_history(id, user_id, room_id, room_name, format, players_json, seats, game, played_at)
+         VALUES(?,?,?,?,?,?,?,?,?)",
+        params![id, user_id, room_id, room_name, format, players_json, seats, game, played_at],
     );
 }
 
@@ -230,7 +254,7 @@ pub fn match_record(
 pub fn matches_for(conn: &Connection, user_id: &str) -> Vec<serde_json::Value> {
     let mut stmt = conn
         .prepare(
-            "SELECT room_name, format, players_json, seats, played_at
+            "SELECT room_name, format, players_json, seats, played_at, game
              FROM match_history WHERE user_id = ? ORDER BY played_at DESC LIMIT 50",
         )
         .unwrap();
@@ -245,6 +269,7 @@ pub fn matches_for(conn: &Connection, user_id: &str) -> Vec<serde_json::Value> {
                 "players": players,
                 "seats": row.get::<_, Option<i64>>(3)?,
                 "playedAt": row.get::<_, i64>(4)?,
+                "game": row.get::<_, Option<String>>(5)?.unwrap_or_else(|| "mtg".to_string()),
             }))
         })
         .unwrap();
@@ -587,13 +612,14 @@ fn row_deck(row: &rusqlite::Row) -> rusqlite::Result<DeckRow> {
         cards_json: row.get(4)?,
         updated_at: row.get(5)?,
         header: row.get(6)?,
+        game: row.get::<_, Option<String>>(7)?.unwrap_or_else(|| "mtg".to_string()),
     })
 }
 
 pub fn decks_for(conn: &Connection, user_id: &str) -> Vec<DeckRow> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, user_id, name, format, cards_json, updated_at, header
+            "SELECT id, user_id, name, format, cards_json, updated_at, header, game
              FROM decks WHERE user_id = ? ORDER BY updated_at DESC",
         )
         .unwrap();
@@ -605,7 +631,7 @@ pub fn decks_for(conn: &Connection, user_id: &str) -> Vec<DeckRow> {
 
 pub fn deck_get(conn: &Connection, id: &str) -> Option<DeckRow> {
     conn.query_row(
-        "SELECT id, user_id, name, format, cards_json, updated_at, header FROM decks WHERE id = ?",
+        "SELECT id, user_id, name, format, cards_json, updated_at, header, game FROM decks WHERE id = ?",
         [id],
         row_deck,
     )
@@ -615,8 +641,8 @@ pub fn deck_get(conn: &Connection, id: &str) -> Option<DeckRow> {
 
 pub fn deck_insert(conn: &Connection, row: &DeckRow) {
     conn.execute(
-        "INSERT INTO decks(id, user_id, name, format, cards_json, updated_at, header) VALUES(?,?,?,?,?,?,?)",
-        params![row.id, row.user_id, row.name, row.format, row.cards_json, row.updated_at, row.header],
+        "INSERT INTO decks(id, user_id, name, format, cards_json, updated_at, header, game) VALUES(?,?,?,?,?,?,?,?)",
+        params![row.id, row.user_id, row.name, row.format, row.cards_json, row.updated_at, row.header, row.game],
     )
     .unwrap();
 }
@@ -690,4 +716,111 @@ pub fn rooms_load(conn: &Connection) -> Vec<(String, Option<String>)> {
 
 pub fn room_delete(conn: &Connection, id: &str) {
     conn.execute("DELETE FROM rooms WHERE id = ?", [id]).unwrap();
+    conn.execute("DELETE FROM room_history WHERE room_id = ?", [id]).unwrap();
+    conn.execute("DELETE FROM room_history_meta WHERE room_id = ?", [id]).unwrap();
+}
+
+// --- timeline (undo/redo/replay) persistence ---
+
+/// One `room_history` row: a timeline snapshot's columns. `state_json` is the
+/// full serialized game state at that point (the Room's own history is
+/// serde-skipped, so this never recurses).
+pub struct HistoryRow {
+    pub hid: u64,
+    pub actor: String,
+    pub label: String,
+    pub seq: u64,
+    pub ts: i64,
+    pub card_json: Option<String>,
+    pub state_json: String,
+}
+
+/// The timeline changes for one room to apply in a single flush: rows to insert
+/// (new snapshots), hids to delete (drained/truncated/cleared), and the current
+/// cursor position (as a hid, or -1 for an empty timeline).
+pub struct HistoryDelta {
+    pub room_id: String,
+    pub removed: Vec<u64>,
+    pub inserts: Vec<HistoryRow>,
+    pub cursor_hid: i64,
+}
+
+/// Apply a room's timeline delta: delete dropped rows, insert new snapshots,
+/// record the cursor. `removed` and `inserts` are disjoint by construction (new
+/// hids are always greater than any dropped one), so ordering is immaterial.
+pub fn history_apply(conn: &Connection, delta: &HistoryDelta) {
+    for hid in &delta.removed {
+        conn.execute(
+            "DELETE FROM room_history WHERE room_id = ? AND hid = ?",
+            params![delta.room_id, *hid as i64],
+        )
+        .unwrap();
+    }
+    for row in &delta.inserts {
+        conn.execute(
+            "INSERT OR REPLACE INTO room_history(room_id, hid, actor, label, seq, ts, card_json, state_json)
+             VALUES(?,?,?,?,?,?,?,?)",
+            params![
+                delta.room_id,
+                row.hid as i64,
+                row.actor,
+                row.label,
+                row.seq as i64,
+                row.ts,
+                row.card_json,
+                row.state_json
+            ],
+        )
+        .unwrap();
+    }
+    conn.execute(
+        "INSERT OR REPLACE INTO room_history_meta(room_id, cursor_hid) VALUES(?,?)",
+        params![delta.room_id, delta.cursor_hid],
+    )
+    .unwrap();
+}
+
+/// Load a room's persisted timeline, ordered oldest-first (hids are monotonic,
+/// so `ORDER BY hid` reproduces the in-memory order exactly). Returns the
+/// snapshots plus the cursor index resolved from the stored cursor_hid (falling
+/// back to the newest frame if the cursor is missing).
+pub fn history_load(conn: &Connection, room_id: &str) -> (Vec<crate::rooms::Snapshot>, usize) {
+    let mut stmt = conn
+        .prepare(
+            "SELECT hid, actor, label, seq, ts, card_json, state_json
+             FROM room_history WHERE room_id = ? ORDER BY hid",
+        )
+        .unwrap();
+    let snaps: Vec<crate::rooms::Snapshot> = stmt
+        .query_map([room_id], |r| {
+            let card_json: Option<String> = r.get(5)?;
+            Ok(crate::rooms::Snapshot {
+                hid: r.get::<_, i64>(0)? as u64,
+                actor: r.get(1)?,
+                label: r.get(2)?,
+                seq: r.get::<_, i64>(3)? as u64,
+                ts: r.get(4)?,
+                card: card_json.and_then(|s| serde_json::from_str(&s).ok()),
+                json: r.get(6)?,
+            })
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect();
+    let cursor_hid: Option<i64> = conn
+        .query_row(
+            "SELECT cursor_hid FROM room_history_meta WHERE room_id = ?",
+            [room_id],
+            |r| r.get(0),
+        )
+        .optional()
+        .unwrap();
+    let cursor = match cursor_hid {
+        Some(h) if h >= 0 => snaps
+            .iter()
+            .position(|s| s.hid as i64 == h)
+            .unwrap_or_else(|| snaps.len().saturating_sub(1)),
+        _ => snaps.len().saturating_sub(1),
+    };
+    (snaps, cursor)
 }

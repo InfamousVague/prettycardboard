@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import {
   Avatar,
   HapticsProvider,
@@ -7,6 +7,7 @@ import {
   NavBar,
   NavBarItem,
   Pill,
+  Spinner,
   TitleBar,
   ToastProvider,
   VisualFeedbackProvider,
@@ -29,22 +30,28 @@ import { useUi } from './state/uiStore.ts';
 import { joinCodeFromHash, rememberPendingJoin } from './data/pendingJoin.ts';
 import { motion, MotionConfig } from 'motion/react';
 import { CardPopupProvider } from './components/CardPopup.tsx';
+import { HoverCardLayer } from './components/HoverCard.tsx';
 import { Notifier } from './components/Notifier.tsx';
 import { InvitePopup } from './components/InvitePopup.tsx';
-import { Spotlight } from './components/Spotlight.tsx';
-import { HomePage } from './pages/HomePage.tsx';
-import { OnboardingPage } from './pages/OnboardingPage.tsx';
-import { PlayPage } from './pages/PlayPage.tsx';
-import { DecksPage } from './pages/DecksPage.tsx';
-import { BrowsePage } from './pages/BrowsePage.tsx';
-import { FriendsPage } from './pages/FriendsPage.tsx';
-import { ProfilePage } from './pages/ProfilePage.tsx';
-import { TablePage } from './pages/TablePage.tsx';
-import { JoinTablePage } from './pages/JoinTablePage.tsx';
-import { DownloadPage } from './pages/DownloadPage.tsx';
 import { DownloadBanner } from './components/DownloadBanner.tsx';
-import { SettingsModal } from './SettingsModal.tsx';
-import { CustomizeModal } from './CustomizeModal.tsx';
+
+// Route pages, the whole table engine, the deck builder, the modals, and the
+// command palette load on first use rather than up front - so the initial
+// payload is just the shell. React.lazy wants a default export; each of these
+// modules exports a named component, so the loader adapts it.
+const Spotlight = lazy(() => import('./components/Spotlight.tsx').then((m) => ({ default: m.Spotlight })));
+const HomePage = lazy(() => import('./pages/HomePage.tsx').then((m) => ({ default: m.HomePage })));
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage.tsx').then((m) => ({ default: m.OnboardingPage })));
+const PlayPage = lazy(() => import('./pages/PlayPage.tsx').then((m) => ({ default: m.PlayPage })));
+const DecksPage = lazy(() => import('./pages/DecksPage.tsx').then((m) => ({ default: m.DecksPage })));
+const BrowsePage = lazy(() => import('./pages/BrowsePage.tsx').then((m) => ({ default: m.BrowsePage })));
+const FriendsPage = lazy(() => import('./pages/FriendsPage.tsx').then((m) => ({ default: m.FriendsPage })));
+const ProfilePage = lazy(() => import('./pages/ProfilePage.tsx').then((m) => ({ default: m.ProfilePage })));
+const TablePage = lazy(() => import('./pages/TablePage.tsx').then((m) => ({ default: m.TablePage })));
+const JoinTablePage = lazy(() => import('./pages/JoinTablePage.tsx').then((m) => ({ default: m.JoinTablePage })));
+const DownloadPage = lazy(() => import('./pages/DownloadPage.tsx').then((m) => ({ default: m.DownloadPage })));
+const SettingsModal = lazy(() => import('./SettingsModal.tsx').then((m) => ({ default: m.SettingsModal })));
+const CustomizeModal = lazy(() => import('./CustomizeModal.tsx').then((m) => ({ default: m.CustomizeModal })));
 
 /** One-time flag: the customize modal greets the player on their first launch. */
 const CUSTOMIZED_KEY = 'pc.customized';
@@ -59,6 +66,16 @@ const CUSTOMIZED_KEY = 'pc.customized';
 // Window chrome (title bar + traffic lights) only makes sense as a desktop
 // window, so it is off in the browser and on under Tauri.
 const DESKTOP = isTauri();
+
+/** Suspense fallback for a lazily-loaded route: a centered spinner that fills
+ *  the content area so the shell never collapses while a chunk streams in. */
+function PageFallback() {
+  return (
+    <div className="pageFallback" role="status" aria-live="polite">
+      <Spinner size="lg" />
+    </div>
+  );
+}
 
 const SIDEBAR_LABEL: Record<Route, 'sbPlayTables' | 'sbDecksLibrary' | 'sbBrowseCatalog' | 'sbFriendsPeople' | 'sbProfileYou'> = {
   home: 'sbPlayTables',
@@ -181,6 +198,13 @@ function Shell({
   // First launch opens the table-setup modal; afterwards it lives behind the
   // Customize rail button.
   const [customizeOpen, setCustomizeOpen] = useState(() => localStorage.getItem(CUSTOMIZED_KEY) == null);
+  // The modals are lazy: mount each only once it has been opened, then keep it
+  // mounted so its close animation can still play. Latching on a ref (rather
+  // than always rendering) is what actually defers loading the modal's chunk.
+  const settingsSeen = useRef(false);
+  const customizeSeen = useRef(false);
+  settingsSeen.current ||= settingsOpen;
+  customizeSeen.current ||= customizeOpen;
   const identity = useApp((state) => state.identity);
   const connected = useApp((state) => state.connected);
   const inRoom = useGame((state) => state.room !== null);
@@ -292,22 +316,30 @@ function Shell({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
           >
-            {page}
+            <Suspense fallback={<PageFallback />}>{page}</Suspense>
           </motion.div>
         </main>
       </div>
-      <SettingsModal
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        preferences={preferences}
-        onChange={onPreferencesChange}
-      />
-      <CustomizeModal
-        open={customizeOpen}
-        onClose={closeCustomize}
-        preferences={preferences}
-        onChange={onPreferencesChange}
-      />
+      {settingsSeen.current && (
+        <Suspense fallback={null}>
+          <SettingsModal
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            preferences={preferences}
+            onChange={onPreferencesChange}
+          />
+        </Suspense>
+      )}
+      {customizeSeen.current && (
+        <Suspense fallback={null}>
+          <CustomizeModal
+            open={customizeOpen}
+            onClose={closeCustomize}
+            preferences={preferences}
+            onChange={onPreferencesChange}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
@@ -364,13 +396,18 @@ export function App() {
               {!bootstrapped ? null : identity ? (
                 <>
                   <Shell preferences={preferences} onPreferencesChange={update} />
-                  <Spotlight />
+                  <Suspense fallback={null}>
+                    <Spotlight />
+                  </Suspense>
                   <Notifier />
                   <InvitePopup />
                 </>
               ) : (
-                <OnboardingPage desktop={DESKTOP} />
+                <Suspense fallback={<PageFallback />}>
+                  <OnboardingPage desktop={DESKTOP} />
+                </Suspense>
               )}
+              <HoverCardLayer />
             </CardPopupProvider>
           </ToastProvider>
         </VisualFeedbackProvider>

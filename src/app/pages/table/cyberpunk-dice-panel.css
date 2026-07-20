@@ -1,0 +1,76 @@
+/*
+ * Cyberpunk Gig/Fixer sidebar card (CyberpunkDicePanel.tsx). All app-theme
+ * tokens — no bespoke neon — so it sits with the other right-rail cards.
+ */
+
+.cpDicePanel {
+  background: var(--glacier-glass-regular);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  border-radius: var(--glacier-radius-xl);
+  padding: var(--glacier-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+}
+
+.cpDiceHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.cpDiceTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-text);
+}
+
+.cpGigTray {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  min-height: 2rem;
+}
+
+.cpFixer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+  padding-top: var(--glacier-space-2);
+  border-top: var(--glacier-hairline) solid var(--glacier-glass-border);
+}
+.cpFixerLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cpFixerDice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-1);
+}
+.cpFixerDie {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A stolen Gig die reads apart from your own rolls with a warm accent edge. */
+.cpDieStolen {
+  border-color: var(--glacier-accent) !important;
+  box-shadow: inset 0 0 0 1px var(--glacier-accent);
+}
+
+.cpSteal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+  padding-top: var(--glacier-space-2);
+  border-top: var(--glacier-hairline) solid var(--glacier-glass-border);
+}
+.cpStealTargets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-1);
+}

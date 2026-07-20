@@ -1,4 +1,4 @@
-use crate::rooms::{Attacker, Block, Card, Combat, Mull, PendingCmd, Player, Room, StackEntry};
+use crate::rooms::{Attacker, Block, Card, Combat, GigDie, Mull, PendingCmd, Player, Room, StackEntry};
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -40,6 +40,16 @@ impl Zone {
 }
 
 const PHASES: [&str; 7] = ["upkeep", "main1", "attack", "block", "damage", "main2", "end"];
+
+/// Opening-hand size per game: Cyberpunk deals 6 (cyberpunktcg.com), Magic 7.
+pub fn opening_hand(game: &str) -> usize {
+    if game == "cyberpunk" {
+        6
+    } else {
+        7
+    }
+}
+
 pub const CMD_CHOICE_MS: i64 = 30_000;
 /// Legacy single-slot undo window. The live undo path is now the snapshot
 /// timeline (see rooms::Room history/cursor); this and apply_undo below are
@@ -94,6 +104,21 @@ pub enum Action {
     TokenClone { iid: String, x: f64, y: f64 },
     #[serde(rename = "draw")]
     Draw { count: usize },
+    /// Play the top card of the library straight onto the battlefield at (x,y),
+    /// face up — the drag-from-deck gesture. The client can't name the top of a
+    /// hidden library, so the server pops it.
+    #[serde(rename = "library.play", rename_all = "camelCase")]
+    LibraryPlay { x: f64, y: f64 },
+    /// Cyberpunk: roll a Fixer die (d`sides`) into your Gig area.
+    #[serde(rename = "gig.roll")]
+    GigRoll { sides: u8 },
+    /// Cyberpunk: send a rolled Gig die back to the Fixer.
+    #[serde(rename = "gig.return")]
+    GigReturn { sides: u8 },
+    /// Cyberpunk: steal a rival's highest rolled Gig die into your own Gig area
+    /// (the +1-per-10-Power mechanic). Lets your Gig count exceed six.
+    #[serde(rename = "gig.steal", rename_all = "camelCase")]
+    GigSteal { from: String },
     #[serde(rename = "shuffle")]
     Shuffle,
     #[serde(rename = "mulligan")]
@@ -957,6 +982,106 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             resync = true;
         }
 
+        Action::LibraryPlay { x, y } => {
+            let p = &mut room.players[pi];
+            if p.library.is_empty() {
+                return Err(("empty_library", "no cards left in the library".to_string()));
+            }
+            let mut card = p.library.remove(0);
+            card.x = x.clamp(0.0, 1.0);
+            card.y = y.clamp(0.0, 1.0);
+            card.face_down = false;
+            card.tapped = false;
+            card.attached_to = None;
+            p.peeked.clear();
+            let name = card.name.clone();
+            p.battlefield.push(card);
+            log = format!("{username} plays {name} from the top of their library");
+            resync = true;
+        }
+
+        Action::GigRoll { sides } => {
+            use rand::Rng;
+            let roll = rand::rng().random_range(1..=sides.max(1));
+            let p = &mut room.players[pi];
+            if let Some(die) = p.gig_dice.iter_mut().find(|d| d.sides == sides) {
+                die.value = roll;
+                die.in_gig = true;
+            }
+            log = format!("{username} rolls a d{sides} into their Gig area: {roll}");
+            resync = true;
+        }
+
+        Action::GigReturn { sides } => {
+            let p = &mut room.players[pi];
+            // A stolen die returned goes back to its rival's Gig; an own die
+            // returned drops back into the Fixer. Prefer returning a stolen copy
+            // (it's the reversible one) when sides collide.
+            if let Some(idx) = p
+                .gig_dice
+                .iter()
+                .position(|d| d.sides == sides && d.stolen)
+                .or_else(|| p.gig_dice.iter().position(|d| d.sides == sides))
+            {
+                if p.gig_dice[idx].stolen {
+                    let die = p.gig_dice.remove(idx);
+                    // Give it back to the original owner's Gig, if they're still seated.
+                    if let Some(from) = die.from.as_deref() {
+                        if let Some(ti) = room.players.iter().position(|q| q.username == from) {
+                            room.players[ti].gig_dice.push(GigDie {
+                                sides: die.sides,
+                                value: die.value,
+                                in_gig: true,
+                                stolen: false,
+                                from: None,
+                            });
+                        }
+                    }
+                    log = format!("{username} returns the stolen d{sides}");
+                } else {
+                    let die = &mut p.gig_dice[idx];
+                    die.value = 0;
+                    die.in_gig = false;
+                    log = format!("{username} returns the d{sides} to the Fixer");
+                }
+            } else {
+                log = format!("{username} returns the d{sides} to the Fixer");
+            }
+            resync = true;
+        }
+
+        Action::GigSteal { from } => {
+            // Take the target's highest-value rolled die and move it into the
+            // actor's Gig as a stolen die (their Gig count can now pass six).
+            let taken = room
+                .players
+                .iter()
+                .position(|p| p.user_id == from)
+                .filter(|&ti| ti != pi)
+                .and_then(|ti| {
+                    let name = room.players[ti].username.clone();
+                    let t = &mut room.players[ti];
+                    t.gig_dice
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, d)| d.in_gig)
+                        .max_by_key(|(_, d)| d.value)
+                        .map(|(i, _)| i)
+                        .map(|idx| (t.gig_dice.remove(idx), name))
+                });
+            if let Some((mut die, target_name)) = taken {
+                let sides = die.sides;
+                die.in_gig = true;
+                die.stolen = true;
+                die.from = Some(target_name.clone());
+                room.players[pi].gig_dice.push(die);
+                log = format!("{username} steals a d{sides} from {target_name}'s Gig");
+            } else {
+                log = format!("{username} tries to steal a Gig die, but there's none to take");
+            }
+            resync = true;
+        }
+
         Action::Shuffle => {
             let p = &mut room.players[pi];
             p.library.shuffle(&mut rand::rng());
@@ -965,11 +1090,12 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
         }
 
         Action::Mulligan => {
+            let deal = opening_hand(&room.game);
             let p = &mut room.players[pi];
             let hand: Vec<Card> = p.hand.drain(..).collect();
             p.library.extend(hand);
             p.library.shuffle(&mut rand::rng());
-            let n = 7.min(p.library.len());
+            let n = deal.min(p.library.len());
             let drawn: Vec<Card> = p.library.drain(0..n).collect();
             p.hand_revealed = false;
             p.peeked.clear();
@@ -1538,6 +1664,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
 
         Action::MullTake => {
             let free_first = free_first_mulls(room);
+            let deal = opening_hand(&room.game);
             let p = &mut room.players[pi];
             let Some(m) = p.mulligan.clone() else {
                 return Err(("no_mulligan", "the game has not started".to_string()));
@@ -1548,7 +1675,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             let hand: Vec<Card> = p.hand.drain(..).collect();
             p.library.extend(hand);
             p.library.shuffle(&mut rand::rng());
-            let n = 7.min(p.library.len());
+            let n = deal.min(p.library.len());
             let drawn: Vec<Card> = p.library.drain(0..n).collect();
             p.hand_revealed = false;
             p.peeked.clear();
@@ -1651,8 +1778,9 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             if !room.restore_to(index) {
                 return Err(("bad_rewind", "that history is no longer available".to_string()));
             }
-            // Destructive: discard everyone's moves after this point.
-            room.history.truncate(index + 1);
+            // Destructive: discard everyone's moves after this point (and their
+            // persisted rows on the next flush).
+            room.hist_truncate_to(index + 1);
             log = format!("{username} rewinds the table");
             record = false;
             resync = true;

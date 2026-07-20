@@ -1,4 +1,4 @@
-import { PRECONS } from '../../data/cards.ts';
+import { PRECONS } from '../../data/precons.ts';
 import type { CardInst } from '../../net/types.ts';
 
 /**

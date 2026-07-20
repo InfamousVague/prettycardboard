@@ -326,24 +326,29 @@ pub async fn friend_remove(
 fn deck_summary(row: &db::DeckRow) -> Value {
     let cards = row.cards();
     let commander = cards.iter().find(|c| c.board == "commander");
-    // A customized header card wins the cover; the commander is the default.
-    let cover = row
+    // The cover card id: a customized header wins, else the anchor (commander /
+    // Legend), else the first card. MTG resolves it to a Scryfall scan here;
+    // Cyberpunk art is resolved client-side from the bundled catalog, so we send
+    // the id + game and leave coverImageUrl null.
+    let cover_id = row
         .header
-        .as_deref()
-        .map(rooms::scryfall_image_url)
-        .or_else(|| {
-            commander
-                .or_else(|| cards.first())
-                .map(|c| rooms::scryfall_image_url(&c.scryfall_id))
-        });
+        .clone()
+        .or_else(|| commander.or_else(|| cards.first()).map(|c| c.scryfall_id.clone()));
+    let cover = if row.game == "cyberpunk" {
+        None
+    } else {
+        cover_id.as_deref().map(rooms::scryfall_image_url)
+    };
     let count: u32 = cards.iter().map(|c| c.quantity).sum();
     json!({
         "id": row.id,
         "name": row.name,
         "format": row.format,
+        "game": row.game,
         "commander": commander.map(|c| c.name.clone()),
         "cardCount": count,
         "coverImageUrl": cover,
+        "coverCardId": cover_id,
         "updatedAt": iso8601(row.updated_at),
     })
 }
@@ -363,6 +368,9 @@ pub struct DeckBody {
     /// Scryfall id of the chosen header/cover card, if customized.
     #[serde(default)]
     header: Option<String>,
+    /// "mtg" (default) or "cyberpunk": which card game this deck is for.
+    #[serde(default)]
+    game: Option<String>,
 }
 
 pub async fn deck_create(
@@ -382,6 +390,7 @@ pub async fn deck_create(
         cards_json: serde_json::to_string(&body.cards).unwrap(),
         updated_at: now_ms(),
         header: body.header,
+        game: body.game.unwrap_or_else(|| "mtg".to_string()),
     };
     db::deck_insert(&app.db.lock().unwrap(), &row);
     // Multi-device sync: every connection (originator included) refreshes.
@@ -404,6 +413,7 @@ pub async fn deck_get(
         "id": row.id,
         "name": row.name,
         "format": row.format,
+        "game": row.game,
         "cards": row.cards(),
         "header": row.header,
     }))
@@ -528,6 +538,9 @@ pub struct RoomBody {
     /// first-draw-skip, and whether command-zone machinery is active.
     #[serde(default)]
     format: Option<String>,
+    /// "mtg" (default) or "cyberpunk": which card game this table plays.
+    #[serde(default)]
+    game: Option<String>,
 }
 
 pub async fn room_create(
@@ -538,7 +551,16 @@ pub async fn room_create(
     if !(2..=6).contains(&body.seats) {
         return err(StatusCode::BAD_REQUEST, "invalid_seats", "seats must be 2-6");
     }
-    let format = body.format.unwrap_or_else(|| "commander".to_string());
+    let game = body.game.unwrap_or_else(|| "mtg".to_string());
+    if game != "mtg" && game != "cyberpunk" {
+        return err(StatusCode::BAD_REQUEST, "invalid_game", "game must be mtg or cyberpunk");
+    }
+    // Cyberpunk has no commander/standard split; force a plain "standard" table.
+    let format = if game == "cyberpunk" {
+        "standard".to_string()
+    } else {
+        body.format.unwrap_or_else(|| "commander".to_string())
+    };
     if format != "commander" && format != "standard" {
         return err(
             StatusCode::BAD_REQUEST,
@@ -567,6 +589,7 @@ pub async fn room_create(
         created_at: now,
         updated_at: now,
         format,
+        game,
         turn_number: 1,
         active_seat: 0,
         phase: "main1".to_string(),
@@ -586,6 +609,10 @@ pub async fn room_create(
         spectators: Vec::new(),
         history: Vec::new(),
         cursor: 0,
+        hist_next_hid: 0,
+        hist_saved_hi: None,
+        hist_removed: Vec::new(),
+        hist_dirty: false,
     };
     // Stored immediately so the room survives a restart even before the
     // first write-behind flush.
@@ -615,6 +642,7 @@ pub async fn rooms_mine(
                 "seats": room.seats,
                 "persistent": room.persistent,
                 "started": room.started,
+                "game": room.game,
                 "updatedAt": iso8601(room.updated_at),
                 "players": room.players
                     .iter()
@@ -638,6 +666,27 @@ pub async fn matches(
 ) -> Response {
     let rows = db::matches_for(&app.db.lock().unwrap(), &user.id);
     Json(rows).into_response()
+}
+
+/// GET /api/me/stats: the caller's all-time aggregates (wins/losses/win rate,
+/// endorsements, avg turn), for the Home dashboard. Reuses the same aggregate
+/// queries the post-match stats screen uses.
+pub async fn my_stats(
+    State(app): State<Arc<App>>,
+    Extension(user): Extension<db::User>,
+) -> Response {
+    let conn = app.db.lock().unwrap();
+    let (wins, losses) = db::user_match_counts(&conn, &user.id);
+    let endorsements = db::user_endorsement_count(&conn, &user.id);
+    let avg_turn_ms = db::user_avg_turn_ms(&conn, &user.id);
+    Json(json!({
+        "wins": wins,
+        "losses": losses,
+        "played": wins + losses,
+        "endorsements": endorsements,
+        "avgTurnMs": avg_turn_ms,
+    }))
+    .into_response()
 }
 
 /// DELETE /api/rooms/{id}: host only. Ends the table for everyone; seated

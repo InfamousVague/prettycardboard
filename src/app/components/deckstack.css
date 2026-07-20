@@ -31,10 +31,11 @@
 }
 
 .dsLayer {
-  background-image: var(--pc-card-back);
-  background-size: cover;
-  background-position: center;
-  filter: brightness(0.55) saturate(0.85);
+  /* Only the cut edge of these under-layers is ever visible, so they wear the
+     top card's own border colour (sampled from the cover art, see edgeColor.ts)
+     rather than a slice of the card back — which read as brown for every deck. */
+  background: var(--ds-edge, oklch(0.34 0.02 60));
+  filter: brightness(0.82);
   box-shadow: 0 2px 8px rgb(0 0 0 / 0.45);
 }
 

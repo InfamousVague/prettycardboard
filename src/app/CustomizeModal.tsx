@@ -1,8 +1,76 @@
-import { Button, FormSection, Modal, Size, Text, TextTone } from '@glacier/react';
+import { useState, type ReactNode } from 'react';
+import { Button, FormSection, Modal, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
 import { useT } from './i18n.ts';
 import type { Preferences } from './preferences.ts';
 import { CARD_BACKS, cardBackUrl } from './data/cardBacks.ts';
 import { PLAYMATS, playmatUrl } from './data/playmats.ts';
+import { presentThemes, THEME_LABEL_KEY, type AssetTheme } from './data/themes.ts';
+
+type Filter = 'all' | AssetTheme;
+
+/**
+ * A picker grid that filters by asset theme. The catalog now spans Magic, the
+ * Cyberpunk TCG and game-agnostic art, so a flat list no longer scales — a chip
+ * row narrows the grid to one theme. Chips are derived from the items present,
+ * so adding a themed asset surfaces its category with no code change; the row
+ * hides itself entirely when everything shares one theme.
+ */
+function ThemedPicker<T extends { id: string; name: string; theme: AssetTheme }>({
+  items,
+  selectedId,
+  onSelect,
+  ariaLabel,
+  gridClass,
+  swatchClass,
+  renderMedia,
+}: {
+  items: readonly T[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+  ariaLabel: string;
+  gridClass: string;
+  swatchClass: string;
+  renderMedia: (item: T) => ReactNode;
+}) {
+  const t = useT();
+  const [filter, setFilter] = useState<Filter>('all');
+  const themes = presentThemes(items);
+  const shown = filter === 'all' ? items : items.filter((item) => item.theme === filter);
+
+  return (
+    <>
+      {themes.length > 1 && (
+        <div className="pickerFilter">
+          <SegmentedControl
+            aria-label={ariaLabel}
+            value={filter}
+            onValueChange={(value) => setFilter(value as Filter)}
+            options={[
+              { value: 'all', label: t('custThemeAll') },
+              ...themes.map((theme) => ({ value: theme, label: t(THEME_LABEL_KEY[theme]) })),
+            ]}
+          />
+        </div>
+      )}
+      <div className={gridClass} role="radiogroup" aria-label={ariaLabel}>
+        {shown.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="radio"
+            aria-checked={selectedId === item.id}
+            className={swatchClass}
+            data-selected={selectedId === item.id || undefined}
+            title={item.name}
+            onClick={() => onSelect(item.id)}
+          >
+            {renderMedia(item)}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
 
 /**
  * The table-setup modal: pick a playmat and a card back. Choices apply live
@@ -30,42 +98,34 @@ export function CustomizeModal({
         </Text>
 
         <FormSection title={t('custPlaymat')} description={t('custPlaymatHint')} divider>
-          <div className="matPicker" role="radiogroup" aria-label={t('custPlaymat')}>
-            {PLAYMATS.map((mat) => (
-              <button
-                key={mat.id}
-                type="button"
-                role="radio"
-                aria-checked={preferences.playmat === mat.id}
-                className="matSwatch"
-                data-selected={preferences.playmat === mat.id || undefined}
-                title={mat.name}
-                onClick={() => onChange({ playmat: mat.id })}
-              >
+          <ThemedPicker
+            items={PLAYMATS}
+            selectedId={preferences.playmat}
+            onSelect={(id) => onChange({ playmat: id })}
+            ariaLabel={t('custPlaymat')}
+            gridClass="matPicker"
+            swatchClass="matSwatch"
+            renderMedia={(mat) => (
+              <>
                 <img src={playmatUrl(mat.id)} alt={mat.name} loading="lazy" draggable={false} />
                 <span className="matSwatchName">{mat.name}</span>
-              </button>
-            ))}
-          </div>
+              </>
+            )}
+          />
         </FormSection>
 
         <FormSection title={t('setCardBack')} description={t('setCardBackHint')} divider>
-          <div className="backPicker" role="radiogroup" aria-label={t('setCardBack')}>
-            {CARD_BACKS.map((back) => (
-              <button
-                key={back.id}
-                type="button"
-                role="radio"
-                aria-checked={preferences.cardBack === back.id}
-                className="backSwatch"
-                data-selected={preferences.cardBack === back.id || undefined}
-                title={back.name}
-                onClick={() => onChange({ cardBack: back.id })}
-              >
-                <img src={cardBackUrl(back.id)} alt={back.name} loading="lazy" draggable={false} />
-              </button>
-            ))}
-          </div>
+          <ThemedPicker
+            items={CARD_BACKS}
+            selectedId={preferences.cardBack}
+            onSelect={(id) => onChange({ cardBack: id })}
+            ariaLabel={t('setCardBack')}
+            gridClass="backPicker"
+            swatchClass="backSwatch"
+            renderMedia={(back) => (
+              <img src={cardBackUrl(back.id)} alt={back.name} loading="lazy" draggable={false} />
+            )}
+          />
         </FormSection>
 
         <div className="customizeFoot">

@@ -7,16 +7,10 @@ import {
   ChevronUp,
   Crown,
   Dices,
-  Hand as HandIcon,
   Minus,
   Moon,
-  Paintbrush,
   Plus,
-  RefreshCw,
   Settings,
-  Shuffle,
-  Skull,
-  Sparkles,
   Sun,
   Swords,
   Tornado,
@@ -44,6 +38,9 @@ import {
 import { SETTLE_EASE, dragTilt, flightAnchor, juicePulse, prefersReducedMotion, restTilt, setFlightAnchor } from './juice.ts';
 import { playmatUrl } from '../../data/playmats.ts';
 import { usePreference } from '../../hooks/usePreference.ts';
+import { TokenPicker } from './TokenPicker.tsx';
+import { HandCard, HAND_PEEK_ZONE } from './HandCard.tsx';
+import { DiceRoll3D } from './DiceRoll3D.tsx';
 
 /**
  * My side of the table: free-placement battlefield with drag v2 (lift, tilt
@@ -54,7 +51,7 @@ import { usePreference } from '../../hooks/usePreference.ts';
 
 /** Where a drag started. Battlefield cards move on the field; everything else
  * follows the pointer as a ghost and is played/moved on drop. */
-type DragFrom = 'hand' | 'battlefield' | 'graveyard' | 'exile';
+type DragFrom = 'hand' | 'battlefield' | 'graveyard' | 'exile' | 'library';
 
 interface DragState {
   iid: string;
@@ -85,8 +82,6 @@ const HAND_DROP_BUFFER = 44;
  */
 const RESERVED_BOTTOM_PX = 96;
 
-/** Bottom band of the viewport that raises the peeking hand while hovered. */
-const HAND_PEEK_ZONE = 230;
 
 export function MyBoard({
   me,
@@ -138,6 +133,35 @@ export function MyBoard({
   const [handPeek, setHandPeek] = useState(false);
   // Manually tucked ~95% off-screen via the Hide-hand tab, to clear the board.
   const [handHidden, setHandHidden] = useState(false);
+  // Tokens/counters are an MTG concept; Cyberpunk keeps the plain custom form.
+  const mtg = room.game !== 'cyberpunk';
+  // Right-click on the empty felt: a small board menu (create token / counter),
+  // and the token picker it opens. `bx`/`by` are 0-1 board coords for placement.
+  const [boardMenu, setBoardMenu] = useState<{ x: number; y: number; bx: number; by: number } | null>(null);
+  const [pickerAt, setPickerAt] = useState<{ x: number; y: number } | null>(null);
+
+  // Dismiss the board menu on any outside press (menu items stopPropagation so
+  // a click inside survives to run its action).
+  useEffect(() => {
+    if (!boardMenu) return;
+    const close = () => setBoardMenu(null);
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('blur', close);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('blur', close);
+    };
+  }, [boardMenu]);
+
+  // The vitals toolbar's token button lives in a sibling component; it asks us
+  // to open the picker (centred) via a window event so both entry points share
+  // one modal.
+  useEffect(() => {
+    if (!mtg) return;
+    const open = () => setPickerAt({ x: 0.5, y: 0.55 });
+    window.addEventListener('pc:create-token', open);
+    return () => window.removeEventListener('pc:create-token', open);
+  }, [mtg]);
   // Pointer x over the hand fan; Infinity = not hovering (all bumps at rest).
   const handX = useMotionValue(Number.POSITIVE_INFINITY);
   const velocity = useRef({ x: 0, t: 0, vx: 0 });
@@ -378,7 +402,14 @@ export function MyBoard({
     if (from === 'hand') return me.hand?.find((c) => c.iid === iid);
     if (from === 'battlefield') return me.battlefield.find((c) => c.iid === iid);
     if (from === 'graveyard') return me.graveyard.find((c) => c.iid === iid);
-    return me.exile.find((c) => c.iid === iid);
+    if (from === 'exile') return me.exile.find((c) => c.iid === iid);
+    // The library is a hidden zone: the client never has its cards, so a
+    // drag-from-deck rides a face-down placeholder (the server plays the real
+    // top card on drop).
+    if (from === 'library') {
+      return { iid, name: '', imageUrl: '', tapped: false, faceDown: true, counters: {}, x: 0, y: 0, isToken: false };
+    }
+    return undefined;
   };
 
   // Which of MY zone piles (deck/graveyard/exile/command) is under the release
@@ -429,10 +460,17 @@ export function MyBoard({
     const pos = snapDrop(boardMode, rawPos, card, rect);
     const pile = pileUnderPoint(event.clientX, event.clientY);
 
-    if (card && pile && pile !== from) {
+    if (card && pile && pile !== from && from !== 'library') {
       // Dropped straight onto a zone pile (deck/graveyard/exile/command): move
       // it there - no context menu needed. Library takes it on top.
       act({ kind: 'card.move', iid, to: pile, ...(pile === 'library' ? { index: 0 } : {}) });
+    } else if (from === 'library') {
+      // Drag from the TOP OF THE DECK onto the felt: the server pops the (hidden)
+      // top card and plays it face up where it landed. Releasing back over a pile,
+      // the hand, or the reserved bottom strip just cancels (no-op).
+      if (!pile && !overHand && !inReservedBand(event.clientY)) {
+        act({ kind: 'library.play', ...pos });
+      }
     } else if (from === 'hand') {
       // Play the card only when it clears the hand's buffer AND the reserved
       // bottom band (hand/deck strip); otherwise it springs into the fan.
@@ -626,10 +664,27 @@ export function MyBoard({
   // Which pile the dragged card is currently over (drop-target highlight).
   const dropPile = drag != null && dragOrigin.current.armed ? pileUnderPoint(drag.clientX, drag.clientY) : null;
 
+  // The zone piles. In Cyberpunk they leave the bottom strip for the mat
+  // quadrants (Deck/Trash right rail, Legends/Eddies bottom tray) via `mat`.
+  const zonePilesEl = (
+    <ZonePiles
+      player={me}
+      mine
+      mat={!mtg}
+      canAct
+      onMenu={onMenu}
+      onHover={onHover}
+      onDragOut={(event, card, zone) => beginDrag(event, card, zone, { menu: false })}
+      dragSuppressed={() => justDragged.current || heldFired.current}
+      dropHint={dropPile}
+    />
+  );
+
   return (
     <div
       className="myBoard"
       data-my-turn={(started && myTurn) || undefined}
+      data-game={room.game || 'mtg'}
       data-strip-only={hideField || undefined}
       // Card scale drives the hand overlap and lifts the board-mode toolbar
       // clear of the (scalable) pile stacks.
@@ -684,7 +739,17 @@ export function MyBoard({
         className="myField"
         style={me.playmat ? { ['--pc-board-mat' as string]: `url("${playmatUrl(me.playmat)}")` } : undefined}
         data-mode={boardMode}
+        data-game={room.game || 'mtg'}
         data-lanes={(boardMode === 'rows' && drag != null) || undefined}
+        onContextMenu={(event) => {
+          // Cards carry their own right-click menu; the bare felt opens the
+          // token/counter menu. MTG only (tokens are a Magic concept).
+          if (!mtg || hideField) return;
+          if ((event.target as HTMLElement).closest('.fieldCard, .boardTools')) return;
+          event.preventDefault();
+          const pos = fieldPos(event.clientX, event.clientY);
+          setBoardMenu({ x: event.clientX, y: event.clientY, bx: pos.x, by: pos.y });
+        }}
       >
         {hosts.map((card) => (
           <span key={card.iid} style={{ display: 'contents' }}>
@@ -811,18 +876,18 @@ export function MyBoard({
 
       </>)}
 
+      {/* Cyberpunk: the zones live in the mat quadrants (a board overlay), not
+          the bottom strip. Magic keeps them floating over the strip. */}
+      {!mtg && !hideField && <div className="matZones">{zonePilesEl}</div>}
+
+      {/* Cyberpunk: a Fixer die rolls in 3D (real polyhedral WebGL dice) over the
+          mat, landing on the server-chosen value. Falls back to a CSS cube if
+          WebGL is unavailable. */}
+      {!mtg && !hideField && <DiceRoll3D dice={me.gigDice} playerId={me.userId} />}
+
       {/* bottom strip: zones | hand | vitals */}
       <div className="myStrip">
-        <ZonePiles
-          player={me}
-          mine
-          canAct
-          onMenu={onMenu}
-          onHover={onHover}
-          onDragOut={(event, card, zone) => beginDrag(event, card, zone, { menu: false })}
-          dragSuppressed={() => justDragged.current || heldFired.current}
-          dropHint={dropPile}
-        />
+        {mtg && zonePilesEl}
 
         {/* .myHand is a non-transforming frame; only the inner .myFan slides
             (rest/peek/hidden), so the tab below can centre on the hand and stay
@@ -898,250 +963,64 @@ export function MyBoard({
         </div>
       )}
 
-    </div>
-  );
-}
-
-/* ================= vitals + conveniences ================= */
-
-export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
-  const t = useT();
-  const act = useGame((state) => state.act);
-  const [tokenOpen, setTokenOpen] = useState(false);
-  const [tokenName, setTokenName] = useState('');
-  const [tokenPT, setTokenPT] = useState('1/1');
-  const lifeRef = useRef<HTMLSpanElement>(null);
-  // Commander damage I've taken from each opponent's commander (21 = lethal).
-  // Manual, like all damage now: steppers adjust cmdDamage[fromSeat].
-  const cmdFoes =
-    room.format === 'commander' ? room.players.filter((p) => p.seat !== me.seat && !p.conceded) : [];
-
-  return (
-    <div className="myVitals">
-      <div className="lifeBlock">
-        <IconButton
-          size="sm"
-          variant="ghost"
-          aria-label="-1"
-          onClick={() => {
-            act({ kind: 'life.add', delta: -1 });
-            juicePulse(lifeRef.current, 0.8);
+      {/* right-click board menu: create a searched token, or a bare counter marker */}
+      {boardMenu && (
+        <div
+          className="cardMenu"
+          style={{
+            left: Math.min(boardMenu.x, window.innerWidth - 220),
+            top: Math.min(boardMenu.y, window.innerHeight - 140),
           }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
         >
-          <Minus size={14} />
-        </IconButton>
-        <span className="lifeBig" ref={lifeRef}>
-          {me.life}
-        </span>
-        <IconButton
-          size="sm"
-          variant="ghost"
-          aria-label="+1"
-          onClick={() => {
-            act({ kind: 'life.add', delta: 1 });
-            juicePulse(lifeRef.current, 0.8);
-          }}
-        >
-          <Plus size={14} />
-        </IconButton>
-      </div>
-      <div className="convenience">
-        <Tooltip content={`${t('tblDraw')} 1`}>
-          <IconButton size="sm" variant="soft" aria-label={t('tblDraw')} onClick={() => act({ kind: 'draw', count: 1 })}>
-            <HandIcon size={15} />
-          </IconButton>
-        </Tooltip>
-        <Tooltip content={t('tblUntapAll')}>
-          <IconButton size="sm" variant="soft" aria-label={t('tblUntapAll')} onClick={() => act({ kind: 'untap.all' })}>
-            <RefreshCw size={15} />
-          </IconButton>
-        </Tooltip>
-        <Tooltip content={t('tblShuffle')}>
-          <IconButton size="sm" variant="soft" aria-label={t('tblShuffle')} onClick={() => act({ kind: 'shuffle' })}>
-            <Shuffle size={15} />
-          </IconButton>
-        </Tooltip>
-        <Tooltip content={t('tblToken')}>
-          <IconButton
-            size="sm"
-            variant={tokenOpen ? 'solid' : 'soft'}
-            aria-label={t('tblToken')}
-            onClick={() => setTokenOpen(!tokenOpen)}
+          <button
+            type="button"
+            className="menuItem"
+            onClick={() => {
+              setPickerAt({ x: boardMenu.bx, y: boardMenu.by });
+              setBoardMenu(null);
+            }}
           >
-            <Sparkles size={15} />
-          </IconButton>
-        </Tooltip>
-        {/* Undo/redo/replay moved to the dedicated TimelineCard below vitals. */}
-        <Menu
-          aria-label={t('gpTableSettings')}
-          placement="top-end"
-          trigger={
-            <IconButton size="sm" variant="soft" aria-label={t('gpTableSettings')}>
-              <Settings size={15} />
-            </IconButton>
-          }
-        >
-          <MenuItem onSelect={() => window.dispatchEvent(new Event('pc:open-customize'))}>
-            <Paintbrush size={14} /> {t('navCustomize')}
-          </MenuItem>
-          <MenuItem onSelect={() => window.dispatchEvent(new Event('pc:open-settings'))}>
-            <Settings size={14} /> {t('navSettings')}
-          </MenuItem>
-        </Menu>
-      </div>
-
-      {tokenOpen && (
-        <form
-          className="tokenForm"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const [power, toughness] = tokenPT.split('/');
-            act({
-              kind: 'token.create',
-              name: tokenName || 'Token',
-              power: power?.trim(),
-              toughness: toughness?.trim(),
-              x: 0.5,
-              y: 0.55,
-            });
-            setTokenOpen(false);
-            setTokenName('');
-          }}
-        >
-          <Input size="sm" value={tokenName} onChange={(event) => setTokenName(event.target.value)} placeholder="Treasure" />
-          <Input size="sm" value={tokenPT} onChange={(event) => setTokenPT(event.target.value)} placeholder="1/1" style={{ width: '4.5rem' }} />
-          <Button size="sm" type="submit">
-            +
-          </Button>
-        </form>
+            {t('tkCreateToken')}
+          </button>
+          <button
+            type="button"
+            className="menuItem"
+            onClick={() => {
+              act({ kind: 'token.create', name: t('tkCounter'), x: boardMenu.bx, y: boardMenu.by });
+              setBoardMenu(null);
+            }}
+          >
+            {t('tkNewCounter')}
+          </button>
+        </div>
       )}
 
-      {/* Damage tracker: one row per commander (21 = lethal), then poison
-         (10 = lethal), so several kinds of damage read the same way. */}
-      <div className="dmgTrack">
-        {cmdFoes.map((foe) => {
-          const taken = me.cmdDamage[String(foe.seat)] ?? 0;
-          return (
-            <div key={foe.userId} className="dmgRow" data-lethal={taken >= 21 || undefined}>
-              <span className="dmgLabel" title={`${t('tblCmdDamage')}: ${foe.username}`}>
-                <Swords size={11} /> {foe.username}
-              </span>
-              <IconButton
-                size="sm"
-                variant="ghost"
-                aria-label={`-1 ${foe.username}`}
-                onClick={() => act({ kind: 'cmd.damage', fromSeat: foe.seat, delta: -1 })}
-              >
-                <Minus size={12} />
-              </IconButton>
-              <span className="dmgVal">{taken}</span>
-              <IconButton
-                size="sm"
-                variant="ghost"
-                aria-label={`+1 ${foe.username}`}
-                onClick={() => act({ kind: 'cmd.damage', fromSeat: foe.seat, delta: 1 })}
-              >
-                <Plus size={12} />
-              </IconButton>
-            </div>
-          );
-        })}
-        <div className="dmgRow" data-lethal={me.poison >= 10 || undefined}>
-          <span className="dmgLabel" title={t('tblPoison')}>
-            <Skull size={11} /> {t('tblPoison')}
-          </span>
-          <IconButton
-            size="sm"
-            variant="ghost"
-            aria-label={`-1 ${t('tblPoison')}`}
-            onClick={() => act({ kind: 'poison.add', delta: -1 })}
-          >
-            <Minus size={12} />
-          </IconButton>
-          <span className="dmgVal">{me.poison}</span>
-          <IconButton
-            size="sm"
-            variant="ghost"
-            aria-label={`+1 ${t('tblPoison')}`}
-            onClick={() => act({ kind: 'poison.add', delta: 1 })}
-          >
-            <Plus size={12} />
-          </IconButton>
-        </div>
-      </div>
+      {pickerAt && (
+        <TokenPicker
+          deckId={me.deckId}
+          onPlace={(token) => {
+            act({
+              kind: 'token.create',
+              name: token.name,
+              imageUrl: token.image,
+              power: token.power,
+              toughness: token.toughness,
+              x: pickerAt.x,
+              y: pickerAt.y,
+            });
+            setPickerAt(null);
+          }}
+          onPlaceCustom={(name, power, toughness) => {
+            act({ kind: 'token.create', name, power, toughness, x: pickerAt.x, y: pickerAt.y });
+            setPickerAt(null);
+          }}
+          onClose={() => setPickerAt(null)}
+        />
+      )}
+
     </div>
   );
 }
 
-/* ================= hand card (dock magnification) ================= */
-
-/**
- * One card of the fan with macOS-Dock magnification: the pointer's distance
- * to the card's center drives a gaussian bump - biggest under the cursor,
- * tapering through the neighbors, gone by roughly two cards away. Motion
- * values keep the whole effect off the React render path.
- */
-function HandCard({
-  card,
-  width,
-  spread,
-  dimmed,
-  handX,
-  onPointerDown,
-  onPointerEnter,
-  onPointerLeave,
-  onClick,
-  onContextMenu,
-}: {
-  card: CardInst;
-  width: number;
-  spread: number;
-  dimmed: boolean;
-  handX: MotionValue<number>;
-  onPointerDown: (event: ReactPointerEvent) => void;
-  onPointerEnter: () => void;
-  onPointerLeave: () => void;
-  onClick: () => void;
-  onContextMenu: (event: React.MouseEvent) => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  // 0..1 pointer proximity to this card's center (live rect read: the fan
-  // reflows as cards are played and the measurement must follow). The falloff
-  // width tracks the card size so the taper stays even at any scale.
-  const bump = useTransform(handX, (x) => {
-    const el = ref.current;
-    if (!el || !Number.isFinite(x) || prefersReducedMotion()) return 0;
-    const rect = el.getBoundingClientRect();
-    const d = (x - (rect.left + rect.width / 2)) / Math.max(1, width);
-    return Math.exp(-d * d);
-  });
-  const scale = useSpring(useTransform(bump, (v) => 1 + 0.3 * v), { stiffness: 430, damping: 30 });
-  // Lift proportionally to the card size so bigger cards clear the fan.
-  const liftMax = -34 * (width / 132);
-  const lift = useSpring(useTransform(bump, (v) => liftMax * v), { stiffness: 430, damping: 30 });
-  const z = useTransform(bump, (v) => Math.round(v * 20));
-
-  return (
-    <motion.div
-      ref={ref}
-      className="handCard"
-      style={{ zIndex: z }}
-      initial={{ y: 60, opacity: 0 }}
-      animate={{
-        y: Math.abs(spread) * 6,
-        opacity: dimmed ? 0.28 : 1,
-        rotate: spread * 3.5,
-      }}
-      transition={{ type: 'spring', stiffness: 260, damping: 22 }}
-      onPointerDown={onPointerDown}
-      onPointerEnter={onPointerEnter}
-      onPointerLeave={onPointerLeave}
-      onClick={onClick}
-      onContextMenu={onContextMenu}
-    >
-      <motion.div className="handCardZoom" style={{ scale, y: lift }}>
-        <GameCard name={card.name} imageUrl={card.imageUrl || cardImage(card.scryfallId)} width={width} tilt={0} />
-      </motion.div>
-    </motion.div>
-  );
-}

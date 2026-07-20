@@ -331,3 +331,131 @@
 .homeResume > button {
   flex: none;
 }
+
+/* ========================================================================
+   Gamified dashboard: player hero + KPI stat strip + shelf carousels
+   ======================================================================== */
+
+.homePage { gap: var(--glacier-space-5); }
+
+/* --- hero row: player card + side CTA (bento). Scoped under .homePage to beat
+   the `.page section { display: flex }` scaffolding rule. --- */
+.homePage .homeHeroRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr);
+  gap: var(--glacier-space-4);
+  align-items: stretch;
+}
+@media (max-width: 60rem) {
+  .homePage .homeHeroRow { grid-template-columns: 1fr; }
+}
+
+.heroCard {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-5);
+  padding: var(--glacier-space-6);
+  border: 1px solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-2xl);
+  background:
+    radial-gradient(120% 150% at 0% -25%, color-mix(in oklch, var(--glacier-accent-solid) 24%, transparent), transparent 55%),
+    radial-gradient(120% 170% at 100% 135%, color-mix(in oklch, var(--glacier-accent-solid) 13%, transparent), transparent 60%),
+    var(--glacier-surface);
+  box-shadow: var(--glacier-shadow-3);
+}
+
+.heroPlayer {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-4);
+  min-inline-size: 0;
+}
+.heroAvatar { position: relative; flex: none; }
+.heroPresence { position: absolute; inset-block-end: 3px; inset-inline-end: 3px; }
+
+.heroIdentity { display: flex; flex-direction: column; gap: 2px; min-inline-size: 0; }
+.heroRank {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-bold);
+  color: var(--glacier-accent-text);
+}
+.heroName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.heroMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-2);
+  margin-block-start: var(--glacier-space-1);
+}
+
+.heroRing { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.heroRingLabel { text-transform: uppercase; letter-spacing: 0.08em; }
+
+/* side panel: Continue (accent) or Start-a-table CTA, both big buttons */
+.heroSide {
+  appearance: none;
+  text-align: start;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-6);
+  border-radius: var(--glacier-radius-2xl);
+  border: 1px solid var(--glacier-border-subtle);
+  background: var(--glacier-surface);
+  color: var(--glacier-text);
+  transition:
+    transform var(--glacier-duration-fast) var(--glacier-ease-out),
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    box-shadow var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+.heroSide:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 55%, var(--glacier-border));
+  box-shadow: 0 10px 34px rgb(0 0 0 / 0.35);
+}
+.heroPlayCta { align-items: flex-start; }
+.heroPlayCta > svg { color: var(--glacier-accent-text); }
+.heroCtaTitle { font-size: var(--glacier-font-size-lg); font-weight: var(--glacier-font-weight-bold); }
+
+.heroResume2 {
+  background:
+    radial-gradient(140% 190% at 0% -35%, color-mix(in oklch, var(--glacier-accent-solid) 26%, transparent), transparent 60%),
+    var(--glacier-surface);
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border-subtle));
+}
+.heroResumeTag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-bold);
+  color: var(--glacier-accent-text);
+}
+.heroResumeName {
+  font-size: var(--glacier-font-size-lg);
+  font-weight: var(--glacier-font-weight-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.heroResumeGo { color: var(--glacier-accent-text); font-weight: var(--glacier-font-weight-semibold); }
+
+/* --- KPI stat strip --- */
+.homePage .homeStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--glacier-space-3);
+}
+@media (max-width: 48rem) { .homePage .homeStats { grid-template-columns: repeat(2, 1fr); } }
+
+/* --- carousel shelves: keep the fixed-width items, let Carousel scroll --- */
+.homeCarousel .homeStackItem { flex: none; }

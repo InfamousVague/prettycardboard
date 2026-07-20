@@ -1,0 +1,76 @@
+/* Catalog deck preview — the full decklist as a scrollable thumbnail grid.
+   The panel is put in "contained" overflow mode (see DeckPreviewModal), so this
+   column owns the height: head + footer pin, only the grid scrolls.
+   NB: class is `deckPreviewModal`, NOT `deckPreview` — the latter is the deck
+   editor's fixed-position floating hover card, and the names would collide. */
+.deckPreviewModal {
+  display: flex;
+  flex-direction: column;
+  /* Bound to the viewport, leaving room for the modal's own padding + title.
+     Because the content overflows this cap, the clamp gives the column a
+     definite height for the flex scroll region to fill. */
+  max-height: calc(100vh - 12rem);
+}
+
+.deckPreviewHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-2) var(--glacier-space-3);
+  padding-block-end: var(--glacier-space-3);
+}
+
+.deckPreviewScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* keep the scrollbar off the cards */
+  margin-inline: calc(var(--glacier-space-1) * -1);
+  padding-inline: var(--glacier-space-1);
+}
+
+.deckPreviewGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: var(--glacier-space-3);
+  padding-block: var(--glacier-space-1);
+}
+
+.deckPreviewCard {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--glacier-radius-2);
+  transition: transform 120ms ease;
+}
+.deckPreviewCard:hover,
+.deckPreviewCard:focus-visible {
+  transform: translateY(-3px);
+  outline: none;
+}
+
+.deckPreviewQty {
+  position: absolute;
+  right: 0.2rem;
+  bottom: 0.2rem;
+  min-inline-size: 1.35rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: var(--glacier-radius-pill, 999px);
+  background: var(--glacier-surface-inverse, rgba(0, 0, 0, 0.8));
+  color: var(--glacier-text-inverse, #fff);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.4;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.deckPreviewFoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--glacier-space-2);
+  padding-block-start: var(--glacier-space-4);
+}

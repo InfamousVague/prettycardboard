@@ -325,11 +325,14 @@ body {
   top: 4vh;
   display: flex;
   justify-content: center;
-  gap: var(--glacier-space-3);
+  gap: 0;
 }
 
+/* A mixed MTG + Cyberpunk fan: the cards overlap into a hand-of-cards arc so
+   the wider (6-card) spread stays on screen. */
 .onboardingFanCard {
   transform-origin: 50% 120%;
+  margin-inline: -2.1rem;
 }
 
 .onboardingPanel {
@@ -609,6 +612,15 @@ body {
   flex-direction: column;
 }
 
+/* Suspense fallback while a lazily-loaded route chunk streams in: fills the
+   content area and centers the spinner so the shell never collapses. */
+.pageFallback {
+  flex: 1;
+  min-height: 60vh;
+  display: grid;
+  place-items: center;
+}
+
 /* ---- card-back picker (Settings) ---- */
 
 .backPicker {
@@ -731,6 +743,11 @@ body {
   gap: var(--glacier-space-5);
 }
 
+/* Theme filter above each picker grid. */
+.pickerFilter {
+  margin-block-end: var(--glacier-space-3);
+}
+
 .matPicker {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
@@ -841,4 +858,37 @@ body {
 /* The shell honors the device safe areas (iPad home indicator, notch). */
 .appWindow {
   padding-block-end: env(safe-area-inset-bottom, 0);
+}
+
+/* Sidebar footer: the player chip (who you are + presence), on every page. */
+.sbPlayer {
+  appearance: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  inline-size: 100%;
+  padding: var(--glacier-space-2);
+  border-radius: var(--glacier-radius-lg);
+  border: 1px solid var(--glacier-border-subtle);
+  background: var(--glacier-surface);
+  color: var(--glacier-text);
+  text-align: start;
+  transition:
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    background var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+.sbPlayer:hover {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-border));
+  background: var(--glacier-surface-raised);
+}
+.sbPlayerAvatar { position: relative; flex: none; }
+.sbPlayerDot { position: absolute; inset-block-end: -1px; inset-inline-end: -1px; }
+.sbPlayerName {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--glacier-font-weight-semibold);
+  font-size: var(--glacier-font-size-sm);
 }

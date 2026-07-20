@@ -43,6 +43,11 @@ export interface Preferences {
   /** Show a staged opponent's board mirrored 180deg (across-the-table view,
    * cards upside down). Off shows their board upright. */
   mirrorOpponent: boolean;
+  /** Automatically untap your permanents at the start of your turn (off by
+   * default; this app is manual-play first). Synced to the table via auto.set. */
+  autoUntap: boolean;
+  /** Automatically draw a card at the start of your turn (off by default). */
+  autoDraw: boolean;
 }
 
 export const ACCENTS = accentOptions;
@@ -78,6 +83,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   playmat: DEFAULT_PLAYMAT,
   verticalCards: false,
   mirrorOpponent: true,
+  autoUntap: false,
+  autoDraw: false,
 };
 
 const STORAGE_KEY = 'glacier-starter:preferences';

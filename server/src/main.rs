@@ -152,6 +152,17 @@ async fn main() {
                 {
                     room.first_turn_begun = true;
                 }
+                // Restore the undo/redo/replay timeline persisted out-of-band, so
+                // undo reaches back across the restart. Bookkeeping is primed to
+                // match the DB (nothing to re-write until the next real change).
+                let (history, cursor) = db::history_load(&conn, &id);
+                let max_hid = history.iter().map(|s| s.hid).max();
+                room.hist_next_hid = max_hid.map(|m| m + 1).unwrap_or(0);
+                room.hist_saved_hi = max_hid;
+                room.cursor = cursor;
+                room.history = history;
+                room.hist_removed.clear();
+                room.hist_dirty = false;
                 restored.push(room);
             }
             None => db::room_delete(&conn, &id),
@@ -192,6 +203,7 @@ async fn main() {
 
     let protected = Router::new()
         .route("/api/me", get(api::me))
+        .route("/api/me/stats", get(api::my_stats))
         .route("/api/users/search", get(api::search_users))
         .route("/api/friends", get(api::friends))
         .route("/api/friends/requests", post(api::friend_request))

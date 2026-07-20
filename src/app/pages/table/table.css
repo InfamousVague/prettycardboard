@@ -485,6 +485,32 @@
   font-size: var(--glacier-font-size-sm);
 }
 
+/* Floating cue while watching another player's board (mutually exclusive with
+   the turn pill — if it were your turn, your own board would be staged). */
+.spectateCue {
+  position: absolute;
+  top: 4.4rem;
+  inset-inline-start: 50%;
+  translate: -50%;
+  z-index: 66;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: 0.35rem 0.4rem 0.35rem 0.9rem;
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  background: var(--glacier-glass-regular);
+  backdrop-filter: blur(var(--glacier-blur-lg)) saturate(var(--glacier-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glacier-blur-lg)) saturate(var(--glacier-glass-saturate));
+  box-shadow: var(--glacier-shadow-3);
+  color: var(--glacier-text-muted);
+  font-size: var(--glacier-font-size-sm);
+}
+.spectateCueText b {
+  color: var(--glacier-text);
+  font-weight: var(--glacier-font-weight-semibold);
+}
+
 .turnPillClose {
   display: inline-grid;
   place-items: center;
@@ -1011,14 +1037,14 @@
 .handTab {
   position: absolute;
   left: 50%;
-  bottom: 0.5rem;
+  bottom: 0.6rem;
   translate: -50% 0;
   z-index: 20;
   display: inline-flex;
   align-items: center;
-  gap: 0.28em;
-  padding: 0.3rem 0.8rem;
-  font-size: var(--glacier-text-2xs, 0.7rem);
+  gap: 0.4em;
+  padding: 0.5rem 1.15rem;
+  font-size: var(--glacier-font-size-sm, 0.875rem);
   font-weight: 600;
   line-height: 1;
   letter-spacing: 0.01em;
@@ -1029,7 +1055,7 @@
   box-shadow: var(--glacier-shadow-sm, 0 2px 8px rgb(0 0 0 / 0.28));
   backdrop-filter: blur(8px);
   cursor: pointer;
-  opacity: 0.78;
+  opacity: 0.85;
   transition: opacity 160ms ease-out, color 160ms ease-out, background 160ms ease-out;
 }
 
@@ -1038,7 +1064,10 @@
   color: var(--glacier-text);
 }
 
+/* Size the icon here (not via the JSX size prop) so the button scales as one. */
 .handTab > svg {
+  width: 1.05rem;
+  height: 1.05rem;
   opacity: 0.85;
 }
 
@@ -1205,6 +1234,109 @@
 .tokenForm {
   display: flex;
   gap: var(--glacier-space-1);
+}
+
+/* Floating-mana pool (MTG only). Collapsed (0 mana) it is a faint one-line strip
+   of glyphs; the first tap wakes it to a full-color active section that grows a
+   hairline top border like .dmgTrack, count badges, per-color minus, and the
+   total + clear tail. */
+.manaBar {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--glacier-space-1);
+  flex-wrap: wrap;
+}
+
+.manaBar[data-active] {
+  padding-block-start: var(--glacier-space-1);
+  border-block-start: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 40%, transparent);
+}
+
+.manaPips {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.manaPip {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: var(--glacier-radius-full);
+  opacity: 0.45;
+  filter: grayscale(0.35);
+  transition: opacity 120ms, transform 120ms, filter 120ms;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.manaBar[data-active] .manaPip,
+.manaPip[data-has] {
+  opacity: 1;
+  filter: none;
+}
+
+.manaPip:hover {
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.manaPip:active {
+  transform: scale(0.9);
+}
+
+.manaCount {
+  position: absolute;
+  top: -3px;
+  inset-inline-end: -3px;
+  min-width: 1rem;
+  height: 1rem;
+  padding-inline: 0.2rem;
+  display: grid;
+  place-items: center;
+  border-radius: var(--glacier-radius-full);
+  background: var(--glacier-accent-solid);
+  color: var(--glacier-accent-contrast, #fff);
+  font-family: var(--glacier-font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+  pointer-events: none;
+}
+
+.manaMinus {
+  position: absolute;
+  bottom: -3px;
+  inset-inline-end: -3px;
+  width: 0.95rem;
+  height: 0.95rem;
+  display: grid;
+  place-items: center;
+  border-radius: var(--glacier-radius-full);
+  background: var(--glacier-surface);
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  color: var(--glacier-text-muted);
+  cursor: pointer;
+}
+
+.manaMinus:hover {
+  color: var(--glacier-text);
+  border-color: var(--glacier-text-muted);
+}
+
+/* The running total lives in a native Glacier Pill (its onRemove is the clear
+   button); only nudge the number to tabular figures so it does not jitter. */
+.manaTotalPill {
+  font-variant-numeric: tabular-nums;
 }
 
 /* counters on cards */
@@ -2313,13 +2445,6 @@
   gap: 2px;
 }
 
-.pmSaltLabel {
-  display: inline-grid;
-  place-items: center;
-  margin-inline-end: 2px;
-  color: var(--glacier-text-subtle);
-}
-
 .pmSaltStep {
   display: inline-grid;
   place-items: center;
@@ -2377,22 +2502,15 @@
   }
 }
 
-/* The salt prompt: whispered on desktop (tooltip carries the long form),
-   spelled out where there is no hover to discover it. */
+/* The salt prompt: a plain text label leading the rating shakers (the tooltip
+   carries the long form on hover). */
 .pmSaltHintText {
-  display: none;
   font-size: var(--glacier-font-size-xs);
   color: var(--glacier-text-subtle);
+  margin-inline-end: 3px;
 }
 
-@media (hover: none) {
-  .pmSaltHintText {
-    display: inline;
-    margin-inline-start: 3px;
-  }
-}
-
-/* Touch: the flame steps and the reopen pill need real finger targets. */
+/* Touch: the salt steps and the reopen pill need real finger targets. */
 @media (pointer: coarse) {
   .pmSaltRow {
     gap: 4px;
@@ -2735,60 +2853,48 @@
   justify-content: center;
 }
 
-/* ================= opponent hand (face-down fan) ================= */
+/* ================= opponent hand ================= */
 
-/* Staged opponent (SeatFrame): a fan of card backs under their header so the
-   hand size reads at a glance, like sleeves across the table. */
-/* Their hand: a fan of card backs like mine, rotated so it hangs from the top
-   edge (their side). The per-card translate/rotate arc flips with it. */
-.oppHand {
-  position: relative;
-  z-index: 6;
+/* The staged opponent's hand (OpponentHand) reuses my own hand's exact markup -
+   .myHand > .myFan > HandCard + .handTab - so it inherits the identical fan,
+   dock-genie, rest/peek/hide behavior and screen-bottom hang-off. This strip
+   just anchors that markup to the very bottom of the screen (the staged board's
+   border can't hang off), clearing the right rail like my board's gutter. */
+.oppHandStrip {
+  position: fixed;
+  inset-inline: 0 19.5rem;
+  bottom: 0;
+  z-index: 34; /* same layer as .myStrip */
   display: flex;
-  align-items: flex-end;
   justify-content: center;
-  padding-block: var(--glacier-space-1);
+  /* Click-through everywhere except the cards + tab, so the opponent's piles
+     behind the strip stay reachable. The genie is driven by a window listener,
+     not the fan's own pointer events, so none of it needs pointer capture. */
   pointer-events: none;
 }
 
-/* Mirror my own hand: the opponent's hand sits at the BOTTOM edge of their
-   board (the same spot mine occupies on mine), but flipped 180deg - it's their
-   hand across the table. Ordered last so the field fills above it. Reveals
-   pop above the fan via z-index on hover. */
-.seatFrame[data-stage] .oppHand {
-  order: 5;
-  transform: rotate(180deg);
-}
-
-.oppHandCard {
-  flex: none;
-  width: 3.4rem;
-  height: calc(3.4rem * 680 / 488);
-  margin-inline: -0.95rem; /* overlap into a fan */
-  border-radius: 0.28rem;
-  background-image: var(--pc-card-back);
-  background-size: cover;
-  background-position: center;
-  border: var(--glacier-hairline) solid rgba(0, 0, 0, 0.5);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
-}
-
-/* A card the opponent revealed: show its face (not a back) with an accent ring
-   so it reads as intentionally shown. */
-.oppHandReveal {
-  width: auto;
-  height: auto;
-  background: none;
-  border: none;
-  border-radius: var(--glacier-radius-sm);
-  box-shadow: 0 0 0 2px color-mix(in oklch, var(--glacier-accent-solid) 70%, transparent), 0 4px 10px rgba(0, 0, 0, 0.5);
-  cursor: pointer;
+/* Their hand cards are informational: no grab cursor, and backs aren't clickable
+   (revealed faces keep the pointer/preview from HandCard's own onClick). */
+.oppHandStrip .handCard {
+  cursor: default;
   pointer-events: auto;
-  z-index: 1;
 }
 
-.oppHandReveal:hover {
-  z-index: 5;
+.oppHandStrip .handTab {
+  pointer-events: auto;
+}
+
+/* Mirror mode (across the table): flip the fan 180deg on top of its rest/peek/
+   hide transform, so the cards read upside down while still hanging off + peeking
+   from the bottom edge. */
+.oppHandStrip[data-mirror] .myFan {
+  transform: translateY(50%) rotate(180deg);
+}
+.oppHandStrip[data-mirror] .myFan[data-peek] {
+  transform: translateY(0) rotate(180deg);
+}
+.oppHandStrip[data-mirror] .myFan[data-hidden] {
+  transform: translateY(95%) rotate(180deg);
 }
 
 .oppHandTally {
@@ -2855,12 +2961,21 @@
   position: absolute;
   inset: 0;
   border-radius: 4.75% / 3.41%;
+}
+
+/* The visible top card wears the full card-back art. */
+.libTop {
   background-image: var(--pc-card-back);
   background-size: cover;
   background-position: center;
 }
 
+/* The under-layers only ever show their cut edge, so they wear the top card's
+   own border colour (sampled from the back at runtime, see edgeColor.ts) rather
+   than a slice of the art — which otherwise reads as a flat brown for every
+   deck. Per-layer brightness (set inline) fades the deeper slivers for depth. */
 .libLayer {
+  background: var(--pc-card-back-edge, oklch(0.34 0.02 60));
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
 }
 
@@ -3141,4 +3256,16 @@
   pointer-events: none;
   filter: saturate(0.85) brightness(0.92);
   transition: filter 160ms ease-out;
+}
+
+/* Cyberpunk vitals: a small caption above the primary counter (Net), since the
+   big number is no longer implicitly "life". */
+.vitalCaption {
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--glacier-text-muted, #9aa);
+  margin-bottom: -0.15rem;
 }
