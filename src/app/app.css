@@ -452,6 +452,56 @@ body {
   gap: var(--glacier-space-2);
 }
 
+/* Global actionable invite popup: floats bottom-inline-end over any route
+   (including mid-match) so a friend's invite can be accepted from anywhere. */
+.invitePopup {
+  position: fixed;
+  inset-block-end: 1rem;
+  inset-inline-end: 1rem;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  max-width: min(92vw, 22rem);
+  padding-block-end: env(safe-area-inset-bottom, 0px);
+}
+
+.invitePopupCard {
+  display: grid;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-4);
+  animation: invitePopIn 240ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes invitePopIn {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .invitePopupCard {
+    animation: none;
+  }
+}
+
+.invitePopupBody {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+.invitePopupActions {
+  display: flex;
+  gap: var(--glacier-space-2);
+  justify-content: flex-end;
+}
+
 /* ---- friends ---- */
 
 .friendSearch {

@@ -574,7 +574,6 @@ pub async fn room_create(
         starting_seat: 0,
         stack: Vec::new(),
         combat: None,
-        last_combat: None,
         markers: Default::default(),
         pending_cmd: Vec::new(),
         turn_started_ms: 0,
@@ -585,6 +584,8 @@ pub async fn room_create(
         first_turn_begun: false,
         players: Vec::new(),
         spectators: Vec::new(),
+        history: Vec::new(),
+        cursor: 0,
     };
     // Stored immediately so the room survives a restart even before the
     // first write-behind flush.

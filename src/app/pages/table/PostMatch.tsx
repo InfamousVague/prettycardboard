@@ -176,7 +176,7 @@ export function PostMatch({
             const s = stats?.[p.userId];
             const winner = p.userId === result.winnerUserId;
             const isMe = p.userId === meId;
-            const canEndorse = isParticipant && !isMe && !p.isBot;
+            const canEndorse = isParticipant && !isMe;
             const canSalt = isParticipant && !isMe && p.deckId != null;
             const saltValue = p.deckId ? salted[p.deckId] : undefined;
             return (
@@ -206,14 +206,14 @@ export function PostMatch({
                       <Timer size={12} /> {fmtTurn(p.avgTurnMs)}
                       {t('pmPerTurn')}
                     </span>
-                    {s && !p.isBot && (
+                    {s && (
                       <span className="pmStat" title={t('pmRecord')}>
                         {s.wins}
                         {t('pmWinAbbr')} · {s.losses}
                         {t('pmLossAbbr')}
                       </span>
                     )}
-                    {s && !p.isBot && s.endorsements > 0 && (
+                    {s && s.endorsements > 0 && (
                       <span className="pmStat" title={t('pmEndorseCount')}>
                         <ThumbsUp size={12} /> {s.endorsements}
                       </span>

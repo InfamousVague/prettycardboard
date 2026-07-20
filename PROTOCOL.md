@@ -173,12 +173,21 @@ Stack:
 - `{kind: "stack.counter", iid, to}` — same, but logs "countered" (to usually
   graveyard).
 
-Guided combat (unenforced bookkeeping):
+Guided combat (unenforced, inform-only bookkeeping). The server NEVER resolves
+damage: `combat` is a lightweight public overlay of who attacks whom and which
+creatures block which attackers. Players read it to see incoming attacks, then
+adjust life and move dead creatures BY HAND (the client offers a one-click
+"take unblocked damage" helper that just dispatches `life.add`). There is no
+lock/ready/prevent, no auto-resolution, and no `combat.results` message.
 - `{kind: "combat.begin"}` — phase -> "attack", empty combat block created.
-- `{kind: "combat.attack", iid, defenderSeat?}` — toggle a creature as
-  attacker (auto-taps it unless already tapped), optional defender.
-- `{kind: "combat.block", blockerIid, attackerIid}` — toggle a block pairing.
-- `{kind: "combat.end"}` — clears combat, phase -> "main2".
+- `{kind: "combat.attack", iid, defenderSeat?, power?, toughness?}` — toggle a
+  creature as attacker (auto-taps it unless already tapped). `defenderSeat`
+  omitted is an open swing every opponent sees. `power`/`toughness` are the
+  attacker's client-declared effective values (strings), shown to defenders.
+- `{kind: "combat.block", blockerIid, attackerIid, power?, toughness?}` —
+  toggle a block pairing; requires `attackerIid` to be a declared attacker.
+- `{kind: "combat.end"}` — clears the overlay, phase -> "main2". Combat also
+  clears automatically on turn change.
 
 Commander:
 - `{kind: "cmd.cast", iid, x, y}` — command zone -> battlefield; increments
@@ -229,48 +238,6 @@ Undo:
 ### CardInst additions
 `attachedTo?: string`, `isCommander?: bool`, `revealed?: bool` (temporarily
 public while on the stack from a hidden zone).
-
-## Bots addendum (v2.1) — AI opponents
-
-Server-resident heuristic opponents. A bot is an ordinary `Player` driven by the
-server itself; it acts exclusively through the same `game.action` pipeline as a
-human, so every rule in this document applies to bots unchanged.
-
-### Seating
-
-- `{ "type": "bot.add", "deckCode"?: "FIC-<n>"|"random", "style"?: "casual"|"aggro"|"defensive" }`
-  — host only, room not started, at least one free seat. Seats a synthetic
-  player (`userId` `"bot:<id>"`, persona username, `isBot: true` in RoomState
-  players). Defaults: `deckCode` random precon, `style` "casual". Errors:
-  `forbidden` (non-host), `already_started`, `room_full`, `bad_deck`.
-- `{ "type": "bot.remove", "seat": <n> }` — host only, room not started,
-  target seat must hold a bot. Error: `not_a_bot`.
-- Bots play the four bundled FF Commander precons only (the server embeds
-  their lists + per-card attributes generated from `src/data/precons.json`
-  by `scripts/gen-bot-data.mjs` into `server/src/data/bot_data.json`).
-
-### Behavior contract
-
-- The scheduler ticks ~every 800 ms; a bot performs at most one action per
-  tick (human-like pacing; ~0 idle cost). Bots resume automatically after a
-  server restart (the scheduler scans persisted rooms — no extra state).
-- Mulligan: keeps any hand with 2–5 lands; otherwise takes at most one
-  mulligan, then keeps (bottoming the owed count, highest mana values first).
-- On its turn: plays one land per turn; casts what its untapped lands can
-  afford (tapping lands as payment), commander included (tax-aware);
-  creatures/permanents go to the battlefield, instants/sorceries ride the
-  stack and self-resolve to the graveyard next tick; attacks per style
-  (aggro: everything; casual: attackers whose power beats the defender's
-  best untapped blocker or when clearly ahead; defensive: only safe swings);
-  ends combat, then passes the turn. A bot never stalls a turn longer than
-  ~25 s (failsafe: pass).
-- Defending: declares blocks (largest blocker onto largest attacker first,
-  style-weighted), and after the attacker ends combat the bot applies the
-  unblocked damage to its own life total (plus commander damage bookkeeping
-  when the attacker is a commander).
-- Answers its own `cmd.choice` prompts (accept: return to command zone).
-- Bots do not chat, do not count as "online" for room-expiry liveness, and
-  are removed with the room. Spectator/friend/presence surfaces ignore them.
 
 ## Match end addendum (2026-07-18)
 
@@ -344,62 +311,50 @@ deck salt ratings + aggregate stats).
   }] }
   ```
 
-  `deck` is null for deckless seats (bots play embedded precons, no deckId).
-  `myEndorsed`/`mySalt` are the caller's own submissions for this match.
+  `deck` is null for deckless seats. `myEndorsed`/`mySalt` are the caller's
+  own submissions for this match.
 - Seats record `deckId` + a `deckName` snapshot at join time, so results
-  survive later deck renames/deletes. Stats treat bots per synthetic
-  `bot:*` id (effectively per-room; their all-time numbers are decorative).
+  survive later deck renames/deletes.
 
-## Combat v3 addendum — locked declarations & resolved results
+## Undo / redo / replay addendum (2026-07-20)
 
-Guided combat grows a full declare → lock → respond → resolve loop. The old
-instant flow (attack, end combat, bots self-settling) remains valid for
-un-locked combats; everything below activates only when the attacker LOCKS.
+Whole-match undo/redo and read-only replay scrubbing, built on a per-room
+in-memory **snapshot timeline** (not event-sourcing): every mutating action
+records a full game-state snapshot, so any point is restored by re-loading a
+snapshot (correct by construction for shuffles, hidden draws, and combat — no
+inverse-patching or RNG re-rolling). Live-only: the timeline is serde-skipped,
+so it is not persisted and resets on server restart (like the old single-slot
+undo it replaces). Capped at 400 snapshots per room (oldest dropped).
 
-### CombatState additions
-`locked: bool` (default false), `ready: [seat]` (defenders done responding),
-`prevent: [seat]` (defenders who prevented all combat damage this combat,
-e.g. a fog instant). Attacker entries gain `power?/toughness?` (strings,
-EFFECTIVE values supplied by the declaring client, counters included);
-blocks gain `power?/toughness?` likewise.
+### Game actions (client -> server, inside `game.action`)
+- `{ kind: 'undo' }` — move the shared cursor back one, restoring that state.
+  Errors: `undo_stale` (nothing to undo), `not_your_action`.
+- `{ kind: 'redo' }` — move the cursor forward one. Errors: `redo_stale`,
+  `not_your_action`.
+- `{ kind: 'rewintTo', index }` *(sic: `rewindTo`)* — host-only destructive jump
+  to any timeline index; discards everyone's later moves. Errors: `forbidden`,
+  `bad_rewind`.
 
-### Actions
-- `combat.attack` — now also carries `power?`, `toughness?`.
-- `combat.lock {}` — active seat only, needs >= 1 attacker; sets locked,
-  phase "block"; log "X locks in N attackers". After lock, attackers cannot
-  be re-toggled (error `locked`).
-- `combat.block` — now also carries `power?`, `toughness?`. Only valid while
-  locked (pre-lock blocks stay allowed for the legacy flow).
-- `combat.ready { prevent?: bool }` — a TARGETED defender marks themselves
-  done (prevent=true when they played a damage-prevention effect: they and
-  their blockers take and deal no combat damage). Recorded in `ready` (and
-  `prevent`). When every targeted human/bot defender is ready, the server
-  RESOLVES immediately.
-- `combat.end` before resolution cancels the combat outright (locked or
-  not): no damage, no deaths, banner clears. A canceled locked combat does
-  NOT stash a legacy settle record.
+Permission: undo/redo are allowed to the **host** or the **player who made the
+move being undone/redone** (owns-the-move policy). A new action taken after an
+undo truncates the redo tail (single linear branch). All three resync via
+`room.state` (hidden-info safe) and are rejected once the match is frozen.
 
-### Resolution (server-side, on last ready)
-For each attacker, in declaration order:
-- Defender in `prevent`: no damage either way, no deaths for that pairing.
-- Unblocked: defender loses `power` life (server applies `life.add`-style,
-  with commander damage bookkeeping when the attacker `isCommander`).
-- Blocked: blockers absorb in declared order — a blocker dies when the
-  attacker's remaining power >= its toughness (power spends as it kills);
-  the attacker dies when the blockers' summed power >= its toughness.
-  Tokens that die cease to exist; real cards go to their graveyard.
-Missing power/toughness resolve as 0 (no damage / no death suggestion).
-Then combat clears, phase becomes "main2", and every viewer receives
-`{"type": "combat.results", "attackerSeat", "entries": [{attackerIid, name,
-defenderSeat, prevented, blockers: [{iid, name, died}], attackerDied,
-damageToDefender}], "totalBySeat": {seat: damage}}` plus log lines. The
-results are freeform SUGGESTIONS made real: undo (10s) reverts the whole
-resolution, and the pile browsers let players correct edge cases
-(indestructible, regeneration) manually.
-Resolved locked combats do NOT create a legacy `last_combat` record (bots
-must not settle twice).
+### Replay scrubbing (viewer-local, read-only)
+- Client -> server: `{ type: 'replay.seek', index }` — top-level message, NOT a
+  game action; never mutates the room or the shared cursor.
+- Server -> client (only to the requesting connection):
+  `{ type: 'replay.frame', roomId, index, head, state }` — `state` is
+  `state_for(viewer)` at that historical snapshot, so hidden zones stay filtered
+  at any past point.
+- Entering/exiting replay is purely client-side (show the frame vs. the live
+  board); the board is read-only while scrubbing.
 
-### Bots
-- As targeted defenders of a locked combat: declare their blocks (now with
-  attrs-derived power/toughness), then `combat.ready` within a few ticks.
-- As attackers: unchanged legacy flow (bots never lock).
+### Undo affordance (server -> client)
+- `{ type: 'undo.state', roomId, canUndo, canRedo, cursor, head, host }` — pushed
+  per seated player after every action (and on game start). `canUndo`/`canRedo`
+  are computed per-viewer under the owns-the-move-or-host policy and are false
+  once the match is frozen; `head` = timeline length, `cursor` = current index.
+
+RoomState is unchanged. Undo/redo/replay all reuse the existing full-state
+resync path, so no per-action inverse deltas exist on the wire.

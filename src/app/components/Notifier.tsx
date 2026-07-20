@@ -16,12 +16,12 @@ export function Notifier() {
 
   useEffect(() => {
     const unsubscribe = ws.onMessage((message) => {
+      // Game invites are actionable, so they get a real accept/decline popup
+      // (InvitePopup), not a passive toast. Friend events stay as toasts.
       if (message.type === 'friend.request') {
         toast({ tone: 'info', message: `${message.from.username} ${t('ntFriendRequest')}` });
       } else if (message.type === 'friend.accepted') {
         toast({ tone: 'success', message: `${message.by.username} ${t('ntFriendAccepted')}` });
-      } else if (message.type === 'invite') {
-        toast({ tone: 'info', message: `${message.from.username} ${t('ntInvited')} ${message.roomName}` });
       }
     });
     return () => {

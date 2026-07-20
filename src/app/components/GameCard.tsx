@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
+import { memo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
 import { motion, useMotionValue, useSpring, useTransform } from 'motion/react';
 import './gamecard.css';
 
@@ -35,7 +35,15 @@ export interface GameCardProps {
 
 const RATIO = 680 / 488;
 
-export function GameCard({
+/**
+ * Memoized: GameCard is the app's heaviest leaf (springs + transforms + foil +
+ * glare) and is rendered per card across the whole board, so it re-renders on
+ * every ws event and every drag frame through its parents. Callers that pass
+ * only primitive props (hand cards, zone piles) now skip reconciliation when
+ * nothing about the card changed; callers that pass fresh `children`/handlers
+ * every render (field/opponent cards) still re-render until those are hoisted.
+ */
+export const GameCard = memo(function GameCard({
   name,
   imageUrl,
   width = 160,
@@ -138,4 +146,4 @@ export function GameCard({
       {children != null && <div className="gcOverlay">{children}</div>}
     </div>
   );
-}
+});

@@ -14,7 +14,6 @@ const STEPS = [
   ['commander-pod', join(HERE, 'scenarios', 'commander-pod.js')],
   ['standard-duel', join(HERE, 'scenarios', 'standard-duel.js')],
   ['chaos-monkey', join(HERE, 'scenarios', 'chaos-monkey.js')],
-  ['vs-bot', join(HERE, 'scenarios', 'vs-bot.js')],
   ['locked-combat', join(HERE, 'scenarios', 'locked-combat.js')],
 ];
 

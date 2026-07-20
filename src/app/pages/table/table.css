@@ -50,6 +50,42 @@
   background: radial-gradient(90% 70% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.4) 100%);
 }
 
+/* Living felt: a barely-there accent bloom near the top of the stage that
+   slowly breathes, so the dark table never reads as a frozen screenshot.
+   Transform + opacity only (GPU-composited, no repaint); stilled for
+   reduced-motion. Sits under the vignette (::after) and all board content. */
+.tableFelt::before {
+  content: '';
+  position: absolute;
+  inset: -12%;
+  pointer-events: none;
+  background: radial-gradient(
+    55% 45% at 50% 34%,
+    color-mix(in oklch, var(--glacier-accent-solid) 13%, transparent),
+    transparent 72%
+  );
+  opacity: 0.5;
+  animation: pcFeltBreathe 24s ease-in-out infinite;
+}
+
+@keyframes pcFeltBreathe {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1) translateY(0);
+  }
+  50% {
+    opacity: 0.72;
+    transform: scale(1.06) translateY(-1.4%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tableFelt::before {
+    animation: none;
+  }
+}
+
 .tableTop,
 .ribbonRow,
 .tableMain,
@@ -252,6 +288,17 @@
   display: flex;
   flex-direction: column;
   padding-inline-end: 19.5rem; /* right rail */
+  /* Sit above the right rail so the hand fan always overlays the log. The main
+     column paints nothing of its own and its board content stays left of the
+     rail gutter, so only the overflowing hand cards actually cover the log. */
+  z-index: 2;
+  /* ...but the empty rail gutter must not swallow clicks meant for the rail:
+     none on the container, auto back on the real board content. */
+  pointer-events: none;
+}
+
+.tableMain > * {
+  pointer-events: auto;
 }
 
 /* ---- opponents ---- */
@@ -366,21 +413,6 @@
   color: var(--glacier-warning-text);
 }
 
-.cmdChip {
-  border: var(--glacier-hairline) solid var(--glacier-border);
-  background: var(--glacier-surface-sunken);
-  color: var(--glacier-text-muted);
-  border-radius: var(--glacier-radius-full);
-  font-size: var(--glacier-font-size-xs);
-  padding: 0.1rem 0.5rem;
-  cursor: pointer;
-}
-
-.cmdChip:hover {
-  color: var(--glacier-danger-text);
-  border-color: var(--glacier-danger-text);
-}
-
 .oppField {
   position: relative;
   flex: 1;
@@ -404,6 +436,9 @@
   position: relative;
   flex: 1;
   min-height: 0;
+  /* Own stacking context: per-card z-order (newest on top) is contained here and
+     can never climb over the hand/pile strip (z-34) or the drag ghost. */
+  isolation: isolate;
   /* The playmat sits INSIDE a glowing card floating on the felt: its own mat
      background, a rounded border, and an accent glow. The hand/deck/HUD float
      over its lower band (which is reserved - no cards land there). */
@@ -558,8 +593,10 @@
   filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.5));
 }
 
+/* Above every placed card's newest-on-top z (10 + counter) but below the card
+   being dragged (z-100000), so hovering always lifts a card to the front. */
 .fieldCard:hover {
-  z-index: 20 !important;
+  z-index: 99990 !important;
 }
 
 .fieldCard[data-dragging] {
@@ -931,8 +968,21 @@
 
 /* hand fan */
 
+/* Non-transforming frame: holds the sliding fan + the sticky tab, and owns the
+   horizontal centre the tab pins to (the hand, not the whole playmat). */
 .myHand {
   flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  min-width: 0;
+  /* Above the zone piles (z-7) in the strip so the fan is never clipped by the
+     deck/graveyard column. */
+  position: relative;
+  z-index: 12;
+}
+
+.myFan {
   display: flex;
   justify-content: center;
   align-items: flex-end;
@@ -943,12 +993,57 @@
   transition: transform 280ms var(--pc-settle), box-shadow 160ms ease-out, background 160ms ease-out;
 }
 
-.myHand[data-peek] {
+.myFan[data-peek] {
   transform: translateY(0);
 }
 
+/* Manually tucked away: slide almost entirely off the bottom edge, clearing the
+   board. Wins over the peek transform because data-peek is suppressed while
+   hidden, so only this rule applies. */
+.myFan[data-hidden] {
+  transform: translateY(95%);
+}
+
+/* Sticky pull-tab that hides / shows the fan. It is centred on the HAND (its
+   parent .myHand, not the whole strip) and pinned to the bottom, so it never
+   moves as the fan rests, peeks or tucks away, and stays clickable every state.
+   It sits above the fan so a card can never bury it. */
+.handTab {
+  position: absolute;
+  left: 50%;
+  bottom: 0.5rem;
+  translate: -50% 0;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28em;
+  padding: 0.3rem 0.8rem;
+  font-size: var(--glacier-text-2xs, 0.7rem);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: var(--glacier-text-subtle);
+  background: color-mix(in oklch, var(--glacier-surface) 88%, transparent);
+  border: 1px solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-full, 999px);
+  box-shadow: var(--glacier-shadow-sm, 0 2px 8px rgb(0 0 0 / 0.28));
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  opacity: 0.78;
+  transition: opacity 160ms ease-out, color 160ms ease-out, background 160ms ease-out;
+}
+
+.handTab:hover {
+  opacity: 1;
+  color: var(--glacier-text);
+}
+
+.handTab > svg {
+  opacity: 0.85;
+}
+
 /* A battlefield card hovers the hand's buffer: light it up as a drop target. */
-.myHand[data-drop] {
+.myFan[data-drop] {
   background: color-mix(in oklch, var(--glacier-accent-solid) 12%, transparent);
   box-shadow: inset 0 2px 0 var(--glacier-accent-solid), 0 -8px 24px color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent);
 }
@@ -1046,6 +1141,52 @@
   gap: var(--glacier-space-2);
 }
 
+/* Damage tracker: one row per kind of damage (commander damage per opponent,
+   then poison) with +/- steppers; a row goes danger at its lethal threshold. */
+.dmgTrack {
+  align-self: stretch;
+  display: grid;
+  gap: 2px;
+  padding-block-start: var(--glacier-space-1);
+  border-block-start: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 40%, transparent);
+}
+
+.dmgRow {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.dmgLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+
+.dmgLabel > svg {
+  flex: none;
+  opacity: 0.8;
+}
+
+.dmgVal {
+  min-width: 2ch;
+  text-align: center;
+  font-family: var(--glacier-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.dmgRow[data-lethal] .dmgVal,
+.dmgRow[data-lethal] .dmgLabel {
+  color: var(--glacier-danger-text, var(--glacier-danger-solid));
+}
+
 .lifeBig {
   font-family: var(--glacier-font-mono);
   font-size: 2.1rem;
@@ -1054,20 +1195,6 @@
   min-width: 2ch;
   text-align: center;
   display: inline-block;
-}
-
-.poisonChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3em;
-  border: var(--glacier-hairline) solid var(--glacier-border);
-  background: var(--glacier-surface-sunken);
-  color: var(--glacier-warning-text);
-  border-radius: var(--glacier-radius-full);
-  font-size: var(--glacier-font-size-xs);
-  font-family: var(--glacier-font-mono);
-  padding: 0.15rem 0.6rem;
-  cursor: pointer;
 }
 
 .convenience {
@@ -1246,6 +1373,99 @@
   justify-items: center;
 }
 
+/* ---- library as a scrollable side panel (search + drag to play) ---- */
+
+.libSidebar {
+  position: fixed;
+  inset-block: 4.4rem var(--glacier-space-3);
+  inset-inline-end: var(--glacier-space-3);
+  width: 22rem;
+  max-width: 92vw;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-3);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
+  border-radius: var(--glacier-radius-xl);
+  background: color-mix(in oklch, oklch(0.16 0.02 265) 94%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-lg));
+  box-shadow: -12px 0 40px oklch(0.05 0.02 265 / 0.5);
+  animation: libSidebarIn 220ms var(--pc-settle);
+}
+
+@keyframes libSidebarIn {
+  from {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .libSidebar {
+    animation: none;
+  }
+}
+
+.libSidebarHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-2);
+}
+
+.libSidebarTitle {
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--glacier-text-subtle);
+}
+
+.libSidebarHint {
+  text-align: center;
+}
+
+.libSidebarScroll {
+  flex: 1;
+  min-height: 0;
+}
+
+.libSidebarGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-1);
+}
+
+.libSidebarCard {
+  display: grid;
+  gap: var(--glacier-space-1);
+  justify-items: center;
+}
+
+.libSidebarGrab {
+  cursor: grab;
+  touch-action: none;
+}
+
+.libSidebarGrab:active {
+  cursor: grabbing;
+}
+
+/* The pointer-following ghost while dragging a library card onto the table. */
+.libDragGhost {
+  position: fixed;
+  z-index: 96;
+  transform: translate(-50%, -50%) rotate(-3deg);
+  pointer-events: none;
+  filter: drop-shadow(0 12px 24px rgb(0 0 0 / 0.5));
+}
+
 /* ---- pile browser ---- */
 
 .pileScroll {
@@ -1289,7 +1509,8 @@
   gap: var(--glacier-space-4);
   justify-items: center;
   padding: var(--glacier-space-6, 2rem);
-  max-width: min(92vw, 70rem);
+  /* Wide enough for the fan to span the screen; the cards size themselves. */
+  max-width: 98vw;
 }
 
 .mullHead {
@@ -1812,6 +2033,47 @@
   min-width: 0;
 }
 
+/* Commander damage read-outs. Recording happens in the player's own vitals
+   damage tracker; the sidebar stat and this topbar bar are view-only, so the
+   whole table's commander-damage state is legible without a per-seat button. */
+.playerStat[data-lethal] {
+  color: var(--glacier-danger-text, var(--glacier-danger-solid));
+  font-weight: var(--glacier-font-weight-semibold);
+}
+
+.cmdBar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  flex-wrap: wrap;
+}
+.cmdBarChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  background: var(--glacier-surface-sunken);
+  color: var(--glacier-text-muted);
+  font-size: var(--glacier-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+.cmdBarChip[data-me] {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 55%, transparent);
+  color: var(--glacier-text);
+}
+.cmdBarChip[data-lethal] {
+  color: var(--glacier-danger-text, var(--glacier-danger-solid));
+  border-color: color-mix(in oklch, var(--glacier-danger-solid) 60%, transparent);
+}
+.cmdBarName {
+  max-width: 6rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tableTop .tableMeta > span {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1859,12 +2121,11 @@
   z-index: 7;
 }
 
-/* My zone piles grow and bleed up into the playmat: real cards on the felt.
-   Transform (not margin) so the bottom-anchored strip layout is untouched. */
+/* My zone piles sit flush on the bottom of the playmat (the strip is
+   align-items:flex-end, so no lift is needed to bottom-align them). */
 .zonePiles[data-mine] {
   position: relative;
   z-index: 7;
-  transform: translateY(-3.25rem);
   padding-inline-start: var(--glacier-space-2);
 }
 
@@ -2478,28 +2739,56 @@
 
 /* Staged opponent (SeatFrame): a fan of card backs under their header so the
    hand size reads at a glance, like sleeves across the table. */
+/* Their hand: a fan of card backs like mine, rotated so it hangs from the top
+   edge (their side). The per-card translate/rotate arc flips with it. */
 .oppHand {
+  position: relative;
+  z-index: 6;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
   padding-block: var(--glacier-space-1);
-  min-height: 2.4rem;
+  pointer-events: none;
+}
+
+/* Mirror my own hand: the opponent's hand sits at the BOTTOM edge of their
+   board (the same spot mine occupies on mine), but flipped 180deg - it's their
+   hand across the table. Ordered last so the field fills above it. Reveals
+   pop above the fan via z-index on hover. */
+.seatFrame[data-stage] .oppHand {
+  order: 5;
+  transform: rotate(180deg);
 }
 
 .oppHandCard {
-  width: 1.55rem;
-  height: 2.15rem;
-  margin-inline: -0.5rem; /* overlap into a fan */
-  border-radius: 0.22rem;
+  flex: none;
+  width: 3.4rem;
+  height: calc(3.4rem * 680 / 488);
+  margin-inline: -0.95rem; /* overlap into a fan */
+  border-radius: 0.28rem;
   background-image: var(--pc-card-back);
   background-size: cover;
   background-position: center;
   border: var(--glacier-hairline) solid rgba(0, 0, 0, 0.5);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 
-.oppHandCard:first-child {
-  margin-inline-start: 0;
+/* A card the opponent revealed: show its face (not a back) with an accent ring
+   so it reads as intentionally shown. */
+.oppHandReveal {
+  width: auto;
+  height: auto;
+  background: none;
+  border: none;
+  border-radius: var(--glacier-radius-sm);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--glacier-accent-solid) 70%, transparent), 0 4px 10px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 1;
+}
+
+.oppHandReveal:hover {
+  z-index: 5;
 }
 
 .oppHandTally {
@@ -2593,18 +2882,37 @@
 }
 
 /* A staged opponent sits ACROSS the table: their board is a MIRROR of mine.
-   Their full-size zone piles sit at the TOP (their far edge), and both the
-   piles and the battlefield are rotated 180deg so every card faces away -
-   upside down until you click one for the (upright) preview. */
-.seatFrame[data-stage] .zonePiles:not([data-mine]) {
-  order: 1;
-  align-self: center;
-  padding: var(--glacier-space-2) var(--glacier-space-3) 0;
+   My own piles live in my bottom-LEFT corner, so a 180deg flip puts theirs in
+   the TOP-RIGHT corner - exactly where they'd be for someone sitting across
+   the table. Both piles and battlefield rotate 180deg so every card faces away
+   (upside down until you click one for the upright preview). */
+.stageArea .seatFrame[data-stage] {
+  position: relative;
+}
+/* MIRRORED (across-the-table) view: the piles pin to the top-right corner (the
+   180deg mirror of my bottom-left column) and the whole board flips. */
+.seatFrame[data-stage][data-mirror] .zonePiles:not([data-mine]) {
+  position: absolute;
+  /* Clear the header row AND the mat's top border: the mirrored piles are
+     rotated so their captions ride toward the top edge and were clipping it. */
+  inset-block-start: 3.9rem;
+  inset-inline-end: var(--glacier-space-3);
+  z-index: 6;
+  padding: 0;
   transform: rotate(180deg);
 }
+.seatFrame[data-stage][data-mirror] .oppField {
+  transform: rotate(180deg);
+}
+/* UPRIGHT view (mirror off): the field takes the middle and the piles flow
+   naturally beneath it, cards the right way up so they read directly. */
 .seatFrame[data-stage] .oppField {
   order: 2;
-  transform: rotate(180deg);
+}
+.seatFrame[data-stage]:not([data-mirror]) .zonePiles:not([data-mine]) {
+  order: 3;
+  align-self: flex-start;
+  padding: var(--glacier-space-2) var(--glacier-space-3);
 }
 
 /* ---- right rail cards: life (Vitals), players, log ---- */
@@ -2626,4 +2934,211 @@
 /* In the rail the life card stretches to the rail width. */
 .tableSide .myVitals {
   align-self: stretch;
+}
+
+/* ---- timeline transport bar (full-width, on demand) ---- */
+
+/* The scrubber breaks out of the narrow rail card into a bar spanning the whole
+   bottom edge, so moves get real width to breathe. Sits above the board and the
+   hand fan; while replaying it also floats over the read-only frame. Rendered
+   through a portal to document.body, so it is positioned against the viewport
+   regardless of the rail's stacking context. */
+.timelineBar {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 63;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-4);
+  padding: var(--glacier-space-3) var(--glacier-space-5);
+  padding-bottom: calc(var(--glacier-space-3) + env(safe-area-inset-bottom, 0px));
+  border-top: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 70%, transparent);
+  background: color-mix(in oklch, oklch(0.16 0.02 265) 94%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-lg));
+  box-shadow: 0 -12px 40px rgb(0 0 0 / 0.45);
+  animation: timelineBarUp 220ms var(--pc-settle);
+}
+
+/* Replaying: accent the top edge so the read-only state reads at a glance. */
+.timelineBar[data-replay] {
+  border-top-color: color-mix(in oklch, var(--glacier-accent-solid) 60%, var(--glacier-border));
+  box-shadow:
+    0 -12px 40px rgb(0 0 0 / 0.5),
+    inset 0 2px 0 color-mix(in oklch, var(--glacier-accent-solid) 40%, transparent);
+}
+
+@keyframes timelineBarUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timelineBar {
+    animation: none;
+  }
+}
+
+.timelineBarHead {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--glacier-text-subtle);
+  white-space: nowrap;
+}
+
+.timelineBar[data-replay] .timelineBarHead {
+  color: var(--glacier-accent-text, var(--glacier-text));
+}
+
+/* The event strip: evenly-spaced stops (a timeline of moves, not a clock), each
+   a mini card thumbnail over a track dot and a short label. Scrolls when long. */
+.timelineEvents {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: var(--glacier-space-1);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 var(--glacier-space-2) 2px;
+  scrollbar-width: thin;
+  /* A faint rule runs through the row of dots, tying the stops together. */
+  background-image: linear-gradient(color-mix(in oklch, var(--glacier-border) 60%, transparent), color-mix(in oklch, var(--glacier-border) 60%, transparent));
+  background-size: 100% var(--glacier-hairline);
+  background-position: 0 calc(2.9rem + 5px);
+  background-repeat: no-repeat;
+}
+
+.tlEvent {
+  flex: none;
+  width: 3.6rem;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.78;
+  transition: opacity 140ms ease-out, transform 140ms var(--pc-settle);
+}
+
+.tlEvent:hover {
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.tlThumb {
+  width: 2rem;
+  height: 2.9rem;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--glacier-radius-sm);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 70%, transparent);
+  background: color-mix(in oklch, var(--glacier-surface) 60%, transparent);
+}
+
+.tlThumb > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tlThumbIcon {
+  color: var(--glacier-text-subtle);
+}
+
+.tlDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: color-mix(in oklch, var(--glacier-border) 90%, var(--glacier-text-subtle));
+  box-shadow: 0 0 0 3px color-mix(in oklch, oklch(0.16 0.02 265) 94%, transparent);
+}
+
+.tlEvent[data-mine] .tlDot {
+  background: var(--glacier-accent-solid);
+}
+
+.tlLabel {
+  max-width: 100%;
+  font-size: var(--glacier-text-2xs, 0.68rem);
+  line-height: 1.1;
+  color: var(--glacier-text-muted);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* The stop currently on screen (live edge, or the inspected point in replay). */
+.tlEvent[data-active] {
+  opacity: 1;
+}
+
+.tlEvent[data-active] .tlThumb {
+  border-color: var(--glacier-accent-solid);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--glacier-accent-solid) 55%, transparent);
+}
+
+.tlEvent[data-active] .tlLabel {
+  color: var(--glacier-text);
+  font-weight: 600;
+}
+
+/* The rail card's Timeline toggle sits between undo (left) and redo (right)
+   and expands to fill the row; its icon stays snug to the label. */
+.timelineToggle {
+  flex: 1;
+  gap: 0.35em;
+}
+
+/* Drop-target ring: a card is being dragged over this zone pile. */
+.zonePile[data-drop] {
+  outline: 2px dashed color-mix(in oklch, var(--glacier-accent-solid) 75%, transparent);
+  outline-offset: 3px;
+  border-radius: var(--glacier-radius-md);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 12%, transparent);
+}
+
+/* ---- dedicated timeline card (below vitals) ---- */
+
+.timelineCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-3);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
+  border-radius: var(--glacier-radius-xl);
+  background: color-mix(in oklch, oklch(0.18 0.02 265) 80%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+}
+
+.timelineTools {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+/* While scrubbing a replay the board is a read-only past frame; the rail (with
+   the timeline card) stays interactive so you can keep scrubbing. */
+.table[data-replay] .tableMain {
+  pointer-events: none;
+  filter: saturate(0.85) brightness(0.92);
+  transition: filter 160ms ease-out;
 }

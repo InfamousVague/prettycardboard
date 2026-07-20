@@ -12,12 +12,11 @@ export type ClientMessage =
   | { type: 'room.spectate'; roomId: string }
   | { type: 'room.leave' }
   | { type: 'room.start' }
-  | { type: 'bot.add'; deckCode?: string; style?: 'casual' | 'aggro' | 'defensive' }
-  | { type: 'bot.remove'; seat: number }
   | { type: 'playmat.set'; id?: string }
   | { type: 'chat.send'; text: string }
   | { type: 'invite.send'; toUserId: string; roomId: string }
-  | { type: 'game.action'; action: GameAction | GameActionV2 };
+  | { type: 'game.action'; action: GameAction | GameActionV2 }
+  | { type: 'replay.seek'; index: number };
 
 type Listener = (message: ServerMessage) => void;
 type StatusListener = (connected: boolean) => void;

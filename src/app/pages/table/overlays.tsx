@@ -88,15 +88,17 @@ export function LibraryViewer() {
     return order.filter((card) => card.name.toLowerCase().includes(query));
   }, [order, filter]);
 
-  if (!libraryCards) return null;
+  // The `search` intent now opens the scrollable LibrarySidebar (drag to play);
+  // the modal is only for `peek` (reorder the top N).
+  if (!libraryCards || libIntent === 'search') return null;
 
   return (
     <Modal
       open
       onClose={close}
-      size={mode === 'search' ? 'xl' : 'lg'}
-      title={mode === 'search' ? t('gpSearchLib') : t('gpPeek')}
-      description={mode === 'search' ? undefined : `${t('tblLibrary')} · ${order.length}`}
+      size="lg"
+      title={t('gpPeek')}
+      description={`${t('tblLibrary')} · ${order.length}`}
     >
       {mode === 'peek' ? (
         <div className="libPeek">
@@ -316,6 +318,17 @@ export function MulliganOverlay({ room, me }: { room: RoomState; me: TablePlayer
   const freeFirst = room.format === 'commander' && room.players.length >= 3 ? 1 : 0;
   const owed = Math.max(0, (mulligan?.taken ?? 0) - freeFirst);
 
+  // The fan fills the width of the screen: size each card so the whole hand
+  // spans ~95vw. Cards overlap by 32px (margin-inline: -16px), so a card's
+  // footprint is (width - 32); solve for width that packs `n` across the row.
+  const [vw, setVw] = useState(() => (typeof window === 'undefined' ? 1280 : window.innerWidth));
+  useEffect(() => {
+    const onResize = () => setVw(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const cardW = Math.round(Math.min(260, Math.max(132, (vw * 0.95 - 32) / Math.max(hand.length, 1) + 32)));
+
   useEffect(() => {
     // Fresh hand or fresh decision - reset local picks.
     setPicking(false);
@@ -378,7 +391,7 @@ export function MulliganOverlay({ room, me }: { room: RoomState; me: TablePlayer
                 <GameCard
                   name={card.name}
                   imageUrl={card.imageUrl || cardImage(card.scryfallId)}
-                  width={128}
+                  width={cardW}
                   tilt={picking ? 0 : 8}
                   selected={picked.has(card.iid)}
                 />

@@ -4,7 +4,7 @@
 // and deaths itself, every viewer receives combat.results, prevent zeroes a
 // combat, combat.end cancels a locked combat without a legacy settle, and a
 // bot defender readies through and takes damage exactly once.
-import { PlaytestClient, Assert, deleteRoom, sleep } from '../lib.js';
+import { PlaytestClient, Assert, deleteRoom } from '../lib.js';
 import { ensureSeed, PASSWORD } from '../seed.js';
 
 /** Mint a token and return its iid from the room.event payload (no resync). */
@@ -223,64 +223,7 @@ async function main() {
   });
   await bob.assertNever('combat.results', 'no combat.results on cancel', 1500, { since: mCancel });
 
-  // ---- bot defender: readies through, damage applied exactly once ----------
-  const botRoomRes = await alice.api('POST', '/api/rooms', {
-    name: 'pt locked combat bot',
-    seats: 2,
-    persistent: false,
-    format: 'standard',
-  });
-  t.ok(botRoomRes.status === 201, 'bot room created', `status ${botRoomRes.status}`);
-  const botRoomId = botRoomRes.json.roomId;
-  m = alice.mark();
-  alice.joinRoom(botRoomId, seeded.pt_alice.deckId);
-  await alice.expectState((s) => s.roomId === botRoomId && s.players.length === 1, 'alice seated in bot room', 5000, {
-    since: m,
-  });
-  alice.send({ type: 'bot.add', style: 'casual' });
-  st = await alice.expectState((s) => s.players.length === 2 && s.players.some((p) => p.isBot), 'bot seated', 5000, {
-    since: m,
-  });
-  const botSeat = st.players.find((p) => p.isBot).seat;
-  alice.send({ type: 'room.start' });
-  alice.act({ kind: 'mull.keep', bottomIids: [] });
-  st = await alice.expectState(
-    (s) => s.started && s.players.every((p) => p.mulligan?.state === 'kept') && s.activeSeat === 0,
-    'bot room underway, alice active',
-    15000,
-    { since: m },
-  );
-  const botLifeBefore = st.players.find((p) => p.isBot).life;
-
-  const raptor = await mintToken(alice, { name: 'PT Raptor', power: '3', toughness: '3' });
-  m = alice.mark();
-  alice.act({ kind: 'combat.begin' });
-  await alice.expectState((s) => s.combat != null, 'bot combat begun', 5000, { since: m });
-  alice.act({ kind: 'combat.attack', iid: raptor, defenderSeat: botSeat, power: '3', toughness: '3' });
-  alice.act({ kind: 'combat.lock' });
-  await alice.expectState((s) => s.combat?.locked === true, 'bot combat locked', 5000, { since: m });
-
-  const botResults = await alice.waitFor((msg) => msg.type === 'combat.results', { since: m, timeoutMs: 12000 });
-  t.ok(!!botResults, 'bot defender readied; combat resolved', '');
-  st = await alice.expectState(
-    (s) => s.combat == null && s.players.find((p) => p.isBot).life === botLifeBefore - 3,
-    `bot took exactly 3 (${botLifeBefore} -> ${botLifeBefore - 3})`,
-    8000,
-    { since: m },
-  );
-  // The legacy self-settle path must NOT fire on top of the server resolution.
-  await sleep(2600);
-  m = alice.mark();
-  alice.requestResync();
-  st = await alice.expectState((s) => s.roomId === botRoomId, 'post-settle resync', 5000, { since: m });
-  t.ok(
-    st && st.players.find((p) => p.isBot).life === botLifeBefore - 3,
-    'bot life unchanged after bot ticks (no double settle)',
-    st ? `${st.players.find((p) => p.isBot).life}` : '',
-  );
-
   // ---- cleanup -------------------------------------------------------------
-  await deleteRoom(alice, botRoomId);
   await deleteRoom(alice, roomId);
   await alice.close();
   await bob.close();

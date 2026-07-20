@@ -4,8 +4,6 @@ import {
   DensitySelector,
   Fieldset,
   Label,
-  Pill,
-  ProgressBar,
   Row,
   SegmentedControl,
   Select,
@@ -18,48 +16,18 @@ import {
   useToast,
   type TabbedModalSection,
 } from '@glacier/react';
-import {
-  CircleUserRound,
-  Download,
-  ExternalLink,
-  Globe,
-  Info,
-  LayoutGrid,
-  LogOut,
-  Palette,
-  RefreshCw,
-} from '@glacier/icons';
+import { CircleUserRound, Globe, Info, LayoutGrid, Palette, Wrench } from '@glacier/icons';
 import { accentSteps } from '@glacier/tokens';
 import { ACCENTS, DEFAULT_PREFERENCES, MONO_FONTS, SANS_FONTS, type Preferences } from './preferences.ts';
 import { LANGUAGES, useT, type AppLocale } from './i18n.ts';
-import { canSelfUpdate, checkForUpdate, currentVersion, installUpdate, type PendingUpdate } from './updater.ts';
-import { isTauri } from './tauri.ts';
-import { useApp } from './state/appStore.ts';
-
-/** The public marketing name, brand-fixed across locales. */
-const APP_NAME = 'PrettyCardboard';
-const DOWNLOAD_URL = 'https://prettycardboard.com/download';
-const SITE_URL = 'https://prettycardboard.com';
+import { AccountTab } from './settings/AccountTab.tsx';
+import { AboutTab } from './settings/AboutTab.tsx';
 
 function resolveTheme(theme: Preferences['theme']): 'light' | 'dark' {
   if (theme !== 'system') return theme;
   return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches
     ? 'light'
     : 'dark';
-}
-
-/** Open a URL in the user's browser — via the Tauri opener when desktop, else a new tab. */
-async function openExternal(url: string): Promise<void> {
-  if (isTauri()) {
-    try {
-      const { openUrl } = await import(/* @vite-ignore */ '@tauri-apps/plugin-opener');
-      await openUrl(url);
-      return;
-    } catch {
-      // fall through to the web path
-    }
-  }
-  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 /**
@@ -237,6 +205,28 @@ export function SettingsModal({
         />
       </div>
 
+      <div className="control">
+        <Label>{t('setCardPlacement')}</Label>
+        <SegmentedControl
+          aria-label={t('setCardPlacement')}
+          fullWidth
+          value={preferences.verticalCards ? 'vertical' : 'natural'}
+          onValueChange={(value) => onChange({ verticalCards: value === 'vertical' })}
+          options={[
+            { value: 'natural', label: t('setCardNatural') },
+            { value: 'vertical', label: t('setCardVertical') },
+          ]}
+        />
+      </div>
+
+      <Fieldset legend={t('setMirror')} description={t('setMirrorHint')}>
+        <Switch
+          label={t('setMirror')}
+          checked={preferences.mirrorOpponent}
+          onCheckedChange={(checked) => onChange({ mirrorOpponent: checked })}
+        />
+      </Fieldset>
+
       <Fieldset legend={t('setHaptics')} description={t('setHapticsHint')}>
         <Switch
           label={t('setHaptics')}
@@ -340,193 +330,5 @@ export function SettingsModal({
         </Row>
       }
     />
-  );
-}
-
-/** Account tab: the signed-in name and a sign-out that also closes the modal. */
-function AccountTab({ onClose }: { onClose: () => void }) {
-  const t = useT();
-  const identity = useApp((state) => state.identity);
-  const signOut = useApp((state) => state.signOut);
-
-  return (
-    <div style={{ display: 'grid', gap: 'var(--glacier-space-5)' }}>
-      <Row align="center" gap={3}>
-        <CircleUserRound size={40} aria-hidden />
-        <div style={{ display: 'grid', gap: 'var(--glacier-space-1)' }}>
-          <Text as="span" weight="medium">
-            {identity?.username ?? '—'}
-          </Text>
-          <Text as="span" size={Size.Small} tone={TextTone.Muted}>
-            {t('pfTempId')}
-          </Text>
-        </div>
-      </Row>
-      <div>
-        <Button
-          variant="danger"
-          onClick={() => {
-            signOut();
-            onClose();
-          }}
-        >
-          <LogOut size={16} />
-          {t('pfSignOut')}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-type UpdateState = 'idle' | 'checking' | 'uptodate' | 'available' | 'installing' | 'error';
-
-/** About & Updates: version, self-update flow (desktop only), and links. */
-function AboutTab() {
-  const t = useT();
-  const [version, setVersion] = useState<string | null>(null);
-  const [state, setState] = useState<UpdateState>('idle');
-  const [pending, setPending] = useState<PendingUpdate | null>(null);
-  const [progress, setProgress] = useState(0);
-
-  useEffect(() => {
-    let alive = true;
-    void currentVersion().then((v) => {
-      if (alive) setVersion(v);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const runCheck = async () => {
-    setState('checking');
-    try {
-      const update = await checkForUpdate();
-      if (update) {
-        setPending(update);
-        setState('available');
-      } else {
-        setState('uptodate');
-      }
-    } catch {
-      setState('error');
-    }
-  };
-
-  const runInstall = async () => {
-    if (!pending) return;
-    setState('installing');
-    setProgress(0);
-    try {
-      await installUpdate(pending, setProgress);
-      // On success the app relaunches; nothing more to do here.
-    } catch {
-      setState('error');
-    }
-  };
-
-  return (
-    <div style={{ display: 'grid', gap: 'var(--glacier-space-5)' }}>
-      <Row justify="between" align="center" gap={3} wrap>
-        <div style={{ display: 'grid', gap: 'var(--glacier-space-1)' }}>
-          <Text as="span" weight="medium">
-            {APP_NAME}
-          </Text>
-          <Text as="span" size={Size.Small} tone={TextTone.Muted}>
-            {t('setCredits')}
-          </Text>
-        </div>
-        <Pill tone="neutral" size="md">
-          {t('setVersion')} {version ?? '…'}
-        </Pill>
-      </Row>
-
-      {canSelfUpdate ? (
-        <div style={{ display: 'grid', gap: 'var(--glacier-space-3)' }}>
-          <Row align="center" gap={3} wrap>
-            <Button
-              variant="outline"
-              loading={state === 'checking'}
-              disabled={state === 'installing'}
-              onClick={runCheck}
-            >
-              <RefreshCw size={16} />
-              {state === 'checking' ? t('setChecking') : t('setCheckUpdates')}
-            </Button>
-            {state === 'uptodate' && (
-              <Text as="span" size={Size.Small} tone={TextTone.Muted}>
-                {t('setUpToDate')}
-              </Text>
-            )}
-            {state === 'error' && (
-              <Text as="span" size={Size.Small} tone={TextTone.Danger}>
-                {t('setUpdateFailed')}
-              </Text>
-            )}
-          </Row>
-
-          {(state === 'available' || state === 'installing') && pending && (
-            <div
-              style={{
-                display: 'grid',
-                gap: 'var(--glacier-space-3)',
-                padding: 'var(--glacier-space-4)',
-                borderRadius: 'var(--glacier-radius-md)',
-                border: 'var(--glacier-hairline) solid var(--glacier-border)',
-                background: 'var(--glacier-surface-raised)',
-              }}
-            >
-              <Row justify="between" align="center" gap={3} wrap>
-                <Text as="span" weight="medium">
-                  {t('setUpdateAvailable')}
-                </Text>
-                <Pill tone="accent" size="sm">
-                  {pending.version}
-                </Pill>
-              </Row>
-              {pending.notes && (
-                <Text as="p" size={Size.Small} tone={TextTone.Muted}>
-                  {pending.notes}
-                </Text>
-              )}
-              {state === 'installing' ? (
-                <div style={{ display: 'grid', gap: 'var(--glacier-space-2)' }}>
-                  <ProgressBar value={progress} max={100} aria-label={t('setUpdating')} />
-                  <Text as="span" size={Size.Small} tone={TextTone.Muted} mono>
-                    {t('setUpdating')} {progress}%
-                  </Text>
-                </div>
-              ) : (
-                <div>
-                  <Button onClick={runInstall}>
-                    <Download size={16} />
-                    {t('setUpdateInstall')}
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gap: 'var(--glacier-space-3)' }}>
-          <Text as="span" size={Size.Small} tone={TextTone.Muted}>
-            {t('setDesktopAutoUpdates')}
-          </Text>
-          <div>
-            <Button variant="outline" onClick={() => void openExternal(DOWNLOAD_URL)}>
-              <Download size={16} />
-              {t('setDownloadDesktop')}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      <Row align="center" gap={2}>
-        <Button variant="ghost" size="sm" onClick={() => void openExternal(SITE_URL)}>
-          <ExternalLink size={16} />
-          prettycardboard.com
-        </Button>
-      </Row>
-    </div>
   );
 }

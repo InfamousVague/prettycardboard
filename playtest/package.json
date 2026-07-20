@@ -9,7 +9,6 @@
     "pod": "node scenarios/commander-pod.js",
     "duel": "node scenarios/standard-duel.js",
     "chaos": "node scenarios/chaos-monkey.js",
-    "vsbot": "node scenarios/vs-bot.js",
     "locked": "node scenarios/locked-combat.js",
     "aimatch": "node scenarios/ai-match.js",
     "restart": "node scenarios/restart-resume.js",

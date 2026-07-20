@@ -28,17 +28,9 @@ interface TableUiState {
   hydrateCardScale: (userId: string | undefined) => void;
   setCardScale: (scale: number, userId: string | undefined) => void;
 
-  /** My selected blocker awaiting an attacker click. */
+  /** My selected blocker awaiting an attacker click (or vice versa). */
   blockerIid: string | null;
   setBlocker: (iid: string | null) => void;
-
-  /** Creature just clicked to attack - the target-selection modal is up. */
-  attackPick: string | null;
-  setAttackPick: (iid: string | null) => void;
-
-  /** Defender dismissed the response modal to play instants; a chip reopens it. */
-  defenseHidden: boolean;
-  setDefenseHidden: (hidden: boolean) => void;
 
   /** Why we last asked for library.cards - decides which viewer opens. */
   libIntent: LibIntent;
@@ -67,12 +59,6 @@ export const useTableUi = create<TableUiState>((set) => ({
 
   blockerIid: null,
   setBlocker: (iid) => set({ blockerIid: iid }),
-
-  attackPick: null,
-  setAttackPick: (iid) => set({ attackPick: iid }),
-
-  defenseHidden: false,
-  setDefenseHidden: (hidden) => set({ defenseHidden: hidden }),
 
   libIntent: null,
   setLibIntent: (intent) => set({ libIntent: intent }),

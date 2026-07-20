@@ -106,8 +106,6 @@ export interface TablePlayer {
   mulligan?: MulliganState | null;
   userId: string;
   username: string;
-  /** Server-driven AI opponent (heuristic bot). */
-  isBot?: boolean;
   /** The seat's chosen playmat id; the felt shows the active player's mat. */
   playmat?: string | null;
   seat: number;
@@ -116,6 +114,9 @@ export interface TablePlayer {
   cmdDamage: Record<string, number>;
   handCount: number;
   hand?: CardInst[];
+  /** Cards individually revealed to the table (reveal.card); visible to
+   * everyone even without a full hand reveal. */
+  revealedHand?: CardInst[];
   libraryCount: number;
   battlefield: CardInst[];
   graveyard: CardInst[];
@@ -218,7 +219,8 @@ export type GameAction =
   | { kind: 'life.add'; delta: number }
   | { kind: 'cmd.damage'; fromSeat: number; delta: number }
   | { kind: 'poison.add'; delta: number }
-  | { kind: 'reveal.hand' };
+  | { kind: 'reveal.hand' }
+  | { kind: 'reveal.card'; iid: string };
 
 /** Server → client WebSocket messages. */
 export type ServerMessage =
@@ -228,46 +230,37 @@ export type ServerMessage =
   | { type: 'friend.request'; id: string; from: { userId: string; username: string } }
   | { type: 'friend.accepted'; by: { userId: string; username: string } }
   | { type: 'room.state'; state: RoomState }
-  | { type: 'room.event'; seq: number; actor: string; action: GameAction & Record<string, unknown> }
-  | { type: 'chat'; from: { userId: string; username: string }; text: string; ts: number }
-  | { type: 'log'; seq: number; text: string; ts: number }
+  | { type: 'room.event'; seq: number; actor: string; action: GameAction & Record<string, unknown>; roomId: string }
+  | { type: 'chat'; from: { userId: string; username: string }; text: string; ts: number; roomId: string }
+  | { type: 'log'; seq: number; text: string; ts: number; roomId: string }
   | { type: 'decks.changed' }
   | { type: 'room.closed'; roomId: string }
   | { type: 'error'; code: string; message: string }
-  | { type: 'cmd.choice'; iid: string; to: Zone }
-  | { type: 'library.cards'; cards: CardInst[] }
-  | ({ type: 'combat.results' } & CombatResults);
+  | { type: 'cmd.choice'; iid: string; to: Zone; roomId: string }
+  | { type: 'library.cards'; cards: CardInst[]; roomId: string }
+  | { type: 'undo.state'; roomId: string; canUndo: boolean; canRedo: boolean; cursor: number; head: number; host: boolean }
+  | { type: 'timeline'; roomId: string; entries: TimelineEntry[] }
+  | { type: 'replay.frame'; roomId: string; index: number; head: number; state: RoomState };
 
 // --- gameplay v2 (turns, phases, combat, tools) ---
 
 export type Phase = 'upkeep' | 'main1' | 'attack' | 'block' | 'damage' | 'main2' | 'end';
 
+/** A lightweight, informational overlay: who is attacking whom and which
+ * creatures block which attackers. The server never resolves damage - players
+ * inform each other and adjust life/creatures manually. */
 export interface CombatState {
   attackers: { iid: string; defenderSeat?: number; power?: string; toughness?: string }[];
   blocks: { blockerIid: string; attackerIid: string; power?: string; toughness?: string }[];
-  /** Combat v3: attackers are locked in; defenders are responding. */
-  locked?: boolean;
-  /** Seats of targeted defenders who declared themselves done. */
-  ready?: number[];
-  /** Seats that prevented all combat damage this combat (fog effects). */
-  prevent?: number[];
 }
 
-/** One attacker's line in a resolved locked combat (combat.results). */
-export interface CombatResultEntry {
-  attackerIid: string;
-  name: string;
-  defenderSeat?: number;
-  prevented: boolean;
-  blockers: { iid: string; name: string; died: boolean }[];
-  attackerDied: boolean;
-  damageToDefender: number;
-}
-
-export interface CombatResults {
-  attackerSeat: number;
-  entries: CombatResultEntry[];
-  totalBySeat: Record<string, number>;
+/** One recorded move on the event timeline: who did it, its log label, when,
+ * and the public face of the card it concerned (for a mini thumbnail). */
+export interface TimelineEntry {
+  ts: number;
+  label: string;
+  actor: string;
+  card?: { name: string; imageUrl?: string | null; scryfallId?: string } | null;
 }
 
 export interface TableMarkers {
@@ -293,8 +286,6 @@ export type GameActionV2 =
   | { kind: 'combat.begin' }
   | { kind: 'combat.attack'; iid: string; defenderSeat?: number; power?: string; toughness?: string }
   | { kind: 'combat.block'; blockerIid: string; attackerIid: string; power?: string; toughness?: string }
-  | { kind: 'combat.lock' }
-  | { kind: 'combat.ready'; prevent?: boolean }
   | { kind: 'combat.end' }
   | { kind: 'cmd.cast'; iid: string; x: number; y: number }
   | { kind: 'cmd.return'; iid: string; accept: boolean }
@@ -311,4 +302,6 @@ export type GameActionV2 =
   | { kind: 'mull.take' }
   | { kind: 'mull.keep'; bottomIids: string[] }
   | { kind: 'undo' }
+  | { kind: 'redo' }
+  | { kind: 'rewindTo'; index: number }
   | { kind: 'concede' };

@@ -1,5 +1,4 @@
 mod api;
-mod bot;
 mod db;
 mod game;
 mod rooms;
@@ -129,9 +128,9 @@ async fn main() {
             .and_then(|s| serde_json::from_str::<rooms::Room>(s).ok());
         match parsed {
             Some(mut room) => {
-                // Humans resume by reconnecting; bots are always "present".
+                // Everyone resumes by reconnecting.
                 for p in room.players.iter_mut() {
-                    p.online = p.is_bot;
+                    p.online = false;
                 }
                 room.spectators.clear();
                 // Rooms persisted before the match-end feature carry zeroed
@@ -183,7 +182,6 @@ async fn main() {
     }
 
     tokio::spawn(rooms::sweeper(app.clone()));
-    tokio::spawn(bot::scheduler(app.clone()));
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(|origin: &HeaderValue, _| {

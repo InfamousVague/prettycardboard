@@ -129,6 +129,12 @@ export const LANE_LAND = 0.84;
 /** Assist-mode bottom strip for lands. */
 export const ASSIST_LAND_Y = 0.86;
 
+/** The deck/graveyard/exile/command pile column floats over the bottom-left of
+ * the mat; Smart-mode + Tidy keep lands to the RIGHT of it so they never tuck
+ * underneath. (A heuristic fraction of field width - the piles' real width
+ * depends on card scale, but this clears the common case.) */
+export const LAND_STRIP_X = 0.34;
+
 /** Grid pitch in px, converted per drop against the live field rect. */
 export const GRID_PX = 56;
 
@@ -153,7 +159,8 @@ export function snapDrop(
     };
   }
   if (mode === 'assist' && card && isLand(card)) {
-    return { x: clamp01(pos.x), y: ASSIST_LAND_Y };
+    // Keep lands on the bottom strip but clear of the left pile column.
+    return { x: clamp01(Math.max(pos.x, LAND_STRIP_X)), y: ASSIST_LAND_Y };
   }
   return pos;
 }
@@ -225,12 +232,16 @@ export function tidyPositions(
       y: clamp01(0.18 + row * stepY, 0.7),
     });
   });
+  // Lands flow along the bottom starting to the RIGHT of the pile column so they
+  // never end up tucked under the deck/graveyard/exile/command stacks.
+  const landStartX = Math.max(startX, LAND_STRIP_X);
+  const landPerRow = Math.max(1, Math.floor((0.94 - landStartX) / stepX) + 1);
   readingOrder(lands).forEach((card, index) => {
-    const row = Math.floor(index / perRow);
-    const col = index % perRow;
+    const row = Math.floor(index / landPerRow);
+    const col = index % landPerRow;
     out.push({
       iid: card.iid,
-      x: clamp01(startX + col * stepX),
+      x: clamp01(landStartX + col * stepX),
       y: clamp01(ASSIST_LAND_Y - row * 0.09, 0.92),
     });
   });

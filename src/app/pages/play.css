@@ -32,6 +32,33 @@
   flex-wrap: wrap;
 }
 
+/* "Turns are happening" live indicator on a table the AI is playing on. */
+.myTableLive {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+}
+
+.myTableLiveDot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--glacier-radius-full);
+  background: var(--glacier-success-solid, #4ade80);
+  animation: pcLivePulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pcLivePulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
 .myTableName {
   font-weight: 600;
   overflow: hidden;

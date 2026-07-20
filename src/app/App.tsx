@@ -30,6 +30,7 @@ import { joinCodeFromHash, rememberPendingJoin } from './data/pendingJoin.ts';
 import { motion, MotionConfig } from 'motion/react';
 import { CardPopupProvider } from './components/CardPopup.tsx';
 import { Notifier } from './components/Notifier.tsx';
+import { InvitePopup } from './components/InvitePopup.tsx';
 import { Spotlight } from './components/Spotlight.tsx';
 import { HomePage } from './pages/HomePage.tsx';
 import { OnboardingPage } from './pages/OnboardingPage.tsx';
@@ -365,6 +366,7 @@ export function App() {
                   <Shell preferences={preferences} onPreferencesChange={update} />
                   <Spotlight />
                   <Notifier />
+                  <InvitePopup />
                 </>
               ) : (
                 <OnboardingPage desktop={DESKTOP} />

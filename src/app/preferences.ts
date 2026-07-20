@@ -37,6 +37,12 @@ export interface Preferences {
   cardBack: string;
   /** The table/backdrop artwork, one of the bundled PrettyCardboard mats. */
   playmat: string;
+  /** Lay battlefield cards perfectly upright instead of the natural slight
+   * per-card tilt. */
+  verticalCards: boolean;
+  /** Show a staged opponent's board mirrored 180deg (across-the-table view,
+   * cards upside down). Off shows their board upright. */
+  mirrorOpponent: boolean;
 }
 
 export const ACCENTS = accentOptions;
@@ -70,6 +76,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   sidebarCollapsed: false,
   cardBack: DEFAULT_CARD_BACK,
   playmat: DEFAULT_PLAYMAT,
+  verticalCards: false,
+  mirrorOpponent: true,
 };
 
 const STORAGE_KEY = 'glacier-starter:preferences';

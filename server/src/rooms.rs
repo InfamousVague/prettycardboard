@@ -63,17 +63,11 @@ pub struct Player {
     pub commander_tax: BTreeMap<String, i64>,
     #[serde(default)]
     pub mulligan: Option<Mull>,
-    /// Synthetic player driven by the server's bot scheduler.
-    #[serde(default)]
-    pub is_bot: bool,
     /// The player's chosen playmat id; the client shows the active player's
     /// mat as the shared table felt.
     #[serde(default)]
     pub playmat: Option<String>,
-    /// Bot play style ("casual" | "aggro" | "defensive"); None for humans.
-    #[serde(default)]
-    pub bot_style: Option<String>,
-    /// The deck this seat was taken with (None for deckless joins/bots);
+    /// The deck this seat was taken with (None for deckless joins);
     /// captured at join so match results can attribute wins to a deck.
     #[serde(default)]
     pub deck_id: Option<String>,
@@ -145,32 +139,15 @@ pub struct Block {
     pub toughness: Option<String>,
 }
 
-/// Guided-combat bookkeeping (unenforced; fully public).
+/// Guided-combat bookkeeping: a lightweight, fully public, unenforced overlay of
+/// who is attacking whom and which creatures block which attackers. The server
+/// never resolves damage - players inform each other and adjust life/creatures
+/// by hand (with a one-click unblocked-damage helper).
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Combat {
     pub attackers: Vec<Attacker>,
     pub blocks: Vec<Block>,
-    /// Combat v3: attackers locked in; declarations frozen, defenders respond.
-    #[serde(default)]
-    pub locked: bool,
-    /// Seats of targeted defenders who are done responding.
-    #[serde(default)]
-    pub ready: Vec<usize>,
-    /// Seats that prevented all combat damage this combat (fog effects).
-    #[serde(default)]
-    pub prevent: Vec<usize>,
-}
-
-/// The last combat exactly as it ended, kept so bots can settle incoming
-/// damage they never witnessed live (a fast attack sequence fits entirely
-/// between two scheduler ticks). `seq` (the ending action's seq) makes the
-/// settlement idempotent per combat.
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EndedCombat {
-    pub seq: u64,
-    pub combat: Combat,
 }
 
 fn is_zero(v: &i64) -> bool {
@@ -248,7 +225,7 @@ pub fn result_player(p: &Player) -> MatchResultPlayer {
         user_id: p.user_id.clone(),
         username: p.username.clone(),
         seat: p.seat,
-        is_bot: p.is_bot,
+        is_bot: false,
         conceded: p.conceded,
         turns_taken: p.turns_taken,
         avg_turn_ms: if p.turns_taken > 0 {
@@ -274,6 +251,26 @@ fn default_turn() -> u64 {
 fn default_true() -> bool {
     true
 }
+
+/// One point in a room's undo/redo/replay history: the full game state
+/// serialized to JSON (connection/live fields are serde-skipped, so this is
+/// pure game state and can be re-derived losslessly), plus who caused it and a
+/// human label for the scrubber. Live-only; not persisted across restart.
+pub struct Snapshot {
+    pub json: String,
+    pub actor: String,
+    pub label: String,
+    pub seq: u64,
+    /// Wall-clock ms this point was recorded (used to order the timeline).
+    pub ts: i64,
+    /// The public face (name + art) of the card this move concerns, for the
+    /// timeline thumbnail. None for cardless moves or hidden/face-down cards.
+    pub card: Option<serde_json::Value>,
+}
+
+/// How many snapshots a room keeps. Bounds memory (~60KB each) and how far
+/// undo/replay can reach back; the oldest are dropped once exceeded.
+const MAX_HISTORY: usize = 400;
 
 /// Serde is for SQLite persistence (state_json); spectators are live-only and
 /// reset on load.
@@ -310,8 +307,6 @@ pub struct Room {
     #[serde(default)]
     pub combat: Option<Combat>,
     #[serde(default)]
-    pub last_combat: Option<EndedCombat>,
-    #[serde(default)]
     pub markers: Markers,
     #[serde(default)]
     pub pending_cmd: Vec<PendingCmd>,
@@ -340,6 +335,126 @@ pub struct Room {
     pub players: Vec<Player>, // sorted by seat
     #[serde(skip)]
     pub spectators: Vec<UserRef>,
+    /// Undo/redo/replay timeline: one full-state snapshot per action, oldest
+    /// first. `cursor` is the index of the currently-live state. Live-only
+    /// (serde-skip) so it is excluded from both persistence and its own
+    /// snapshots (no recursion) and resets on restart.
+    #[serde(skip)]
+    pub history: Vec<Snapshot>,
+    #[serde(skip)]
+    pub cursor: usize,
+}
+
+impl Room {
+    /// Capture the current game state as the newest history entry. A new action
+    /// taken after an undo first discards the redo tail (everything past the
+    /// cursor), so history stays a single linear branch.
+    pub fn push_history(&mut self, actor: String, label: String, seq: u64, card: Option<serde_json::Value>) {
+        if !self.history.is_empty() && self.cursor + 1 < self.history.len() {
+            self.history.truncate(self.cursor + 1);
+        }
+        let json = match serde_json::to_string(self) {
+            Ok(j) => j,
+            Err(_) => return,
+        };
+        self.history.push(Snapshot { json, actor, label, seq, ts: crate::now_ms(), card });
+        if self.history.len() > MAX_HISTORY {
+            let drop = self.history.len() - MAX_HISTORY;
+            self.history.drain(0..drop);
+        }
+        self.cursor = self.history.len() - 1;
+    }
+
+    /// A card's public face (name + art) for the timeline thumbnail, if it is
+    /// currently public (any face-up card in a public zone, or a revealed hand
+    /// card). Returns None for hidden or face-down cards - never leaks identity.
+    pub fn public_card_view(&self, iid: &str) -> Option<serde_json::Value> {
+        let view = |c: &Card| {
+            serde_json::json!({ "name": c.name, "scryfallId": c.scryfall_id, "imageUrl": c.image_url })
+        };
+        for p in &self.players {
+            for zone in [&p.battlefield, &p.graveyard, &p.exile, &p.command] {
+                if let Some(c) = zone.iter().find(|c| c.iid == iid && !c.face_down) {
+                    return Some(view(c));
+                }
+            }
+            if let Some(c) = p.hand.iter().find(|c| c.iid == iid) {
+                if (c.revealed || p.hand_revealed) && !c.face_down {
+                    return Some(view(c));
+                }
+                return None;
+            }
+        }
+        None
+    }
+
+    /// Restore the GAME state at history index `target` while leaving ROOM
+    /// MEMBERSHIP untouched: a restore rewinds moves, never joins/leaves. Who is
+    /// seated, online, the host, spectators, `departed`, and the history/cursor
+    /// are all live state (joins/leaves are NOT recorded on the timeline), so
+    /// they carry forward from the current room rather than the snapshot. Sets
+    /// the cursor to `target`. Returns false if the index/JSON is bad.
+    pub fn restore_to(&mut self, target: usize) -> bool {
+        let Some(json) = self.history.get(target).map(|s| s.json.clone()) else {
+            return false;
+        };
+        let Ok(mut restored) = serde_json::from_str::<Room>(&json) else {
+            return false;
+        };
+        // The live roster owns its Player values; reconcile the snapshot against
+        // it so a restore across a mid-game join/leave neither drops a joiner nor
+        // resurrects someone who left.
+        let mut live: std::collections::HashMap<String, Player> =
+            std::mem::take(&mut self.players).into_iter().map(|p| (p.user_id.clone(), p)).collect();
+        // Drop snapshot players who have since left; keep survivors' live online.
+        restored.players.retain(|p| live.contains_key(&p.user_id));
+        for p in restored.players.iter_mut() {
+            if let Some(lp) = live.get(&p.user_id) {
+                p.online = lp.online;
+            }
+        }
+        // Re-seat anyone who joined AFTER this snapshot, carrying their live
+        // board forward (Player is not Clone, so move it out of the live map).
+        let joined: Vec<String> = live
+            .keys()
+            .filter(|uid| !restored.players.iter().any(|p| &p.user_id == *uid))
+            .cloned()
+            .collect();
+        for uid in joined {
+            if let Some(p) = live.remove(&uid) {
+                restored.players.push(p);
+            }
+        }
+        restored.players.sort_by_key(|p| p.seat);
+        restored.host = self.host.clone();
+        restored.seq = self.seq;
+        restored.updated_at = self.updated_at;
+        restored.departed = std::mem::take(&mut self.departed);
+        restored.spectators = std::mem::take(&mut self.spectators);
+        restored.history = std::mem::take(&mut self.history);
+        restored.cursor = target;
+        // Re-anchor absolute wall-clock timers to now: a rewind restarts the
+        // active player's turn clock and any pending-commander window from the
+        // rewind point rather than inheriting stale (possibly already-expired)
+        // timestamps from the snapshot.
+        let now = crate::now_ms();
+        if restored.turn_started_ms > 0 {
+            restored.turn_started_ms = now;
+        }
+        for pc in restored.pending_cmd.iter_mut() {
+            pc.deadline = now + crate::game::CMD_CHOICE_MS;
+        }
+        *self = restored;
+        true
+    }
+
+    /// A read-only historical frame filtered for one viewer (replay scrubbing).
+    /// Never touches the shared cursor.
+    pub fn replay_frame(&self, index: usize, viewer: Option<&str>) -> Option<Value> {
+        let snap = self.history.get(index)?;
+        let temp: Room = serde_json::from_str(&snap.json).ok()?;
+        Some(temp.state_for(viewer))
+    }
 }
 
 /// A card as one specific viewer sees it: face-down cards owned by someone
@@ -395,7 +510,6 @@ impl Room {
                     "command": zone(&p.command),
                     "online": p.online,
                     "handRevealed": p.hand_revealed,
-                    "isBot": p.is_bot,
                     "playmat": p.playmat,
                     "conceded": p.conceded,
                     "deckName": p.deck_name,
@@ -404,6 +518,18 @@ impl Room {
                     pv["hand"] = Value::Array(
                         p.hand.iter().map(|c| serde_json::to_value(c).unwrap()).collect(),
                     );
+                } else if viewer.is_some() {
+                    // Cards individually revealed to the table (reveal.card) are
+                    // visible to everyone even without a full hand reveal.
+                    let revealed: Vec<Value> = p
+                        .hand
+                        .iter()
+                        .filter(|c| c.revealed)
+                        .map(|c| serde_json::to_value(c).unwrap())
+                        .collect();
+                    if !revealed.is_empty() {
+                        pv["revealedHand"] = Value::Array(revealed);
+                    }
                 }
                 pv
             })
@@ -636,13 +762,10 @@ pub async fn sweeper(app: Arc<App>) {
         let now = crate::now_ms();
         let mut dead: Vec<String> = Vec::new();
         for room in app.rooms.iter() {
-            // Bots never count as "online" for liveness: a quick room whose
-            // only remaining presence is bots still expires.
             let expired = if room.persistent {
                 now - room.updated_at > PERSISTENT_TTL_MS
             } else {
-                room.players.iter().all(|p| p.is_bot || !p.online)
-                    && now - room.updated_at > QUICK_TTL_MS
+                room.players.iter().all(|p| !p.online) && now - room.updated_at > QUICK_TTL_MS
             };
             if expired {
                 dead.push(room.id.clone());

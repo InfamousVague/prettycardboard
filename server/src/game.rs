@@ -4,6 +4,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
+mod turns;
+use turns::free_first_mulls;
+// Re-exported so callers keep using `game::next_occupied`, `game::auto_turn_begin`, etc.
+pub use turns::{
+    auto_turn_begin, maybe_begin_first_turn, next_occupied, turn_clock_begin, turn_clock_credit,
+};
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Zone {
@@ -33,7 +40,12 @@ impl Zone {
 }
 
 const PHASES: [&str; 7] = ["upkeep", "main1", "attack", "block", "damage", "main2", "end"];
-const CMD_CHOICE_MS: i64 = 30_000;
+pub const CMD_CHOICE_MS: i64 = 30_000;
+/// Legacy single-slot undo window. The live undo path is now the snapshot
+/// timeline (see rooms::Room history/cursor); this and apply_undo below are
+/// kept dormant to avoid churning the 40+ action arms that still record a
+/// per-action UndoKind.
+#[allow(dead_code)]
 const UNDO_MS: i64 = 10_000;
 
 /// The freeform Action set (serde tag "kind"). The server applies these
@@ -105,6 +117,8 @@ pub enum Action {
     PoisonAdd { delta: i64 },
     #[serde(rename = "reveal.hand")]
     RevealHand,
+    #[serde(rename = "reveal.card", rename_all = "camelCase")]
+    RevealCard { iid: String },
 
     // --- gameplay v2: turns + phases ---
     #[serde(rename = "turn.pass")]
@@ -153,13 +167,6 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         toughness: Option<String>,
     },
-    #[serde(rename = "combat.lock")]
-    CombatLock,
-    #[serde(rename = "combat.ready")]
-    CombatReady {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        prevent: Option<bool>,
-    },
     #[serde(rename = "combat.end")]
     CombatEnd,
 
@@ -205,6 +212,12 @@ pub enum Action {
     MullKeep { bottom_iids: Vec<String> },
     #[serde(rename = "undo")]
     Undo,
+    #[serde(rename = "redo")]
+    Redo,
+    /// Host-only destructive jump to any point in the timeline (index into the
+    /// room's snapshot history).
+    #[serde(rename = "rewindTo", rename_all = "camelCase")]
+    RewindTo { index: usize },
 
     // --- match end ---
     #[serde(rename = "concede")]
@@ -250,9 +263,10 @@ pub struct Applied {
     /// (user_id, message). The actor's own entries go only to the acting
     /// connection; other users' entries go to all of their connections.
     pub private: Vec<(String, Value)>,
-    /// Whole-room extra messages (combat.results) sent to every viewer,
-    /// players and spectators alike, after the room.event and log lines.
-    pub extra_broadcasts: Vec<Value>,
+    /// Whether dispatch should append a new history snapshot for this action.
+    /// True for normal mutating actions; false for undo/redo/rewind, which move
+    /// the cursor over the existing timeline instead of extending it.
+    pub record: bool,
 }
 
 type ActionError = (&'static str, String);
@@ -350,106 +364,6 @@ fn seat_username(room: &Room, seat: usize) -> String {
         .unwrap_or_else(|| format!("seat {}", seat + 1))
 }
 
-/// Next occupied, non-conceded seat clockwise after `from`; true when it
-/// wrapped past the lowest such seat (a new turn round). Falls back to all
-/// occupied seats if everyone conceded (degenerate, but never panics).
-pub fn next_occupied(room: &Room, from: usize) -> (usize, bool) {
-    let mut seats: Vec<usize> = room
-        .players
-        .iter()
-        .filter(|p| !p.conceded)
-        .map(|p| p.seat)
-        .collect();
-    if seats.is_empty() {
-        seats = room.players.iter().map(|p| p.seat).collect();
-    }
-    seats.sort_unstable();
-    match seats.iter().find(|&&s| s > from) {
-        Some(&s) => (s, false),
-        None => (seats[0], true),
-    }
-}
-
-/// Credit the elapsed turn time to the current active player. Call BEFORE
-/// active_seat changes; safe when the clock never started (0).
-pub fn turn_clock_credit(room: &mut Room, now: i64) {
-    if room.turn_started_ms > 0 {
-        let seat = room.active_seat;
-        if let Some(p) = room.players.iter_mut().find(|p| p.seat == seat) {
-            p.turn_time_ms += (now - room.turn_started_ms).max(0);
-        }
-    }
-    room.turn_started_ms = 0;
-}
-
-/// Start the turn clock for `seat` and count the turn they are beginning.
-pub fn turn_clock_begin(room: &mut Room, seat: usize, now: i64) {
-    if let Some(p) = room.players.iter_mut().find(|p| p.seat == seat) {
-        p.turns_taken += 1;
-    }
-    room.turn_started_ms = now;
-}
-
-/// The opening-mulligan window: once every non-conceded seat has kept (a keep
-/// or a concede can be the closing event), restart the active player's turn
-/// clock — table-wide deliberation is not their turn time — and, under
-/// auto-turn, fire the first untap/draw. Idempotent via first_turn_begun.
-pub fn maybe_begin_first_turn(room: &mut Room, now: i64) -> Vec<String> {
-    if room.first_turn_begun
-        || !room.started
-        || room.turn_number != 1
-        || !room
-            .players
-            .iter()
-            .filter(|p| !p.conceded)
-            .all(|p| p.mulligan.as_ref().map(|m| m.state == "kept").unwrap_or(true))
-    {
-        return Vec::new();
-    }
-    room.first_turn_begun = true;
-    room.turn_started_ms = now;
-    if room.auto_turn {
-        auto_turn_begin(room, room.active_seat)
-    } else {
-        Vec::new()
-    }
-}
-
-/// The free-mulligan allowance: 1 in 3+ player commander pods, else 0.
-fn free_first_mulls(room: &Room) -> u32 {
-    if room.format == "commander" && room.players.len() >= 3 {
-        1
-    } else {
-        0
-    }
-}
-
-/// Auto-turn bookkeeping for the player whose turn is starting: untap their
-/// battlefield and draw 1 — unless the first-turn skip applies (starting seat,
-/// turn 1, standard or 2-player) or their library is empty.
-pub fn auto_turn_begin(room: &mut Room, seat: usize) -> Vec<String> {
-    let skip = room.turn_number == 1
-        && seat == room.starting_seat
-        && (room.format == "standard" || room.players.len() == 2);
-    let Some(p) = room.players.iter_mut().find(|p| p.seat == seat) else {
-        return Vec::new();
-    };
-    for c in p.battlefield.iter_mut() {
-        c.tapped = false;
-    }
-    if skip {
-        vec![format!("{} untaps (first draw skipped)", p.username)]
-    } else if p.library.is_empty() {
-        vec![format!("{} untaps, no cards left to draw", p.username)]
-    } else {
-        let card = p.library.remove(0);
-        p.hand.push(card);
-        p.hand_revealed = false;
-        p.peeked.clear();
-        vec![format!("{} untaps and draws a card", p.username)]
-    }
-}
-
 /// Drop a card into one of its owner's zones with move cleanup applied
 /// (untapped, face up, un-revealed, detached; counters cleared off-battlefield).
 fn place_card(p: &mut Player, mut card: Card, to: Zone, x: Option<f64>, y: Option<f64>, index: Option<i64>) {
@@ -490,260 +404,34 @@ pub fn complete_pending(room: &mut Room, pending: PendingCmd) -> String {
     format!("{username}'s {name} is put into {}", to.desc())
 }
 
-/// Clear an in-progress combat at a turn boundary or combat.end. Un-locked
-/// combats stash the legacy settle record (bots apply their own incoming
-/// damage from it); LOCKED combats never stash one — the server resolves
-/// those itself, and clearing one unresolved is a cancel (no damage at all).
+/// The primary card an action concerns, for the timeline thumbnail. None for
+/// cardless moves (life, draw, turn, markers, dice, ...).
+pub fn action_card_iid(action: &Action) -> Option<&str> {
+    match action {
+        Action::CardMove { iid, .. }
+        | Action::CardPos { iid, .. }
+        | Action::CardTap { iid, .. }
+        | Action::CardFace { iid, .. }
+        | Action::CardCounter { iid, .. }
+        | Action::CardAttach { iid, .. }
+        | Action::TokenClone { iid, .. }
+        | Action::StackPush { iid }
+        | Action::StackResolve { iid, .. }
+        | Action::StackCounter { iid, .. }
+        | Action::CombatAttack { iid, .. }
+        | Action::CmdCast { iid, .. }
+        | Action::CmdReturn { iid, .. }
+        | Action::RevealCard { iid } => Some(iid),
+        Action::CombatBlock { blocker_iid, .. } => Some(blocker_iid),
+        _ => None,
+    }
+}
+
+/// Clear an in-progress combat at a turn boundary or combat.end. Combat is now
+/// purely informational bookkeeping, so clearing it just drops the overlay -
+/// any life/creature changes were made manually by the players.
 pub fn clear_combat(room: &mut Room) {
-    if let Some(ending) = room.combat.take() {
-        if !ending.locked && !ending.attackers.is_empty() {
-            room.last_combat = Some(crate::rooms::EndedCombat { seq: room.seq, combat: ending });
-        }
-    }
-}
-
-/// A creature dies in combat resolution: tokens cease to exist, commanders
-/// get the usual command-zone choice, real cards go to their owner's
-/// graveyard (untapped, face up, counters and attachments cleared). Returns
-/// an extra log line when the death needs one (the commander choice).
-fn combat_death(
-    room: &mut Room,
-    iid: &str,
-    now: i64,
-    private: &mut Vec<(String, Value)>,
-) -> Option<String> {
-    let owner_idx = room
-        .players
-        .iter()
-        .position(|p| p.battlefield.iter().any(|c| c.iid == iid))?;
-    let pos = room.players[owner_idx]
-        .battlefield
-        .iter()
-        .position(|c| c.iid == iid)
-        .unwrap();
-    let mut card = room.players[owner_idx].battlefield.remove(pos);
-    clear_followers(room, iid);
-    card.attached_to = None;
-    card.tapped = false;
-    card.face_down = false;
-    card.revealed = false;
-    card.counters.clear();
-    let username = room.players[owner_idx].username.clone();
-    let owner_id = room.players[owner_idx].user_id.clone();
-    let name = card.name.clone();
-    if card.is_token {
-        return None; // ceases to exist; the summary line already says it died
-    }
-    if room.format == "commander" && card.is_commander {
-        room.pending_cmd.push(PendingCmd {
-            iid: iid.to_string(),
-            owner: owner_id.clone(),
-            card,
-            to: Zone::Graveyard,
-            x: None,
-            y: None,
-            index: None,
-            deadline: now + CMD_CHOICE_MS,
-        });
-        private.push((owner_id, json!({"type": "cmd.choice", "iid": iid, "to": Zone::Graveyard})));
-        return Some(format!("{username}'s commander {name} may return to the command zone"));
-    }
-    room.players[owner_idx].graveyard.push(card);
-    None
-}
-
-/// Resolve a locked combat (Combat v3): apply damage and deaths, mutate the
-/// room, and return (log lines, the combat.results broadcast). The caller has
-/// already taken `combat` off the room.
-fn resolve_combat(
-    room: &mut Room,
-    combat: &Combat,
-    now: i64,
-    private: &mut Vec<(String, Value)>,
-) -> (Vec<String>, Value) {
-    let attacker_seat = room.active_seat;
-    let parse = |s: &Option<String>| -> i64 {
-        s.as_deref().and_then(|v| v.trim().parse::<i64>().ok()).unwrap_or(0)
-    };
-    let mut lines: Vec<String> = Vec::new();
-    let mut entries: Vec<Value> = Vec::new();
-    let mut totals: BTreeMap<usize, i64> = BTreeMap::new();
-    // Who an open swing (defenderSeat null) hits: every seated opponent.
-    let open_defenders: Vec<usize> = room
-        .players
-        .iter()
-        .filter(|p| !p.conceded && p.seat != attacker_seat)
-        .map(|p| p.seat)
-        .collect();
-    struct LiveBlock {
-        iid: String,
-        name: String,
-        owner_seat: usize,
-        power: i64,
-        toughness: i64,
-    }
-    for a in &combat.attackers {
-        let Some((atk_owner_seat, atk_name, atk_commander)) = room.players.iter().find_map(|p| {
-            p.battlefield
-                .iter()
-                .find(|c| c.iid == a.iid)
-                .map(|c| (p.seat, c.name.clone(), c.is_commander))
-        }) else {
-            continue; // the attacker left the battlefield mid-combat
-        };
-        let atk_power = parse(&a.power);
-        let atk_tough = parse(&a.toughness);
-        let defender_seat_json = a
-            .defender_seat
-            .or_else(|| (open_defenders.len() == 1).then(|| open_defenders[0]));
-        // Declared blocks whose blocker is still on a battlefield.
-        let blocks: Vec<LiveBlock> = combat
-            .blocks
-            .iter()
-            .filter(|b| b.attacker_iid == a.iid)
-            .filter_map(|b| {
-                room.players.iter().find_map(|p| {
-                    p.battlefield.iter().find(|c| c.iid == b.blocker_iid).map(|c| LiveBlock {
-                        iid: c.iid.clone(),
-                        name: c.name.clone(),
-                        owner_seat: p.seat,
-                        power: parse(&b.power),
-                        toughness: parse(&b.toughness),
-                    })
-                })
-            })
-            .collect();
-        if blocks.is_empty() {
-            // Unblocked: the declared defender (or every opponent, on an open
-            // swing) loses the attacker's power, unless they prevented.
-            let defenders: Vec<usize> = match a.defender_seat {
-                Some(s) => vec![s],
-                None => open_defenders.clone(),
-            };
-            let mut dealt_to: Vec<(usize, i64)> = Vec::new();
-            let mut prevented = !defenders.is_empty();
-            for &seat in &defenders {
-                if combat.prevent.contains(&seat) {
-                    continue;
-                }
-                prevented = false;
-                if atk_power <= 0 {
-                    continue;
-                }
-                let Some(dp) = room.players.iter_mut().find(|p| p.seat == seat) else {
-                    continue;
-                };
-                dp.life -= atk_power;
-                if atk_commander {
-                    let e = dp.cmd_damage.entry(atk_owner_seat).or_insert(0);
-                    *e = (*e + atk_power).max(0);
-                    let by = dp.cmd_damage_by_commander.entry(a.iid.clone()).or_insert(0);
-                    *by = (*by + atk_power).max(0);
-                }
-                *totals.entry(seat).or_insert(0) += atk_power;
-                dealt_to.push((seat, atk_power));
-            }
-            lines.push(if prevented {
-                format!("{atk_name}'s combat damage is prevented")
-            } else if dealt_to.is_empty() {
-                format!("{atk_name} deals no combat damage")
-            } else {
-                let hits = dealt_to
-                    .iter()
-                    .map(|(s, n)| format!("{} for {n}", seat_username(room, *s)))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("{atk_name} hits {hits}")
-            });
-            let dealt: i64 = dealt_to.iter().map(|(_, n)| n).sum();
-            entries.push(json!({
-                "attackerIid": a.iid,
-                "name": atk_name,
-                "defenderSeat": defender_seat_json,
-                "prevented": prevented,
-                "blockers": [],
-                "attackerDied": false,
-                "damageToDefender": dealt,
-            }));
-        } else {
-            // Blocked: blockers absorb in declared order; a blocker dies when
-            // the attacker's remaining power covers its toughness (power
-            // spends as it kills), the attacker dies when the blockers'
-            // summed power covers its toughness. Pairings whose blocker's
-            // owner prevented sit the whole exchange out.
-            let mut blocker_vals: Vec<Value> = Vec::new();
-            let mut remaining = atk_power;
-            let mut blocker_power_sum = 0i64;
-            let mut dead_blockers: Vec<(String, String)> = Vec::new();
-            let mut any_active = false;
-            for b in &blocks {
-                if combat.prevent.contains(&b.owner_seat) {
-                    blocker_vals.push(json!({"iid": b.iid, "name": b.name, "died": false}));
-                    continue;
-                }
-                any_active = true;
-                blocker_power_sum += b.power;
-                let dies = b.toughness > 0 && remaining >= b.toughness;
-                if dies {
-                    remaining -= b.toughness;
-                    dead_blockers.push((b.iid.clone(), b.name.clone()));
-                }
-                blocker_vals.push(json!({"iid": b.iid, "name": b.name, "died": dies}));
-            }
-            let attacker_dies = any_active && atk_tough > 0 && blocker_power_sum >= atk_tough;
-            let names = blocks.iter().map(|b| b.name.clone()).collect::<Vec<_>>().join(" and ");
-            let mut line = if any_active {
-                format!("{atk_name} is blocked by {names}")
-            } else {
-                format!("{atk_name} is blocked by {names}, all combat damage prevented")
-            };
-            for (_, n) in &dead_blockers {
-                line.push_str(&format!(", {n} dies"));
-            }
-            if attacker_dies {
-                line.push_str(&format!(", {atk_name} dies"));
-            }
-            lines.push(line);
-            for (iid, _) in &dead_blockers {
-                if let Some(extra) = combat_death(room, iid, now, private) {
-                    lines.push(extra);
-                }
-            }
-            if attacker_dies {
-                if let Some(extra) = combat_death(room, &a.iid, now, private) {
-                    lines.push(extra);
-                }
-            }
-            entries.push(json!({
-                "attackerIid": a.iid,
-                "name": atk_name,
-                "defenderSeat": defender_seat_json,
-                "prevented": !any_active,
-                "blockers": blocker_vals,
-                "attackerDied": attacker_dies,
-                "damageToDefender": 0,
-            }));
-        }
-    }
-    if totals.is_empty() {
-        lines.push("Combat resolves with no damage to players".to_string());
-    } else {
-        let parts = totals
-            .iter()
-            .map(|(s, n)| format!("{} takes {n}", seat_username(room, *s)))
-            .collect::<Vec<_>>()
-            .join(", ");
-        lines.push(format!("Combat resolves: {parts}"));
-    }
-    let total_by_seat: serde_json::Map<String, Value> =
-        totals.iter().map(|(s, n)| (s.to_string(), json!(n))).collect();
-    let results = json!({
-        "type": "combat.results",
-        "attackerSeat": attacker_seat,
-        "entries": entries,
-        "totalBySeat": total_by_seat,
-    });
-    (lines, results)
+    room.combat = None;
 }
 
 /// The requester's peek window, if it still matches the top of their library
@@ -828,6 +516,7 @@ fn resolve_from_stack(
 
 /// Invert one recorded simple action; Err(undo_stale) when it no longer
 /// applies cleanly.
+#[allow(dead_code)]
 fn apply_undo(room: &mut Room, pi: usize, kind: UndoKind) -> Result<(), ActionError> {
     fn stale() -> ActionError {
         ("undo_stale", "that action can no longer be undone".to_string())
@@ -934,8 +623,13 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
     let now = crate::now_ms();
 
     // A finished match freezes the table: the result screen owns the room and
-    // every further action (including stray hotkeys) is rejected outright.
-    if room.match_result.is_some() {
+    // every further action (including stray hotkeys) is rejected outright. The
+    // undo/redo/rewind timeline is the ONLY way back from an accidental
+    // match-ending move, so those three are exempt - each restores a snapshot
+    // recorded before maybe_finish_match ran (match_result: None), clearing the
+    // freeze.
+    let is_recovery = matches!(action, Action::Undo | Action::Redo | Action::RewindTo { .. });
+    if room.match_result.is_some() && !is_recovery {
         return Err(("match_over", "the match is already over".to_string()));
     }
 
@@ -945,8 +639,10 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
     let mut resync = false;
     let mut extra_logs: Vec<String> = Vec::new();
     let mut private: Vec<(String, Value)> = Vec::new();
-    let mut extra_broadcasts: Vec<Value> = Vec::new();
     let mut undo: Option<UndoKind> = None;
+    // Undo/redo/rewind move the cursor over existing history rather than
+    // recording a new snapshot; every other action records.
+    let mut record = true;
     let log: String;
 
     match action {
@@ -1064,7 +760,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
         }
 
         Action::CardPos { ref iid, x, y } => {
-            let (prev_x, prev_y, name);
+            let (prev_x, prev_y);
             {
                 let p = &mut room.players[pi];
                 let (_, card) = find_card_mut(p, iid).ok_or_else(|| not_found(iid))?;
@@ -1072,7 +768,6 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                 prev_y = card.y;
                 card.x = x;
                 card.y = y;
-                name = visible_name(card);
             }
             // Attached cards stay glued to their host.
             let moved = glue_followers(room, iid, x, y);
@@ -1084,7 +779,9 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                 for_actor["attachments"] = json!(arr);
                 for_others["attachments"] = json!(arr);
             }
-            log = format!("{username} moves {name}");
+            // Repositioning a card on the battlefield is fidget, not a game
+            // event: no log line (an empty log is skipped by dispatch_action).
+            log = String::new();
             undo = Some(UndoKind::Pos { iid: iid.clone(), x: prev_x, y: prev_y });
         }
 
@@ -1330,17 +1027,25 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             });
             let p = &mut room.players[pi];
             let entry = p.cmd_damage.entry(from_seat).or_insert(0);
+            let before = *entry;
             *entry = (*entry + delta).max(0);
             let total = *entry;
+            // Commander damage IS combat damage: it also lowers the player's life
+            // total (the separate 21-from-one-commander loss rule is tracked by
+            // the tallies above). Mirror the *effective* change so a decrement
+            // clamped at zero commander damage doesn't hand back phantom life.
+            let applied = total - before;
+            p.life -= applied;
+            let life = p.life;
             if let Some(ciid) = attributed {
                 let by = p.cmd_damage_by_commander.entry(ciid).or_insert(0);
                 *by = (*by + delta).max(0);
                 resync = true; // by-commander tally is only in RoomState
             }
-            log = if delta >= 0 {
-                format!("{from_name} deals {delta} commander damage to {username} ({total} total)")
+            log = if applied >= 0 {
+                format!("{from_name} deals {applied} commander damage to {username} ({total} total, {life} life)")
             } else {
-                format!("{username} removes {} commander damage from {from_name} ({total} total)", -delta)
+                format!("{username} removes {} commander damage from {from_name} ({total} total, {life} life)", -applied)
             };
         }
 
@@ -1360,6 +1065,19 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             room.players[pi].hand_revealed = true;
             log = format!("{username} reveals their hand");
             resync = true; // other players' next room.state includes the hand
+        }
+
+        Action::RevealCard { ref iid } => {
+            let p = &mut room.players[pi];
+            let card = p
+                .hand
+                .iter_mut()
+                .find(|c| c.iid == *iid)
+                .ok_or_else(|| ("card_not_found", format!("No card {iid} in your hand")))?;
+            card.revealed = true;
+            let name = card.name.clone();
+            log = format!("{username} reveals {name} from their hand");
+            resync = true; // every viewer's next room.state includes the revealed card
         }
 
         // --- turns + phases ---
@@ -1495,9 +1213,6 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             if room.combat.is_none() {
                 return Err(("no_combat", "combat has not begun".to_string()));
             }
-            if room.combat.as_ref().unwrap().locked {
-                return Err(("locked", "attackers are locked in".to_string()));
-            }
             let already = room
                 .combat
                 .as_ref()
@@ -1577,90 +1292,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             resync = true;
         }
 
-        Action::CombatLock => {
-            let seat = room.players[pi].seat;
-            if seat != room.active_seat {
-                return Err(("not_active", "only the active player can lock attackers".to_string()));
-            }
-            let Some(combat) = room.combat.as_mut() else {
-                return Err(("no_combat", "combat has not begun".to_string()));
-            };
-            if combat.locked {
-                return Err(("locked", "attackers are already locked in".to_string()));
-            }
-            if combat.attackers.is_empty() {
-                return Err(("no_attackers", "declare at least one attacker first".to_string()));
-            }
-            combat.locked = true;
-            let n = combat.attackers.len();
-            room.phase = "block".to_string();
-            log = format!("{username} locks in {n} {}", plural(n as i64, "attacker", "attackers"));
-            resync = true;
-        }
-
-        Action::CombatReady { prevent } => {
-            let seat = room.players[pi].seat;
-            {
-                let Some(combat) = room.combat.as_ref() else {
-                    return Err(("no_combat", "combat has not begun".to_string()));
-                };
-                if !combat.locked {
-                    return Err(("not_locked", "attackers are not locked in".to_string()));
-                }
-                let targeted = seat != room.active_seat
-                    && combat
-                        .attackers
-                        .iter()
-                        .any(|a| a.defender_seat.map_or(true, |d| d == seat));
-                if !targeted {
-                    return Err(("not_defending", "no attacker is aimed at your seat".to_string()));
-                }
-                if combat.ready.contains(&seat) {
-                    return Err(("already_ready", "you are already ready".to_string()));
-                }
-            }
-            let preventing = prevent == Some(true);
-            {
-                let combat = room.combat.as_mut().unwrap();
-                combat.ready.push(seat);
-                if preventing {
-                    combat.prevent.push(seat);
-                }
-            }
-            log = if preventing {
-                format!("{username} prevents all combat damage")
-            } else {
-                format!("{username} is ready")
-            };
-            // The moment every targeted defender has responded, resolve.
-            let all_ready = {
-                let combat = room.combat.as_ref().unwrap();
-                room.players
-                    .iter()
-                    .filter(|p| !p.conceded && p.seat != room.active_seat)
-                    .filter(|p| {
-                        combat
-                            .attackers
-                            .iter()
-                            .any(|a| a.defender_seat.map_or(true, |d| d == p.seat))
-                    })
-                    .all(|p| combat.ready.contains(&p.seat))
-            };
-            if all_ready {
-                // Resolved locked combats never leave a legacy last_combat
-                // record (bots must not settle the damage a second time).
-                let combat = room.combat.take().unwrap();
-                let (mut lines, results) = resolve_combat(room, &combat, now, &mut private);
-                extra_logs.append(&mut lines);
-                extra_broadcasts.push(results);
-                room.phase = "main2".to_string();
-            }
-            resync = true;
-        }
-
         Action::CombatEnd => {
-            // Canceling a LOCKED combat drops it outright (no damage, no
-            // legacy settle record); un-locked keeps the legacy stash flow.
             clear_combat(room);
             room.phase = "main2".to_string();
             log = format!("{username} ends combat");
@@ -1966,15 +1598,63 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
         }
 
         Action::Undo => {
-            let entry = room.players[pi]
-                .undo
-                .take()
-                .ok_or(("undo_stale", "nothing to undo".to_string()))?;
-            if now - entry.ts > UNDO_MS {
-                return Err(("undo_stale", "too late to undo".to_string()));
+            if room.cursor == 0 || room.history.is_empty() {
+                return Err(("undo_stale", "nothing to undo".to_string()));
             }
-            apply_undo(room, pi, entry.kind)?;
-            log = format!("{username} undoes their last action");
+            let undone = &room.history[room.cursor];
+            if actor_id != room.host && actor_id != undone.actor {
+                return Err(("not_your_action", "only whoever made that move (or the host) can undo it".to_string()));
+            }
+            let label = undone.label.clone();
+            let target = room.cursor - 1;
+            if !room.restore_to(target) {
+                return Err(("undo_stale", "that history is no longer available".to_string()));
+            }
+            log = if label.is_empty() {
+                format!("{username} undoes the last move")
+            } else {
+                format!("{username} undoes: {label}")
+            };
+            record = false;
+            resync = true;
+        }
+
+        Action::Redo => {
+            if room.cursor + 1 >= room.history.len() {
+                return Err(("redo_stale", "nothing to redo".to_string()));
+            }
+            let target = room.cursor + 1;
+            let redone = &room.history[target];
+            if actor_id != room.host && actor_id != redone.actor {
+                return Err(("not_your_action", "only whoever made that move (or the host) can redo it".to_string()));
+            }
+            let label = redone.label.clone();
+            if !room.restore_to(target) {
+                return Err(("redo_stale", "that history is no longer available".to_string()));
+            }
+            log = if label.is_empty() {
+                format!("{username} redoes the next move")
+            } else {
+                format!("{username} redoes: {label}")
+            };
+            record = false;
+            resync = true;
+        }
+
+        Action::RewindTo { index } => {
+            if actor_id != room.host {
+                return Err(("forbidden", "only the host can rewind the table".to_string()));
+            }
+            if index >= room.history.len() {
+                return Err(("bad_rewind", "no such point in the timeline".to_string()));
+            }
+            if !room.restore_to(index) {
+                return Err(("bad_rewind", "that history is no longer available".to_string()));
+            }
+            // Destructive: discard everyone's moves after this point.
+            room.history.truncate(index + 1);
+            log = format!("{username} rewinds the table");
+            record = false;
             resync = true;
         }
 
@@ -2036,5 +1716,5 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
     if let Some(kind) = undo {
         room.players[pi].undo = Some(UndoEntry { kind, ts: now });
     }
-    Ok(Applied { for_actor, for_others, log, extra_logs, resync, private, extra_broadcasts })
+    Ok(Applied { for_actor, for_others, log, extra_logs, resync, private, record })
 }

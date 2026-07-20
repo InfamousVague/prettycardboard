@@ -1,0 +1,153 @@
+name: Desktop Build
+
+# Matrix-builds the Tauri desktop bundles on each target platform's native
+# runner. Cross-compiling from one host (Mac -> Windows/Linux) is flaky in
+# practice, so we lean on GitHub Actions runners per OS.
+#
+# Triggers:
+#   - tag push (v*)      -> builds Linux + Windows, uploads installers +
+#                           signed OTA artifacts to the GitHub Release named
+#                           after the tag, then assembles latest.json. The
+#                           signed + notarized macOS .dmg is produced LOCALLY
+#                           (`npm run release:mac`) and uploaded to the same
+#                           release; macOS is skipped here on tag push so an
+#                           ad-hoc CI build never races the signed one.
+#   - workflow_dispatch  -> ad-hoc smoke build on all 3 (artifacts only).
+#
+# COST NOTE: macOS runners bill 10x. We only exercise macOS on manual dispatch
+# (smoke), never on tag push, and there is no push-to-main trigger.
+#
+# Required repo secrets (set via `gh secret set`):
+#   TAURI_SIGNING_PRIVATE_KEY            the minisign updater private key
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD   its password
+# Without these, tauri-action skips signing the *.sig OTA artifacts and OTA
+# updates cannot be verified.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: macOS (Universal)
+            tauri-args: '--target universal-apple-darwin'
+            rust-targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
+          - os: ubuntu-22.04
+            label: Linux (x64)
+            # .deb + .rpm only; AppImage/linuxdeploy is flaky on runners.
+            # Linux users update via package manager / re-download (no OTA),
+            # matching Libre's proven trade-off.
+            tauri-args: '--bundles deb,rpm'
+            rust-targets: ''
+          - os: windows-latest
+            label: Windows (x64)
+            tauri-args: ''
+            rust-targets: ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Cache Rust target
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install Linux build deps
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install npm deps
+        run: npm ci
+
+      - name: Build (Tauri bundle)
+        # Skip macOS on tag push: the signed/notarized DMG is built + uploaded
+        # locally. macOS still builds on manual dispatch for smoke.
+        if: ${{ !(matrix.os == 'macos-latest' && github.ref_type == 'tag') }}
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: ${{ github.ref_type == 'tag' && format('PrettyCardboard {0}', github.ref_name) || '' }}
+          releaseBody: ${{ github.ref_type == 'tag' && 'Desktop installers for macOS, Windows, and Linux. The app auto-updates.' || '' }}
+          releaseDraft: false
+          prerelease: false
+          updaterJsonPreferNsis: true
+          args: ${{ matrix.tauri-args }}
+
+      - name: Upload bundle artifacts
+        if: ${{ !(matrix.os == 'macos-latest' && github.ref_type == 'tag') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: prettycardboard-${{ matrix.os }}
+          path: |
+            src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.msi
+            src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.nsis.zip
+            src-tauri/target/release/bundle/**/*.app.tar.gz
+            src-tauri/target/release/bundle/**/*.deb
+            src-tauri/target/release/bundle/**/*.rpm
+            src-tauri/target/release/bundle/**/*.sig
+          retention-days: 14
+          if-no-files-found: warn
+
+  # Post-matrix: assemble a unified latest.json from every platform's signed
+  # updater artifact on the release (tauri-action's per-job manifest gets
+  # clobbered by whichever matrix entry uploads last). Merges with the Mac
+  # assets already uploaded by the local release step.
+  build-update-manifest:
+    name: Build OTA updater manifest
+    needs: [build]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Assemble latest.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/build-updater-manifest.mjs "${{ github.ref_name }}"

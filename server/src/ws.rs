@@ -31,12 +31,13 @@ enum ClientMsg {
     InviteSend { to_user_id: String, room_id: String },
     #[serde(rename = "game.action")]
     GameAction { action: game::Action },
-    #[serde(rename = "bot.add", rename_all = "camelCase")]
-    BotAdd { deck_code: Option<String>, style: Option<String> },
     #[serde(rename = "playmat.set")]
     PlaymatSet { id: Option<String> },
-    #[serde(rename = "bot.remove")]
-    BotRemove { seat: usize },
+    // Replay scrubbing: viewer-local and read-only. These NEVER enter apply()
+    // and never move the shared cursor - they only materialize a past frame
+    // for the requesting connection.
+    #[serde(rename = "replay.seek")]
+    ReplaySeek { index: usize },
 }
 
 pub async fn ws_handler(
@@ -156,9 +157,8 @@ fn handle_msg(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
         ClientMsg::ChatSend { text } => chat_send(app, user, &text, tx),
         ClientMsg::InviteSend { to_user_id, room_id } => invite_send(app, user, &to_user_id, &room_id),
         ClientMsg::GameAction { action } => game_action(app, user, action, tx),
-        ClientMsg::BotAdd { deck_code, style } => bot_add(app, user, deck_code, style, tx),
         ClientMsg::PlaymatSet { id } => playmat_set(app, user, id),
-        ClientMsg::BotRemove { seat } => bot_remove(app, user, seat, tx),
+        ClientMsg::ReplaySeek { index } => replay_seek(app, user, index, tx),
     }
 }
 
@@ -175,12 +175,20 @@ pub fn send_user(app: &App, user_id: &str, msg: &Value) {
     }
 }
 
+/// Broadcast to every member and spectator of a room. Stamps the message with
+/// its `roomId` so a client that is a (possibly offline) member of several
+/// tables can tell which table an event belongs to and only apply the ones for
+/// the table it is currently viewing.
 fn room_send_all(app: &App, room: &Room, msg: &Value) {
+    let mut tagged = msg.clone();
+    if let Some(obj) = tagged.as_object_mut() {
+        obj.insert("roomId".to_string(), json!(room.id));
+    }
     for p in &room.players {
-        send_user(app, &p.user_id, msg);
+        send_user(app, &p.user_id, &tagged);
     }
     for s in &room.spectators {
-        send_user(app, &s.user_id, msg);
+        send_user(app, &s.user_id, &tagged);
     }
 }
 
@@ -243,6 +251,8 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
                 }
                 rooms::touch(app, &mut room);
                 room_send_states(app, &room);
+                send_undo_state(app, &room);
+                send_timeline(app, &room);
                 return;
             }
         }
@@ -256,7 +266,7 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
     let revived = {
         let mut done = false;
         if let Some(mut room) = app.rooms.get_mut(room_id) {
-            if let Some(p) = room.players.iter_mut().find(|p| p.user_id == user.id && !p.is_bot) {
+            if let Some(p) = room.players.iter_mut().find(|p| p.user_id == user.id) {
                 p.online = true;
                 done = true;
                 room.seq += 1;
@@ -264,6 +274,8 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
                 rooms::touch(app, &mut room);
                 room_send_states(app, &room);
                 room_log(app, &room, seq, &format!("{} returns to the table", user.username));
+                send_undo_state(app, &room);
+                send_timeline(app, &room);
             }
         }
         done
@@ -318,9 +330,7 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
         cmd_damage_by_commander: Default::default(),
         commander_tax: Default::default(),
         mulligan: None,
-        is_bot: false,
         playmat: None,
-        bot_style: None,
         deck_id: deck_id.clone(),
         deck_name,
         conceded: false,
@@ -352,6 +362,8 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
     rooms::touch(app, &mut room);
     room_send_states(app, &room);
     room_log(app, &room, seq, &format!("{} takes seat {}", user.username, seat + 1));
+    send_undo_state(app, &room);
+    send_timeline(app, &room);
     drop(room);
     presence_update(app, &user.id);
 }
@@ -442,13 +454,8 @@ fn leave_room(app: &Arc<App>, user: &db::User) {
             room.stack.retain(|e| e.owner != user.id);
             room.pending_cmd.retain(|p| p.owner != user.id);
             if room.host == user.id {
-                // Prefer a human for the host seat; bots cannot run a lobby.
-                let next = room
-                    .players
-                    .iter()
-                    .find(|p| !p.is_bot)
-                    .or_else(|| room.players.first());
-                if let Some(next) = next {
+                // Hand the lobby to whoever remains.
+                if let Some(next) = room.players.first() {
                     room.host = next.user_id.clone();
                 }
             }
@@ -536,14 +543,14 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
         &room
             .players
             .iter()
-            .map(|p| serde_json::json!({ "username": p.username, "isBot": p.is_bot }))
+            .map(|p| serde_json::json!({ "username": p.username, "isBot": false }))
             .collect::<Vec<_>>(),
     )
     .unwrap_or_else(|_| "[]".to_string());
     let now = crate::now_ms();
     {
         let conn = app.db.lock().unwrap();
-        for p in room.players.iter().filter(|p| !p.is_bot) {
+        for p in room.players.iter() {
             db::match_record(
                 &conn,
                 &crate::hex_id(8),
@@ -558,9 +565,17 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
         }
     }
 
+    // Seed the undo/redo/replay timeline with the opening state, so undo can
+    // reach all the way back to the deal.
+    room.history.clear();
+    room.cursor = 0;
+    room.push_history(user.id.clone(), "Game started".to_string(), seq, None);
+
     rooms::touch(app, &mut room);
     room_send_states(app, &room);
     room_log(app, &room, seq, "Game started: opening hands of 7 dealt; keep or mulligan");
+    send_undo_state(app, &room);
+    send_timeline(app, &room);
 }
 
 fn chat_send(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
@@ -635,43 +650,59 @@ pub fn dispatch_action(
     action: game::Action,
     actor_tx: Option<&Tx>,
 ) -> Result<(), (&'static str, String)> {
+    // The card the move concerns, captured before apply consumes the action;
+    // its public face is read AFTER apply (where the card has landed).
+    let card_iid = game::action_card_iid(&action).map(str::to_string);
     let applied = game::apply(room, actor_id, action)?;
     room.seq += 1;
     let seq = room.seq;
+    // Record this action as a new point on the undo/redo/replay timeline.
+    // Undo/redo/rewind set record=false: they moved the cursor over existing
+    // history rather than extending it. Skip recording when no player is present
+    // to use it - keeps abandoned rooms from churning history.
+    if applied.record && room.players.iter().any(|p| p.online) {
+        let card = card_iid.as_deref().and_then(|iid| room.public_card_view(iid));
+        room.push_history(actor_id.to_string(), applied.log.clone(), seq, card);
+    }
     rooms::touch(app, room);
     for p in &room.players {
         let payload = if p.user_id == actor_id { &applied.for_actor } else { &applied.for_others };
         send_user(
             app,
             &p.user_id,
-            &json!({"type": "room.event", "seq": seq, "actor": actor_id, "action": payload}),
+            &json!({"type": "room.event", "seq": seq, "actor": actor_id, "action": payload, "roomId": room.id}),
         );
     }
-    let spec_msg = json!({"type": "room.event", "seq": seq, "actor": actor_id, "action": applied.for_others});
+    let spec_msg = json!({"type": "room.event", "seq": seq, "actor": actor_id, "action": applied.for_others, "roomId": room.id});
     for s in &room.spectators {
         send_user(app, &s.user_id, &spec_msg);
     }
-    room_log(app, room, seq, &applied.log);
+    // An empty log line means the action is not log-worthy (e.g. repositioning
+    // a card): skip it rather than broadcasting a blank entry.
+    if !applied.log.is_empty() {
+        room_log(app, room, seq, &applied.log);
+    }
     for line in &applied.extra_logs {
         room_log(app, room, seq, line);
     }
-    // Whole-room extras (combat.results): every viewer, spectators included.
-    for msg in &applied.extra_broadcasts {
-        room_send_all(app, room, msg);
-    }
     // Per-viewer messages (library.cards, cmd.choice): the actor's own go only
     // to the acting connection; anyone else's to all of their connections.
-    // Spectators never receive these.
+    // Spectators never receive these. Stamped with roomId like every other
+    // room-scoped message so the client can scope them to the viewed table.
     for (uid, msg) in &applied.private {
+        let mut tagged = msg.clone();
+        if let Some(obj) = tagged.as_object_mut() {
+            obj.insert("roomId".to_string(), json!(room.id));
+        }
         if uid == actor_id {
             match actor_tx {
                 Some(tx) => {
-                    let _ = tx.send(msg.to_string());
+                    let _ = tx.send(tagged.to_string());
                 }
-                None => send_user(app, uid, msg),
+                None => send_user(app, uid, &tagged),
             }
         } else {
-            send_user(app, uid, msg);
+            send_user(app, uid, &tagged);
         }
     }
     if applied.resync {
@@ -680,7 +711,84 @@ pub fn dispatch_action(
     // Any action can be the one that leaves a single player standing
     // (concede is the obvious path; leave has its own call site).
     maybe_finish_match(app, room);
+    // Refresh everyone's undo/redo affordance after every action.
+    send_undo_state(app, room);
+    send_timeline(app, room);
     Ok(())
+}
+
+/// Push each seated player their per-viewer undo/redo affordance. `canUndo`/
+/// `canRedo` are gated on the owns-the-move-or-host policy and disabled once
+/// the match is frozen. Spectators do not act, so they are skipped.
+pub fn send_undo_state(app: &App, room: &Room) {
+    let head = room.history.len();
+    let cursor = room.cursor;
+    for p in &room.players {
+        let is_host = p.user_id == room.host;
+        // Undo/redo stay available even after the match freezes: they are the
+        // recovery path from an accidental match-ending move (apply() exempts
+        // them from the frozen guard).
+        let can_undo =
+            cursor > 0 && (is_host || room.history.get(cursor).map(|s| s.actor == p.user_id).unwrap_or(false));
+        let can_redo = cursor + 1 < head
+            && (is_host || room.history.get(cursor + 1).map(|s| s.actor == p.user_id).unwrap_or(false));
+        send_user(
+            app,
+            &p.user_id,
+            &json!({
+                "type": "undo.state",
+                "roomId": room.id,
+                "canUndo": can_undo,
+                "canRedo": can_redo,
+                "cursor": cursor,
+                "head": head,
+                "host": is_host,
+            }),
+        );
+    }
+}
+
+/// Broadcast the move timeline (one entry per history snapshot: its wall-clock
+/// timestamp, log label, and actor) to every viewer. Same for all - labels are
+/// the public log lines - so it goes to players and spectators alike.
+pub fn send_timeline(app: &App, room: &Room) {
+    let entries: Vec<Value> = room
+        .history
+        .iter()
+        .map(|s| json!({ "ts": s.ts, "label": s.label, "actor": s.actor, "card": s.card }))
+        .collect();
+    let msg = json!({ "type": "timeline", "roomId": room.id, "entries": entries });
+    room_send_all(app, room, &msg);
+}
+
+/// Serve one historical frame to the requesting connection only (read-only
+/// replay scrubbing). Never mutates the room or the shared cursor, and is
+/// hidden-info filtered through state_for for that viewer at that past point.
+fn replay_seek(app: &Arc<App>, user: &db::User, index: usize, tx: &Tx) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        return;
+    };
+    let Some(room) = app.rooms.get(&rref.room_id) else {
+        return;
+    };
+    let head = room.history.len();
+    if head == 0 {
+        return;
+    }
+    let viewer = if rref.spectating { None } else { Some(user.id.as_str()) };
+    let clamped = index.min(head - 1);
+    if let Some(state) = room.replay_frame(clamped, viewer) {
+        let _ = tx.send(
+            json!({
+                "type": "replay.frame",
+                "roomId": room.id,
+                "index": clamped,
+                "head": head,
+                "state": state,
+            })
+            .to_string(),
+        );
+    }
 }
 
 /// Ends the match when exactly one non-conceded player remains in a started
@@ -742,150 +850,13 @@ pub fn maybe_finish_match(app: &App, room: &mut Room) {
     room_log(app, room, seq, &format!("{winner_name} wins the match"));
 }
 
-/// {"type":"bot.add"} per the Bots addendum: host-only, pre-start, needs a
-/// free seat; seats a synthetic player with one of the embedded precons.
-fn bot_add(
-    app: &Arc<App>,
-    user: &db::User,
-    deck_code: Option<String>,
-    style: Option<String>,
-    tx: &Tx,
-) {
-    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
-        send_err(tx, "not_in_room", "you are not in a room");
-        return;
-    };
-    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
-        send_err(tx, "room_not_found", "no such room");
-        return;
-    };
-    if room.host != user.id {
-        send_err(tx, "forbidden", "only the host can add bots");
-        return;
-    }
-    if room.started {
-        send_err(tx, "already_started", "the game has already started");
-        return;
-    }
-    let taken: Vec<usize> = room.players.iter().map(|p| p.seat).collect();
-    let Some(seat) = (0..room.seats).find(|s| !taken.contains(s)) else {
-        send_err(tx, "room_full", "room is full");
-        return;
-    };
-    let decks = &crate::bot::data().decks;
-    let deck = match deck_code.as_deref() {
-        None | Some("random") => &decks[rand::random_range(0..decks.len())],
-        Some(code) => match decks.iter().find(|d| d.code == code) {
-            Some(d) => d,
-            None => {
-                send_err(tx, "bad_deck", &format!("no bot deck {code}"));
-                return;
-            }
-        },
-    };
-    let style = match style.as_deref() {
-        Some("aggro") => "aggro",
-        Some("defensive") => "defensive",
-        _ => "casual",
-    };
-    let username = crate::bot::pick_name(&room);
-    let bot_id = format!("bot:{}", crate::hex_id(6));
-    // The bot's zones are built through the same path as a human's deck so
-    // cards carry identical scryfall ids, image urls, and commander flags.
-    let cards: Vec<db::DeckCard> = deck
-        .cards
-        .iter()
-        .map(|c| db::DeckCard {
-            scryfall_id: c.sid.clone(),
-            name: c.name.clone(),
-            quantity: c.qty,
-            board: c.board.clone(),
-        })
-        .collect();
-    let is_commander_room = room.format == "commander";
-    let (command, library) = rooms::build_zones(&cards, is_commander_room);
-    room.players.push(rooms::Player {
-        user_id: bot_id,
-        username: username.clone(),
-        seat,
-        life: if is_commander_room { 40 } else { 20 },
-        poison: 0,
-        cmd_damage: Default::default(),
-        cmd_damage_by_commander: Default::default(),
-        commander_tax: Default::default(),
-        mulligan: None,
-        is_bot: true,
-        playmat: Some(bot_playmat(&username).to_string()),
-        bot_style: Some(style.to_string()),
-        deck_id: None,
-        deck_name: Some(deck.name.clone()),
-        conceded: false,
-        turns_taken: 0,
-        turn_time_ms: 0,
-        hand: Vec::new(),
-        library,
-        battlefield: Vec::new(),
-        graveyard: Vec::new(),
-        exile: Vec::new(),
-        command,
-        hand_revealed: false,
-        online: true,
-        undo: None,
-        peeked: Vec::new(),
-    });
-    room.players.sort_by_key(|p| p.seat);
-    room.seq += 1;
-    let seq = room.seq;
-    rooms::touch(app, &mut room);
-    room_send_states(app, &room);
-    room_log(app, &room, seq, &format!("{} takes seat {}", username, seat + 1));
-}
-
-/// {"type":"bot.remove"}: host-only, pre-start, target seat must hold a bot.
-fn bot_remove(app: &Arc<App>, user: &db::User, seat: usize, tx: &Tx) {
-    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
-        send_err(tx, "not_in_room", "you are not in a room");
-        return;
-    };
-    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
-        send_err(tx, "room_not_found", "no such room");
-        return;
-    };
-    if room.host != user.id {
-        send_err(tx, "forbidden", "only the host can remove bots");
-        return;
-    }
-    if room.started {
-        send_err(tx, "already_started", "the game has already started");
-        return;
-    }
-    let target = room.players.iter().find(|p| p.seat == seat);
-    let Some(bot) = target.filter(|p| p.is_bot) else {
-        send_err(tx, "not_a_bot", &format!("seat {seat} does not hold a bot"));
-        return;
-    };
-    let bot_id = bot.user_id.clone();
-    let bot_name = bot.username.clone();
-    room.players.retain(|p| p.user_id != bot_id);
-    room.seq += 1;
-    let seq = room.seq;
-    rooms::touch(app, &mut room);
-    room_send_states(app, &room);
-    room_log(app, &room, seq, &format!("{} removes {}", user.username, bot_name));
-}
-
-/// The bundled playmat ids (client's src/app/data/playmats.ts); bots pick one
-/// deterministically by persona so their turns re-skin the felt too.
+/// The bundled playmat ids (client's src/app/data/playmats.ts); a player's
+/// chosen mat must be one of these.
 const PLAYMATS: [&str; 15] = [
     "arcane-study", "tavern", "house-felt", "plains", "island", "swamp", "mountain",
     "forest", "confluence", "marble", "boneyard", "forgefloor", "fae-glade",
     "planar-sky", "neon-grid",
 ];
-
-fn bot_playmat(username: &str) -> &'static str {
-    let hash: u32 = username.bytes().fold(0u32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u32));
-    PLAYMATS[(hash as usize) % PLAYMATS.len()]
-}
 
 /// A player's chosen playmat, mirrored into the room so every client can show
 /// the active player's mat as the shared felt. Unknown ids are dropped.

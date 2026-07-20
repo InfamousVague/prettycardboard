@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
-import { Avatar, Pill, Text, Size, TextTone, Tooltip } from '@glacier/react';
-import { BookCopy, Bot, Check, Crown, Hand as HandIcon, Shield, Skull, X, Zap } from '@glacier/icons';
-import { send } from '../../net/ws.ts';
+import { useEffect, useMemo, useState } from 'react';
+import { Avatar, Button, Pill, Text, Size, TextTone, Tooltip } from '@glacier/react';
+import { BookCopy, Check, Crown, Hand as HandIcon, Shield, Skull, Zap } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
@@ -13,6 +12,7 @@ import { AttackBadge, BlockCluster, CounterBadges, ZonePiles, groupAttachments }
 import { restTilt } from './juice.ts';
 import { effectivePT, isCreature } from './boardModes.ts';
 import { playmatUrl } from '../../data/playmats.ts';
+import { usePreference } from '../../hooks/usePreference.ts';
 
 /**
  * An opponent's seat: identity + vitals in the frame header, their battlefield
@@ -27,7 +27,6 @@ export function SeatFrame({
   me,
   canAct,
   onHover,
-  onDamageMe,
   stage,
 }: {
   room: RoomState;
@@ -35,7 +34,6 @@ export function SeatFrame({
   me: TablePlayer | undefined;
   canAct: boolean;
   onHover: (card: CardInst | null) => void;
-  onDamageMe: (delta: number) => void;
   /** Full-size main-stage rendering (vs the compact strip). */
   stage?: boolean;
 }) {
@@ -46,13 +44,16 @@ export function SeatFrame({
   const setBlocker = useTableUi((state) => state.setBlocker);
   // The viewer's battlefield-size preference applies to the staged board too.
   const cardScale = useTableUi((state) => state.cardScale);
+  const verticalCards = usePreference('verticalCards');
+  const mirrorOpponent = usePreference('mirrorOpponent');
 
   const combat = room.combat;
   const isActiveSeat = room.started && room.activeSeat === player.seat;
   const markers = room.markers ?? {};
-  const cmdIn = me !== undefined ? (player.cmdDamage[String(me.seat)] ?? 0) : 0;
+  // Commander damage I've taken from THIS opponent's commander (21 = lethal);
+  // the chip both shows it and steps it, so display and action agree.
   const anyDeciding = room.players.some((p) => p.mulligan?.state === 'deciding');
-  const { hosts, attachments } = groupAttachments(player.battlefield);
+  const { hosts, attachments } = useMemo(() => groupAttachments(player.battlefield), [player.battlefield]);
 
   const attackerEntry = (iid: string) => combat?.attackers.find((entry) => entry.iid === iid);
 
@@ -69,6 +70,15 @@ export function SeatFrame({
     combat != null &&
     room.activeSeat !== me.seat &&
     combat.attackers.some((a) => attackerHitsMe(a.iid));
+
+  // Unblocked power aimed at me; the one-click "take damage" helper subtracts it
+  // from my life. Creature deaths stay manual (drag them to the graveyard).
+  const incomingUnblocked = (combat?.attackers ?? [])
+    .filter((a) => attackerHitsMe(a.iid) && !(combat?.blocks ?? []).some((b) => b.attackerIid === a.iid))
+    .reduce((sum, a) => {
+      const p = parseInt((a.power ?? '0').trim(), 10);
+      return sum + (Number.isFinite(p) ? Math.max(0, p) : 0);
+    }, 0);
 
   // Attacker → blocker picker (assign a block from the staged attacker board).
   const [blockPick, setBlockPick] = useState<{ attackerIid: string; x: number; y: number } | null>(null);
@@ -118,7 +128,7 @@ export function SeatFrame({
             ? `calc(min(${baseY * 100}%, 100% - 8.75rem) + ${offset * 0.8}px)`
             : `min(${baseY * 100}%, 100% - 8.75rem)`,
           zIndex: host ? 4 : 5,
-          ['--rest-tilt' as string]: `${restTilt(card.iid)}deg`,
+          ['--rest-tilt' as string]: verticalCards ? '0deg' : `${restTilt(card.iid)}deg`,
         }}
         onPointerEnter={() => onHover(card)}
         onPointerLeave={() => onHover(null)}
@@ -149,6 +159,7 @@ export function SeatFrame({
       className="oppBoard seatFrame"
       data-active={isActiveSeat || undefined}
       data-stage={stage || undefined}
+      data-mirror={mirrorOpponent || undefined}
       style={player.playmat ? { ['--pc-board-mat' as string]: `url("${playmatUrl(player.playmat)}")` } : undefined}
     >
       {iAmDefender && stage && (
@@ -158,10 +169,13 @@ export function SeatFrame({
             {t('gpBlockers')}
           </Text>
           <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="combatHint">
-            {combat?.locked && me !== undefined && (combat.ready ?? []).includes(me.seat)
-              ? t('cbWaitingOthers')
-              : t('gpBlockPrompt')}
+            {t('gpBlockPrompt')}
           </Text>
+          {incomingUnblocked > 0 && (
+            <Button size="sm" variant="solid" onClick={() => act({ kind: 'life.add', delta: -incomingUnblocked })}>
+              {t('cbTakeDamage')} · {incomingUnblocked}
+            </Button>
+          )}
         </div>
       )}
       <header className="oppHead">
@@ -169,23 +183,6 @@ export function SeatFrame({
         <Text as="span" size={Size.Small} weight="semibold" className="seatName">
           {player.username}
         </Text>
-        {player.isBot && (
-          <Pill size="sm" tone="accent" icon={<Bot size={11} />}>
-            {t('gpBotChip')}
-          </Pill>
-        )}
-        {player.isBot && me?.userId === room.hostUserId && !room.started && (
-          <Tooltip content={t('gpRemoveBot')}>
-            <button
-              type="button"
-              className="seatMarker seatBotRemove"
-              aria-label={t('gpRemoveBot')}
-              onClick={() => send({ type: 'bot.remove', seat: player.seat })}
-            >
-              <X size={12} />
-            </button>
-          </Tooltip>
-        )}
         {markers.monarch === player.seat && (
           <Tooltip content={t('gpMonarch')}>
             <span className="seatMarker">
@@ -223,32 +220,45 @@ export function SeatFrame({
         <span className="oppHandCount" title={t('tblLibrary')}>
           <BookCopy size={11} /> {player.libraryCount}
         </span>
-        {me !== undefined && canAct && (
-          <Tooltip content={`${t('tblCommand')}: ${cmdIn}`}>
-            <button
-              type="button"
-              className="cmdChip"
-              onClick={() => onDamageMe(1)}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                onDamageMe(-1);
-              }}
-            >
-              ⚔ {cmdIn}
-            </button>
-          </Tooltip>
-        )}
       </header>
-      {/* Their hand as a fan of face-down cards, so the count is visible at a
-          glance across the table. */}
-      {player.handCount > 0 && (
-        <div className="oppHand" title={`${t('tblHand')}: ${player.handCount}`} aria-label={`${t('tblHand')}: ${player.handCount}`}>
-          {Array.from({ length: Math.min(player.handCount, 14) }).map((_, index) => (
-            <span key={index} className="oppHandCard" aria-hidden />
-          ))}
-          <span className="oppHandTally">{player.handCount}</span>
-        </div>
-      )}
+      {/* Their hand: a fan hanging from the top edge (their side of the table).
+          Hidden cards are backs; cards they REVEAL (whole hand, or a single card
+          via reveal.card) show their face so the table can read them. */}
+      {stage && player.handCount > 0 && (() => {
+        const revealed = player.hand ?? player.revealedHand ?? [];
+        const shownReveals = revealed.slice(0, 12);
+        const backs = Math.max(0, Math.min(player.handCount, 12) - shownReveals.length);
+        const total = shownReveals.length + backs;
+        const spreadAt = (i: number) => i - (total - 1) / 2;
+        return (
+          <div className="oppHand" title={`${t('tblHand')}: ${player.handCount}`} aria-label={`${t('tblHand')}: ${player.handCount}`}>
+            {shownReveals.map((card, index) => {
+              const spread = spreadAt(index);
+              return (
+                <div
+                  key={card.iid}
+                  className="oppHandCard oppHandReveal"
+                  style={{ transform: `translateY(${Math.abs(spread) * 6}px) rotate(${spread * 4}deg)` }}
+                  onClick={() => popup.open({ scryfallId: card.scryfallId, name: card.name, imageUrl: card.imageUrl })}
+                >
+                  <GameCard name={card.name} imageUrl={card.imageUrl || cardImage(card.scryfallId)} width={56} tilt={0} />
+                </div>
+              );
+            })}
+            {Array.from({ length: backs }).map((_, i) => {
+              const spread = spreadAt(shownReveals.length + i);
+              return (
+                <div
+                  key={`back-${i}`}
+                  className="oppHandCard"
+                  style={{ transform: `translateY(${Math.abs(spread) * 6}px) rotate(${spread * 4}deg)` }}
+                  aria-hidden
+                />
+              );
+            })}
+          </div>
+        );
+      })()}
       <div className="oppField">
         {hosts.map((card) => (
           <span key={card.iid} style={{ display: 'contents' }}>
@@ -257,7 +267,7 @@ export function SeatFrame({
           </span>
         ))}
       </div>
-      <ZonePiles player={player} onHover={onHover} />
+      <ZonePiles player={player} big={stage} onHover={onHover} />
 
       {blockPick && me && (
         <div

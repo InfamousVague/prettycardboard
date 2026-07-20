@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { AlertDialog, Avatar, Button, IconButton, Input, Kbd, Pill, Text, Size, TextTone, Tooltip, useToast } from '@glacier/react';
-import { Copy, Crown, Eye, Flag, Heart, Link2, LogOut, ScrollText, Skull, Sparkles, Users, Zap } from '@glacier/icons';
+import { AlertDialog, Avatar, Button, Input, Kbd, Menu, MenuItem, Pill, Text, Size, StatusDot, TextTone, Tooltip, useToast } from '@glacier/react';
+import { Copy, Crown, Eye, Flag, Heart, Link2, LogOut, ScrollText, Settings, Skull, Sparkles, Swords, UserPlus, Zap } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
@@ -9,20 +9,19 @@ import { tableShareUrl } from '../data/pendingJoin.ts';
 import { GameCard } from '../components/GameCard.tsx';
 import type { CardInst, GameAction, GameActionV2, RoomState, TablePlayer, Zone } from '../net/types.ts';
 import { useTableUi } from './table/tableUi.ts';
-import { MyBoard } from './table/MyBoard.tsx';
+import { MyBoard, Vitals } from './table/MyBoard.tsx';
 import { SeatFrame } from './table/SeatFrame.tsx';
 import { PhaseRibbon } from './table/PhaseRibbon.tsx';
 import { StackTray } from './table/StackTray.tsx';
 import { CmdChoiceDialog, LibraryViewer, MulliganOverlay, PileViewer, RollBanner } from './table/overlays.tsx';
-import { AttackTargetModal, CombatResultsModal, DefenseModal, DefenseReturnChip } from './table/CombatModals.tsx';
+import { LibrarySidebar } from './table/LibrarySidebar.tsx';
 import { PostMatch } from './table/PostMatch.tsx';
 import { PreMatch } from './table/PreMatch.tsx';
+import { TimelineCard } from './table/TimelineCard.tsx';
 import { TurnCue } from './table/TurnCue.tsx';
 import { flightAnchor, flyCard } from './table/juice.ts';
 import { onStatus, send } from '../net/ws.ts';
 import { loadPreferences } from '../preferences.ts';
-import { BotPicker } from './table/BotPicker.tsx';
-import { MiniBoard } from './table/MiniBoard.tsx';
 import { installTableShims } from './table/shims.ts';
 import './table/table.css';
 
@@ -50,26 +49,28 @@ export function TablePage() {
   const t = useT();
   const { toast } = useToast();
   const identity = useApp((state) => state.identity);
-  const room = useGame((state) => state.room);
+  const liveRoom = useGame((state) => state.room);
+  const replay = useGame((state) => state.replay);
+  // While scrubbing a replay, the whole table renders a past frame (read-only);
+  // otherwise it is the live authoritative room.
+  const room = replay.active && replay.frame ? replay.frame : liveRoom;
   const spectating = useGame((state) => state.spectating);
   const act = useGame((state) => state.act);
   const leave = useGame((state) => state.leave);
   const start = useGame((state) => state.start);
+  const friends = useApp((state) => state.friends.friends);
 
   const [menu, setMenu] = useState<Menu | null>(null);
   const [pinnedSeat, setPinnedSeat] = useState<number | null>(null);
-  const [preview, setPreview] = useState<CardInst | null>(null);
   const [confirmConcede, setConfirmConcede] = useState(false);
   // The matchup splash: only for the false->true start transition witnessed
   // live (a reload into a running game skips straight to the table).
   const [preMatch, setPreMatch] = useState(false);
   const prevStarted = useRef<boolean | null>(null);
-  // The dock keeps showing the LAST hovered card; the live hover (nullable)
-  // only matters for the T-to-tap hotkey.
+  // Tracks the last hovered card for the T-to-tap hotkey.
   const hoverRef = useRef<CardInst | null>(null);
   const handleHover = (card: CardInst | null) => {
     hoverRef.current = card;
-    if (card) setPreview(card);
   };
 
   useEffect(() => {
@@ -91,8 +92,6 @@ export function TablePage() {
     if (!combatActive) {
       const ui = useTableUi.getState();
       if (ui.blockerIid) ui.setBlocker(null);
-      if (ui.attackPick) ui.setAttackPick(null);
-      if (ui.defenseHidden) ui.setDefenseHidden(false);
     }
   }, [combatActive]);
 
@@ -194,7 +193,11 @@ export function TablePage() {
   const me = room.players.find((player) => player.userId === identity?.userId);
   const others = room.players.filter((player) => player.userId !== identity?.userId);
   const isHost = room.hostUserId === identity?.userId;
-  const canAct = !spectating && me != null && room.started;
+  // Online friends not already seated here: invite them straight into this table.
+  const onlineFriends = friends.filter(
+    (friend) => friend.online && !room.players.some((player) => player.userId === friend.userId),
+  );
+  const canAct = !spectating && me != null && room.started && !replay.active;
 
   // Seats flow clockwise from mine so the table reads like a real one.
   const seatCount = Math.max(1, room.players.length);
@@ -221,7 +224,7 @@ export function TablePage() {
   };
 
   return (
-    <div className="table" onContextMenu={(event) => event.preventDefault()}>
+    <div className="table" data-replay={replay.active || undefined} onContextMenu={(event) => event.preventDefault()}>
       <div className="tableFelt" aria-hidden />
 
       {/* ---- your-turn cue: edge glow + dismissable pill ---- */}
@@ -248,6 +251,7 @@ export function TablePage() {
               {t('tblSpectating')}
             </Pill>
           )}
+          <CmdDamageBar room={room} meId={me?.userId} />
         </div>
         {room.started && <PhaseRibbon room={room} me={me} canAct={canAct} />}
         <div className="tableTopActions">
@@ -256,8 +260,27 @@ export function TablePage() {
               <Link2 size={15} /> {t('tblShare')}
             </Button>
           </Tooltip>
-          {isHost && !room.started && !spectating && room.players.length < room.seats && (
-            <BotPicker compact />
+          {!spectating && onlineFriends.length > 0 && (
+            <Menu
+              aria-label={t('tblInviteFriends')}
+              trigger={
+                <Button size="sm" variant="soft">
+                  <UserPlus size={15} /> {t('tblInviteFriends')}
+                </Button>
+              }
+            >
+              {onlineFriends.map((friend) => (
+                <MenuItem
+                  key={friend.userId}
+                  onSelect={() => {
+                    send({ type: 'invite.send', toUserId: friend.userId, roomId: room.roomId });
+                    toast({ tone: 'success', message: `${t('frInvite')} → ${friend.username}` });
+                  }}
+                >
+                  <StatusDot tone="success" size="sm" /> {friend.username}
+                </MenuItem>
+              ))}
+            </Menu>
           )}
           {isHost && !room.started && !spectating && (
             <Button size="sm" onClick={start}>
@@ -269,6 +292,16 @@ export function TablePage() {
               <Flag size={15} /> {t('tblConcede')}
             </Button>
           )}
+          <Tooltip content={t('setTitle')}>
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={t('setTitle')}
+              onClick={() => window.dispatchEvent(new CustomEvent('pc:open-settings'))}
+            >
+              <Settings size={15} />
+            </Button>
+          </Tooltip>
           <Button size="sm" variant="ghost" onClick={leave}>
             <LogOut size={15} /> {t('tblLeave')}
           </Button>
@@ -308,7 +341,6 @@ export function TablePage() {
                 me={me}
                 canAct={canAct}
                 onHover={handleHover}
-                onDamageMe={(delta) => me && act({ kind: 'cmd.damage', fromSeat: player.seat, delta })}
               />
             ))}
             {orderedOthers.length === 0 && (
@@ -320,7 +352,6 @@ export function TablePage() {
                 <Button size="sm" onClick={shareInvite}>
                   <Link2 size={15} /> {t('tblShare')}
                 </Button>
-                {isHost && !spectating && room.players.length < room.seats && <BotPicker />}
                 <Text size={Size.XSmall} tone={TextTone.Subtle}>
                   {t('tblCode')}: <Kbd>{room.code}</Kbd>
                 </Text>
@@ -339,15 +370,15 @@ export function TablePage() {
               me={me}
               canAct={canAct}
               onHover={handleHover}
-              onDamageMe={(delta) => me && act({ kind: 'cmd.damage', fromSeat: stagedPlayer.seat, delta })}
               stage
             />
           </div>
         )}
 
-        {/* ---- my board: the stage when it's mine, a hand strip otherwise ---- */}
-        {me && !spectating && (
-          <MyBoard me={me} room={room} onMenu={openMenu} onHover={handleHover} hideField={room.started && !stagedIsMe} />
+        {/* ---- my board: only while it owns the stage. Looking at someone
+             else's playmat hides my hand/deck/piles entirely. ---- */}
+        {me && !spectating && (!room.started || stagedIsMe) && (
+          <MyBoard me={me} room={room} onMenu={openMenu} onHover={handleHover} />
         )}
         {spectating && me == null && !stagedPlayer && <div className="tableSpectatorSpace" />}
 
@@ -355,8 +386,14 @@ export function TablePage() {
         <StackTray room={room} canAct={canAct} />
       </div>
 
-      {/* ---- right dock: players + log ---- */}
-      <SidePanel preview={preview} room={room} meId={identity?.userId} stagedSeat={stagedSeat} onFocusSeat={setPinnedSeat} />
+      {/* ---- right dock: life + players + log, stacked cards ---- */}
+      <SidePanel
+        room={room}
+        me={me}
+        spectating={spectating}
+        meId={identity?.userId}
+        onFocusSeat={setPinnedSeat}
+      />
 
       {/* ---- context menu ---- */}
       {menu && me && !spectating && (
@@ -372,16 +409,16 @@ export function TablePage() {
       )}
 
       {/* ---- overlays ---- */}
+      {/* Frame-driven interactive overlays are suppressed while scrubbing a
+          replay: `room` is a historical frame then, so a past mulligan/combat
+          state must not resurface as a live modal over the read-only shield. */}
       <LibraryViewer />
+      {me && !spectating && !replay.active && <LibrarySidebar />}
       <PileViewer room={room} me={me} canAct={!spectating && me != null} />
-      {me && !spectating && !preMatch && <MulliganOverlay room={room} me={me} />}
-      {me && !spectating && <CmdChoiceDialog me={me} />}
+      {me && !spectating && !preMatch && !replay.active && <MulliganOverlay room={room} me={me} />}
+      {me && !spectating && !replay.active && <CmdChoiceDialog me={me} />}
       {preMatch && <PreMatch room={room} onClose={() => setPreMatch(false)} />}
       {/* Combat v3: target picker, defender response, resolved breakdown. */}
-      {me && !spectating && <AttackTargetModal room={room} me={me} />}
-      {me && !spectating && <DefenseModal room={room} me={me} />}
-      {me && !spectating && <DefenseReturnChip room={room} me={me} />}
-      <CombatResultsModal room={room} />
       {/* Spectators see the result too; controls inside are gated to players. */}
       <PostMatch room={room} meId={identity?.userId} spectating={spectating} onLeave={leave} />
       <RollBanner />
@@ -538,7 +575,8 @@ function CardMenu({
           {item(`→ ${t('gpStack')}`, { kind: 'stack.push', iid: menu.iid }, 'stack')}
           {item(`→ ${t('tblGraveyard')}`, { kind: 'card.move', iid: menu.iid, to: 'graveyard' }, `grave:${me.userId}`)}
           {item('→ Top of library', { kind: 'card.move', iid: menu.iid, to: 'library', index: 0 }, `lib:${me.userId}`)}
-          {item('Reveal hand', { kind: 'reveal.hand' })}
+          {item(t('gpRevealCard'), { kind: 'reveal.card', iid: menu.iid })}
+          {item(t('gpRevealHand'), { kind: 'reveal.hand' })}
         </>
       )}
       {menu.zone === 'graveyard' && (
@@ -547,6 +585,13 @@ function CardMenu({
           {item('→ Battlefield', { kind: 'card.move', iid: menu.iid, to: 'battlefield', x: 0.5, y: 0.55 }, 'field:mine')}
           {item(`→ ${t('tblExile')}`, { kind: 'card.move', iid: menu.iid, to: 'exile' }, `exile:${me.userId}`)}
           {item(`→ ${t('gpStack')}`, { kind: 'stack.push', iid: menu.iid }, 'stack')}
+        </>
+      )}
+      {menu.zone === 'exile' && (
+        <>
+          {item(`→ ${t('tblHand')}`, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
+          {item('→ Battlefield', { kind: 'card.move', iid: menu.iid, to: 'battlefield', x: 0.5, y: 0.55 }, 'field:mine')}
+          {item(`→ ${t('tblGraveyard')}`, { kind: 'card.move', iid: menu.iid, to: 'graveyard' }, `grave:${me.userId}`)}
         </>
       )}
       {menu.zone === 'command' && card && (
@@ -571,65 +616,40 @@ function CardMenu({
 /* ================= side dock ================= */
 
 function SidePanel({
-  preview,
   room,
+  me,
+  spectating,
   meId,
-  stagedSeat,
   onFocusSeat,
 }: {
-  preview: CardInst | null;
   room: RoomState;
+  me?: TablePlayer;
+  spectating?: boolean;
   meId?: string;
-  stagedSeat?: number | null;
   onFocusSeat?: (seat: number) => void;
 }) {
   const t = useT();
   const log = useGame((state) => state.log);
-  const [showLog, setShowLog] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Keep the log pinned to the newest entry while it is open.
+  // Keep the log pinned to the newest entry.
   useEffect(() => {
-    if (showLog) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [log.length, showLog]);
-
-  const markers = room.markers ?? {};
-  const players = [...room.players].sort((a, b) => a.seat - b.seat);
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+  }, [log.length]);
 
   return (
     <aside className="tableSide">
-      <div className="sidePreview" data-empty={!preview || undefined}>
-        {preview && (
-          <GameCard
-            name={preview.name}
-            imageUrl={preview.faceDown ? undefined : preview.imageUrl || cardImage(preview.scryfallId)}
-            faceDown={preview.faceDown}
-            width={200}
-            tilt={0}
-          />
-        )}
-      </div>
+      {room.started && me && !spectating && <Vitals me={me} room={room} />}
+      {room.started && me && !spectating && <TimelineCard />}
+      <PlayersCard room={room} meId={meId} onFocusSeat={onFocusSeat} />
 
-      <div className="sideHead">
-        <span className="sideHeadTitle">
-          <Users size={13} />
-          {showLog ? t('tblLog') : t('tblPlayers')}
-        </span>
-        <Tooltip content={t('tblLog')}>
-          <IconButton
-            variant={showLog ? 'soft' : 'ghost'}
-            size="sm"
-            aria-label={t('tblLog')}
-            aria-pressed={showLog}
-            data-active={showLog || undefined}
-            onClick={() => setShowLog((open) => !open)}
-          >
-            <ScrollText size={16} />
-          </IconButton>
-        </Tooltip>
-      </div>
-
-      {showLog ? (
+      <div className="sideLogCard">
+        <div className="sideHead">
+          <span className="sideHeadTitle">
+            <ScrollText size={13} />
+            {t('tblLog')}
+          </span>
+        </div>
         <div ref={scrollRef} className="sideScroll">
           {log.length === 0 ? (
             <p className="sideEmpty">{t('tblLogEmpty')}</p>
@@ -641,104 +661,174 @@ function SidePanel({
             ))
           )}
         </div>
-      ) : (
-        <div className="sidePlayers">
-          {room.started && stagedSeat != null && (
-            <div className="miniBoards">
-              {players
-                .filter((player) => player.seat !== stagedSeat)
-                .map((player) => (
-                  <MiniBoard
-                    key={player.userId}
-                    player={player}
-                    active={room.activeSeat === player.seat}
-                    onStage={() => onFocusSeat?.(player.seat)}
-                  />
-                ))}
-            </div>
-          )}
-          {players.map((player) => {
-            const active = room.started && room.activeSeat === player.seat;
-            const isMe = player.userId === meId;
-            const isHost = room.hostUserId === player.userId;
-            const focusable = room.started && !isMe;
-            return (
-              <div
-                key={player.userId}
-                className="playerRow"
-                data-active={active || undefined}
-                data-me={isMe || undefined}
-                data-dead={player.conceded || undefined}
-                data-focusable={focusable || undefined}
-                onClick={focusable && onFocusSeat ? () => onFocusSeat(player.seat) : undefined}
-              >
-                <Avatar name={player.username} size="sm" />
-                <div className="playerBody">
-                  <span className="playerNameRow">
-                    <span className="playerName">{player.username}</span>
-                    {player.conceded && (
-                      <Tooltip content={t('tblConceded')}>
-                        <span className="playerBadge playerBadgeDead">
-                          <Skull size={11} />
-                        </span>
-                      </Tooltip>
-                    )}
-                    {isMe && <span className="playerYou">{t('tblYou')}</span>}
-                    {isHost && (
-                      <Tooltip content={t('tblHost')}>
-                        <span className="playerBadge">
-                          <Crown size={11} />
-                        </span>
-                      </Tooltip>
-                    )}
-                    {markers.monarch === player.seat && (
-                      <Tooltip content={t('gpMonarch')}>
-                        <span className="playerBadge playerBadgeMonarch">
-                          <Crown size={11} />
-                        </span>
-                      </Tooltip>
-                    )}
-                    {markers.initiative === player.seat && (
-                      <Tooltip content={t('gpInitiative')}>
-                        <span className="playerBadge playerBadgeInit">
-                          <Zap size={11} />
-                        </span>
-                      </Tooltip>
-                    )}
-                  </span>
-                  <span className="playerMeta">
-                    <span className="playerStat" title={t('tblLife')}>
-                      <Heart size={12} /> {player.life}
-                    </span>
-                    {player.poison > 0 && (
-                      <span className="playerStat" title={t('tblPoison')}>
-                        <Skull size={12} /> {player.poison}
-                      </span>
-                    )}
-                    <span className="playerStat" title={t('tblHand')}>
-                      {player.handCount}
-                    </span>
-                  </span>
-                </div>
-                {active && <span className="playerTurnDot" aria-hidden />}
-              </div>
-            );
-          })}
-          {room.spectators.length > 0 && (
-            <div className="sideSpectators">
-              <span className="sideHeadTitle">
-                <Eye size={13} />
-                {t('tblSpectators')}
+        {room.spectators.length > 0 && (
+          <div className="sideSpectators">
+            <span className="sideHeadTitle">
+              <Eye size={13} />
+              {t('tblSpectators')}
+            </span>
+            {room.spectators.map((spectator) => (
+              <span key={spectator.userId} className="spectatorName">
+                {spectator.username}
               </span>
-              {room.spectators.map((spectator) => (
-                <span key={spectator.userId} className="spectatorName">
-                  {spectator.username}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </aside>
+  );
+}
+
+/**
+ * The player roster as a card in the bottom-right HUD, stacked under the life
+ * card. Each row is clickable to bring that seat's board to the stage; no
+ * board thumbnails (the stage itself is the preview).
+ */
+/**
+ * Commander damage a player has TAKEN, summarized: the single highest total
+ * from any one commander (that's the 21-to-die number) plus a per-source
+ * breakdown for the tooltip. Read-only — damage is recorded from your own
+ * vitals tracker, not from here.
+ */
+function cmdDamageSummary(player: TablePlayer, room: RoomState) {
+  const rows = Object.entries(player.cmdDamage ?? {})
+    .map(([seat, amount]) => ({
+      amount,
+      from: room.players.find((p) => p.seat === Number(seat))?.username ?? `Seat ${seat}`,
+    }))
+    .filter((row) => row.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+  return { max: rows[0]?.amount ?? 0, rows };
+}
+
+/**
+ * Topbar read-out of every player currently taking commander damage: one chip
+ * per player with a nonzero total, so the whole table's commander-damage state
+ * is visible at a glance without a per-seat button on the felt.
+ */
+function CmdDamageBar({ room, meId }: { room: RoomState; meId?: string }) {
+  const t = useT();
+  if (room.format !== 'commander' || !room.started) return null;
+  const chips = room.players
+    .map((player) => ({ player, ...cmdDamageSummary(player, room) }))
+    .filter((chip) => chip.max > 0);
+  if (chips.length === 0) return null;
+  return (
+    <div className="cmdBar" aria-label={t('tblCmdDamage')}>
+      {chips.map(({ player, max, rows }) => (
+        <Tooltip
+          key={player.userId}
+          content={`${player.username} — ${rows.map((row) => `${row.from} ${row.amount}`).join(' · ')}`}
+        >
+          <span
+            className="cmdBarChip"
+            data-lethal={max >= 21 || undefined}
+            data-me={player.userId === meId || undefined}
+          >
+            <Swords size={11} />
+            <span className="cmdBarName">{player.username}</span>
+            {max}
+          </span>
+        </Tooltip>
+      ))}
+    </div>
+  );
+}
+
+function PlayersCard({
+  room,
+  meId,
+  onFocusSeat,
+}: {
+  room: RoomState;
+  meId?: string;
+  onFocusSeat?: (seat: number) => void;
+}) {
+  const t = useT();
+  const markers = room.markers ?? {};
+  const players = [...room.players].sort((a, b) => a.seat - b.seat);
+  return (
+    <div className="playersCard">
+      {players.map((player) => {
+        const active = room.started && room.activeSeat === player.seat;
+        const isMe = player.userId === meId;
+        const isHost = room.hostUserId === player.userId;
+        // Any row stages that seat; clicking mine brings my own board back.
+        const focusable = room.started;
+        return (
+          <div
+            key={player.userId}
+            className="playerRow"
+            data-active={active || undefined}
+            data-me={isMe || undefined}
+            data-dead={player.conceded || undefined}
+            data-focusable={focusable || undefined}
+            onClick={focusable && onFocusSeat ? () => onFocusSeat(player.seat) : undefined}
+          >
+            <Avatar name={player.username} size="sm" />
+            <div className="playerBody">
+              <span className="playerNameRow">
+                <span className="playerName">{player.username}</span>
+                {player.conceded && (
+                  <Tooltip content={t('tblConceded')}>
+                    <span className="playerBadge playerBadgeDead">
+                      <Skull size={11} />
+                    </span>
+                  </Tooltip>
+                )}
+                {isMe && <span className="playerYou">{t('tblYou')}</span>}
+                {isHost && (
+                  <Tooltip content={t('tblHost')}>
+                    <span className="playerBadge">
+                      <Crown size={11} />
+                    </span>
+                  </Tooltip>
+                )}
+                {markers.monarch === player.seat && (
+                  <Tooltip content={t('gpMonarch')}>
+                    <span className="playerBadge playerBadgeMonarch">
+                      <Crown size={11} />
+                    </span>
+                  </Tooltip>
+                )}
+                {markers.initiative === player.seat && (
+                  <Tooltip content={t('gpInitiative')}>
+                    <span className="playerBadge playerBadgeInit">
+                      <Zap size={11} />
+                    </span>
+                  </Tooltip>
+                )}
+              </span>
+              <span className="playerMeta">
+                <span className="playerStat" title={t('tblLife')}>
+                  <Heart size={12} /> {player.life}
+                </span>
+                {room.format === 'commander' && (() => {
+                  const cmd = cmdDamageSummary(player, room);
+                  return cmd.max > 0 ? (
+                    <span
+                      className="playerStat"
+                      data-lethal={cmd.max >= 21 || undefined}
+                      title={`${t('tblCmdDamage')} — ${cmd.rows.map((row) => `${row.from} ${row.amount}`).join(' · ')}`}
+                    >
+                      <Swords size={12} /> {cmd.max}
+                    </span>
+                  ) : null;
+                })()}
+                {player.poison > 0 && (
+                  <span className="playerStat" title={t('tblPoison')}>
+                    <Skull size={12} /> {player.poison}
+                  </span>
+                )}
+                <span className="playerStat" title={t('tblHand')}>
+                  {player.handCount}
+                </span>
+              </span>
+            </div>
+            {active && <span className="playerTurnDot" aria-hidden />}
+          </div>
+        );
+      })}
+    </div>
   );
 }

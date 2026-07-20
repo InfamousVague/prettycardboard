@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import * as ws from '../net/ws.ts';
-import type { CardInst, CombatResults, GameAction, GameActionV2, RoomState, ServerMessage, TablePlayer, Zone } from '../net/types.ts';
+import type { CardInst, GameAction, GameActionV2, RoomState, ServerMessage, TablePlayer, TimelineEntry, Zone } from '../net/types.ts';
 
 /**
  * Live table state. The server is authoritative: `room.state` snapshots replace
@@ -33,20 +33,36 @@ interface GameState {
   libraryCards: CardInst[] | null;
   /** Set when the room we were seated at was closed by its host; pages toast it once and ack. */
   closedRoomId: string | null;
-  /** A locked combat just resolved; every viewer gets the breakdown popup. */
-  combatResults: CombatResults | null;
+  /** The room the user is ACTIVELY viewing. Background updates for any other
+   * room (e.g. bots playing on after you left) must not re-open the table. */
+  joinedRoomId: string | null;
+  /** Latest turn number seen for rooms we're subscribed to but not viewing -
+   * powers the "turns are happening" indicator on the Play page. */
+  activity: Record<string, number>;
+  /** Undo/redo affordance for the viewed table (server-computed per viewer). */
+  undoState: { canUndo: boolean; canRedo: boolean; cursor: number; head: number; isHost: boolean };
+  /** Read-only replay scrubbing over the match timeline; frame replaces the
+   * live board while active. */
+  replay: { active: boolean; index: number; head: number; frame: RoomState | null };
+  /** One entry per history snapshot (index-aligned): timestamp, log label,
+   * actor, and the card it concerned - powers the event timeline. */
+  timeline: TimelineEntry[];
 
   join: (roomId: string, deckId?: string) => void;
   spectate: (roomId: string) => void;
   leave: () => void;
   start: () => void;
   act: (action: GameAction | GameActionV2) => void;
+  redo: () => void;
+  rewindTo: (index: number) => void;
+  replaySeek: (index: number) => void;
+  replayExit: () => void;
   sendChat: (text: string) => void;
   clear: () => void;
   ackClosed: () => void;
   answerCmdChoice: (iid: string, accept: boolean) => void;
   clearLibraryCards: () => void;
-  clearCombatResults: () => void;
+  clearActivity: (roomId: string) => void;
 }
 
 function mapCards(cards: CardInst[], iid: string, fn: (card: CardInst) => CardInst): CardInst[] {
@@ -164,14 +180,18 @@ function applyEvent(room: RoomState, actor: string, action: GameAction & Record<
         return { ...player, life: action.value };
       case 'life.add':
         return { ...player, life: player.life + action.delta };
-      case 'cmd.damage':
+      case 'cmd.damage': {
+        // Commander damage is combat damage: it also drops the life total.
+        // Mirror the server's effective (clamp-aware) delta so a decrement at
+        // zero commander damage doesn't refund life.
+        const before = player.cmdDamage[String(action.fromSeat)] ?? 0;
+        const after = Math.max(0, before + action.delta);
         return {
           ...player,
-          cmdDamage: {
-            ...player.cmdDamage,
-            [String(action.fromSeat)]: Math.max(0, (player.cmdDamage[String(action.fromSeat)] ?? 0) + action.delta),
-          },
+          life: player.life - (after - before),
+          cmdDamage: { ...player.cmdDamage, [String(action.fromSeat)]: after },
         };
+      }
       case 'poison.add':
         return { ...player, poison: Math.max(0, player.poison + action.delta) };
       default:
@@ -193,26 +213,65 @@ export const useGame = create<GameState>((set, get) => {
 
   ws.onMessage((message: ServerMessage) => {
     if (message.type === 'room.state') {
-      set({ room: message.state });
+      // Only the room we're actively in owns the table view. Snapshots for a
+      // room we've left (bots playing on) just bump its activity indicator so
+      // the Play page can show turns are happening - without yanking us back.
+      if (message.state.roomId === get().joinedRoomId) {
+        set({ room: message.state });
+      } else {
+        set((state) => ({
+          activity: { ...state.activity, [message.state.roomId]: message.state.turnNumber ?? 0 },
+        }));
+      }
     } else if (message.type === 'cmd.choice') {
-      set({ cmdChoice: { iid: message.iid, to: message.to } });
+      // Every room-scoped event below is ignored unless it belongs to the table
+      // we are actively viewing. The server streams events for every table we
+      // are still a member of, so without this a play at another table would
+      // leak into this one's log, combat popup, or board.
+      if (message.roomId === get().joinedRoomId) set({ cmdChoice: { iid: message.iid, to: message.to } });
     } else if (message.type === 'library.cards') {
-      set({ libraryCards: message.cards });
-    } else if (message.type === 'combat.results') {
-      set({ combatResults: { attackerSeat: message.attackerSeat, entries: message.entries, totalBySeat: message.totalBySeat } });
+      if (message.roomId === get().joinedRoomId) set({ libraryCards: message.cards });
+    } else if (message.type === 'undo.state') {
+      if (message.roomId === get().joinedRoomId)
+        set({
+          undoState: {
+            canUndo: message.canUndo,
+            canRedo: message.canRedo,
+            cursor: message.cursor,
+            head: message.head,
+            isHost: message.host,
+          },
+        });
+    } else if (message.type === 'timeline') {
+      if (message.roomId === get().joinedRoomId) set({ timeline: message.entries });
+    } else if (message.type === 'replay.frame') {
+      // Only land a frame while the viewer is actively scrubbing this table.
+      if (message.roomId === get().joinedRoomId)
+        set((state) =>
+          state.replay.active
+            ? { replay: { ...state.replay, index: message.index, head: message.head, frame: message.state } }
+            : state,
+        );
     } else if (message.type === 'room.event') {
-      const room = get().room;
-      if (room) set({ room: applyEvent(room, message.actor, message.action) });
+      const { room, joinedRoomId } = get();
+      if (room && message.roomId === joinedRoomId) set({ room: applyEvent(room, message.actor, message.action) });
     } else if (message.type === 'chat') {
-      set((state) => ({ chat: [...state.chat.slice(-199), { from: message.from, text: message.text, ts: message.ts }] }));
+      if (message.roomId === get().joinedRoomId)
+        set((state) => ({ chat: [...state.chat.slice(-199), { from: message.from, text: message.text, ts: message.ts }] }));
     } else if (message.type === 'log') {
-      set((state) => ({ log: [...state.log.slice(-299), { seq: message.seq, text: message.text, ts: message.ts }] }));
+      if (message.roomId === get().joinedRoomId)
+        set((state) => ({ log: [...state.log.slice(-299), { seq: message.seq, text: message.text, ts: message.ts }] }));
     } else if (message.type === 'room.closed') {
       // The table was ended by its host (or expired). Clearing the room drops
-      // the shell back to the routed page automatically.
-      const room = get().room;
+      // the shell back to the routed page automatically; drop any activity
+      // indicator too.
+      const { room, activity } = get();
+      const nextActivity = { ...activity };
+      delete nextActivity[message.roomId];
       if (room && room.roomId === message.roomId) {
-        set({ room: null, spectating: false, chat: [], log: [], closedRoomId: message.roomId, cmdChoice: null, libraryCards: null });
+        set({ room: null, spectating: false, chat: [], log: [], joinedRoomId: null, closedRoomId: message.roomId, cmdChoice: null, libraryCards: null, activity: nextActivity, replay: { active: false, index: 0, head: 0, frame: null }, undoState: { canUndo: false, canRedo: false, cursor: 0, head: 0, isHost: false }, timeline: [] });
+      } else {
+        set({ activity: nextActivity });
       }
     }
   });
@@ -229,26 +288,54 @@ export const useGame = create<GameState>((set, get) => {
       set({ cmdChoice: null });
     },
     clearLibraryCards: () => set({ libraryCards: null }),
-    combatResults: null,
-    clearCombatResults: () => set({ combatResults: null }),
     closedRoomId: null,
+    joinedRoomId: null,
+    activity: {},
+    undoState: { canUndo: false, canRedo: false, cursor: 0, head: 0, isHost: false },
+    replay: { active: false, index: 0, head: 0, frame: null },
+    timeline: [],
+    clearActivity: (roomId) =>
+      set((state) => {
+        if (!(roomId in state.activity)) return state;
+        const next = { ...state.activity };
+        delete next[roomId];
+        return { activity: next };
+      }),
 
     join: (roomId, deckId) => {
-      set({ spectating: false, chat: [], log: [] });
+      set({ spectating: false, chat: [], log: [], joinedRoomId: roomId, replay: { active: false, index: 0, head: 0, frame: null }, undoState: { canUndo: false, canRedo: false, cursor: 0, head: 0, isHost: false }, timeline: [] });
       ws.send({ type: 'room.join', roomId, deckId });
     },
     spectate: (roomId) => {
-      set({ spectating: true, chat: [], log: [] });
+      set({ spectating: true, chat: [], log: [], joinedRoomId: roomId, replay: { active: false, index: 0, head: 0, frame: null }, undoState: { canUndo: false, canRedo: false, cursor: 0, head: 0, isHost: false }, timeline: [] });
       ws.send({ type: 'room.spectate', roomId });
     },
     leave: () => {
       ws.send({ type: 'room.leave' });
-      set({ room: null, spectating: false, chat: [], log: [] });
+      set({ room: null, spectating: false, chat: [], log: [], joinedRoomId: null, replay: { active: false, index: 0, head: 0, frame: null }, undoState: { canUndo: false, canRedo: false, cursor: 0, head: 0, isHost: false }, timeline: [] });
     },
     start: () => ws.send({ type: 'room.start' }),
-    act: (action) => ws.sendAction(action),
+    // Actions are frozen while scrubbing a replay - the board is a past frame.
+    act: (action) => {
+      if (get().replay.active) return;
+      ws.sendAction(action);
+    },
+    redo: () => {
+      if (get().replay.active) return;
+      ws.sendAction({ kind: 'redo' });
+    },
+    // Rewind is a deliberate host action launched FROM the replay scrubber, so
+    // it is not blocked by replay mode (the caller exits replay right after).
+    rewindTo: (index) => ws.sendAction({ kind: 'rewindTo', index }),
+    // Seeking activates replay mode (the timeline scrubber is the entry point):
+    // set the inspected index and pull the historical frame for it.
+    replaySeek: (index) => {
+      set((state) => ({ replay: { active: true, index, head: state.undoState.head, frame: state.replay.frame } }));
+      ws.send({ type: 'replay.seek', index });
+    },
+    replayExit: () => set((state) => ({ replay: { active: false, index: 0, head: state.replay.head, frame: null } })),
     sendChat: (text) => ws.send({ type: 'chat.send', text }),
-    clear: () => set({ room: null, spectating: false, chat: [], log: [] }),
+    clear: () => set({ room: null, spectating: false, chat: [], log: [], joinedRoomId: null, replay: { active: false, index: 0, head: 0, frame: null }, undoState: { canUndo: false, canRedo: false, cursor: 0, head: 0, isHost: false }, timeline: [] }),
     ackClosed: () => set({ closedRoomId: null }),
   };
 });

@@ -1,6 +1,6 @@
 import { useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { AlertDialog, Menu, MenuItem, MenuSub, Tooltip } from '@glacier/react';
-import { Crown, Swords } from '@glacier/icons';
+import { Ban, Crown, Skull, Swords } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
@@ -52,9 +52,12 @@ function LibraryStack({ count, width, userId }: { count: number; width: number; 
       </div>
     );
   }
+  // The container is exactly one card tall; the under-layers grow UPWARD out of
+  // it (overflow visible) so the front card's bottom edge lines up with the
+  // graveyard/exile piles beside it.
   return (
-    <div className="libStack" style={{ width: width + layers * step, height: height + layers * step }}>
-      <div className="libStack3d" style={{ width, height }}>
+    <div className="libStack" style={{ width, height }}>
+      <div className="libStack3d">
         {Array.from({ length: layers }, (_, index) => {
           const depth = layers - index; // painted back-to-front
           return (
@@ -62,7 +65,7 @@ function LibraryStack({ count, width, userId }: { count: number; width: number; 
               key={index}
               className="libLayer"
               style={{
-                transform: `translate3d(${depth * step}px, ${depth * step}px, ${depth * -3}px)`,
+                transform: `translate3d(${depth * step}px, ${depth * -step}px, ${depth * -3}px)`,
                 filter: `brightness(${Math.max(0.35, 0.78 - depth * 0.06)})`,
               }}
               aria-hidden
@@ -177,16 +180,28 @@ export function TaxBadge({ value }: { value: number }) {
 export function ZonePiles({
   player,
   mine,
+  big,
   canAct,
   onMenu,
   onHover,
+  onDragOut,
+  dragSuppressed,
+  dropHint,
 }: {
   player: TablePlayer;
   mine?: boolean;
+  /** Full-size piles for a staged opponent (a mirror of my own board). */
+  big?: boolean;
   /** Seated, started, not spectating - gates every affordance. */
   canAct?: boolean;
   onMenu?: (event: ReactPointerEvent | React.MouseEvent, iid: string, zone: Zone) => void;
   onHover?: (card: CardInst | null) => void;
+  /** Start dragging the pile's top card back out onto the board (my piles). */
+  onDragOut?: (event: ReactPointerEvent, card: CardInst, zone: 'graveyard' | 'exile') => void;
+  /** True right after a drag/long-press so the pile's click (open viewer) is suppressed. */
+  dragSuppressed?: () => boolean;
+  /** The zone a card is currently being dragged over, for a drop-target ring. */
+  dropHint?: Zone | null;
 }) {
   const t = useT();
   const act = useGame((state) => state.act);
@@ -199,8 +214,10 @@ export function ZonePiles({
 
   const graveTop = player.graveyard[player.graveyard.length - 1];
   const exileTop = player.exile[player.exile.length - 1];
-  // My own piles ride the playmat card-scale preference; opponents stay compact.
-  const width = mine ? Math.round(96 * cardScale) : 44;
+  // My own piles (and a staged opponent's mirror) ride the card-scale
+  // preference; compact everywhere else.
+  const width = mine || big ? Math.round(96 * cardScale) : 44;
+  const emptyIcon = Math.max(16, Math.round(width * 0.34));
   const interactive = mine && canAct;
 
   // Touch has no right-click, so press-and-hold opens the zone card's menu.
@@ -216,7 +233,7 @@ export function ZonePiles({
   };
 
   const libraryPile = (
-    <div className="zonePile" title={`${t('tblLibrary')}: ${player.libraryCount}`}>
+    <div className="zonePile" data-drop={dropHint === 'library' || undefined} title={`${t('tblLibrary')}: ${player.libraryCount}`}>
       <LibraryStack count={player.libraryCount} width={width} userId={player.userId} />
       <span className="pileCount">{player.libraryCount}</span>
     </div>
@@ -314,11 +331,23 @@ export function ZonePiles({
       <button
         type="button"
         className="pileBtn zonePile"
+        data-drop={dropHint === 'graveyard' || undefined}
         title={t('tblGraveyard')}
-        onClick={() => player.graveyard.length > 0 && setPileView({ userId: player.userId, zone: 'graveyard' })}
+        onClick={() => {
+          // A drag/long-press just happened - don't also open the viewer.
+          if (dragSuppressed?.()) return;
+          if (player.graveyard.length > 0) setPileView({ userId: player.userId, zone: 'graveyard' });
+        }}
         onClickCapture={graveLongPress.onClickCapture}
         onContextMenu={interactive && onMenu && graveTop ? (event) => onMenu(event, graveTop.iid, 'graveyard') : undefined}
-        onPointerDown={interactive ? graveLongPress.onPointerDown : undefined}
+        onPointerDown={
+          interactive
+            ? (event) => {
+                graveLongPress.onPointerDown(event);
+                if (graveTop && onDragOut) onDragOut(event, graveTop, 'graveyard');
+              }
+            : undefined
+        }
         onPointerMove={interactive ? graveLongPress.onPointerMove : undefined}
         onPointerUp={interactive ? graveLongPress.onPointerUp : undefined}
         onPointerEnter={() => graveTop && onHover?.(graveTop)}
@@ -331,18 +360,29 @@ export function ZonePiles({
           {graveTop ? (
             <GameCard name={graveTop.name} imageUrl={graveTop.imageUrl || cardImage(graveTop.scryfallId)} width={width} tilt={0} />
           ) : (
-            <div className="pileEmpty" style={{ width }} />
+            <div className="pileEmpty pileEmptyIcon" style={{ width }}>
+              <Skull size={emptyIcon} />
+            </div>
           )}
         </div>
-        <span className="pileCount">{player.graveyard.length}</span>
+        <span className="pileCaption">
+          <span className="pileLabel">{t('tblGraveyard')}</span>
+          <span className="pileCount">{player.graveyard.length}</span>
+        </span>
       </button>
 
       {/* exile */}
       <button
         type="button"
         className="pileBtn zonePile"
+        data-drop={dropHint === 'exile' || undefined}
         title={t('tblExile')}
-        onClick={() => player.exile.length > 0 && setPileView({ userId: player.userId, zone: 'exile' })}
+        onClick={() => {
+          if (dragSuppressed?.()) return;
+          if (player.exile.length > 0) setPileView({ userId: player.userId, zone: 'exile' });
+        }}
+        onContextMenu={interactive && onMenu && exileTop ? (event) => onMenu(event, exileTop.iid, 'exile') : undefined}
+        onPointerDown={interactive && exileTop && onDragOut ? (event) => onDragOut(event, exileTop, 'exile') : undefined}
         onPointerEnter={() => exileTop && onHover?.(exileTop)}
         onPointerLeave={() => onHover?.(null)}
       >
@@ -350,14 +390,19 @@ export function ZonePiles({
           {exileTop ? (
             <GameCard name={exileTop.name} imageUrl={exileTop.imageUrl || cardImage(exileTop.scryfallId)} width={width} tilt={0} />
           ) : (
-            <div className="pileEmpty" style={{ width }} />
+            <div className="pileEmpty pileEmptyIcon" style={{ width }}>
+              <Ban size={emptyIcon} />
+            </div>
           )}
         </div>
-        <span className="pileCount">{player.exile.length}</span>
+        <span className="pileCaption">
+          <span className="pileLabel">{t('tblExile')}</span>
+          <span className="pileCount">{player.exile.length}</span>
+        </span>
       </button>
 
       {/* command zone */}
-      <div className="zonePile zoneCommand" title={t('tblCommand')} ref={(el) => setFlightAnchor(`cmd:${player.userId}`, el)}>
+      <div className="zonePile zoneCommand" data-drop={dropHint === 'command' || undefined} title={t('tblCommand')} ref={(el) => setFlightAnchor(`cmd:${player.userId}`, el)}>
         {player.command.map((card) => (
           <CmdCard
             key={card.iid}

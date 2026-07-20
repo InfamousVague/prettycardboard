@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from 'motion/react';
 import { Button, IconButton, Input, Menu, MenuItem, MenuSub, Pill, SegmentedControl, Size, Text, TextTone, Tooltip } from '@glacier/react';
 import {
   AlignStartVertical,
+  ChevronDown,
+  ChevronUp,
   Crown,
   Dices,
   Hand as HandIcon,
@@ -18,7 +20,6 @@ import {
   Sun,
   Swords,
   Tornado,
-  Undo2,
   Zap,
 } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
@@ -33,15 +34,16 @@ import {
   CARD_SCALE_MAX,
   CARD_SCALE_MIN,
   CARD_SCALE_STEP,
+  effectivePT,
   hostUnderPoint,
   isCreature,
   snapDrop,
   tidyPositions,
   type BoardMode,
 } from './boardModes.ts';
-import { targetedSeats } from './CombatModals.tsx';
-import { SETTLE_EASE, dragTilt, juicePulse, prefersReducedMotion, restTilt, setFlightAnchor } from './juice.ts';
+import { SETTLE_EASE, dragTilt, flightAnchor, juicePulse, prefersReducedMotion, restTilt, setFlightAnchor } from './juice.ts';
 import { playmatUrl } from '../../data/playmats.ts';
+import { usePreference } from '../../hooks/usePreference.ts';
 
 /**
  * My side of the table: free-placement battlefield with drag v2 (lift, tilt
@@ -50,14 +52,23 @@ import { playmatUrl } from '../../data/playmats.ts';
  * vitals + tools cluster. Input is never blocked by animation.
  */
 
+/** Where a drag started. Battlefield cards move on the field; everything else
+ * follows the pointer as a ghost and is played/moved on drop. */
+type DragFrom = 'hand' | 'battlefield' | 'graveyard' | 'exile';
+
 interface DragState {
   iid: string;
-  fromHand: boolean;
+  from: DragFrom;
   x: number;
   y: number;
   clientX: number;
   clientY: number;
   tilt: number;
+  /** Where within the card it was grabbed, as a field-fraction offset from the
+   * card's center, so the card is dragged from the point clicked (not recentred
+   * on the pointer). Zero for ghost drags from hand/piles. */
+  grabX: number;
+  grabY: number;
 }
 
 /**
@@ -66,6 +77,16 @@ interface DragState {
  * into the hand. Outside the buffer, a hand card lands on the felt.
  */
 const HAND_DROP_BUFFER = 44;
+
+/**
+ * The bottom band of the playmat (where the deck/piles float) is reserved:
+ * cards never land there. Small now that the hand auto-peeks away instead of
+ * permanently occupying the bottom. Capped at a quarter of the field.
+ */
+const RESERVED_BOTTOM_PX = 96;
+
+/** Bottom band of the viewport that raises the peeking hand while hovered. */
+const HAND_PEEK_ZONE = 230;
 
 export function MyBoard({
   me,
@@ -94,16 +115,31 @@ export function MyBoard({
   const handCardWidth = Math.round(132 * cardScale);
   const blockerIid = useTableUi((state) => state.blockerIid);
   const setBlocker = useTableUi((state) => state.setBlocker);
-  const setAttackPick = useTableUi((state) => state.setAttackPick);
+  // Perfectly-upright cards vs the natural slight per-card tilt (Settings ->
+  // Table -> Card placement).
+  const verticalCards = usePreference('verticalCards');
 
   const fieldRef = useRef<HTMLDivElement>(null);
   const handRef = useRef<HTMLDivElement | null>(null);
   const cardEls = useRef(new Map<string, HTMLElement>());
   const prevFaces = useRef(new Map<string, boolean>());
   const [drag, setDrag] = useState<DragState | null>(null);
+  // Where a just-dropped card is held locally until the server echoes its new
+  // position - stops the card snapping back to its old spot for one network
+  // round-trip (the release "jitter").
+  const [droppedPos, setDroppedPos] = useState<Record<string, { x: number; y: number }>>({});
+  // Per-card stacking order: the most recently placed card floats over the rest.
+  // Local to this viewer (a felt is freeform); `.myField` is its own stacking
+  // context so these never climb over the hand/pile strip.
+  const [zOrder, setZOrder] = useState<Record<string, number>>({});
+  const zCounter = useRef(0);
+  const bumpZ = (iid: string) => setZOrder((m) => ({ ...m, [iid]: (zCounter.current += 1) }));
+  // The fan rests half off-screen and peeks up on hover (or while dragging).
+  const [handPeek, setHandPeek] = useState(false);
+  // Manually tucked ~95% off-screen via the Hide-hand tab, to clear the board.
+  const [handHidden, setHandHidden] = useState(false);
   // Pointer x over the hand fan; Infinity = not hovering (all bumps at rest).
   const handX = useMotionValue(Number.POSITIVE_INFINITY);
-  const lastSent = useRef(0);
   const velocity = useRef({ x: 0, t: 0, vx: 0 });
   // A drag only becomes real after the pointer travels a few pixels -
   // otherwise a plain click would count as a zero-distance drop and hand
@@ -136,8 +172,68 @@ export function MyBoard({
     (room.players.length === 2 ||
       combat.attackers.some((entry) => entry.defenderSeat === me.seat || entry.defenderSeat == null));
   const blockMode = started && attackersTargetMe;
+  // Unblocked power aimed at me: the one-click "take damage" helper subtracts
+  // this from my life. Creature deaths stay manual (drag to the graveyard).
+  const incomingUnblocked = (combat?.attackers ?? [])
+    .filter(
+      (a) =>
+        (a.defenderSeat === me.seat || a.defenderSeat == null) &&
+        !(combat?.blocks ?? []).some((b) => b.attackerIid === a.iid),
+    )
+    .reduce((sum, a) => {
+      const p = parseInt((a.power ?? '0').trim(), 10);
+      return sum + (Number.isFinite(p) ? Math.max(0, p) : 0);
+    }, 0);
 
-  const { hosts, attachments } = groupAttachments(me.battlefield);
+  // Rebuilt only when the battlefield changes - not on every drag frame /
+  // ws event, which re-render this component.
+  const { hosts, attachments } = useMemo(() => groupAttachments(me.battlefield), [me.battlefield]);
+
+  // Peek the hand up whenever the pointer is in the bottom band of the screen.
+  // Driving this off a STABLE viewport threshold (not the hand's own moving
+  // box) avoids a raise/lower oscillation when the pointer sits near the edge.
+  useEffect(() => {
+    if (hideField) return;
+    const onMove = (event: PointerEvent) => {
+      setHandPeek(event.clientY > window.innerHeight - HAND_PEEK_ZONE);
+    };
+    window.addEventListener('pointermove', onMove);
+    return () => window.removeEventListener('pointermove', onMove);
+  }, [hideField]);
+
+  // Release a held drop position once the server's echo has caught up (or the
+  // card left the battlefield), so the local override never lingers.
+  useEffect(() => {
+    setDroppedPos((held) => {
+      const iids = Object.keys(held);
+      if (iids.length === 0) return held;
+      let changed = false;
+      const next = { ...held };
+      for (const iid of iids) {
+        const p = held[iid];
+        const card = me.battlefield.find((c) => c.iid === iid);
+        if (!p || !card || (Math.abs(card.x - p.x) < 0.001 && Math.abs(card.y - p.y) < 0.001)) {
+          delete next[iid];
+          changed = true;
+        }
+      }
+      return changed ? next : held;
+    });
+    // Drop stacking entries for cards that left the battlefield.
+    setZOrder((order) => {
+      const iids = Object.keys(order);
+      if (iids.length === 0) return order;
+      let changed = false;
+      const next = { ...order };
+      for (const iid of iids) {
+        if (!me.battlefield.some((c) => c.iid === iid)) {
+          delete next[iid];
+          changed = true;
+        }
+      }
+      return changed ? next : order;
+    });
+  }, [me.battlefield]);
 
   // Face-down flips: animate the half-turn when a card's face changes.
   useEffect(() => {
@@ -155,16 +251,33 @@ export function MyBoard({
 
   /* ---------------- drag v2 ---------------- */
 
-  const fieldPos = (clientX: number, clientY: number) => {
+  // Largest droppable y (normalized) - everything below is the reserved
+  // hand/deck band. Kept above 0.55 so tiny boards keep a play area.
+  const maxDropY = (rect: DOMRect) => {
+    if (rect.height <= 0) return 0.92;
+    const reserved = Math.min(rect.height / 4, RESERVED_BOTTOM_PX);
+    return Math.max(0.55, (rect.height - reserved) / rect.height);
+  };
+
+  // The card's center position (field fraction) for a pointer, minus the grab
+  // offset so the point originally clicked stays under the pointer.
+  const fieldPos = (clientX: number, clientY: number, grabX = 0, grabY = 0) => {
     const rect = fieldRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0.5, y: 0.5 };
     return {
-      x: Math.min(0.97, Math.max(0, (clientX - rect.left) / rect.width)),
-      y: Math.min(0.92, Math.max(0, (clientY - rect.top) / rect.height)),
+      x: Math.min(0.97, Math.max(0, (clientX - rect.left) / rect.width - grabX)),
+      y: Math.min(maxDropY(rect), Math.max(0, (clientY - rect.top) / rect.height - grabY)),
     };
   };
 
-  const beginDrag = (event: ReactPointerEvent, card: CardInst, fromHand: boolean) => {
+  // Is a release point over the reserved bottom band of my field?
+  const inReservedBand = (clientY: number) => {
+    const rect = fieldRef.current?.getBoundingClientRect();
+    if (!rect) return false;
+    return clientY > rect.top + rect.height * maxDropY(rect);
+  };
+
+  const beginDrag = (event: ReactPointerEvent, card: CardInst, from: DragFrom, opts?: { menu?: boolean }) => {
     if (event.button !== 0 || hideField) return;
     event.stopPropagation();
     (event.target as Element).setPointerCapture?.(event.pointerId);
@@ -172,11 +285,12 @@ export function MyBoard({
     clearHold();
     // Touch and pen only; mouse keeps its native contextmenu path. The event is
     // stale by the time the timer fires, so capture what openMenu needs now.
-    if (event.pointerType !== 'mouse') {
+    // Pile cards opt out (menu:false) - they carry their own long-press menu.
+    if (event.pointerType !== 'mouse' && opts?.menu !== false) {
       const el = event.currentTarget as Element;
       const cx = event.clientX;
       const cy = event.clientY;
-      const zone: Zone = fromHand ? 'hand' : 'battlefield';
+      const zone: Zone = from;
       holdTimer.current = setTimeout(() => {
         holdTimer.current = null;
         heldFired.current = true;
@@ -195,13 +309,31 @@ export function MyBoard({
     }
     dragOrigin.current = { px: event.clientX, py: event.clientY, armed: false };
     velocity.current = { x: event.clientX, t: performance.now(), vx: 0 };
+    // For an in-place battlefield drag, remember where within the card the grab
+    // landed so it moves from that point (not recentred on the pointer). Ghost
+    // drags from the hand/piles keep zero offset (the ghost tracks the pointer).
+    let grabX = 0;
+    let grabY = 0;
+    // Attachments render at their HOST's position, not their own x/y, so a grab
+    // offset computed from card.x/y would be wrong; detaching them just
+    // recentres on the pointer (grab 0). Standalone cards keep the real offset.
+    if (from === 'battlefield' && !card.attachedTo) {
+      const rect = fieldRef.current?.getBoundingClientRect();
+      if (rect) {
+        const held = droppedPos[card.iid];
+        grabX = (event.clientX - rect.left) / rect.width - (held?.x ?? card.x);
+        grabY = (event.clientY - rect.top) / rect.height - (held?.y ?? card.y);
+      }
+    }
     setDrag({
       iid: card.iid,
-      fromHand,
-      ...fieldPos(event.clientX, event.clientY),
+      from,
+      ...fieldPos(event.clientX, event.clientY, grabX, grabY),
       clientX: event.clientX,
       clientY: event.clientY,
       tilt: 0,
+      grabX,
+      grabY,
     });
   };
 
@@ -218,7 +350,7 @@ export function MyBoard({
     const dt = Math.max(1, now - velocity.current.t);
     const vx = (event.clientX - velocity.current.x) / dt;
     velocity.current = { x: event.clientX, t: now, vx: vx * 0.5 + velocity.current.vx * 0.5 };
-    const pos = fieldPos(event.clientX, event.clientY);
+    const pos = fieldPos(event.clientX, event.clientY, drag.grabX, drag.grabY);
     setDrag({
       ...drag,
       ...pos,
@@ -226,24 +358,43 @@ export function MyBoard({
       clientY: event.clientY,
       tilt: dragTilt(velocity.current.vx),
     });
-    // Battlefield cards stream their position (throttled); hand cards only
-    // commit on drop.
-    if (!drag.fromHand && Date.now() - lastSent.current > 90) {
-      lastSent.current = Date.now();
-      act({ kind: 'card.pos', iid: drag.iid, ...pos });
-    }
+    // The drag stays entirely local until release: the card follows the
+    // pointer here, and the final position is committed once in endDrag. We
+    // used to stream card.pos every ~90ms, which spammed the log and round-
+    // tripped every frame - other players now see the card land on drop.
   };
 
   const settle = (iid: string) => {
     if (prefersReducedMotion()) return;
+    // A gentle scale pop on landing - no counter-rotation, which read as a
+    // wobble/jitter when composited over the card's rest tilt.
     cardEls.current.get(iid)?.animate(
-      [
-        { transform: 'scale(1.05) rotate(1.5deg)' },
-        { transform: 'scale(0.99) rotate(-0.6deg)', offset: 0.6 },
-        { transform: 'scale(1) rotate(0deg)' },
-      ],
-      { duration: 340, easing: SETTLE_EASE, composite: 'add' },
+      [{ transform: 'scale(1.04)' }, { transform: 'scale(1)' }],
+      { duration: 240, easing: SETTLE_EASE, composite: 'add' },
     );
+  };
+
+  const cardOf = (from: DragFrom, iid: string): CardInst | undefined => {
+    if (from === 'hand') return me.hand?.find((c) => c.iid === iid);
+    if (from === 'battlefield') return me.battlefield.find((c) => c.iid === iid);
+    if (from === 'graveyard') return me.graveyard.find((c) => c.iid === iid);
+    return me.exile.find((c) => c.iid === iid);
+  };
+
+  // Which of MY zone piles (deck/graveyard/exile/command) is under the release
+  // point, if any - so a card can be dropped straight onto a pile instead of
+  // going through the context menu. Anchors are the piles' live DOM rects.
+  const pileUnderPoint = (clientX: number, clientY: number): Zone | null => {
+    const pad = 10;
+    const over = (key: string) => {
+      const r = flightAnchor(key);
+      return r != null && clientX >= r.left - pad && clientX <= r.right + pad && clientY >= r.top - pad && clientY <= r.bottom + pad;
+    };
+    if (over(`cmd:${me.userId}`)) return 'command';
+    if (over(`grave:${me.userId}`)) return 'graveyard';
+    if (over(`exile:${me.userId}`)) return 'exile';
+    if (over(`lib:${me.userId}`)) return 'library';
+    return null;
   };
 
   // Is a release point inside the hand's cushion (the fan plus HAND_DROP_BUFFER
@@ -262,7 +413,6 @@ export function MyBoard({
     clearHold();
     if (!drag) return;
     const iid = drag.iid;
-    const fromHand = drag.fromHand;
 
     if (!dragOrigin.current.armed) {
       // Never crossed the drag threshold: this was a click/tap, handled by the
@@ -271,21 +421,28 @@ export function MyBoard({
       return;
     }
 
+    const from = drag.from;
     const rect = fieldRef.current?.getBoundingClientRect() ?? null;
-    const rawPos = fieldPos(event.clientX, event.clientY);
+    const rawPos = fieldPos(event.clientX, event.clientY, drag.grabX, drag.grabY);
     const overHand = inHandZone(event.clientX, event.clientY);
-    const card = fromHand ? me.hand?.find((c) => c.iid === iid) : me.battlefield.find((c) => c.iid === iid);
+    const card = cardOf(from, iid);
     const pos = snapDrop(boardMode, rawPos, card, rect);
+    const pile = pileUnderPoint(event.clientX, event.clientY);
 
-    if (fromHand) {
-      // Play the card only when it clears the hand's buffer; a drop back inside
-      // the buffer springs it into the fan.
-      if (!overHand && card) {
+    if (card && pile && pile !== from) {
+      // Dropped straight onto a zone pile (deck/graveyard/exile/command): move
+      // it there - no context menu needed. Library takes it on top.
+      act({ kind: 'card.move', iid, to: pile, ...(pile === 'library' ? { index: 0 } : {}) });
+    } else if (from === 'hand') {
+      // Play the card only when it clears the hand's buffer AND the reserved
+      // bottom band (hand/deck strip); otherwise it springs into the fan.
+      if (!overHand && !inReservedBand(event.clientY) && card) {
         const host = boardMode === 'assist' ? hostUnderPoint(me.battlefield, rawPos, rect, iid) : null;
         act({ kind: 'card.move', iid, to: 'battlefield', ...(host ? rawPos : pos) });
         if (host) act({ kind: 'card.attach', iid, hostIid: host.iid });
+        bumpZ(iid);
       }
-    } else if (card) {
+    } else if (from === 'battlefield' && card) {
       // Dropping a battlefield card into the hand buffer returns it to hand.
       if (overHand) {
         act({ kind: 'card.move', iid, to: 'hand' });
@@ -297,10 +454,23 @@ export function MyBoard({
           // Dragging an attached card away detaches it.
           act({ kind: 'card.attach', iid, hostIid: null });
           act({ kind: 'card.pos', iid, ...pos });
+          setDroppedPos((m) => ({ ...m, [iid]: pos }));
+          bumpZ(iid);
         } else {
           act({ kind: 'card.pos', iid, ...pos });
+          setDroppedPos((m) => ({ ...m, [iid]: pos }));
+          bumpZ(iid);
         }
         settle(iid);
+      }
+    } else if ((from === 'graveyard' || from === 'exile') && card) {
+      // Dragged a card back OUT of a pile: onto the hand, or onto the field.
+      // A release still inside the strip just springs back (no-op).
+      if (overHand) {
+        act({ kind: 'card.move', iid, to: 'hand' });
+      } else if (!inReservedBand(event.clientY)) {
+        act({ kind: 'card.move', iid, to: 'battlefield', ...pos });
+        bumpZ(iid);
       }
     }
     justDragged.current = true;
@@ -333,16 +503,27 @@ export function MyBoard({
       heldFired.current = false;
       return;
     }
-    if (attackMode && !combat?.locked) {
+    if (attackMode) {
       if (attackerEntry(card.iid)) {
-        // Re-click un-declares (legacy toggle) while declarations are open.
+        // Re-click un-declares.
         act({ kind: 'combat.attack', iid: card.iid });
         juicePulse(cardEls.current.get(card.iid));
         return;
       }
       if (isCreature(card) && !card.tapped) {
+        // Declare it attacking right on the board - no modal. With one
+        // opponent it aims at them; multiplayer is an open swing everyone sees.
         event.stopPropagation();
-        setAttackPick(card.iid);
+        const opponents = room.players.filter((p) => p.seat !== me.seat && !p.conceded);
+        const { power, toughness } = effectivePT(card);
+        act({
+          kind: 'combat.attack',
+          iid: card.iid,
+          defenderSeat: opponents.length === 1 ? opponents[0]!.seat : undefined,
+          power,
+          toughness,
+        });
+        juicePulse(cardEls.current.get(card.iid));
         return;
       }
       // Non-creatures fall through to the normal preview/tap click.
@@ -370,11 +551,20 @@ export function MyBoard({
   /* ---------------- render ---------------- */
 
   const renderFieldCard = (card: CardInst, host?: CardInst, attachIndex = 0) => {
-    const dragging = drag?.iid === card.iid && dragOrigin.current.armed && !drag.fromHand;
-    const hostDragging = host && drag?.iid === host.iid && !drag.fromHand;
-    const baseX = dragging ? drag.x : host ? (hostDragging ? drag!.x : host.x) : card.x;
-    const baseY = dragging ? drag.y : host ? (hostDragging ? drag!.y : host.y) : card.y;
+    const dragging = drag?.iid === card.iid && dragOrigin.current.armed && drag.from === 'battlefield';
+    const hostDragging = host && drag?.iid === host.iid && drag.from === 'battlefield';
+    // Held drop position (until the server echo lands) beats the stale card.x/y.
+    const held = droppedPos[card.iid];
+    const restX = held?.x ?? card.x;
+    const restY = held?.y ?? card.y;
+    const hostHeld = host ? droppedPos[host.iid] : undefined;
+    const hostX = hostHeld?.x ?? host?.x ?? 0;
+    const hostY = hostHeld?.y ?? host?.y ?? 0;
+    const baseX = dragging ? drag.x : host ? (hostDragging ? drag!.x : hostX) : restX;
+    const baseY = dragging ? drag.y : host ? (hostDragging ? drag!.y : hostY) : restY;
     const offset = host ? Math.round(18 * cardScale) * (attachIndex + 1) : 0;
+    const z = zOrder[card.iid];
+    const cardZ = z != null ? 10 + z : 5;
     const attacker = attackerEntry(card.iid);
     const affordance = attackMode && !card.tapped && isCreature(card) ? 'attack' : blockMode && !card.tapped && isCreature(card) ? 'block' : undefined;
 
@@ -390,15 +580,18 @@ export function MyBoard({
         style={{
           left: offset ? `calc(${baseX * 100}% + ${offset}px)` : `${baseX * 100}%`,
           top: offset ? `calc(${baseY * 100}% + ${offset * 0.8}px)` : `${baseY * 100}%`,
-          zIndex: dragging ? 30 : host ? 4 : 5,
-          ['--rest-tilt' as string]: `${restTilt(card.iid)}deg`,
+          // Newest-placed card floats over the rest (contained by .myField's
+          // stacking context so it never covers the hand/pile strip). The card
+          // being dragged is highest; attachments tuck under their host.
+          zIndex: dragging ? 100000 : host ? 4 : cardZ,
+          ['--rest-tilt' as string]: verticalCards ? '0deg' : `${restTilt(card.iid)}deg`,
           ['--drag-tilt' as string]: dragging ? `${drag.tilt}deg` : '0deg',
         }}
         ref={(el) => {
           if (el) cardEls.current.set(card.iid, el);
           else cardEls.current.delete(card.iid);
         }}
-        onPointerDown={(event) => beginDrag(event, card, false)}
+        onPointerDown={(event) => beginDrag(event, card, 'battlefield')}
         onPointerEnter={() => onHover(card)}
         onPointerLeave={() => onHover(null)}
         onContextMenu={(event) => onMenu(event, card.iid, 'battlefield')}
@@ -424,13 +617,26 @@ export function MyBoard({
     );
   };
 
-  const draggedHandCard = drag?.fromHand ? me.hand?.find((c) => c.iid === drag.iid) : undefined;
+  // Cards dragged from anywhere but the battlefield follow the pointer as a
+  // ghost (the battlefield card moves in place instead).
+  const draggedGhostCard = drag && drag.from !== 'battlefield' ? cardOf(drag.from, drag.iid) : undefined;
   // Highlight the hand as a drop target while a battlefield card hovers its buffer.
   const returnToHandHot =
-    drag != null && dragOrigin.current.armed && !drag.fromHand && inHandZone(drag.clientX, drag.clientY);
+    drag != null && dragOrigin.current.armed && drag.from === 'battlefield' && inHandZone(drag.clientX, drag.clientY);
+  // Which pile the dragged card is currently over (drop-target highlight).
+  const dropPile = drag != null && dragOrigin.current.armed ? pileUnderPoint(drag.clientX, drag.clientY) : null;
 
   return (
-    <div className="myBoard" data-my-turn={(started && myTurn) || undefined} data-strip-only={hideField || undefined} onPointerMove={moveDrag} onPointerUp={endDrag}>
+    <div
+      className="myBoard"
+      data-my-turn={(started && myTurn) || undefined}
+      data-strip-only={hideField || undefined}
+      // Card scale drives the hand overlap and lifts the board-mode toolbar
+      // clear of the (scalable) pile stacks.
+      style={{ ['--card-scale' as string]: cardScale }}
+      onPointerMove={moveDrag}
+      onPointerUp={endDrag}
+    >
       {!hideField && (<>
       {/* combat banner */}
       {(attackMode || blockMode) && (
@@ -439,7 +645,7 @@ export function MyBoard({
           <Text as="span" size={Size.Small} weight="semibold">
             {attackMode ? t('gpAttackers') : t('gpBlockers')}
           </Text>
-          {attackMode && !combat?.locked && (
+          {attackMode && (
             <>
               {(combat?.attackers.length ?? 0) > 0 && (
                 <Pill size="sm" tone="accent">
@@ -449,33 +655,22 @@ export function MyBoard({
               <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="combatHint">
                 {t('gpAttackHint')}
               </Text>
-              {(combat?.attackers.length ?? 0) > 0 && (
-                <Button size="sm" variant="solid" onClick={() => act({ kind: 'combat.lock' })}>
-                  {t('cbLockIn')}
-                </Button>
-              )}
-              <Button size="sm" onClick={() => act({ kind: 'combat.end' })}>
-                {t('gpEndCombat')}
-              </Button>
-            </>
-          )}
-          {attackMode && combat?.locked && (
-            <>
-              <Pill size="sm" tone="accent">
-                {(combat.ready ?? []).length}/{targetedSeats(room).length} {t('cbReadyCount')}
-              </Pill>
-              <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="combatHint">
-                {t('cbLockedWaiting')}
-              </Text>
               <Button size="sm" onClick={() => act({ kind: 'combat.end' })}>
                 {t('gpEndCombat')}
               </Button>
             </>
           )}
           {blockMode && (
-            <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="combatHint">
-              {t('gpBlockHint')}
-            </Text>
+            <>
+              <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="combatHint">
+                {t('gpBlockHint')}
+              </Text>
+              {incomingUnblocked > 0 && (
+                <Button size="sm" variant="solid" onClick={() => act({ kind: 'life.add', delta: -incomingUnblocked })}>
+                  {t('cbTakeDamage')} · {incomingUnblocked}
+                </Button>
+              )}
+            </>
           )}
         </div>
       )}
@@ -497,9 +692,6 @@ export function MyBoard({
             {renderFieldCard(card)}
           </span>
         ))}
-
-        {/* vitals cluster floats top-end over the playmat */}
-        <Vitals me={me} floating />
 
         {/* board mode toolbar, docked bottom-start of the field */}
         <div className="boardTools boardToolsStart">
@@ -621,48 +813,72 @@ export function MyBoard({
 
       {/* bottom strip: zones | hand | vitals */}
       <div className="myStrip">
-        <ZonePiles player={me} mine canAct onMenu={onMenu} onHover={onHover} />
+        <ZonePiles
+          player={me}
+          mine
+          canAct
+          onMenu={onMenu}
+          onHover={onHover}
+          onDragOut={(event, card, zone) => beginDrag(event, card, zone, { menu: false })}
+          dragSuppressed={() => justDragged.current || heldFired.current}
+          dropHint={dropPile}
+        />
 
-        <div
-          className="myHand"
-          data-count={me.hand?.length ?? 0}
-          data-drop={returnToHandHot || undefined}
-          // Drives the per-card overlap so the fan keeps its shape at any scale.
-          style={{ ['--card-scale' as string]: cardScale }}
-          ref={(el) => {
-            handRef.current = el;
-            setFlightAnchor('hand:mine', el);
-          }}
-          onPointerMove={(event) => {
-            // Dock-style magnification is a mouse luxury; touch pointers are
-            // busy dragging, and mid-drag the fan should hold still.
-            if (event.pointerType !== 'mouse' || drag) return;
-            handX.set(event.clientX);
-          }}
-          onPointerLeave={() => handX.set(Number.POSITIVE_INFINITY)}
-        >
-          {(me.hand ?? []).map((card, index, hand) => (
-            <HandCard
-              key={card.iid}
-              card={card}
-              width={handCardWidth}
-              spread={index - (hand.length - 1) / 2}
-              dimmed={drag?.iid === card.iid && dragOrigin.current.armed}
-              handX={handX}
-              onPointerDown={(event) => beginDrag(event, card, true)}
-              onPointerEnter={() => onHover(card)}
-              onPointerLeave={() => onHover(null)}
-              onClick={() => clickHandCard(card)}
-              onContextMenu={(event) => onMenu(event, card.iid, 'hand')}
-            />
-          ))}
+        {/* .myHand is a non-transforming frame; only the inner .myFan slides
+            (rest/peek/hidden), so the tab below can centre on the hand and stay
+            vertically sticky. */}
+        <div className="myHand">
+          <div
+            className="myFan"
+            data-count={me.hand?.length ?? 0}
+            data-drop={returnToHandHot || undefined}
+            data-peek={(handPeek && !handHidden) || undefined}
+            data-hidden={handHidden || undefined}
+            ref={(el) => {
+              handRef.current = el;
+              setFlightAnchor('hand:mine', el);
+            }}
+            onPointerMove={(event) => {
+              // Dock-style magnification is a mouse luxury; touch pointers are
+              // busy dragging, and mid-drag the fan should hold still.
+              if (event.pointerType !== 'mouse' || drag) return;
+              handX.set(event.clientX);
+            }}
+            onPointerLeave={() => handX.set(Number.POSITIVE_INFINITY)}
+          >
+            {(me.hand ?? []).map((card, index, hand) => (
+              <HandCard
+                key={card.iid}
+                card={card}
+                width={handCardWidth}
+                spread={index - (hand.length - 1) / 2}
+                dimmed={drag?.iid === card.iid && dragOrigin.current.armed}
+                handX={handX}
+                onPointerDown={(event) => beginDrag(event, card, 'hand')}
+                onPointerEnter={() => onHover(card)}
+                onPointerLeave={() => onHover(null)}
+                onClick={() => clickHandCard(card)}
+                onContextMenu={(event) => onMenu(event, card.iid, 'hand')}
+              />
+            ))}
+          </div>
+
+          {/* Sticky hide/show tab: centred on the hand, pinned to the bottom so
+              it never moves as the fan rests, peeks or tucks. */}
+          <button
+            type="button"
+            className="handTab"
+            onClick={() => setHandHidden((hidden) => !hidden)}
+            title={handHidden ? t('gpShowHand') : t('gpHideHand')}
+          >
+            {handHidden ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            {handHidden ? t('gpShowHand') : t('gpHideHand')}
+          </button>
         </div>
-
-        {hideField && <Vitals me={me} />}
       </div>
 
-      {/* pointer-following ghost for hand drags */}
-      {draggedHandCard && drag && dragOrigin.current.armed && (
+      {/* pointer-following ghost for hand / pile drags */}
+      {draggedGhostCard && drag && dragOrigin.current.armed && (
         <div
           className="dragGhost"
           style={{
@@ -673,8 +889,9 @@ export function MyBoard({
           aria-hidden
         >
           <GameCard
-            name={draggedHandCard.name}
-            imageUrl={draggedHandCard.imageUrl || cardImage(draggedHandCard.scryfallId)}
+            name={draggedGhostCard.name}
+            imageUrl={draggedGhostCard.faceDown ? undefined : draggedGhostCard.imageUrl || cardImage(draggedGhostCard.scryfallId)}
+            faceDown={draggedGhostCard.faceDown}
             width={handCardWidth}
             tilt={0}
           />
@@ -687,16 +904,20 @@ export function MyBoard({
 
 /* ================= vitals + conveniences ================= */
 
-function Vitals({ me, floating }: { me: TablePlayer; floating?: boolean }) {
+export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
   const t = useT();
   const act = useGame((state) => state.act);
   const [tokenOpen, setTokenOpen] = useState(false);
   const [tokenName, setTokenName] = useState('');
   const [tokenPT, setTokenPT] = useState('1/1');
   const lifeRef = useRef<HTMLSpanElement>(null);
+  // Commander damage I've taken from each opponent's commander (21 = lethal).
+  // Manual, like all damage now: steppers adjust cmdDamage[fromSeat].
+  const cmdFoes =
+    room.format === 'commander' ? room.players.filter((p) => p.seat !== me.seat && !p.conceded) : [];
 
   return (
-    <div className={floating ? 'myVitals myVitalsFloat' : 'myVitals'}>
+    <div className="myVitals">
       <div className="lifeBlock">
         <IconButton
           size="sm"
@@ -724,19 +945,6 @@ function Vitals({ me, floating }: { me: TablePlayer; floating?: boolean }) {
           <Plus size={14} />
         </IconButton>
       </div>
-      <button
-        type="button"
-        className="poisonChip"
-        onClick={() => act({ kind: 'poison.add', delta: 1 })}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          act({ kind: 'poison.add', delta: -1 });
-        }}
-        title={t('tblPoison')}
-      >
-        <Skull size={13} /> {me.poison}
-      </button>
-
       <div className="convenience">
         <Tooltip content={`${t('tblDraw')} 1`}>
           <IconButton size="sm" variant="soft" aria-label={t('tblDraw')} onClick={() => act({ kind: 'draw', count: 1 })}>
@@ -763,11 +971,7 @@ function Vitals({ me, floating }: { me: TablePlayer; floating?: boolean }) {
             <Sparkles size={15} />
           </IconButton>
         </Tooltip>
-        <Tooltip content={t('gpUndo')}>
-          <IconButton size="sm" variant="soft" aria-label={t('gpUndo')} onClick={() => act({ kind: 'undo' })}>
-            <Undo2 size={15} />
-          </IconButton>
-        </Tooltip>
+        {/* Undo/redo/replay moved to the dedicated TimelineCard below vitals. */}
         <Menu
           aria-label={t('gpTableSettings')}
           placement="top-end"
@@ -811,6 +1015,60 @@ function Vitals({ me, floating }: { me: TablePlayer; floating?: boolean }) {
           </Button>
         </form>
       )}
+
+      {/* Damage tracker: one row per commander (21 = lethal), then poison
+         (10 = lethal), so several kinds of damage read the same way. */}
+      <div className="dmgTrack">
+        {cmdFoes.map((foe) => {
+          const taken = me.cmdDamage[String(foe.seat)] ?? 0;
+          return (
+            <div key={foe.userId} className="dmgRow" data-lethal={taken >= 21 || undefined}>
+              <span className="dmgLabel" title={`${t('tblCmdDamage')}: ${foe.username}`}>
+                <Swords size={11} /> {foe.username}
+              </span>
+              <IconButton
+                size="sm"
+                variant="ghost"
+                aria-label={`-1 ${foe.username}`}
+                onClick={() => act({ kind: 'cmd.damage', fromSeat: foe.seat, delta: -1 })}
+              >
+                <Minus size={12} />
+              </IconButton>
+              <span className="dmgVal">{taken}</span>
+              <IconButton
+                size="sm"
+                variant="ghost"
+                aria-label={`+1 ${foe.username}`}
+                onClick={() => act({ kind: 'cmd.damage', fromSeat: foe.seat, delta: 1 })}
+              >
+                <Plus size={12} />
+              </IconButton>
+            </div>
+          );
+        })}
+        <div className="dmgRow" data-lethal={me.poison >= 10 || undefined}>
+          <span className="dmgLabel" title={t('tblPoison')}>
+            <Skull size={11} /> {t('tblPoison')}
+          </span>
+          <IconButton
+            size="sm"
+            variant="ghost"
+            aria-label={`-1 ${t('tblPoison')}`}
+            onClick={() => act({ kind: 'poison.add', delta: -1 })}
+          >
+            <Minus size={12} />
+          </IconButton>
+          <span className="dmgVal">{me.poison}</span>
+          <IconButton
+            size="sm"
+            variant="ghost"
+            aria-label={`+1 ${t('tblPoison')}`}
+            onClick={() => act({ kind: 'poison.add', delta: 1 })}
+          >
+            <Plus size={12} />
+          </IconButton>
+        </div>
+      </div>
     </div>
   );
 }

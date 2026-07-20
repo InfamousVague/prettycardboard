@@ -19,7 +19,7 @@ import {
   useLocale,
   useToast,
 } from '@glacier/react';
-import { Swords, Ticket, X } from '@glacier/icons';
+import { Flag, Swords, Ticket } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
@@ -66,6 +66,8 @@ export function PlayPage() {
   const join = useGame((state) => state.join);
   const closedRoomId = useGame((state) => state.closedRoomId);
   const ackClosed = useGame((state) => state.ackClosed);
+  const activity = useGame((state) => state.activity);
+  const clearActivity = useGame((state) => state.clearActivity);
 
   const [tableName, setTableName] = useState('');
   const [seats, setSeats] = useState('4');
@@ -214,6 +216,12 @@ export function PlayPage() {
                         {t('plLobby')}
                       </Pill>
                     )}
+                    {activity[room.roomId] != null && (
+                      <Pill size="sm" tone="success" className="myTableLive">
+                        <span className="myTableLiveDot" aria-hidden />
+                        {t('plTurn')} {activity[room.roomId]}
+                      </Pill>
+                    )}
                   </div>
                   <div className="myTableMeta">
                     <div className="myTablePlayers">
@@ -233,18 +241,23 @@ export function PlayPage() {
                   </div>
                 </div>
                 <div className="myTableActions">
-                  <Button size="sm" onClick={() => join(room.roomId)}>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      clearActivity(room.roomId);
+                      join(room.roomId);
+                    }}
+                  >
                     {t('plResume')}
                   </Button>
                   {room.players[0]?.userId === identity?.userId && (
-                    <IconButton
-                      variant="ghost"
+                    <Button
                       size="sm"
-                      aria-label={t('plCloseTable')}
+                      variant="ghost"
                       onClick={() => setConfirmClose(room)}
                     >
-                      <X size={16} />
-                    </IconButton>
+                      <Flag size={14} /> {t('plEndMatch')}
+                    </Button>
                   )}
                 </div>
               </Card>
@@ -258,9 +271,9 @@ export function PlayPage() {
           <Heading level={2}>{t('plHistory')}</Heading>
           <div className="matchList">
             {history.map((match, index) => {
-              const humans = match.players.filter((p) => !p.isBot).map((p) => p.username);
-              const bots = match.players.filter((p) => p.isBot).map((p) => p.username);
-              const others = [...humans.filter((n) => n !== identity?.username), ...bots];
+              const others = match.players
+                .map((p) => p.username)
+                .filter((n) => n !== identity?.username);
               return (
                 <div key={`${match.playedAt}-${index}`} className="matchRow">
                   <div className="matchRowMain">
@@ -345,10 +358,10 @@ export function PlayPage() {
       <AlertDialog
         open={confirmClose !== null}
         onClose={() => setConfirmClose(null)}
-        title={t('plCloseTable')}
-        description={confirmClose?.name}
+        title={t('plEndMatch')}
+        description={t('plEndMatchDesc')}
         tone="danger"
-        actionLabel={t('plCloseTable')}
+        actionLabel={t('plEndMatch')}
         actionLoading={closing}
         onAction={() => void closeTable()}
         cancelLabel={t('dbCancel')}
