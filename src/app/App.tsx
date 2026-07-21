@@ -51,9 +51,8 @@ const TablePage = lazy(() => import('./pages/TablePage.tsx').then((m) => ({ defa
 const JoinTablePage = lazy(() => import('./pages/JoinTablePage.tsx').then((m) => ({ default: m.JoinTablePage })));
 const DownloadPage = lazy(() => import('./pages/DownloadPage.tsx').then((m) => ({ default: m.DownloadPage })));
 const SettingsModal = lazy(() => import('./SettingsModal.tsx').then((m) => ({ default: m.SettingsModal })));
-const CustomizeModal = lazy(() => import('./CustomizeModal.tsx').then((m) => ({ default: m.CustomizeModal })));
 
-/** One-time flag: the customize modal greets the player on their first launch. */
+/** One-time flag: on first launch, Settings opens on the Customize tab. */
 const CUSTOMIZED_KEY = 'pc.customized';
 
 // Capture a #/join/CODE deep link before anything renders, so an invite opened
@@ -194,27 +193,33 @@ function Shell({
 }) {
   const t = useT();
   const [route, navigate] = useRoute();
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  // First launch opens the table-setup modal; afterwards it lives behind the
-  // Customize rail button.
-  const [customizeOpen, setCustomizeOpen] = useState(() => localStorage.getItem(CUSTOMIZED_KEY) == null);
-  // The modals are lazy: mount each only once it has been opened, then keep it
-  // mounted so its close animation can still play. Latching on a ref (rather
-  // than always rendering) is what actually defers loading the modal's chunk.
+  // First launch opens Settings on the Customize tab so the player sets up their
+  // playmat and card back; afterwards it lives behind the Customize rail button.
+  const firstRun = useRef(localStorage.getItem(CUSTOMIZED_KEY) == null);
+  const [settingsOpen, setSettingsOpen] = useState(firstRun.current);
+  const [settingsSection, setSettingsSection] = useState<string | undefined>(
+    firstRun.current ? 'customize' : undefined,
+  );
+  // The modal is lazy: mount it only once it has been opened, then keep it
+  // mounted so its close animation can still play.
   const settingsSeen = useRef(false);
-  const customizeSeen = useRef(false);
   settingsSeen.current ||= settingsOpen;
-  customizeSeen.current ||= customizeOpen;
   const identity = useApp((state) => state.identity);
   const connected = useApp((state) => state.connected);
   const inRoom = useGame((state) => state.room !== null);
   const pendingJoin = useUi((state) => state.pendingJoin);
 
-  // Deep surfaces (the in-game toolbar) open these modals via window events,
+  // Deep surfaces (the in-game toolbar) open settings via window events,
   // avoiding prop-drilling through the whole table tree.
   useEffect(() => {
-    const openCustomize = () => setCustomizeOpen(true);
-    const openSettings = () => setSettingsOpen(true);
+    const openCustomize = () => {
+      setSettingsSection('customize');
+      setSettingsOpen(true);
+    };
+    const openSettings = () => {
+      setSettingsSection(undefined);
+      setSettingsOpen(true);
+    };
     window.addEventListener('pc:open-customize', openCustomize);
     window.addEventListener('pc:open-settings', openSettings);
     return () => {
@@ -223,9 +228,9 @@ function Shell({
     };
   }, []);
 
-  const closeCustomize = () => {
+  const closeSettings = () => {
     localStorage.setItem(CUSTOMIZED_KEY, '1');
-    setCustomizeOpen(false);
+    setSettingsOpen(false);
   };
 
   // A share link brings the player to the join screen (unless they're already
@@ -297,8 +302,14 @@ function Shell({
           <AppRail
             route={route}
             onNavigate={navigate}
-            onOpenSettings={() => setSettingsOpen(true)}
-            onOpenCustomize={() => setCustomizeOpen(true)}
+            onOpenSettings={() => {
+              setSettingsSection(undefined);
+              setSettingsOpen(true);
+            }}
+            onOpenCustomize={() => {
+              setSettingsSection('customize');
+              setSettingsOpen(true);
+            }}
           />
         )}
         {!inRoom && (
@@ -324,19 +335,10 @@ function Shell({
         <Suspense fallback={null}>
           <SettingsModal
             open={settingsOpen}
-            onClose={() => setSettingsOpen(false)}
+            onClose={closeSettings}
             preferences={preferences}
             onChange={onPreferencesChange}
-          />
-        </Suspense>
-      )}
-      {customizeSeen.current && (
-        <Suspense fallback={null}>
-          <CustomizeModal
-            open={customizeOpen}
-            onClose={closeCustomize}
-            preferences={preferences}
-            onChange={onPreferencesChange}
+            initialSection={settingsSection}
           />
         </Suspense>
       )}
@@ -371,8 +373,12 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    applyPreferences(preferences);
+    // Persist BEFORE applying: applyPreferences fires `pc:preferences`
+    // synchronously, and some listeners (e.g. the table's playmat/cardback
+    // sync) read loadPreferences() — so localStorage must already be current,
+    // or the change lands one interaction late (the "double-click to apply" bug).
     savePreferences(preferences);
+    applyPreferences(preferences);
   }, [preferences]);
 
   useEffect(() => {

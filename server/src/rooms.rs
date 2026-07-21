@@ -75,6 +75,13 @@ pub struct DiceRollResult {
 /// The six Fixer dice, in printed order (largest first on the mat).
 pub const GIG_SIDES: [u8; 6] = [20, 12, 10, 8, 6, 4];
 
+pub fn empty_mana() -> BTreeMap<String, i64> {
+    ["W", "U", "B", "R", "G", "C"]
+        .into_iter()
+        .map(|color| (color.to_string(), 0))
+        .collect()
+}
+
 /// A fresh Fixer set for a Cyberpunk game (empty for other games — MTG has no
 /// dice board).
 pub fn new_gig_dice(game: &str) -> Vec<GigDie> {
@@ -95,8 +102,16 @@ pub struct Player {
     pub user_id: String,
     pub username: String,
     pub seat: usize,
+    /// Pregame acknowledgement. Only this authenticated seat can toggle it;
+    /// changing decks or going offline resets it.
+    #[serde(default)]
+    pub ready: bool,
     pub life: i64,
     pub poison: i64,
+    /// Public floating mana. Only this seat's authenticated player can change
+    /// it; keeping it in room state makes it visible to every viewer.
+    #[serde(default = "empty_mana")]
+    pub mana: BTreeMap<String, i64>,
     pub cmd_damage: BTreeMap<usize, i64>,
     /// Commander damage received, additionally keyed by the commander's iid
     /// (additive to the by-seat matrix; clients may ignore).
@@ -148,6 +163,13 @@ pub struct Player {
     /// Total ms spent as the active player (the turn clock).
     #[serde(default)]
     pub turn_time_ms: i64,
+    /// Authoritative match counters used for player and deck aggregates.
+    #[serde(default)]
+    pub cards_played: u64,
+    #[serde(default)]
+    pub cards_drawn: u64,
+    #[serde(default)]
+    pub peak_battlefield: u64,
     pub hand: Vec<Card>,
     pub library: Vec<Card>, // index 0 = top; never sent on the wire, only counted
     pub battlefield: Vec<Card>,
@@ -276,6 +298,12 @@ pub struct MatchResultPlayer {
     pub conceded: bool,
     pub turns_taken: u64,
     pub avg_turn_ms: i64,
+    #[serde(default)]
+    pub cards_played: u64,
+    #[serde(default)]
+    pub cards_drawn: u64,
+    #[serde(default)]
+    pub peak_battlefield: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deck_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -298,6 +326,9 @@ pub fn result_player(p: &Player) -> MatchResultPlayer {
         } else {
             0
         },
+        cards_played: p.cards_played,
+        cards_drawn: p.cards_drawn,
+        peak_battlefield: p.peak_battlefield,
         deck_id: p.deck_id.clone(),
         deck_name: p.deck_name.clone(),
         life: p.life,
@@ -394,6 +425,10 @@ pub struct Room {
     /// When the current active player's turn began (unix ms; 0 = no clock).
     #[serde(default)]
     pub turn_started_ms: i64,
+    /// Last active-player interaction credited by the turn clock. Kept separate
+    /// from turn_started_ms so AFK gaps can be capped without losing turn state.
+    #[serde(default)]
+    pub turn_last_interaction_ms: i64,
     /// When the game started (unix ms; 0 for pre-feature rooms).
     #[serde(default)]
     pub started_at_ms: i64,
@@ -582,6 +617,7 @@ impl Room {
         let now = crate::now_ms();
         if restored.turn_started_ms > 0 {
             restored.turn_started_ms = now;
+            restored.turn_last_interaction_ms = now;
         }
         for pc in restored.pending_cmd.iter_mut() {
             pc.deadline = now + crate::game::CMD_CHOICE_MS;
@@ -642,8 +678,10 @@ impl Room {
                     "userId": p.user_id,
                     "username": p.username,
                     "seat": p.seat,
+                    "ready": p.ready,
                     "life": p.life,
                     "poison": p.poison,
+                    "mana": p.mana,
                     "cmdDamage": cmd,
                     "cmdDamageByCommander": p.cmd_damage_by_commander,
                     "commanderTax": p.commander_tax,

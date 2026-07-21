@@ -169,6 +169,19 @@ export class PlaytestClient {
     this.send({ type: 'room.join', roomId, ...(deckId ? { deckId } : {}) });
   }
 
+  spectateRoom(roomId) {
+    this.roomId = roomId;
+    this.send({ type: 'room.spectate', roomId });
+  }
+
+  setReady(ready = true) {
+    this.send({ type: 'room.ready', ready });
+  }
+
+  setAutoTurn(untap = true, draw = true) {
+    this.send({ type: 'auto.set', untap, draw });
+  }
+
   /// Re-joining the room you are seated in is a cheap server-side no-op that
   /// broadcasts a fresh per-viewer room.state to every player — used to
   /// observe state after actions that do not resync on their own (tap, pos,
@@ -301,6 +314,23 @@ export async function connectAll(clients) {
     await c.connect();
   }
   return clients;
+}
+
+/// Mark every seated client ready and wait until the authoritative snapshot
+/// reflects the complete lobby. Waiting avoids a cross-socket race with start.
+export async function readyAll(clients, observer = clients[0], timeoutMs = 5000) {
+  const since = observer.mark();
+  for (const client of clients) client.setReady(true);
+  const msg = await observer.waitFor(
+    (m) =>
+      m.type === 'room.state' &&
+      (!observer.roomId || m.state.roomId === observer.roomId) &&
+      m.state.players.length === clients.length &&
+      m.state.players.every((player) => player.ready),
+    { since, timeoutMs },
+  );
+  if (!msg) throw new Error(`lobby did not become ready within ${timeoutMs}ms`);
+  return msg.state;
 }
 
 /// Find the caller's deck id by name via REST.

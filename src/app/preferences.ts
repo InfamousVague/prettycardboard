@@ -10,7 +10,8 @@ import type { VisualFeedbackVariant, VisualFeedbackIntensity } from '@glacier/re
 import type { AppLocale } from './i18n.ts';
 import type { Keybinds } from './data/keybinds.ts';
 import { DEFAULT_CARD_BACK, cardBackUrl } from './data/cardBacks.ts';
-import { DEFAULT_PLAYMAT, playmatUrl } from './data/playmats.ts';
+import { DEFAULT_PLAYMAT, playmatBackground } from './data/playmats.ts';
+import { DEFAULT_DICE_SKIN } from './data/diceSkins.ts';
 
 export interface Preferences {
   theme: 'system' | 'light' | 'dark';
@@ -28,6 +29,10 @@ export interface Preferences {
   locale: AppLocale;
   /** Force-minimize animations app-wide, independent of the OS setting. */
   reduceMotion: boolean;
+  /** Table notifications and tactile interaction sounds. */
+  soundEffects: boolean;
+  /** Master table-sound volume, normalized from 0 to 1. */
+  soundVolume: number;
   haptics: boolean;
   /** The on-screen counterpart to haptics; fires for every pointer type. */
   visualFeedback: boolean;
@@ -38,12 +43,17 @@ export interface Preferences {
   cardBack: string;
   /** The table/backdrop artwork, one of the bundled PrettyCardboard mats. */
   playmat: string;
+  /** The 3D dice look, one of the entries in data/diceSkins.ts. */
+  diceSkin: string;
   /** Lay battlefield cards perfectly upright instead of the natural slight
    * per-card tilt. */
   verticalCards: boolean;
   /** Show a staged opponent's board mirrored 180deg (across-the-table view,
    * cards upside down). Off shows their board upright. */
   mirrorOpponent: boolean;
+  /** Extra eye-candy: a very subtle continuous idle drift on battlefield cards
+   * that catches the light and shows off holographic art. Off by default. */
+  ambientCards: boolean;
   /** Automatically untap your permanents at the start of your turn (off by
    * default; this app is manual-play first). Synced to the table via auto.set. */
   autoUntap: boolean;
@@ -82,6 +92,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   frostedness: 1,
   locale: 'en',
   reduceMotion: false,
+  soundEffects: true,
+  soundVolume: 0.65,
   haptics: false,
   visualFeedback: false,
   visualFeedbackVariant: 'shockwave',
@@ -89,8 +101,10 @@ export const DEFAULT_PREFERENCES: Preferences = {
   sidebarCollapsed: false,
   cardBack: DEFAULT_CARD_BACK,
   playmat: DEFAULT_PLAYMAT,
+  diceSkin: DEFAULT_DICE_SKIN,
   verticalCards: false,
   mirrorOpponent: true,
+  ambientCards: false,
   autoUntap: false,
   autoDraw: false,
   enableWip: false,
@@ -169,7 +183,7 @@ export function applyPreferences(preferences: Preferences): void {
   root.style.setProperty('--pc-card-back', `url("${cardBackUrl(preferences.cardBack)}")`);
 
   // The playmat backs the whole shell (glass panels float on it) and the table.
-  root.style.setProperty('--pc-playmat', `url("${playmatUrl(preferences.playmat)}")`);
+  root.style.setProperty('--pc-playmat', playmatBackground(preferences.playmat));
   // Live surfaces (the table felt, the room's synced mat) listen for this.
   window.dispatchEvent(new CustomEvent('pc:preferences', { detail: preferences }));
 }

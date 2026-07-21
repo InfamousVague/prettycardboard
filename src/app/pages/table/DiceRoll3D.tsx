@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import type DiceBoxType from '@3d-dice/dice-box-threejs';
 import type { GigDie } from '../../net/types.ts';
 import { CyberpunkDiceRoll } from './CyberpunkDiceRoll.tsx';
+import { playSound } from '../../sounds.ts';
+import { loadPreferences } from '../../preferences.ts';
+import { diceSkinById } from '../../data/diceSkins.ts';
 import './dice3d/dice-roll-3d.css';
 
 /**
@@ -38,6 +41,10 @@ export function DiceRoll3D({
   const queue = useRef<Roll[]>([]);
   const loading = useRef(false);
   const clearTimer = useRef<number | undefined>(undefined);
+  // Removes the "dismiss on playmat interaction" listener once armed.
+  const interactionCleanup = useRef<(() => void) | undefined>(undefined);
+  // The skin the live box was built with; a change rebuilds it.
+  const currentSkin = useRef<string | null>(null);
   const [failed, setFailed] = useState(false);
   // A stable, unique container id for the library's selector-based constructor.
   const containerId = useRef(`pc-dicebox-${Math.random().toString(36).slice(2)}`);
@@ -64,6 +71,7 @@ export function DiceRoll3D({
     prev.current = { owner: playerId, map };
     if (fresh.length === 0) return;
     queue.current.push(...fresh);
+    playSound('diceRoll');
     void ensureBoxAndFlush();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dice, playerId, failed]);
@@ -72,17 +80,37 @@ export function DiceRoll3D({
   // fresh roll. A stage-switch rebaselines instead of firing.
   const prevSeq = useRef<{ owner: string; seq: number } | null>(null);
   useEffect(() => {
-    if (failed || !lastRoll) return;
+    if (failed) return;
     if (!prevSeq.current || prevSeq.current.owner !== playerId) {
-      prevSeq.current = { owner: playerId, seq: lastRoll.seq };
+      prevSeq.current = { owner: playerId, seq: lastRoll?.seq ?? 0 };
       return;
     }
+    if (!lastRoll) return;
     if (lastRoll.seq === prevSeq.current.seq) return;
     prevSeq.current = { owner: playerId, seq: lastRoll.seq };
     queue.current.push({ sides: lastRoll.sides, value: lastRoll.value });
+    playSound('diceRoll');
     void ensureBoxAndFlush();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastRoll?.seq, playerId, failed]);
+
+  // The dice linger on the mat after settling; the next real interaction with
+  // the playmat clears them (so a roll stays readable as long as you want).
+  const armClearOnInteraction = () => {
+    if (interactionCleanup.current) return;
+    const onDown = (event: PointerEvent) => {
+      if (!(event.target as HTMLElement | null)?.closest('.table')) return;
+      interactionCleanup.current?.();
+      interactionCleanup.current = undefined;
+      try {
+        boxRef.current?.clearDice();
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener('pointerdown', onDown, true);
+    interactionCleanup.current = () => window.removeEventListener('pointerdown', onDown, true);
+  };
 
   const flush = () => {
     const box = boxRef.current;
@@ -90,16 +118,43 @@ export function DiceRoll3D({
     const batch = queue.current;
     queue.current = [];
     if (batch.length === 0) return;
+    // A fresh roll clears whatever the previous roll left on the mat and drops
+    // any pending dismiss listener.
+    window.clearTimeout(clearTimer.current);
+    interactionCleanup.current?.();
+    interactionCleanup.current = undefined;
+    try {
+      box.clearDice();
+    } catch {
+      /* ignore */
+    }
     // Predetermined notation: `1d20@17` forces the physics to settle on 17.
     // Several at once combine with `+` (rare — usually one Fixer die at a time).
     const notation = batch.map((r) => `1d${r.sides}@${r.value}`).join('+');
-    box.roll(notation).catch(() => {});
-    // Let the result sit, then clear so the next roll starts clean.
-    window.clearTimeout(clearTimer.current);
-    clearTimer.current = window.setTimeout(() => boxRef.current?.clearDice(), 2600);
+    box
+      .roll(notation)
+      .then(() => {
+        playSound('diceLand');
+        armClearOnInteraction();
+      })
+      .catch(() => {});
+    // Fallback: arm the dismiss even if the roll promise never resolves, so the
+    // dice can never get stuck on the mat with no way to clear them.
+    clearTimer.current = window.setTimeout(armClearOnInteraction, 4000);
   };
 
   const ensureBoxAndFlush = async () => {
+    // A skin change rebuilds the box so the next roll wears the new look.
+    const skinId = loadPreferences().diceSkin;
+    if (boxRef.current && currentSkin.current !== skinId) {
+      try {
+        boxRef.current.clearDice();
+      } catch {
+        /* ignore */
+      }
+      if (wrapRef.current) wrapRef.current.innerHTML = '';
+      boxRef.current = null;
+    }
     if (boxRef.current) {
       flush();
       return;
@@ -109,25 +164,29 @@ export function DiceRoll3D({
     loading.current = true;
     try {
       const { default: DiceBox } = await import('@3d-dice/dice-box-threejs');
-      const accent = resolveAccent();
+      const skin = diceSkinById(skinId);
+      const background = skin.accent ? resolveAccent() : skin.color;
+      const foreground = skin.accent ? inkFor(background) : skin.pip;
       const box = new DiceBox(`#${containerId.current}`, {
+        assetPath: import.meta.env.BASE_URL,
         sounds: false,
         shadows: true,
         theme_surface: 'green-felt',
-        theme_material: 'plastic',
-        theme_texture: '',
+        theme_material: skin.material,
+        theme_texture: skin.texture ?? '',
         theme_customColorset: {
-          background: accent,
-          foreground: inkFor(accent),
-          texture: 'none',
-          material: 'plastic',
+          background,
+          foreground,
+          texture: skin.texture ?? 'none',
+          material: skin.material,
         },
-        gravity_multiplier: 500,
+        gravity_multiplier: 320,
         baseScale: 90,
         strength: 1.6,
       });
       await box.initialize();
       boxRef.current = box;
+      currentSkin.current = skinId;
       flush();
     } catch {
       // No WebGL / library failed — drop to the CSS cube.
@@ -140,6 +199,7 @@ export function DiceRoll3D({
   useEffect(
     () => () => {
       window.clearTimeout(clearTimer.current);
+      interactionCleanup.current?.();
       try {
         boxRef.current?.clearDice();
       } catch {

@@ -24,6 +24,7 @@
     "@glacier/icons": "file:./vendor/@glacier/icons",
     "@glacier/react": "file:./vendor/@glacier/react",
     "@glacier/tokens": "file:./vendor/@glacier/tokens",
+    "@mdi/js": "^7.4.47",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-process": "^2.3.1",

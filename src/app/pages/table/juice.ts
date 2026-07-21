@@ -23,6 +23,16 @@ export function restTilt(iid: string): number {
   return ((hash % 61) / 10) - 3; // -3.0 .. +3.0
 }
 
+/**
+ * Deterministic negative animation-delay per card instance (0..-6s) so ambient
+ * idle motion desynchronizes across the board instead of pulsing in lockstep.
+ */
+export function ambientDelay(iid: string): number {
+  let hash = 0;
+  for (let i = 0; i < iid.length; i += 1) hash = (hash * 17 + iid.charCodeAt(i)) | 0;
+  return -((Math.abs(hash) % 60) / 10); // -6.0 .. 0
+}
+
 /** Velocity-following drag tilt: rotate = clamp(vx * k, +-8deg). vx in px/ms. */
 export function dragTilt(vx: number): number {
   return Math.max(-8, Math.min(8, vx * 9));

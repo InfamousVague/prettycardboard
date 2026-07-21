@@ -17,10 +17,11 @@ import {
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { getGame } from '../../data/games.ts';
-import { ManaSymbol } from '../../components/Mana.tsx';
+import { EMPTY_MANA, MANA_ORDER, ManaSymbol } from '../../components/Mana.tsx';
+import { DiceIcon, type PolyhedralSides } from '../../components/DiceIcon.tsx';
 import { juicePulse } from './juice.ts';
-import { MANA_ORDER, useTableUi, type ManaColor } from './tableUi.ts';
-import type { RoomState, TablePlayer } from '../../net/types.ts';
+import { useTableUi } from './tableUi.ts';
+import type { ManaColor, ManaPool, RoomState, TablePlayer } from '../../net/types.ts';
 
 /**
  * The personal vitals + conveniences cluster in the right rail: life (or the
@@ -152,8 +153,8 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
       )}
 
       {/* Floating-mana pool (MTG only; the component self-gates on the game
-         registry). A local play aid for banking mana tapped from lands. */}
-      <ManaBar room={room} />
+        registry). The authenticated seat owns updates; room state shares it. */}
+      <ManaBar room={room} mana={me.mana} />
 
       {/* Dice tray (non-Cyberpunk; Cyberpunk rolls from its Fixer panel). Rolls a
          real 3D physics die on the mat and logs the result. */}
@@ -164,14 +165,16 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
           </span>
           <div className="diceTrayDice">
             {([20, 12, 10, 8, 6, 4] as const).map((sides) => (
-              <button
-                key={sides}
-                type="button"
-                className="diceTrayDie"
-                onClick={() => act({ kind: 'dice.roll', sides })}
-              >
-                d{sides}
-              </button>
+              <Tooltip key={sides} content={`${t('tblRollDice')} d${sides}`}>
+                <button
+                  type="button"
+                  className="diceTrayDie"
+                  aria-label={`${t('tblRollDice')} d${sides}`}
+                  onClick={() => act({ kind: 'dice.roll', sides })}
+                >
+                  <DiceIcon sides={sides as PolyhedralSides} size={24} />
+                </button>
+              </Tooltip>
             ))}
             <button
               type="button"
@@ -245,22 +248,20 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
 }
 
 /**
- * Floating-mana pool - a client-only play aid for freeform MTG. Tapping a land
- * has no rules engine to feed a mana pool, so this lets a player bank the mana
- * they produce and spend it down as they cast. Left-tap a pip to add one; the
+ * Floating-mana pool - a server-authoritative play aid for freeform MTG.
+ * Tapping a land has no rules engine to feed a mana pool, so this lets a player
+ * bank the mana they produce and spend it down as they cast. Only this seat can
+ * mutate its pool; every room viewer receives the public value. Left-tap a pip to add one; the
  * little minus badge (or right-click / ArrowDown, or hold the minus to repeat)
  * spends one; the X empties the whole pool the way mana clears between phases.
  *
  * MTG-only by registry: it renders only for games whose GameDef declares a
- * `mana` stat, so Cyberpunk (and any future non-mana game) never sees it. State
- * lives in the table-UI store, in memory - never persisted, never server-synced
- * (it is high-frequency and ephemeral, so a restored pool would be wrong).
+ * `mana` stat. The server owns the pool on this authenticated player's seat and
+ * broadcasts it to every player and spectator.
  */
-function ManaBar({ room }: { room: RoomState }) {
+function ManaBar({ room, mana = EMPTY_MANA }: { room: RoomState; mana?: ManaPool }) {
   const t = useT();
-  const mana = useTableUi((s) => s.mana);
-  const addMana = useTableUi((s) => s.addMana);
-  const clearAll = useTableUi((s) => s.clearMana);
+  const act = useGame((state) => state.act);
   const holdRef = useRef<number | null>(null);
   // Set once a press-and-hold has actually started spending, so the click that
   // ends the hold doesn't also add one back.
@@ -272,7 +273,7 @@ function ManaBar({ room }: { room: RoomState }) {
   const active = total > 0;
 
   const bump = (c: ManaColor, d: number, el?: HTMLElement | null) => {
-    addMana(c, d);
+    act({ kind: 'mana.add', color: c, delta: d });
     if (d > 0 && el) juicePulse(el, 0.6);
   };
   const endHold = () => {
@@ -288,7 +289,7 @@ function ManaBar({ room }: { room: RoomState }) {
     heldRef.current = false;
     holdRef.current = window.setTimeout(function tick() {
       heldRef.current = true;
-      addMana(c, -1);
+      act({ kind: 'mana.add', color: c, delta: -1 });
       holdRef.current = window.setTimeout(tick, 140);
     }, 380);
   };
@@ -350,7 +351,7 @@ function ManaBar({ room }: { room: RoomState }) {
               size="sm"
               tone="accent"
               variant="soft"
-              onRemove={clearAll}
+              onRemove={() => act({ kind: 'mana.clear' })}
               aria-label={`${t('tblFloatingTotal')}: ${total}`}
             >
               {total}

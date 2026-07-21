@@ -1,6 +1,38 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { AlertDialog, Avatar, Button, Input, Kbd, Menu, MenuItem, Pill, Text, Size, StatusDot, TextTone, Tooltip, useToast } from '@glacier/react';
-import { Copy, Crown, Eye, Flag, Heart, Link2, LogOut, ScrollText, Settings, Skull, Sparkles, Swords, UserPlus, Zap } from '@glacier/icons';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { AlertDialog, Avatar, Button, IconButton, Input, Kbd, Menu, MenuItem, Pill, Text, Size, StatusDot, TextTone, Tooltip, useToast } from '@glacier/react';
+import {
+  ArrowDownToLine,
+  ArrowRight,
+  ArrowUpToLine,
+  Ban,
+  BellRing,
+  ChevronRight,
+  CircleMinus,
+  CirclePlus,
+  Copy,
+  Crown,
+  Eye,
+  EyeOff,
+  Flag,
+  Hand,
+  Heart,
+  Layers,
+  Link2,
+  LogOut,
+  Paperclip,
+  Play,
+  Plus,
+  RotateCw,
+  ScrollText,
+  Send,
+  Settings,
+  Skull,
+  Swords,
+  Unlink,
+  UserPlus,
+  X,
+  Zap,
+} from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
@@ -12,7 +44,7 @@ import { usePreference } from '../hooks/usePreference.ts';
 import { resolveKeybinds, KEYBIND_DEF, type ActionId } from '../data/keybinds.ts';
 import type { GameId } from '../data/games.ts';
 import { GameCard } from '../components/GameCard.tsx';
-import { GameTag } from '../components/GameTag.tsx';
+import { ManaPoolReadout } from '../components/Mana.tsx';
 import type { CardInst, GameAction, GameActionV2, RoomState, TablePlayer, Zone } from '../net/types.ts';
 import { useTableUi } from './table/tableUi.ts';
 import { MyBoard } from './table/MyBoard.tsx';
@@ -23,13 +55,16 @@ import { CyberpunkDicePanel } from './table/CyberpunkDicePanel.tsx';
 import { PhaseRibbon } from './table/PhaseRibbon.tsx';
 import { StackTray } from './table/StackTray.tsx';
 import { CmdChoiceDialog, LibraryViewer, MulliganOverlay, PileViewer, RollBanner } from './table/overlays.tsx';
+import { TablePresence } from './table/TablePresence.tsx';
 import { LibrarySidebar } from './table/LibrarySidebar.tsx';
 import { PostMatch } from './table/PostMatch.tsx';
 import { PreMatch } from './table/PreMatch.tsx';
+import { PregameLobby } from './table/PregameLobby.tsx';
 import { TimelineCard } from './table/TimelineCard.tsx';
 import { TurnCue } from './table/TurnCue.tsx';
 import { flightAnchor, flyCard } from './table/juice.ts';
-import { onStatus, send } from '../net/ws.ts';
+import { onMessage, onStatus, send } from '../net/ws.ts';
+import { playSound, primeSounds } from '../sounds.ts';
 import { DEFAULT_PREFERENCES, loadPreferences } from '../preferences.ts';
 import { applyAccentRamp, clearDeckTint } from '../state/accent.ts';
 import { installTableShims } from './table/shims.ts';
@@ -68,7 +103,6 @@ export function TablePage() {
   const spectating = useGame((state) => state.spectating);
   const act = useGame((state) => state.act);
   const leave = useGame((state) => state.leave);
-  const start = useGame((state) => state.start);
   // Face-down cards on this table wear the game-appropriate default back when the
   // player left the default on (Cyberpunk shows its crest, not Magic's back). A
   // scoped --pc-card-back override cascades to every face-down surface inside the
@@ -91,7 +125,10 @@ export function TablePage() {
   // The matchup splash: only for the false->true start transition witnessed
   // live (a reload into a running game skips straight to the table).
   const [preMatch, setPreMatch] = useState(false);
+  const [pingCooling, setPingCooling] = useState(false);
+  const pingTimer = useRef<number | undefined>(undefined);
   const prevStarted = useRef<boolean | null>(null);
+  const previousTurn = useRef<{ roomId: string; started: boolean; turnKey: string } | null>(null);
   // Tracks the last hovered card for the tap/flip/clone hotkeys.
   const hoverRef = useRef<CardInst | null>(null);
   const handleHover = (card: CardInst | null) => {
@@ -101,6 +138,10 @@ export function TablePage() {
   // so the keydown handler (mounted once) reads the current map without
   // re-subscribing on every rebind or game switch.
   const bindingsRef = useRef<Map<string, ActionId>>(new Map());
+  // An unbound 1-9 key can prefix the next all-counter shortcut (e.g. 5 then
+  // ] adds five to every counter on the hovered card). It expires quickly so a
+  // stray digit never changes a later action.
+  const counterRepeatRef = useRef({ value: 1, expiresAt: 0 });
 
   useEffect(() => {
     installTableShims();
@@ -128,6 +169,61 @@ export function TablePage() {
   // felt wears the active player's mat; the server honors my auto untap/draw at
   // my turn), on join and whenever preferences change.
   const roomId = room?.roomId;
+  useEffect(() => {
+    const prime = () => primeSounds();
+    window.addEventListener('pointerdown', prime, { once: true });
+    return () => window.removeEventListener('pointerdown', prime);
+  }, []);
+
+  useEffect(() => {
+    if (!roomId) return;
+    return onMessage((message) => {
+      if (!('roomId' in message) || message.roomId !== roomId) return;
+      if (message.type === 'room.ping') {
+        if (message.to.userId === identity?.userId) {
+          playSound('ping');
+          toast({ tone: 'info', message: t('tblPingedYou').replace('{name}', message.from.username) });
+        } else if (message.from.userId === identity?.userId) {
+          toast({ tone: 'neutral', message: t('tblPingSent').replace('{name}', message.to.username) });
+        }
+      } else if (
+        message.type === 'room.event' &&
+        message.actor === identity?.userId &&
+        message.action.kind === 'draw'
+      ) {
+        playSound('cardDraw');
+      }
+    });
+  }, [roomId, identity?.userId, toast, t]);
+
+  const liveMe = liveRoom?.players.find((player) => player.userId === identity?.userId);
+  const liveTurnKey = `${liveRoom?.turnNumber ?? 0}:${liveRoom?.activeSeat ?? -1}`;
+  useEffect(() => {
+    const current = liveRoom && liveMe
+      ? { roomId: liveRoom.roomId, started: liveRoom.started, turnKey: liveTurnKey }
+      : null;
+    const previous = previousTurn.current;
+    if (
+      current &&
+      previous?.roomId === current.roomId &&
+      current.started &&
+      liveRoom?.matchResult == null &&
+      liveRoom?.activeSeat === liveMe?.seat &&
+      (!previous.started || previous.turnKey !== current.turnKey) &&
+      !spectating
+    ) {
+      playSound('turn');
+    }
+    previousTurn.current = current;
+  }, [liveRoom, liveMe, liveTurnKey, spectating]);
+
+  useEffect(
+    () => () => {
+      window.clearTimeout(pingTimer.current);
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!roomId || spectating) return;
     const share = () => {
@@ -179,9 +275,6 @@ export function TablePage() {
   useEffect(() => {
     if (prevStarted.current === false && startedNow === true) {
       setPreMatch(true);
-      // A fresh deal starts with an empty floating-mana pool (it is a local,
-      // per-phase aid; carrying a stale pool into a new game would be wrong).
-      useTableUi.getState().clearMana();
     }
     prevStarted.current = startedNow;
   }, [startedNow]);
@@ -209,7 +302,8 @@ export function TablePage() {
     const onKey = (event: KeyboardEvent) => {
       if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
       const action = bindingsRef.current.get(event.code);
-      if (!action) return;
+      const counterPrefix = action ? null : event.code.match(/^(?:Digit|Numpad)([1-9])$/);
+      if (!action && !counterPrefix) return;
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('input, textarea, select, [contenteditable], [role="dialog"], [role="menu"]')) return;
       // Space would also click a focused button; let the button win.
@@ -226,6 +320,14 @@ export function TablePage() {
       const hovered = hoverRef.current;
       const mine = hovered ? seatMe!.battlefield.find((card) => card.iid === hovered.iid) : undefined;
 
+      if (!action) {
+        if (counterPrefix && mine && Object.values(mine.counters).some((count) => count > 0)) {
+          event.preventDefault();
+          counterRepeatRef.current = { value: Number(counterPrefix[1]), expiresAt: Date.now() + 2_000 };
+        }
+        return;
+      }
+
       const guard = KEYBIND_DEF[action].guard;
       if (guard === 'myTurn' && current.activeSeat !== seatMe!.seat) return;
       if (guard === 'hoveredMine' && mine == null) return;
@@ -233,6 +335,9 @@ export function TablePage() {
       if (guard === 'combat' && current.combat == null) return;
 
       event.preventDefault();
+      if (action !== 'incrementCounters' && action !== 'decrementCounters') {
+        counterRepeatRef.current = { value: 1, expiresAt: 0 };
+      }
       switch (action) {
         case 'passTurn':
           state.act({ kind: 'turn.pass' });
@@ -246,6 +351,17 @@ export function TablePage() {
         case 'cloneHovered':
           state.act({ kind: 'token.clone', iid: mine!.iid, x: Math.min(0.95, mine!.x + 0.06), y: mine!.y });
           break;
+        case 'incrementCounters':
+        case 'decrementCounters': {
+          const pending = counterRepeatRef.current;
+          const repeat = pending.expiresAt >= Date.now() ? pending.value : 1;
+          const delta = action === 'incrementCounters' ? repeat : -repeat;
+          counterRepeatRef.current = { value: 1, expiresAt: 0 };
+          for (const [counter, count] of Object.entries(mine!.counters)) {
+            if (count > 0) state.act({ kind: 'card.counter', iid: mine!.iid, counter, delta });
+          }
+          break;
+        }
         case 'draw':
           state.act({ kind: 'draw', count: 1 });
           break;
@@ -305,24 +421,28 @@ export function TablePage() {
     );
   };
 
+  const pingPlayer = (player: TablePlayer) => {
+    if (pingCooling) return;
+    send({ type: 'room.ping', targetUserId: player.userId });
+    setPingCooling(true);
+    window.clearTimeout(pingTimer.current);
+    pingTimer.current = window.setTimeout(() => setPingCooling(false), 3_000);
+  };
+
   if (!room) return null;
 
   const me = room.players.find((player) => player.userId === identity?.userId);
-  const others = room.players.filter((player) => player.userId !== identity?.userId);
+  const pingTargets = me
+    ? room.players.filter(
+        (player) => player.userId !== me.userId && player.online !== false && !player.conceded,
+      )
+    : [];
   const isHost = room.hostUserId === identity?.userId;
   // Online friends not already seated here: invite them straight into this table.
   const onlineFriends = friends.filter(
     (friend) => friend.online && !room.players.some((player) => player.userId === friend.userId),
   );
   const canAct = !spectating && me != null && room.started && !replay.active;
-
-  // Seats flow clockwise from mine so the table reads like a real one.
-  const seatCount = Math.max(1, room.players.length);
-  const clockwise = (player: TablePlayer) => {
-    const from = me?.seat ?? 0;
-    return (((player.seat - from) % seatCount) + seatCount) % seatCount;
-  };
-  const orderedOthers = [...others].sort((a, b) => clockwise(a) - clockwise(b));
 
   // Once the game starts, ONE board owns the stage: the active player's, or
   // whichever seat was pinned from a side-rail mini. Everyone else shrinks to
@@ -361,7 +481,6 @@ export function TablePage() {
           <Text as="span" weight="semibold">
             {room.name}
           </Text>
-          <GameTag game={room.game} />
           <Tooltip content={`${t('tblCode')}: ${room.code}`}>
             <button
               type="button"
@@ -377,15 +496,9 @@ export function TablePage() {
               {t('tblSpectating')}
             </Pill>
           )}
-          <CmdDamageBar room={room} meId={me?.userId} />
         </div>
         {room.started && <PhaseRibbon room={room} me={me} canAct={canAct} />}
         <div className="tableTopActions">
-          <Tooltip content={t('tblShareHint')}>
-            <Button size="sm" variant="soft" onClick={shareInvite}>
-              <Link2 size={15} /> <span className="ttActionLabel">{t('tblShare')}</span>
-            </Button>
-          </Tooltip>
           {!spectating && onlineFriends.length > 0 && (
             <Menu
               aria-label={t('tblInviteFriends')}
@@ -408,11 +521,6 @@ export function TablePage() {
               ))}
             </Menu>
           )}
-          {isHost && !room.started && !spectating && (
-            <Button size="sm" onClick={start}>
-              <Sparkles size={15} /> <span className="ttActionLabel">{t('tblStart')}</span>
-            </Button>
-          )}
           {room.started && me && !spectating && !me.conceded && !room.matchResult && (
             <Tooltip content={t('tblConcede')}>
               <Button size="sm" variant="ghost" onClick={() => setConfirmConcede(true)}>
@@ -420,21 +528,6 @@ export function TablePage() {
               </Button>
             </Tooltip>
           )}
-          <Tooltip content={t('setTitle')}>
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label={t('setTitle')}
-              onClick={() => window.dispatchEvent(new CustomEvent('pc:open-settings'))}
-            >
-              <Settings size={15} />
-            </Button>
-          </Tooltip>
-          <Tooltip content={t('tblLeave')}>
-            <Button size="sm" variant="ghost" onClick={leave}>
-              <LogOut size={15} /> <span className="ttActionLabel">{t('tblLeave')}</span>
-            </Button>
-          </Tooltip>
         </div>
       </header>
 
@@ -455,39 +548,9 @@ export function TablePage() {
         />
       )}
 
-      <div className="tableMain">
-        {/* ---- pre-start: every seat, hosting controls ---- */}
+      <div className="tableMain" data-lobby={!room.started || undefined}>
         {!room.started && (
-          <div
-            className="tableOpponents"
-            data-count={orderedOthers.length}
-            data-rows={orderedOthers.length > 3 ? 2 : 1}
-          >
-            {orderedOthers.map((player) => (
-              <SeatFrame
-                key={player.userId}
-                room={room}
-                player={player}
-                me={me}
-                canAct={canAct}
-                onHover={handleHover}
-              />
-            ))}
-            {orderedOthers.length === 0 && (
-              <div className="tableWaiting">
-                <Text tone={TextTone.Muted}>{t('tblWaiting')}</Text>
-                <Text size={Size.Small} tone={TextTone.Subtle}>
-                  {t('tblShareBlurb')}
-                </Text>
-                <Button size="sm" onClick={shareInvite}>
-                  <Link2 size={15} /> {t('tblShare')}
-                </Button>
-                <Text size={Size.XSmall} tone={TextTone.Subtle}>
-                  {t('tblCode')}: <Kbd>{room.code}</Kbd>
-                </Text>
-              </div>
-            )}
-          </div>
+          <PregameLobby room={room} me={me} spectating={spectating} isHost={isHost} onShare={shareInvite} />
         )}
 
         {/* ---- started: the active (or pinned) board owns the stage ---- */}
@@ -525,22 +588,27 @@ export function TablePage() {
 
         {/* ---- my board: only while it owns the stage. Looking at someone
              else's playmat hides my hand/deck/piles entirely. ---- */}
-        {me && !spectating && (!room.started || stagedIsMe) && (
+        {me && !spectating && room.started && stagedIsMe && (
           <MyBoard me={me} room={room} onMenu={openMenu} onHover={handleHover} />
         )}
         {spectating && me == null && !stagedPlayer && <div className="tableSpectatorSpace" />}
 
         {/* ---- the shared stack, floating center ---- */}
-        <StackTray room={room} canAct={canAct} />
+        {room.started && <StackTray room={room} canAct={canAct} />}
       </div>
 
-      {/* ---- right dock: life + players + log, stacked cards ---- */}
+      {/* ---- right dock: scrollable table cards over persistent navigation ---- */}
       <SidePanel
         room={room}
         me={me}
         spectating={spectating}
         meId={identity?.userId}
         onFocusSeat={setPinnedSeat}
+        pingTargets={pingTargets}
+        onPingPlayer={pingPlayer}
+        pingCooling={pingCooling}
+        onShare={shareInvite}
+        onLeave={leave}
       />
 
       {/* ---- context menu ---- */}
@@ -548,6 +616,9 @@ export function TablePage() {
         <CardMenu
           menu={menu}
           me={me}
+          recipients={room.players
+            .filter((player) => player.userId !== me.userId)
+            .map((player) => ({ userId: player.userId, username: player.username }))}
           onAction={(action) => {
             act(action);
             setMenu(null);
@@ -570,6 +641,7 @@ export function TablePage() {
       {/* Spectators see the result too; controls inside are gated to players. */}
       <PostMatch room={room} meId={identity?.userId} spectating={spectating} onLeave={leave} />
       <RollBanner />
+      <TablePresence meId={identity?.userId} active={room.started && !spectating} />
     </div>
   );
 }
@@ -578,7 +650,7 @@ export function TablePage() {
 
 const COUNTER_PALETTE: { label: string; counter: string; delta: number }[] = [
   { label: '+1/+1', counter: '+1/+1', delta: 1 },
-  { label: '-1/-1', counter: '+1/+1', delta: -1 },
+  { label: '-1/-1', counter: '-1/-1', delta: 1 },
   { label: 'Loyalty', counter: 'loyalty', delta: 1 },
   { label: 'Charge', counter: 'charge', delta: 1 },
 ];
@@ -586,16 +658,18 @@ const COUNTER_PALETTE: { label: string; counter: string; delta: number }[] = [
 function CardMenu({
   menu,
   me,
+  recipients,
   onAction,
   onClose,
 }: {
   menu: Menu;
   me: TablePlayer;
+  recipients: { userId: string; username: string }[];
   onAction: (action: AnyAction) => void;
   onClose: () => void;
 }) {
   const t = useT();
-  const [sub, setSub] = useState<'counter' | 'attach' | null>(null);
+  const [sub, setSub] = useState<'counter' | 'attach' | 'move' | 'give' | null>(null);
   const [customCounter, setCustomCounter] = useState('');
 
   const card =
@@ -606,6 +680,17 @@ function CardMenu({
     me.command.find((c) => c.iid === menu.iid);
 
   const hosts = me.battlefield.filter((c) => c.iid !== menu.iid && !c.attachedTo);
+  const cardArt = card && !card.faceDown ? card.imageUrl || cardImage(card.scryfallId) : undefined;
+  const zoneName =
+    menu.zone === 'hand'
+      ? t('tblHand')
+      : menu.zone === 'graveyard'
+        ? t('tblGraveyard')
+        : menu.zone === 'exile'
+          ? t('tblExile')
+          : menu.zone === 'command'
+            ? t('tblCommand')
+            : 'Battlefield';
 
   /** Fire the action, arcing a clone from the card toward its destination pile. */
   const moveWithArc = (action: AnyAction, anchorKey: string | null) => {
@@ -621,40 +706,94 @@ function CardMenu({
     onAction(action);
   };
 
-  const item = (label: string, action: AnyAction, anchorKey?: string | null) => (
+  const item = (label: string, icon: ReactNode, action: AnyAction, anchorKey?: string | null) => (
     <button
       type="button"
       className="menuItem"
+      role="menuitem"
       onPointerDown={(event) => event.stopPropagation()}
       onClick={() => (anchorKey !== undefined ? moveWithArc(action, anchorKey) : onAction(action))}
     >
-      {label}
+      <span className="menuItemIcon" aria-hidden>{icon}</span>
+      <span>{label}</span>
     </button>
   );
 
-  const expander = (label: string, key: 'counter' | 'attach') => (
+  const quick = (label: string, icon: ReactNode, action: AnyAction, anchorKey?: string | null) => (
+    <button
+      type="button"
+      className="menuQuickAction"
+      role="menuitem"
+      title={label}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={() => (anchorKey !== undefined ? moveWithArc(action, anchorKey) : onAction(action))}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+
+  const expander = (label: string, icon: ReactNode, key: 'counter' | 'attach' | 'move' | 'give') => (
     <button
       type="button"
       className="menuItem menuExpander"
       data-open={sub === key || undefined}
+      role="menuitem"
+      aria-expanded={sub === key}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={() => setSub(sub === key ? null : key)}
     >
-      {label}
+      <span className="menuItemIcon" aria-hidden>{icon}</span>
+      <span>{label}</span>
+      <ChevronRight className="menuItemChevron" size={14} aria-hidden />
     </button>
   );
 
   return (
     <div
       className="cardMenu"
-      style={{ left: Math.min(menu.x, window.innerWidth - 224), top: Math.min(menu.y, window.innerHeight - 420) }}
+      style={{
+        left: Math.max(8, Math.min(menu.x, window.innerWidth - 256)),
+        top: Math.max(8, Math.min(menu.y, window.innerHeight - 440)),
+      }}
+      role="menu"
+      aria-label={card?.name || 'Card'}
       onPointerDown={(event) => event.stopPropagation()}
     >
+      <div className="menuCardHeader">
+        {cardArt ? (
+          <img className="menuCardThumb" src={cardArt} alt="" draggable={false} />
+        ) : (
+          <span className="menuCardThumb menuCardThumbFallback" aria-hidden><Layers size={16} /></span>
+        )}
+        <span className="menuCardIdentity">
+          <span className="menuCardName">{card?.name || 'Card'}</span>
+          <span className="menuCardZone">{zoneName}</span>
+        </span>
+        <IconButton size="sm" variant="ghost" aria-label={t('cpClose')} onClick={onClose}>
+          <X size={15} />
+        </IconButton>
+      </div>
       {menu.zone === 'battlefield' && card && (
         <>
-          {item(card.tapped ? 'Untap' : 'Tap', { kind: 'card.tap', iid: menu.iid, tapped: !card.tapped })}
-          {item(card.faceDown ? 'Turn face up' : 'Turn face down', { kind: 'card.face', iid: menu.iid, faceDown: !card.faceDown })}
-          {expander('Add counter…', 'counter')}
+          <div className="menuQuickActions">
+            {quick(
+              card.tapped ? 'Untap' : 'Tap',
+              <RotateCw size={16} />,
+              { kind: 'card.tap', iid: menu.iid, tapped: !card.tapped },
+            )}
+            {quick(
+              card.faceDown ? 'Face up' : 'Face down',
+              card.faceDown ? <Eye size={16} /> : <EyeOff size={16} />,
+              { kind: 'card.face', iid: menu.iid, faceDown: !card.faceDown },
+            )}
+            {quick(
+              'Clone',
+              <Copy size={16} />,
+              { kind: 'token.clone', iid: menu.iid, x: Math.min(0.95, card.x + 0.06), y: card.y },
+            )}
+          </div>
+          {expander('Counters', <CirclePlus size={15} />, 'counter')}
           {sub === 'counter' && (
             <div className="menuInset">
               {COUNTER_PALETTE.map((entry) => (
@@ -662,10 +801,14 @@ function CardMenu({
                   key={entry.label}
                   type="button"
                   className="menuItem"
+                  role="menuitem"
                   onPointerDown={(event) => event.stopPropagation()}
                   onClick={() => onAction({ kind: 'card.counter', iid: menu.iid, counter: entry.counter, delta: entry.delta })}
                 >
-                  {entry.label}
+                  <span className="menuItemIcon" aria-hidden>
+                    {entry.delta < 0 ? <CircleMinus size={14} /> : <CirclePlus size={14} />}
+                  </span>
+                  <span>{entry.label}</span>
                 </button>
               ))}
               <form
@@ -682,13 +825,13 @@ function CardMenu({
                   onChange={(event) => setCustomCounter(event.target.value)}
                   placeholder="Custom…"
                 />
-                <Button size="sm" type="submit" variant="soft">
-                  +
-                </Button>
+                <IconButton size="sm" type="submit" variant="soft" aria-label={t('gpSetCounter')}>
+                  <Plus size={14} />
+                </IconButton>
               </form>
             </div>
           )}
-          {hosts.length > 0 && expander('Attach to…', 'attach')}
+          {hosts.length > 0 && expander('Attach to', <Paperclip size={15} />, 'attach')}
           {sub === 'attach' && (
             <div className="menuInset menuScroll">
               {hosts.map((host) => (
@@ -696,67 +839,90 @@ function CardMenu({
                   key={host.iid}
                   type="button"
                   className="menuItem"
+                  role="menuitem"
                   onPointerDown={(event) => event.stopPropagation()}
                   onClick={() => onAction({ kind: 'card.attach', iid: menu.iid, hostIid: host.iid })}
                 >
-                  {host.name}
+                  <span className="menuItemIcon" aria-hidden><Paperclip size={14} /></span>
+                  <span>{host.name}</span>
                 </button>
               ))}
             </div>
           )}
-          {card.attachedTo && item('Detach', { kind: 'card.attach', iid: menu.iid, hostIid: null })}
-          {item(`→ ${t('gpStack')}`, { kind: 'stack.push', iid: menu.iid }, 'stack')}
-          {item('Clone token', { kind: 'token.clone', iid: menu.iid, x: Math.min(0.95, card.x + 0.06), y: card.y })}
-          <hr className="menuRule" />
-          {item(`→ ${t('tblHand')}`, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
-          {item(`→ ${t('tblGraveyard')}`, { kind: 'card.move', iid: menu.iid, to: 'graveyard' }, `grave:${me.userId}`)}
-          {item(`→ ${t('tblExile')}`, { kind: 'card.move', iid: menu.iid, to: 'exile' }, `exile:${me.userId}`)}
-          {item(`→ ${t('tblCommand')}`, { kind: 'card.move', iid: menu.iid, to: 'command' }, `cmd:${me.userId}`)}
-          {item('→ Top of library', { kind: 'card.move', iid: menu.iid, to: 'library', index: 0 }, `lib:${me.userId}`)}
-          {item('→ Bottom of library', { kind: 'card.move', iid: menu.iid, to: 'library', index: -1 }, `lib:${me.userId}`)}
+          {card.attachedTo && item('Detach', <Unlink size={15} />, { kind: 'card.attach', iid: menu.iid, hostIid: null })}
+          {item(t('gpStack'), <Layers size={15} />, { kind: 'stack.push', iid: menu.iid }, 'stack')}
+          {expander('Move to', <ArrowRight size={15} />, 'move')}
+          {sub === 'move' && (
+            <div className="menuInset">
+              {item(t('tblHand'), <Hand size={14} />, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
+              {item(t('tblGraveyard'), <Skull size={14} />, { kind: 'card.move', iid: menu.iid, to: 'graveyard' }, `grave:${me.userId}`)}
+              {item(t('tblExile'), <Ban size={14} />, { kind: 'card.move', iid: menu.iid, to: 'exile' }, `exile:${me.userId}`)}
+              {item(t('tblCommand'), <Crown size={14} />, { kind: 'card.move', iid: menu.iid, to: 'command' }, `cmd:${me.userId}`)}
+              {item('Top of library', <ArrowUpToLine size={14} />, { kind: 'card.move', iid: menu.iid, to: 'library', index: 0 }, `lib:${me.userId}`)}
+              {item('Bottom of library', <ArrowDownToLine size={14} />, { kind: 'card.move', iid: menu.iid, to: 'library', index: -1 }, `lib:${me.userId}`)}
+            </div>
+          )}
         </>
       )}
       {menu.zone === 'hand' && (
         <>
-          {item('Play', { kind: 'card.move', iid: menu.iid, to: 'battlefield', x: 0.5, y: 0.55 }, 'field:mine')}
-          {item('Play face down', { kind: 'card.face', iid: menu.iid, faceDown: true })}
-          {item(`→ ${t('gpStack')}`, { kind: 'stack.push', iid: menu.iid }, 'stack')}
-          {item(`→ ${t('tblGraveyard')}`, { kind: 'card.move', iid: menu.iid, to: 'graveyard' }, `grave:${me.userId}`)}
-          {item('→ Top of library', { kind: 'card.move', iid: menu.iid, to: 'library', index: 0 }, `lib:${me.userId}`)}
-          {item(t('gpRevealCard'), { kind: 'reveal.card', iid: menu.iid })}
-          {item(t('gpRevealHand'), { kind: 'reveal.hand' })}
+          {item('Play', <Play size={15} />, { kind: 'card.move', iid: menu.iid, to: 'battlefield', x: 0.5, y: 0.55 }, 'field:mine')}
+          {item('Play face down', <EyeOff size={15} />, { kind: 'card.face', iid: menu.iid, faceDown: true })}
+          {item(t('gpStack'), <Layers size={15} />, { kind: 'stack.push', iid: menu.iid }, 'stack')}
+          {expander('Move to', <ArrowRight size={15} />, 'move')}
+          {sub === 'move' && (
+            <div className="menuInset">
+              {item(t('tblGraveyard'), <Skull size={14} />, { kind: 'card.move', iid: menu.iid, to: 'graveyard' }, `grave:${me.userId}`)}
+              {item('Top of library', <ArrowUpToLine size={14} />, { kind: 'card.move', iid: menu.iid, to: 'library', index: 0 }, `lib:${me.userId}`)}
+            </div>
+          )}
+          {item(t('gpRevealCard'), <Eye size={15} />, { kind: 'reveal.card', iid: menu.iid })}
+          {item(t('gpRevealHand'), <Eye size={15} />, { kind: 'reveal.hand' })}
         </>
       )}
       {menu.zone === 'graveyard' && (
         <>
-          {item(`→ ${t('tblHand')}`, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
-          {item('→ Battlefield', { kind: 'card.move', iid: menu.iid, to: 'battlefield', x: 0.5, y: 0.55 }, 'field:mine')}
-          {item(`→ ${t('tblExile')}`, { kind: 'card.move', iid: menu.iid, to: 'exile' }, `exile:${me.userId}`)}
-          {item(`→ ${t('gpStack')}`, { kind: 'stack.push', iid: menu.iid }, 'stack')}
+          {item(t('tblHand'), <Hand size={15} />, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
+          {item('Battlefield', <Play size={15} />, { kind: 'card.move', iid: menu.iid, to: 'battlefield', x: 0.5, y: 0.55 }, 'field:mine')}
+          {item(t('tblExile'), <Ban size={15} />, { kind: 'card.move', iid: menu.iid, to: 'exile' }, `exile:${me.userId}`)}
+          {item(t('gpStack'), <Layers size={15} />, { kind: 'stack.push', iid: menu.iid }, 'stack')}
         </>
       )}
       {menu.zone === 'exile' && (
         <>
-          {item(`→ ${t('tblHand')}`, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
-          {item('→ Battlefield', { kind: 'card.move', iid: menu.iid, to: 'battlefield', x: 0.5, y: 0.55 }, 'field:mine')}
-          {item(`→ ${t('tblGraveyard')}`, { kind: 'card.move', iid: menu.iid, to: 'graveyard' }, `grave:${me.userId}`)}
+          {item(t('tblHand'), <Hand size={15} />, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
+          {item('Battlefield', <Play size={15} />, { kind: 'card.move', iid: menu.iid, to: 'battlefield', x: 0.5, y: 0.55 }, 'field:mine')}
+          {item(t('tblGraveyard'), <Skull size={15} />, { kind: 'card.move', iid: menu.iid, to: 'graveyard' }, `grave:${me.userId}`)}
         </>
       )}
       {menu.zone === 'command' && card && (
         <>
-          {item(`${t('tblCommand')} → Battlefield`, { kind: 'cmd.cast', iid: menu.iid, x: 0.55, y: 0.55 }, 'field:mine')}
-          {item(`→ ${t('tblHand')}`, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
+          {item(`${t('tblCommand')} → Battlefield`, <Play size={15} />, { kind: 'cmd.cast', iid: menu.iid, x: 0.55, y: 0.55 }, 'field:mine')}
+          {item(t('tblHand'), <Hand size={15} />, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
         </>
       )}
-      <hr className="menuRule" />
-      <button
-        type="button"
-        className="menuItem"
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={onClose}
-      >
-        {t('cpClose')}
-      </button>
+      {card && recipients.length > 0 && (
+        <>
+          {expander(t('gpGiveTo'), <Send size={15} />, 'give')}
+          {sub === 'give' && (
+            <div className="menuInset menuScroll">
+              {recipients.map((player) => (
+                <button
+                  key={player.userId}
+                  type="button"
+                  className="menuItem"
+                  role="menuitem"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => onAction({ kind: 'card.give', iid: menu.iid, toUser: player.userId })}
+                >
+                  <span className="menuItemIcon" aria-hidden><Send size={14} /></span>
+                  <span>{player.username}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -769,12 +935,22 @@ function SidePanel({
   spectating,
   meId,
   onFocusSeat,
+  pingTargets,
+  onPingPlayer,
+  pingCooling,
+  onShare,
+  onLeave,
 }: {
   room: RoomState;
   me?: TablePlayer;
   spectating?: boolean;
   meId?: string;
   onFocusSeat?: (seat: number) => void;
+  pingTargets: TablePlayer[];
+  onPingPlayer?: (player: TablePlayer) => void;
+  pingCooling?: boolean;
+  onShare: () => void;
+  onLeave: () => void;
 }) {
   const t = useT();
   const log = useGame((state) => state.log);
@@ -786,46 +962,101 @@ function SidePanel({
   }, [log.length]);
 
   return (
-    <aside className="tableSide">
-      {room.started && me && !spectating && <Vitals me={me} room={room} />}
-      {room.started && me && !spectating && room.game === 'cyberpunk' && (
-        <CyberpunkDicePanel me={me} others={room.players.filter((p) => p.userId !== me.userId)} />
-      )}
-      {room.started && me && !spectating && <TimelineCard />}
-      <PlayersCard room={room} meId={meId} onFocusSeat={onFocusSeat} />
-
-      <div className="sideLogCard">
-        <div className="sideHead">
-          <span className="sideHeadTitle">
-            <ScrollText size={13} />
-            {t('tblLog')}
-          </span>
-        </div>
-        <div ref={scrollRef} className="sideScroll">
-          {log.length === 0 ? (
-            <p className="sideEmpty">{t('tblLogEmpty')}</p>
-          ) : (
-            log.map((line, index) => (
-              <p key={`${line.seq}-${index}`} className="sideLine">
-                {line.text}
-              </p>
-            ))
+    <aside className="tableSide" data-nav-only={!room.started || undefined}>
+      {room.started && (
+        <div className="tableSideScroll">
+          {me && !spectating && <Vitals me={me} room={room} />}
+          {me && !spectating && room.game === 'cyberpunk' && (
+            <CyberpunkDicePanel me={me} others={room.players.filter((p) => p.userId !== me.userId)} />
           )}
-        </div>
-        {room.spectators.length > 0 && (
-          <div className="sideSpectators">
-            <span className="sideHeadTitle">
-              <Eye size={13} />
-              {t('tblSpectators')}
-            </span>
-            {room.spectators.map((spectator) => (
-              <span key={spectator.userId} className="spectatorName">
-                {spectator.username}
+          {me && !spectating && <TimelineCard />}
+          <PlayersCard
+            room={room}
+            meId={meId}
+            onFocusSeat={onFocusSeat}
+            onPingPlayer={onPingPlayer}
+            pingCooling={pingCooling}
+          />
+
+          <div className="sideLogCard">
+            <div className="sideHead">
+              <span className="sideHeadTitle">
+                <ScrollText size={13} />
+                {t('tblLog')}
               </span>
-            ))}
+            </div>
+            <div ref={scrollRef} className="sideScroll">
+              {log.length === 0 ? (
+                <p className="sideEmpty">{t('tblLogEmpty')}</p>
+              ) : (
+                log.map((line, index) => (
+                  <p key={`${line.seq}-${index}`} className="sideLine">
+                    {line.text}
+                  </p>
+                ))
+              )}
+            </div>
+            {room.spectators.length > 0 && (
+              <div className="sideSpectators">
+                <span className="sideHeadTitle">
+                  <Eye size={13} />
+                  {t('tblSpectators')}
+                </span>
+                {room.spectators.map((spectator) => (
+                  <span key={spectator.userId} className="spectatorName">
+                    {spectator.username}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      <nav className="tableSideNav" aria-label={t('tblTableNav')}>
+        <Tooltip content={t('tblPingHint')}>
+          <Menu
+            aria-label={t('tblPing')}
+            placement="top-end"
+            trigger={
+              <IconButton
+                size="sm"
+                variant="ghost"
+                disabled={pingCooling || pingTargets.length === 0}
+                aria-label={t('tblPing')}
+              >
+                <BellRing size={16} />
+              </IconButton>
+            }
+          >
+            {pingTargets.map((player) => (
+              <MenuItem key={player.userId} onSelect={() => onPingPlayer?.(player)}>
+                <BellRing size={14} /> {player.username}
+              </MenuItem>
+            ))}
+          </Menu>
+        </Tooltip>
+        <Tooltip content={t('tblShareHint')}>
+          <IconButton size="sm" variant="ghost" aria-label={t('tblShare')} onClick={onShare}>
+            <Link2 size={16} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip content={t('setTitle')}>
+          <IconButton
+            size="sm"
+            variant="ghost"
+            aria-label={t('setTitle')}
+            onClick={() => window.dispatchEvent(new CustomEvent('pc:open-settings'))}
+          >
+            <Settings size={16} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip content={t('tblLeave')}>
+          <IconButton size="sm" variant="ghost" aria-label={t('tblLeave')} onClick={onLeave}>
+            <LogOut size={16} />
+          </IconButton>
+        </Tooltip>
+      </nav>
     </aside>
   );
 }
@@ -852,48 +1083,18 @@ function cmdDamageSummary(player: TablePlayer, room: RoomState) {
   return { max: rows[0]?.amount ?? 0, rows };
 }
 
-/**
- * Topbar read-out of every player currently taking commander damage: one chip
- * per player with a nonzero total, so the whole table's commander-damage state
- * is visible at a glance without a per-seat button on the felt.
- */
-function CmdDamageBar({ room, meId }: { room: RoomState; meId?: string }) {
-  const t = useT();
-  if (room.format !== 'commander' || !room.started) return null;
-  const chips = room.players
-    .map((player) => ({ player, ...cmdDamageSummary(player, room) }))
-    .filter((chip) => chip.max > 0);
-  if (chips.length === 0) return null;
-  return (
-    <div className="cmdBar" aria-label={t('tblCmdDamage')}>
-      {chips.map(({ player, max, rows }) => (
-        <Tooltip
-          key={player.userId}
-          content={`${player.username} — ${rows.map((row) => `${row.from} ${row.amount}`).join(' · ')}`}
-        >
-          <span
-            className="cmdBarChip"
-            data-lethal={max >= 21 || undefined}
-            data-me={player.userId === meId || undefined}
-          >
-            <Swords size={11} />
-            <span className="cmdBarName">{player.username}</span>
-            {max}
-          </span>
-        </Tooltip>
-      ))}
-    </div>
-  );
-}
-
 function PlayersCard({
   room,
   meId,
   onFocusSeat,
+  onPingPlayer,
+  pingCooling,
 }: {
   room: RoomState;
   meId?: string;
   onFocusSeat?: (seat: number) => void;
+  onPingPlayer?: (player: TablePlayer) => void;
+  pingCooling?: boolean;
 }) {
   const t = useT();
   const markers = room.markers ?? {};
@@ -971,11 +1172,29 @@ function PlayersCard({
                     <Skull size={12} /> {player.poison}
                   </span>
                 )}
+                {room.game !== 'cyberpunk' && <ManaPoolReadout mana={player.mana} />}
                 <span className="playerStat" title={t('tblHand')}>
                   {player.handCount}
                 </span>
               </span>
             </div>
+            {!isMe && player.online !== false && !player.conceded && onPingPlayer && (
+              <Tooltip content={t('tblPingPlayer').replace('{name}', player.username)}>
+                <IconButton
+                  className="playerPing"
+                  size="sm"
+                  variant="ghost"
+                  disabled={pingCooling}
+                  aria-label={t('tblPingPlayer').replace('{name}', player.username)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onPingPlayer(player);
+                  }}
+                >
+                  <BellRing size={13} />
+                </IconButton>
+              </Tooltip>
+            )}
             {active && <span className="playerTurnDot" aria-hidden />}
           </div>
         );

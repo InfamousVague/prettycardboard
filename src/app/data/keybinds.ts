@@ -23,6 +23,8 @@ export type ActionId =
   | 'untapAll'
   | 'createToken'
   | 'cloneHovered'
+  | 'incrementCounters'
+  | 'decrementCounters'
   | 'rollD20'
   | 'lifeUp'
   | 'lifeDown'
@@ -58,6 +60,8 @@ export const KEYBIND_DEFS: KeybindDef[] = [
   { action: 'untapAll', labelKey: 'tblUntapAll', group: 'common', games: ['mtg'], defaultCode: 'KeyU', guard: 'canAct' },
   { action: 'createToken', labelKey: 'kbToken', group: 'common', games: ['mtg'], defaultCode: 'KeyK', guard: 'canAct' },
   { action: 'cloneHovered', labelKey: 'kbClone', group: 'common', games: ['mtg'], defaultCode: 'KeyC', guard: 'hoveredToken' },
+  { action: 'incrementCounters', labelKey: 'kbCountersUp', group: 'common', games: ['mtg'], defaultCode: 'BracketRight', guard: 'hoveredMine' },
+  { action: 'decrementCounters', labelKey: 'kbCountersDown', group: 'common', games: ['mtg'], defaultCode: 'BracketLeft', guard: 'hoveredMine' },
   { action: 'rollD20', labelKey: 'kbRollD20', group: 'common', games: ['mtg'], defaultCode: 'KeyR', guard: 'canAct' },
   // turn
   { action: 'passTurn', labelKey: 'kbPass', group: 'turn', games: ['mtg', 'cyberpunk'], defaultCode: 'Space', guard: 'myTurn' },

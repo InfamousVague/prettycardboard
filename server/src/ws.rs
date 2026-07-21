@@ -25,6 +25,18 @@ enum ClientMsg {
     RoomLeave,
     #[serde(rename = "room.start")]
     RoomStart,
+    #[serde(rename = "room.ready")]
+    RoomReady { ready: bool },
+    #[serde(rename = "room.deck.set", rename_all = "camelCase")]
+    RoomDeckSet { deck_id: String },
+    #[serde(rename = "room.ping", rename_all = "camelCase")]
+    RoomPing { target_user_id: String },
+    #[serde(rename = "room.hand.hover")]
+    RoomHandHover { position: Option<f64> },
+    /// Live table pointer: normalized position over the table plus the card iid
+    /// currently hovered (if any). Ephemeral presence, relayed and never stored.
+    #[serde(rename = "cursor.move")]
+    CursorMove { x: f64, y: f64, hover: Option<String> },
     #[serde(rename = "chat.send")]
     ChatSend { text: String },
     #[serde(rename = "invite.send", rename_all = "camelCase")]
@@ -136,8 +148,18 @@ async fn client_loop(app: Arc<App>, user: db::User, socket: WebSocket) {
             } else if let Some(mut room) = app.rooms.get_mut(&rref.room_id) {
                 if let Some(p) = room.players.iter_mut().find(|p| p.user_id == user.id) {
                     p.online = false;
+                    p.ready = false;
                     rooms::touch(&app, &mut room);
                 }
+                room_send_all(
+                    &app,
+                    &room,
+                    &json!({
+                        "type": "room.hand.hover",
+                        "fromUserId": user.id,
+                        "position": null,
+                    }),
+                );
                 room_send_states(&app, &room);
             }
         }
@@ -162,6 +184,11 @@ fn handle_msg(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
             presence_update(app, &user.id);
         }
         ClientMsg::RoomStart => start_room(app, user, tx),
+        ClientMsg::RoomReady { ready } => room_ready(app, user, ready, tx),
+        ClientMsg::RoomDeckSet { deck_id } => room_deck_set(app, user, &deck_id, tx),
+        ClientMsg::RoomPing { target_user_id } => room_ping(app, user, &target_user_id, tx),
+        ClientMsg::RoomHandHover { position } => room_hand_hover(app, user, position, tx),
+        ClientMsg::CursorMove { x, y, hover } => cursor_move(app, user, x, y, hover, tx),
         ClientMsg::ChatSend { text } => chat_send(app, user, &text, tx),
         ClientMsg::InviteSend { to_user_id, room_id } => invite_send(app, user, &to_user_id, &room_id),
         ClientMsg::GameAction { action } => game_action(app, user, action, tx),
@@ -313,6 +340,12 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
         send_err(tx, "room_not_found", "no such room");
         return;
     };
+    if let Some(deck) = deck.as_ref() {
+        if deck.game != room.game {
+            send_err(tx, "wrong_game", "deck does not match this table's game");
+            return;
+        }
+    }
     let taken: Vec<usize> = room.players.iter().map(|p| p.seat).collect();
     let Some(seat) = (0..room.seats).find(|s| !taken.contains(s)) else {
         send_err(tx, "room_full", "room is full");
@@ -344,8 +377,10 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
         user_id: user.id.clone(),
         username: user.username.clone(),
         seat,
+        ready: false,
         life: starting_life,
         poison: 0,
+        mana: rooms::empty_mana(),
         cmd_damage: Default::default(),
         cmd_damage_by_commander: Default::default(),
         commander_tax: Default::default(),
@@ -362,6 +397,9 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
         conceded: false,
         turns_taken: 0,
         turn_time_ms: 0,
+        cards_played: 0,
+        cards_drawn: 0,
+        peak_battlefield: 0,
         hand: Vec::new(),
         library,
         battlefield: Vec::new(),
@@ -433,6 +471,17 @@ fn leave_room(app: &Arc<App>, user: &db::User) {
         return;
     };
     if let Some(mut room) = app.rooms.get_mut(&rref.room_id) {
+        if !rref.spectating && room.started {
+            room_send_all(
+                app,
+                &room,
+                &json!({
+                    "type": "room.hand.hover",
+                    "fromUserId": user.id,
+                    "position": null,
+                }),
+            );
+        }
         if rref.spectating {
             room.spectators.retain(|s| s.user_id != user.id);
         } else if room.persistent {
@@ -441,6 +490,7 @@ fn leave_room(app: &Arc<App>, user: &db::User) {
             // tables and you can resume), just mark the player offline.
             if let Some(p) = room.players.iter_mut().find(|p| p.user_id == user.id) {
                 p.online = false;
+                p.ready = false;
             }
         } else {
             let was_active = room.started
@@ -540,6 +590,18 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
         send_err(tx, "already_started", "the game has already started");
         return;
     }
+    if room.players.iter().any(|p| !p.online) {
+        send_err(tx, "players_offline", "every seated player must be online");
+        return;
+    }
+    if room.players.iter().any(|p| p.deck_id.is_none()) {
+        send_err(tx, "deck_required", "every seated player must choose a deck");
+        return;
+    }
+    if room.players.iter().any(|p| !p.ready) {
+        send_err(tx, "not_ready", "every seated player must be ready");
+        return;
+    }
     room.started = true;
     let deal = crate::game::opening_hand(&room.game);
     for p in room.players.iter_mut() {
@@ -606,6 +668,85 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
     send_timeline(app, &room);
 }
 
+fn room_ready(app: &Arc<App>, user: &db::User, ready: bool, tx: &Tx) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        send_err(tx, "not_in_room", "you are not in a room");
+        return;
+    };
+    if rref.spectating {
+        send_err(tx, "forbidden", "spectators cannot ready a seat");
+        return;
+    }
+    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
+        send_err(tx, "room_not_found", "no such room");
+        return;
+    };
+    if room.started {
+        send_err(tx, "already_started", "the game has already started");
+        return;
+    }
+    let Some(player) = room.players.iter_mut().find(|p| p.user_id == user.id) else {
+        send_err(tx, "not_seated", "you are not seated in this room");
+        return;
+    };
+    if ready && player.deck_id.is_none() {
+        send_err(tx, "deck_required", "choose a deck before marking ready");
+        return;
+    }
+    if player.ready != ready {
+        player.ready = ready;
+        rooms::touch(app, &mut room);
+        room_send_states(app, &room);
+    }
+}
+
+fn room_deck_set(app: &Arc<App>, user: &db::User, deck_id: &str, tx: &Tx) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        send_err(tx, "not_in_room", "you are not in a room");
+        return;
+    };
+    if rref.spectating {
+        send_err(tx, "forbidden", "spectators cannot choose a deck");
+        return;
+    }
+    let Some(deck) = db::deck_get(&app.db.lock().unwrap(), deck_id) else {
+        send_err(tx, "deck_not_found", "deck not found");
+        return;
+    };
+    if deck.user_id != user.id {
+        send_err(tx, "forbidden", "that deck does not belong to you");
+        return;
+    }
+    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
+        send_err(tx, "room_not_found", "no such room");
+        return;
+    };
+    if room.started {
+        send_err(tx, "already_started", "the game has already started");
+        return;
+    }
+    if deck.game != room.game {
+        send_err(tx, "wrong_game", "deck does not match this table's game");
+        return;
+    }
+    let (command, library) = rooms::build_zones(&deck.cards(), room.format == "commander", &room.game);
+    let Some(player) = room.players.iter_mut().find(|p| p.user_id == user.id) else {
+        send_err(tx, "not_seated", "you are not seated in this room");
+        return;
+    };
+    player.deck_id = Some(deck.id);
+    player.deck_name = Some(deck.name);
+    player.command = command;
+    player.library = library;
+    player.hand.clear();
+    player.battlefield.clear();
+    player.graveyard.clear();
+    player.exile.clear();
+    player.ready = false;
+    rooms::touch(app, &mut room);
+    room_send_states(app, &room);
+}
+
 fn chat_send(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
     let text = text.trim();
     if text.is_empty() {
@@ -627,6 +768,125 @@ fn chat_send(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
             "from": {"userId": user.id, "username": user.username},
             "text": text,
             "ts": crate::now_ms(),
+        }),
+    );
+}
+
+fn room_ping(app: &Arc<App>, user: &db::User, target_user_id: &str, tx: &Tx) {
+    const COOLDOWN_MS: i64 = 3_000;
+
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        send_err(tx, "not_in_room", "you are not in a room");
+        return;
+    };
+    if rref.spectating {
+        send_err(tx, "forbidden", "spectators cannot ping players");
+        return;
+    }
+    let Some(room) = app.rooms.get(&rref.room_id) else {
+        send_err(tx, "room_not_found", "no such room");
+        return;
+    };
+    if !room.players.iter().any(|player| player.user_id == user.id) {
+        send_err(tx, "not_seated", "you are not seated in this room");
+        return;
+    }
+    if target_user_id == user.id {
+        send_err(tx, "invalid_ping_target", "you cannot ping yourself");
+        return;
+    }
+    let Some(target) = room.players.iter().find(|player| player.user_id == target_user_id) else {
+        send_err(tx, "invalid_ping_target", "that player is not seated in this room");
+        return;
+    };
+    if !target.online {
+        send_err(tx, "player_offline", "that player is offline");
+        return;
+    }
+    if target.conceded {
+        send_err(tx, "invalid_ping_target", "that player has conceded");
+        return;
+    }
+    let target_id = target.user_id.clone();
+    let target_name = target.username.clone();
+    let now = crate::now_ms();
+    if let Some(last) = app.ping_at.get(&user.id) {
+        if now.saturating_sub(*last) < COOLDOWN_MS {
+            send_err(tx, "ping_cooldown", "wait before pinging again");
+            return;
+        }
+    }
+    app.ping_at.insert(user.id.clone(), now);
+    let message = json!({
+        "type": "room.ping",
+        "from": {"userId": user.id, "username": user.username},
+        "to": {"userId": target_id, "username": target_name},
+        "ts": now,
+        "roomId": room.id,
+    });
+    send_user(app, &user.id, &message);
+    send_user(app, &target_id, &message);
+}
+
+fn room_hand_hover(app: &Arc<App>, user: &db::User, position: Option<f64>, tx: &Tx) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        send_err(tx, "not_in_room", "you are not in a room");
+        return;
+    };
+    if rref.spectating {
+        send_err(tx, "forbidden", "spectators do not have a hand");
+        return;
+    }
+    let Some(room) = app.rooms.get(&rref.room_id) else {
+        send_err(tx, "room_not_found", "no such room");
+        return;
+    };
+    if !room.started || !room.players.iter().any(|player| player.user_id == user.id) {
+        return;
+    }
+    let position = position.map(|value| value.clamp(0.0, 1.0));
+    room_send_all(
+        app,
+        &room,
+        &json!({
+            "type": "room.hand.hover",
+            "fromUserId": user.id,
+            "position": position,
+        }),
+    );
+}
+
+/// Live table pointer relay: broadcast the sender's normalized position and the
+/// card they are hovering to everyone in the room. Ephemeral - nothing is
+/// stored and it never enters the game state.
+fn cursor_move(app: &Arc<App>, user: &db::User, x: f64, y: f64, hover: Option<String>, tx: &Tx) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        send_err(tx, "not_in_room", "you are not in a room");
+        return;
+    };
+    if rref.spectating {
+        return;
+    }
+    let Some(room) = app.rooms.get(&rref.room_id) else {
+        return;
+    };
+    let Some(player) = room.players.iter().find(|p| p.user_id == user.id) else {
+        return;
+    };
+    if !room.started {
+        return;
+    }
+    room_send_all(
+        app,
+        &room,
+        &json!({
+            "type": "cursor",
+            "fromUserId": user.id,
+            "username": player.username,
+            "seat": player.seat,
+            "x": x.clamp(0.0, 1.0),
+            "y": y.clamp(0.0, 1.0),
+            "hover": hover,
         }),
     );
 }
@@ -879,13 +1139,16 @@ pub fn maybe_finish_match(app: &App, room: &mut Room) {
 }
 
 /// The bundled playmat ids (client's src/app/data/playmats.ts); a player's
-/// chosen mat must be one of these.
-const PLAYMATS: [&str; 25] = [
+/// chosen mat must be one of these. Includes the solid-color token mats.
+const PLAYMATS: [&str; 39] = [
     "arcane-study", "tavern", "house-felt", "plains", "island", "swamp", "mountain",
     "forest", "confluence", "marble", "boneyard", "forgefloor", "fae-glade",
     "planar-sky", "neon-grid",
     "aurora-drift", "deep-field", "felted-field", "heirloom-table", "quarry-slab",
     "back-alley", "corporate-arcology", "neon-megacity", "rain-ramen", "the-net",
+    "burgundy-dotted", "navy-dotted", "slate-plus", "tan-dotted",
+    "solid-blue", "solid-teal", "solid-green", "solid-amber", "solid-red",
+    "solid-purple", "solid-graphite", "solid-ink", "solid-slate", "solid-surface",
 ];
 
 /// A player's chosen playmat, mirrored into the room so every client can show

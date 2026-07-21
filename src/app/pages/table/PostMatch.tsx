@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Avatar, Button, Text, Size, TextTone, Tooltip } from '@glacier/react';
-import { Crown, LogOut, Skull, ThumbsUp, Timer, Trophy } from '@glacier/icons';
+import { Crown, Download, Grid3X3, Layers, LogOut, Play, Skull, ThumbsUp, Timer, Trophy } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import * as api from '../../net/api.ts';
 import { SaltPile } from '../../components/SaltPile.tsx';
@@ -207,6 +207,22 @@ export function PostMatch({
                       <Timer size={12} /> {fmtTurn(p.avgTurnMs)}
                       {t('pmPerTurn')}
                     </span>
+                    {s && s.allTimeAvgTurnMs > 0 && (
+                      <span className="pmStat" title={t('pmUsualTurn')}>
+                        <Timer size={12} /> {fmtTurn(s.allTimeAvgTurnMs)} {t('pmUsual')}
+                      </span>
+                    )}
+                    <span className="pmStat" title={t('pmCardsPlayed')}>
+                      <Layers size={12} /> {p.cardsPlayed}
+                    </span>
+                    <span className="pmStat" title={t('pmCardsDrawn')}>
+                      <Download size={12} /> {p.cardsDrawn}
+                    </span>
+                    {p.peakBattlefield > 0 && (
+                      <span className="pmStat" title={t('pmPeakBoard')}>
+                        <Grid3X3 size={12} /> {p.peakBattlefield}
+                      </span>
+                    )}
                     {s && (
                       <span className="pmStat" title={t('pmRecord')}>
                         {s.wins}
@@ -224,6 +240,12 @@ export function PostMatch({
                         {t('pmDeckWord')} {s.deck.wins}
                         {t('pmWinAbbr')} · {s.deck.losses}
                         {t('pmLossAbbr')}
+                      </span>
+                    )}
+                    {s?.deck && s.deck.avgCardsPerTurn > 0 && (
+                      <span className="pmStat" title={t('pmDeckCardsPerTurn')}>
+                        <Layers size={12} /> {s.deck.avgCardsPerTurn.toFixed(1)}
+                        {t('pmPerTurn')}
                       </span>
                     )}
                     {s?.deck && s.deck.saltCount > 0 && (
@@ -274,6 +296,15 @@ export function PostMatch({
         </div>
 
         <div className="pmFooter">
+          <Button
+            variant="solid"
+            onClick={() => {
+              setDismissed(true);
+              window.dispatchEvent(new Event('pc:watch-replay'));
+            }}
+          >
+            <Play size={14} /> {t('gpWatchReplay')}
+          </Button>
           <Button variant="soft" onClick={() => setDismissed(true)}>
             {t('pmBack')}
           </Button>

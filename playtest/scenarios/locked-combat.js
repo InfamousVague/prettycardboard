@@ -11,7 +11,7 @@
 // "dead" creatures are removed by hand (tokens cease); combat.end clears the
 // overlay to main2 without touching life; combat also clears on turn change;
 // and no combat.results frame is ever emitted.
-import { PlaytestClient, Assert, deleteRoom } from '../lib.js';
+import { PlaytestClient, Assert, deleteRoom, readyAll } from '../lib.js';
 import { ensureSeed, PASSWORD } from '../seed.js';
 
 /** Mint a token and return its iid from the room.event payload (no resync). */
@@ -52,6 +52,7 @@ async function main() {
   bob.joinRoom(roomId, seeded.pt_bob.deckId);
   await bob.expectState((s) => s.players.length === 2, 'bob seated', 5000, { since: m });
 
+  await readyAll([alice, bob]);
   m = alice.mark();
   alice.send({ type: 'room.start' });
   await alice.expectState((s) => s.started, 'started', 5000, { since: m });
@@ -156,7 +157,14 @@ async function main() {
   m = alice.mark();
   alice.act({ kind: 'combat.begin' });
   await alice.expectState((s) => s.combat != null, 'combat 3 begun', 5000, { since: m });
+  const mBobFrail = bob.mark();
   alice.act({ kind: 'combat.attack', iid: frail, defenderSeat: 1, power: '3', toughness: '3' });
+  await bob.expectState(
+    (s) => s.combat?.attackers?.some((attacker) => attacker.iid === frail),
+    'bob sees the frail attacker',
+    5000,
+    { since: mBobFrail },
+  );
   m = bob.mark();
   bob.act({ kind: 'combat.block', blockerIid: ogre, attackerIid: frail, power: '4', toughness: '4' });
   await bob.expectState((s) => s.combat?.blocks?.length === 1, 'ogre (4/4) blocks the frail (3/3)', 5000, { since: m });

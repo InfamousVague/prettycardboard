@@ -92,21 +92,49 @@ export function isCreature(card: CardInst): boolean {
   return card.power != null && card.toughness != null;
 }
 
+const PT_COUNTER = /^([+-]?\d+)\/([+-]?\d+)$/;
+
+export function parsePtCounter(counter: string): { power: number; toughness: number } | null {
+  const match = PT_COUNTER.exec(counter.trim());
+  if (!match) return null;
+  const power = Number.parseInt(match[1]!, 10);
+  const toughness = Number.parseInt(match[2]!, 10);
+  return Number.isFinite(power) && Number.isFinite(toughness) ? { power, toughness } : null;
+}
+
+const signed = (value: number) => (value >= 0 ? `+${value}` : String(value));
+
+export function formatPtCounter(power: number, toughness: number): string {
+  return `${signed(Math.trunc(power))}/${signed(Math.trunc(toughness))}`;
+}
+
+export function ptCounterModifier(counters: Record<string, number>): { power: number; toughness: number } {
+  let power = 0;
+  let toughness = 0;
+  for (const [kind, count] of Object.entries(counters)) {
+    const modifier = parsePtCounter(kind);
+    if (!modifier || count <= 0) continue;
+    power += modifier.power * count;
+    toughness += modifier.toughness * count;
+  }
+  return { power, toughness };
+}
+
 /**
- * Effective power/toughness for combat declarations: printed base plus +1/+1
- * and -1/-1 counters. Non-numeric bases (`*`) fall back to 0 - the player can
- * fix the outcome by hand, combat math just needs a number.
+ * Effective power/toughness for combat declarations: printed base plus every
+ * P/T-shaped counter (`+1/+1`, `+1/+6`, `-2/+0`, etc.). Non-numeric bases (`*`)
+ * fall back to 0 - the player can fix the outcome by hand, combat math just
+ * needs a number.
  */
 export function effectivePT(card: CardInst): { power: string; toughness: string } {
   const base = (value: string | undefined) => {
     const parsed = parseInt((value ?? '').trim(), 10);
     return Number.isFinite(parsed) ? parsed : 0;
   };
-  const plus = card.counters['+1/+1'] ?? 0;
-  const minus = card.counters['-1/-1'] ?? 0;
+  const modifier = ptCounterModifier(card.counters);
   return {
-    power: String(base(card.power) + plus - minus),
-    toughness: String(base(card.toughness) + plus - minus),
+    power: String(base(card.power) + modifier.power),
+    toughness: String(base(card.toughness) + modifier.toughness),
   };
 }
 

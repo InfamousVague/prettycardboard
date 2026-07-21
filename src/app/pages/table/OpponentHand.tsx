@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMotionValue } from 'motion/react';
 import { ChevronDown, ChevronUp } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
@@ -8,6 +8,7 @@ import { usePreference } from '../../hooks/usePreference.ts';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import { cardBackUrl, effectiveCardBack } from '../../data/cardBacks.ts';
 import type { CardInst, TablePlayer } from '../../net/types.ts';
+import { onMessage } from '../../net/ws.ts';
 import { HandCard, HAND_PEEK_ZONE } from './HandCard.tsx';
 
 /** A stand-in for a hidden hand slot; HandCard renders it as a back (faceDown),
@@ -40,10 +41,46 @@ export function OpponentHand({ player }: { player: TablePlayer }) {
   // This hand fans at screen level (outside the seat frame), so it must carry
   // its own owner's card back rather than inheriting the viewer's.
   const game = useGame((state) => state.room?.game);
+  const roomId = useGame((state) => state.room?.roomId);
   const backSrc = cardBackUrl(effectiveCardBack(player.cardBack ?? undefined, game));
-  const [peek, setPeek] = useState(false);
+  const [localPeek, setLocalPeek] = useState(false);
+  const [remotePeek, setRemotePeek] = useState(false);
   const [hidden, setHidden] = useState(false);
   const handX = useMotionValue(Number.POSITIVE_INFINITY);
+  const fanRef = useRef<HTMLDivElement>(null);
+  const localHover = useRef(false);
+  const remotePosition = useRef<number | null>(null);
+
+  const applyRemotePosition = (position: number | null) => {
+    if (position == null) {
+      handX.set(Number.POSITIVE_INFINITY);
+      return;
+    }
+    const rect = fanRef.current?.getBoundingClientRect();
+    const visualPosition = mirror ? 1 - position : position;
+    handX.set(rect ? rect.left + rect.width * visualPosition : Number.POSITIVE_INFINITY);
+  };
+
+  useEffect(() => {
+    if (!roomId) return;
+    return onMessage((message) => {
+      if (
+        message.type !== 'room.hand.hover' ||
+        message.roomId !== roomId ||
+        message.fromUserId !== player.userId
+      ) return;
+      remotePosition.current = message.position;
+      setRemotePeek(message.position != null);
+      if (!localHover.current) applyRemotePosition(message.position);
+    });
+  }, [roomId, player.userId, handX, mirror]);
+
+  useEffect(() => {
+    if (player.online !== false) return;
+    remotePosition.current = null;
+    setRemotePeek(false);
+    if (!localHover.current) handX.set(Number.POSITIVE_INFINITY);
+  }, [player.online, handX]);
 
   // Peek up whenever the pointer sits in the bottom band of the screen, and feed
   // the same pointer x to the dock-genie. Driven off a window listener (not the
@@ -51,13 +88,17 @@ export function OpponentHand({ player }: { player: TablePlayer }) {
   // blocks the opponent's piles behind it.
   useEffect(() => {
     const onMove = (event: PointerEvent) => {
-      const inBand = event.clientY > window.innerHeight - HAND_PEEK_ZONE;
-      setPeek(inBand);
-      handX.set(inBand ? event.clientX : Number.POSITIVE_INFINITY);
+      const inBand = mirror
+        ? event.clientY < HAND_PEEK_ZONE
+        : event.clientY > window.innerHeight - HAND_PEEK_ZONE;
+      localHover.current = inBand;
+      setLocalPeek(inBand);
+      if (inBand) handX.set(event.clientX);
+      else applyRemotePosition(remotePosition.current);
     };
     window.addEventListener('pointermove', onMove);
     return () => window.removeEventListener('pointermove', onMove);
-  }, [handX]);
+  }, [handX, mirror]);
 
   if (player.handCount <= 0) return null;
 
@@ -76,7 +117,12 @@ export function OpponentHand({ player }: { player: TablePlayer }) {
       style={{ ['--card-scale' as string]: cardScale, ['--pc-card-back' as string]: `url("${backSrc}")` }}
     >
       <div className="myHand">
-        <div className="myFan" data-peek={(peek && !hidden) || undefined} data-hidden={hidden || undefined}>
+        <div
+          ref={fanRef}
+          className="myFan"
+          data-peek={((localPeek || remotePeek) && !hidden) || undefined}
+          data-hidden={hidden || undefined}
+        >
           {slots.map((slot, index) => (
             <HandCard
               key={slot.card.iid}

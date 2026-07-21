@@ -600,6 +600,7 @@ pub async fn room_create(
         markers: Default::default(),
         pending_cmd: Vec::new(),
         turn_started_ms: 0,
+        turn_last_interaction_ms: 0,
         started_at_ms: 0,
         started_players: 0,
         match_result: None,
@@ -817,11 +818,16 @@ pub async fn match_stats(
             let deck = p.deck_id.as_ref().map(|deck_id| {
                 let (dw, dl) = db::deck_match_counts(&conn, deck_id);
                 let (salt_x100, salt_count) = db::deck_salt(&conn, deck_id);
+                let (avg_cards_per_turn, avg_cards_drawn, avg_peak_battlefield) =
+                    db::deck_gameplay_stats(&conn, deck_id);
                 json!({
                     "wins": dw,
                     "losses": dl,
                     "salt": salt_x100 as f64 / 100.0,
                     "saltCount": salt_count,
+                    "avgCardsPerTurn": avg_cards_per_turn,
+                    "avgCardsDrawn": avg_cards_drawn,
+                    "avgPeakBattlefield": avg_peak_battlefield,
                 })
             });
             json!({
@@ -835,6 +841,9 @@ pub async fn match_stats(
                 "conceded": p.conceded,
                 "turnsTaken": p.turns_taken,
                 "avgTurnMs": p.avg_turn_ms,
+                "cardsPlayed": p.cards_played,
+                "cardsDrawn": p.cards_drawn,
+                "peakBattlefield": p.peak_battlefield,
                 "wins": wins,
                 "losses": losses,
                 "endorsements": db::user_endorsement_count(&conn, &p.user_id),

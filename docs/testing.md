@@ -13,7 +13,7 @@ cd playtest
 node run-all.js                 # the standard suite
 ```
 
-`run-all.js` runs, in order: `seed`, `commander-pod`, `standard-duel`,
+`run-all.js` runs, in order: `seed`, `lobby-mana`, `commander-pod`, `standard-duel`,
 `chaos-monkey`, `locked-combat`, and prints a summary table (exit code reflects
 failures). `restart-resume` is intentionally excluded (it kills and relaunches
 the server) — run it with `npm run restart`. The AI match is a dev-feature test —
@@ -35,6 +35,7 @@ out of your dev database.
 | Scenario | Focus |
 |----------|-------|
 | `seed` | Creates the idempotent `pt_*` users + decks the others reuse. |
+| `lobby-mana` | Readiness, deck privacy/switching, reconnect gates, spectator denial, and public owner-only mana. |
 | `commander-pod` | A 3–4 player Commander pod: zones, tax, command zone, mulligans. |
 | `standard-duel` | A 2-player game: turns, phases, the stack, life. |
 | `chaos-monkey` | High-volume random-ish actions; shakes out state desyncs. |
@@ -49,7 +50,7 @@ The client mirrors the real one: `connect()`, `joinRoom()`, `act()`, plus
 `await`-able expectations that poll the socket.
 
 ```js
-import { PlaytestClient, Assert } from './lib.js';
+import { PlaytestClient, Assert, readyAll } from './lib.js';
 import { ensureSeed, PASSWORD } from './seed.js';
 
 const t = new Assert('my-scenario');
@@ -61,6 +62,7 @@ await alice.connect();
 const room = await alice.api('POST', '/api/rooms', { name: 'demo', seats: 2, format: 'commander' });
 alice.joinRoom(room.json.roomId, seeded.pt_alice.deckId);
 await alice.expectState((s) => s.players.length === 1, 'alice seated');
+await readyAll([alice]);
 
 alice.act({ kind: 'mull.keep', bottomIids: [] });
 // ... drive the game, assert with t.ok(...) / expectState / expectLog ...
@@ -72,7 +74,10 @@ process.exit(result.failed ? 1 : 0);
 Key `PlaytestClient` methods:
 
 - `api(method, path, body)` — REST call with auth.
-- `connect()` / `joinRoom(id, deckId)` / `act(action)` / `send(msg)`.
+- `connect()` / `joinRoom(id, deckId)` / `spectateRoom(id)` / `setReady()` /
+  `act(action)` / `send(msg)`.
+- `readyAll(clients)` — marks every seated client ready and waits for the
+  authoritative lobby snapshot before `room.start`.
 - `mark()` — returns the current message index; pass as `{ since }` to scope an
   expectation to messages that arrive *after* now.
 - `expectState(pred, label, timeoutMs, { since })` — resolve when a `room.state`

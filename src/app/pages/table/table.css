@@ -33,12 +33,13 @@
   position: absolute;
   inset: 0;
   z-index: 0;
-  /* The player's playmat IS the table surface; the gradients above it keep the
-     accent wash and enough darkness for card readability on any mat. */
+  /* The table surface uses the app's theme background instead of the playmat
+     art (which read as distracting under the cards); the gradients above keep
+     the accent wash and enough depth for card readability on any theme. */
   background:
     radial-gradient(120% 90% at 50% 0%, color-mix(in oklch, var(--glacier-accent-solid) 12%, transparent), transparent 60%),
     radial-gradient(140% 120% at 50% 110%, oklch(0.17 0.03 265 / 0.55), oklch(0.13 0.02 268 / 0.6) 55%, oklch(0.1 0.015 270 / 0.72) 100%),
-    var(--pc-playmat);
+    linear-gradient(var(--glacier-bg), var(--glacier-bg));
   background-size: cover, cover, cover;
   background-position: center;
 }
@@ -114,18 +115,13 @@
   min-width: 0;
 }
 
-/* The action labels collapse to icons first (tooltips carry the names), then the
-   room code and commander-damage read-out drop (both live elsewhere too), so the
-   turn/attack/end-turn ribbon and the essential buttons always fit one row. */
+/* Contextual action labels collapse before they can crowd the turn ribbon. */
 @container tabletop (max-width: 1080px) {
   .tableTopActions .ttActionLabel {
     display: none;
   }
 }
 @container tabletop (max-width: 860px) {
-  .tableTop .cmdBar {
-    display: none;
-  }
   .tableCode kbd {
     display: none;
   }
@@ -322,6 +318,320 @@
   pointer-events: auto;
 }
 
+.tableMain[data-lobby] {
+  padding-inline-end: 0;
+  overflow: auto;
+}
+
+/* ---- pregame lobby ---- */
+
+.pregameLobby {
+  flex: 1;
+  width: min(72rem, 100%);
+  min-height: 0;
+  margin-inline: auto;
+  padding: var(--glacier-space-5) var(--glacier-space-6) var(--glacier-space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-5);
+  overflow: auto;
+}
+
+.pregameHero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--glacier-space-4);
+  padding-block-end: var(--glacier-space-4);
+  border-block-end: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
+}
+
+.pregameHeading {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+}
+
+.pregameKicker {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  color: var(--glacier-text-muted);
+  font-size: var(--glacier-font-size-xs);
+  text-transform: capitalize;
+  letter-spacing: 0;
+}
+
+.pregameTitle {
+  margin: 0;
+  color: var(--glacier-text);
+  font-family: var(--glacier-font-display, var(--glacier-font-sans));
+  font-size: 1.75rem;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.pregameSeats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: var(--glacier-space-3);
+}
+
+.pregameSeat {
+  min-width: 0;
+  min-height: 10rem;
+  padding: var(--glacier-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-3);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 72%, transparent);
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--glacier-surface-raised) 76%, transparent);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+  transition: border-color 160ms ease-out, background 160ms ease-out, opacity 160ms ease-out;
+}
+
+.pregameSeat[data-ready] {
+  border-color: color-mix(in oklch, var(--glacier-success-solid, #4ade80) 62%, var(--glacier-border));
+  background: color-mix(in oklch, var(--glacier-success-solid, #4ade80) 8%, var(--glacier-surface-raised));
+}
+
+.pregameSeat[data-offline] {
+  opacity: 0.62;
+}
+
+.pregameSeatNumber {
+  color: var(--glacier-text-subtle);
+  font-family: var(--glacier-font-mono);
+  font-size: 0.65rem;
+  font-weight: var(--glacier-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.pregameIdentity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+.pregamePlayerName {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pregamePlayerName > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pregameBadges {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  flex-wrap: wrap;
+}
+
+.pregameDeck,
+.pregameReady {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  min-width: 0;
+  color: var(--glacier-text-muted);
+  font-size: var(--glacier-font-size-xs);
+}
+
+.pregameDeck {
+  margin-block-start: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pregameDeck[data-empty] {
+  color: var(--glacier-warning-text, var(--glacier-text-muted));
+}
+
+.pregameReady[data-ready] {
+  color: var(--glacier-success-text, #7ee2a8);
+  font-weight: var(--glacier-font-weight-semibold);
+}
+
+.pregameSeatEmpty {
+  align-items: center;
+  justify-content: center;
+  color: var(--glacier-text-subtle);
+  border-style: dashed;
+  background: color-mix(in oklch, var(--glacier-surface-sunken) 50%, transparent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pregameSeatEmpty .pregameSeatNumber {
+  align-self: stretch;
+  text-align: start;
+}
+
+.pregameSeatEmpty:hover {
+  color: var(--glacier-text);
+  border-color: var(--glacier-accent-border);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 8%, var(--glacier-surface-sunken));
+}
+
+.pregameControls {
+  margin-block-start: auto;
+  padding-block-start: var(--glacier-space-5);
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(16rem, 0.75fr);
+  gap: var(--glacier-space-5);
+  border-block-start: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
+}
+
+.pregameDeckSetup {
+  position: relative;
+  isolation: isolate;
+  min-height: 8rem;
+  padding: var(--glacier-space-4);
+  display: flex;
+  align-items: flex-end;
+  gap: var(--glacier-space-4);
+  overflow: hidden;
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  border-radius: 8px;
+  background: var(--glacier-surface-raised);
+}
+
+.pregameDeckSetup[data-has-art]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-image: var(--pregame-deck-art);
+  background-size: cover;
+  background-position: center 35%;
+  opacity: 0.42;
+}
+
+.pregameDeckSetup[data-has-art]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(90deg, var(--glacier-surface-raised) 0 44%, color-mix(in oklch, var(--glacier-surface-raised) 74%, transparent));
+}
+
+.pregameDeckSetupBody {
+  flex: 1;
+  min-width: 0;
+  max-width: 27rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+}
+
+.pregameDeckLabel {
+  color: var(--glacier-text);
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-semibold);
+}
+
+.pregameReadyButton {
+  flex: none;
+}
+
+.pregameWatching {
+  min-height: 8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--glacier-space-2);
+  color: var(--glacier-text-muted);
+  border: var(--glacier-hairline) dashed var(--glacier-border);
+  border-radius: 8px;
+}
+
+.pregameLaunch {
+  padding-inline-start: var(--glacier-space-5);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: var(--glacier-space-3);
+  border-inline-start: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
+}
+
+.pregameLaunchStatus,
+.pregameLaunch > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+.pregameLaunchStatus {
+  color: var(--glacier-text-muted);
+  font-size: var(--glacier-font-size-sm);
+}
+
+.pregameLaunch[data-ready] .pregameLaunchStatus {
+  color: var(--glacier-success-text, #7ee2a8);
+  font-weight: var(--glacier-font-weight-semibold);
+}
+
+.pregameSpectators {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--glacier-space-2);
+  flex-wrap: wrap;
+  color: var(--glacier-text-subtle);
+  font-size: var(--glacier-font-size-xs);
+}
+
+@media (max-width: 900px) {
+  .pregameLobby {
+    padding-inline: var(--glacier-space-4);
+  }
+
+  .pregameControls {
+    grid-template-columns: 1fr;
+  }
+
+  .pregameLaunch {
+    padding: var(--glacier-space-4) 0 0;
+    border-inline-start: 0;
+    border-block-start: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
+  }
+}
+
+@media (max-width: 620px) {
+  .pregameHero,
+  .pregameDeckSetup {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pregameHero > button,
+  .pregameReadyButton {
+    width: 100%;
+  }
+
+  .pregameSeats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .pregameSeats {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---- opponents ---- */
 
 .tableOpponents {
@@ -460,9 +770,9 @@
   /* Own stacking context: per-card z-order (newest on top) is contained here and
      can never climb over the hand/pile strip (z-34) or the drag ghost. */
   isolation: isolate;
-  /* The playmat sits INSIDE a glowing card floating on the felt: its own mat
-     background, a rounded border, and an accent glow. The hand/deck/HUD float
-     over its lower band (which is reserved - no cards land there). */
+  /* The playmat sits INSIDE a glowing card floating on the (black) felt: it
+     shows the player's selected playmat artwork, with a subtle gradient over it
+     for depth. The hand/deck/HUD float over its lower band. */
   margin: var(--glacier-space-3);
   border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
   border-radius: var(--pc-mat-radius);
@@ -472,14 +782,104 @@
     var(--pc-board-mat, linear-gradient(oklch(0.16 0.02 265), oklch(0.13 0.02 268)));
   background-size: cover, cover;
   background-position: center;
-  box-shadow: var(--pc-mat-shadow);
+  /* Resting (not your turn): a neutral shadow only — no accent bloom, so the
+     board never glows blue off-turn. The accent glow + moving backlight come in
+     on [data-my-turn]. */
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--glacier-border) 28%, transparent),
+    0 20px 55px oklch(0.05 0.02 265 / 0.55);
   transition: box-shadow 240ms ease-out, border-color 240ms ease-out;
 }
 
-/* On your turn the card's border and glow warm to the accent. */
+/* On your turn the card's border warms to the accent; the moving backlight
+   below supplies the glow, so the static bloom here stays gentle. */
+.myBoard[data-my-turn] {
+  isolation: isolate;
+}
+
 .myBoard[data-my-turn] .myField {
   border-color: color-mix(in oklch, var(--glacier-accent-solid) 50%, var(--glacier-border));
-  box-shadow: var(--pc-mat-shadow-active);
+  box-shadow: var(--pc-mat-shadow);
+  z-index: 1;
+}
+
+/* Living backlight: on your turn, two soft accent lights of differing opacity
+   drift organically BEHIND the playmat and spill a slow-moving glow out past
+   its edges - a lamp wandering behind the mat, not a pulse. Transform-only
+   (GPU-composited), and stilled for reduced motion. */
+.myBoard[data-my-turn]::before,
+.myBoard[data-my-turn]::after {
+  content: '';
+  position: absolute;
+  inset: calc(var(--glacier-space-3) - 16px);
+  z-index: 0;
+  pointer-events: none;
+  border-radius: calc(var(--pc-mat-radius) + 16px);
+  filter: blur(30px);
+  will-change: transform;
+}
+
+.myBoard[data-my-turn]::before {
+  background: radial-gradient(
+    46% 46% at 50% 50%,
+    color-mix(in oklch, var(--glacier-accent-solid) 66%, transparent),
+    transparent 70%
+  );
+  opacity: 0.85;
+  animation: pcMatLightA 16s ease-in-out infinite;
+}
+
+.myBoard[data-my-turn]::after {
+  background: radial-gradient(
+    40% 40% at 50% 50%,
+    color-mix(in oklch, var(--glacier-accent-solid) 48%, transparent),
+    transparent 72%
+  );
+  opacity: 0.5;
+  animation: pcMatLightB 23s ease-in-out infinite;
+}
+
+@keyframes pcMatLightA {
+  0% {
+    transform: translate3d(-7%, -5%, 0);
+  }
+  25% {
+    transform: translate3d(6%, -7%, 0);
+  }
+  50% {
+    transform: translate3d(8%, 6%, 0);
+  }
+  75% {
+    transform: translate3d(-5%, 7%, 0);
+  }
+  100% {
+    transform: translate3d(-7%, -5%, 0);
+  }
+}
+
+@keyframes pcMatLightB {
+  0% {
+    transform: translate3d(7%, 6%, 0);
+  }
+  30% {
+    transform: translate3d(-6%, 7%, 0);
+  }
+  55% {
+    transform: translate3d(-8%, -6%, 0);
+  }
+  80% {
+    transform: translate3d(6%, -7%, 0);
+  }
+  100% {
+    transform: translate3d(7%, 6%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .myBoard[data-my-turn]::before,
+  .myBoard[data-my-turn]::after {
+    animation: none;
+  }
 }
 
 /* The one-shot "Your turn" pill, top-center under the ribbon. */
@@ -627,10 +1027,13 @@
   content: '';
   position: absolute;
   inset: -8px;
+  z-index: 0;
 }
 
 .fieldCardShell,
 .fieldCard > :first-child {
+  position: relative;
+  z-index: 1;
   transition: transform 320ms var(--pc-settle);
 }
 
@@ -675,6 +1078,54 @@
   100% {
     opacity: 1;
     scale: 1;
+  }
+}
+
+/* Ambient card motion (Settings -> Table -> Ambient card motion): an opt-in,
+   very subtle continuous idle drift plus a slow light sheen so battlefield
+   cards catch the light and show off holographic art. Always yields to hover,
+   press, and drag, and never runs under reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-reduce-motion]) .fieldCard[data-ambient] .fieldCardShell {
+    animation: pcCardDrift 9s ease-in-out infinite;
+    animation-delay: var(--ambient-delay, 0s);
+  }
+
+  :root:not([data-reduce-motion]) .fieldCard[data-ambient] .gcArt {
+    animation: pcCardSheen 9s ease-in-out infinite;
+    animation-delay: var(--ambient-delay, 0s);
+  }
+
+  .fieldCard[data-ambient]:hover .fieldCardShell,
+  .fieldCard[data-ambient]:active .fieldCardShell,
+  .fieldCard[data-ambient][data-dragging] .fieldCardShell {
+    animation: none;
+  }
+}
+
+@keyframes pcCardDrift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  20% {
+    transform: translate3d(0.8px, -1.4px, 0) rotate(0.35deg);
+  }
+  50% {
+    transform: translate3d(0, -0.8px, 0) rotate(-0.28deg);
+  }
+  80% {
+    transform: translate3d(-0.8px, -1.4px, 0) rotate(0.22deg);
+  }
+}
+
+@keyframes pcCardSheen {
+  0%,
+  100% {
+    filter: none;
+  }
+  50% {
+    filter: brightness(1.07) saturate(1.06);
   }
 }
 
@@ -1399,6 +1850,27 @@
   font-variant-numeric: tabular-nums;
 }
 
+.manaReadout {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.manaReadoutPip {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  color: var(--glacier-text-muted);
+  font-family: var(--glacier-font-mono);
+  font-size: 0.65rem;
+  font-weight: var(--glacier-font-weight-semibold);
+}
+
+.manaReadoutPip > img {
+  flex: none;
+}
+
 /* Sidebar dice tray (Magic): compact d20…d4 + coin, rolling the 3D mat dice. */
 .diceTray {
   align-self: stretch;
@@ -1423,7 +1895,10 @@
 .diceTrayDie {
   flex: 1 1 2.3rem;
   min-width: 2.3rem;
-  padding: 0.28rem 0.3rem;
+  min-height: 2.3rem;
+  display: grid;
+  place-items: center;
+  padding: 0.2rem;
   border-radius: var(--glacier-radius-md);
   border: var(--glacier-hairline) solid var(--glacier-border);
   background: var(--glacier-surface-sunken);
@@ -1433,6 +1908,9 @@
   font-weight: var(--glacier-font-weight-semibold);
   cursor: pointer;
   transition: background 120ms, border-color 120ms, transform 80ms;
+}
+.diceTrayDie > svg {
+  display: block;
 }
 .diceTrayDie:hover {
   border-color: var(--glacier-accent-border);
@@ -1454,6 +1932,52 @@
   display: flex;
   gap: 2px;
   z-index: 2;
+}
+
+.counterBadges[data-empty] {
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.fieldCard:hover .counterBadges[data-empty],
+.counterBadges[data-empty]:focus-within {
+  opacity: 1;
+}
+
+.counterManagerTrigger {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 1.35rem;
+  min-height: 1.35rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--glacier-radius-full);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.counterManagerTrigger:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+
+.counterManagerTrigger:hover .counterBadge,
+.counterManagerTrigger:hover .counterPill {
+  outline: 2px solid color-mix(in oklch, white 72%, transparent);
+  outline-offset: 1px;
+}
+
+.counterEmptyPlus {
+  display: grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: var(--glacier-radius-full);
+  color: white;
+  background: color-mix(in oklch, var(--glacier-accent-solid) 88%, black);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
 .counterBadge {
@@ -1498,13 +2022,124 @@
   font-weight: var(--glacier-font-weight-medium);
 }
 
+.counterPopover {
+  width: min(20rem, calc(100vw - 1rem));
+}
+
+.counterPopover {
+  width: max-content;
+  max-width: min(26rem, calc(100vw - 1.5rem));
+}
+
+.counterManager {
+  display: grid;
+  gap: 0.85rem;
+  min-width: 15rem;
+  max-width: min(26rem, calc(100vw - 1.5rem));
+  padding: 0.25rem;
+}
+
+.counterManagerHead {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  font-size: 0.82rem;
+}
+
+.counterManagerSection {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.counterManagerLabel {
+  color: var(--glacier-text-muted);
+  font-size: 0.66rem;
+  font-weight: var(--glacier-font-weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.counterManagerEmpty {
+  margin: 0;
+  color: var(--glacier-text-muted);
+  font-size: 0.75rem;
+}
+
+.counterQuickAdds {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+
+.counterManagerList {
+  display: grid;
+  gap: 0.35rem;
+  max-height: 11rem;
+  overflow-y: auto;
+}
+
+.counterManagerRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7.6rem 2rem;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.counterPtRow {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.counterPtControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2rem;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.counterPtInputs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+.counterPtSlash {
+  color: var(--glacier-text-muted);
+  font: var(--glacier-font-weight-bold) 1rem/1 var(--glacier-font-mono);
+}
+
+.counterManagerName {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--glacier-text-secondary);
+  font-size: 0.75rem;
+  font-weight: var(--glacier-font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.counterNamedAdd {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.4rem;
+}
+
+@media (hover: none) {
+  .counterBadges[data-empty] {
+    opacity: 1;
+  }
+}
+
 /* ---- context menu ---- */
 
 .cardMenu {
   position: fixed;
   z-index: 90;
   display: grid;
-  min-width: 12rem;
+  width: min(15rem, calc(100vw - 1rem));
+  min-width: 0;
   max-height: min(26rem, 80vh);
   overflow-y: auto;
   padding: var(--glacier-space-1);
@@ -1514,16 +2149,124 @@
   box-shadow: var(--glacier-shadow-4, 0 12px 32px rgba(0, 0, 0, 0.5));
 }
 
+.cardMenuCompact {
+  width: min(13rem, calc(100vw - 1rem));
+}
+
+.menuCardHeader {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-1) var(--glacier-space-1) var(--glacier-space-2);
+  margin-block-end: var(--glacier-space-1);
+  border-block-end: var(--glacier-hairline) solid var(--glacier-border);
+}
+
+.menuCardThumb {
+  width: 2rem;
+  height: 2.75rem;
+  display: grid;
+  place-items: center;
+  object-fit: cover;
+  border-radius: 3px;
+  background: var(--glacier-surface-sunken);
+}
+
+.menuCardThumbFallback {
+  color: var(--glacier-text-subtle);
+}
+
+.menuCardIdentity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.menuCardName {
+  overflow: hidden;
+  color: var(--glacier-text);
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menuCardZone {
+  color: var(--glacier-text-subtle);
+  font-size: var(--glacier-font-size-xs);
+}
+
+.menuQuickActions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--glacier-space-1);
+  padding: 0 var(--glacier-space-1) var(--glacier-space-1);
+}
+
+.menuQuickAction {
+  min-width: 0;
+  min-height: 3.25rem;
+  padding: var(--glacier-space-2) var(--glacier-space-1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  border-radius: var(--glacier-radius-sm);
+  color: var(--glacier-text-muted);
+  background: var(--glacier-surface-sunken);
+  font: inherit;
+  font-size: var(--glacier-font-size-xs);
+  cursor: pointer;
+}
+
+.menuQuickAction:hover {
+  color: var(--glacier-text);
+  border-color: var(--glacier-accent-border);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 9%, var(--glacier-surface-sunken));
+}
+
+.menuQuickAction > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .menuItem {
+  width: 100%;
+  min-height: 2rem;
+  display: grid;
+  grid-template-columns: 1.15rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--glacier-space-2);
   text-align: start;
   border: none;
   background: none;
   color: var(--glacier-text);
   font-family: var(--glacier-font-sans);
   font-size: var(--glacier-font-size-sm);
-  padding: var(--glacier-space-2) var(--glacier-space-3);
+  padding: 0.4rem var(--glacier-space-2);
   border-radius: var(--glacier-radius-sm);
   cursor: pointer;
+}
+
+.menuItemIcon {
+  display: grid;
+  place-items: center;
+  color: var(--glacier-text-subtle);
+}
+
+.menuItem:hover .menuItemIcon {
+  color: var(--glacier-accent-text, var(--glacier-text));
+}
+
+.menuItemChevron {
+  color: var(--glacier-text-subtle);
+  transition: transform 120ms ease-out;
 }
 
 .menuItem:hover {
@@ -1534,9 +2277,13 @@
   background: var(--glacier-surface-sunken);
 }
 
+.menuExpander[data-open] .menuItemChevron {
+  transform: rotate(90deg);
+}
+
 .menuInset {
   display: grid;
-  margin-inline-start: var(--glacier-space-3);
+  margin-inline: var(--glacier-space-2) var(--glacier-space-1);
   border-inline-start: var(--glacier-hairline) solid var(--glacier-border);
   padding-inline-start: var(--glacier-space-1);
 }
@@ -1547,9 +2294,20 @@
 }
 
 .menuCustom {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--glacier-space-1);
   padding: var(--glacier-space-1) var(--glacier-space-2);
+}
+
+.menuSectionLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  padding: var(--glacier-space-2);
+  color: var(--glacier-text-subtle);
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
 }
 
 .menuRule {
@@ -1597,6 +2355,9 @@
   top: -8px;
   inset-inline-start: -4px;
   z-index: 4;
+  /* Decorative position label - never intercept the pointer, or it swallows the
+     hover preview over the card's top-left corner (matches the selection ring). */
+  pointer-events: none;
   display: grid;
   place-items: center;
   width: 1.2rem;
@@ -1858,7 +2619,7 @@
 
 /* ---- side dock ---- */
 
-/* The right rail is a transparent column of stacked cards: life, players, log. */
+/* The right rail owns a scrollable card stack and a pinned navigation row. */
 .tableSide {
   position: absolute;
   top: 4.4rem;
@@ -1868,17 +2629,52 @@
   display: flex;
   flex-direction: column;
   gap: var(--glacier-space-2);
+  overflow: hidden;
   pointer-events: none;
 }
 
-.tableSide > * {
+.tableSide[data-nav-only] {
+  top: auto;
+}
+
+.tableSideScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  pointer-events: auto;
+}
+
+.tableSideScroll > * {
+  flex-shrink: 0;
+  pointer-events: auto;
+}
+
+.tableSideNav {
+  flex: none;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: var(--glacier-space-1);
+  padding: var(--glacier-space-1);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
+  border-radius: 8px;
+  background: color-mix(in oklch, oklch(0.16 0.02 265) 92%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.38);
   pointer-events: auto;
 }
 
 /* The log card fills whatever height the life + players cards leave. */
 .sideLogCard {
-  flex: 1;
-  min-height: 6rem;
+  flex: 1 0 12rem;
+  min-height: 12rem;
   display: flex;
   flex-direction: column;
   gap: var(--glacier-space-2);
@@ -1892,7 +2688,7 @@
 
 .sideScroll {
   flex: 1;
-  min-height: 0;
+  min-height: 7rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -2046,6 +2842,10 @@
   border-radius: 50%;
   background: var(--glacier-info-solid);
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--glacier-info-solid) 25%, transparent);
+}
+
+.playerPing {
+  flex: none;
 }
 
 .sideSpectators {
@@ -3198,45 +3998,47 @@
   align-self: stretch;
 }
 
-/* ---- timeline transport bar (full-width, on demand) ---- */
+/* ---- timeline transport bar (floating, on demand) ---- */
 
-/* The scrubber breaks out of the narrow rail card into a bar spanning the whole
-   bottom edge, so moves get real width to breathe. Sits above the board and the
-   hand fan; while replaying it also floats over the read-only frame. Rendered
-   through a portal to document.body, so it is positioned against the viewport
-   regardless of the rail's stacking context. */
+/* The scrubber floats as a rounded card above the bottom edge, centered, with a
+   label on top and the event strip below. Rendered through a portal to
+   document.body, so it is positioned against the viewport regardless of the
+   rail's stacking context. */
 .timelineBar {
   position: fixed;
-  inset-inline: 0;
-  bottom: 0;
+  left: 50%;
+  bottom: calc(var(--glacier-space-4) + env(safe-area-inset-bottom, 0px));
+  transform: translate(-50%, 0);
   z-index: 63;
   display: flex;
-  align-items: center;
-  gap: var(--glacier-space-4);
-  padding: var(--glacier-space-3) var(--glacier-space-5);
-  padding-bottom: calc(var(--glacier-space-3) + env(safe-area-inset-bottom, 0px));
-  border-top: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 70%, transparent);
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  width: fit-content;
+  max-width: min(calc(100vw - 2rem), 64rem);
+  padding: var(--glacier-space-3) var(--glacier-space-4);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 70%, transparent);
+  border-radius: var(--glacier-radius-xl);
   background: color-mix(in oklch, oklch(0.16 0.02 265) 94%, transparent);
   backdrop-filter: blur(var(--glacier-blur-lg));
-  box-shadow: 0 -12px 40px rgb(0 0 0 / 0.45);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 0.5);
   animation: timelineBarUp 220ms var(--pc-settle);
 }
 
-/* Replaying: accent the top edge so the read-only state reads at a glance. */
+/* Replaying: accent the frame so the read-only state reads at a glance. */
 .timelineBar[data-replay] {
-  border-top-color: color-mix(in oklch, var(--glacier-accent-solid) 60%, var(--glacier-border));
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 60%, var(--glacier-border));
   box-shadow:
-    0 -12px 40px rgb(0 0 0 / 0.5),
-    inset 0 2px 0 color-mix(in oklch, var(--glacier-accent-solid) 40%, transparent);
+    0 18px 48px rgb(0 0 0 / 0.55),
+    0 0 0 1px color-mix(in oklch, var(--glacier-accent-solid) 40%, transparent);
 }
 
 @keyframes timelineBarUp {
   from {
-    transform: translateY(100%);
+    transform: translate(-50%, 16px);
     opacity: 0;
   }
   to {
-    transform: translateY(0);
+    transform: translate(-50%, 0);
     opacity: 1;
   }
 }
@@ -3247,10 +4049,8 @@
   }
 }
 
-.timelineBarHead {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--glacier-space-2);
+/* Label sits at the top of the floating card. */
+.timelineBarLabel {
   font-size: var(--glacier-font-size-xs);
   font-weight: var(--glacier-font-weight-semibold);
   text-transform: uppercase;
@@ -3259,12 +4059,46 @@
   white-space: nowrap;
 }
 
-.timelineBar[data-replay] .timelineBarHead {
+.timelineBar[data-replay] .timelineBarLabel {
   color: var(--glacier-accent-text, var(--glacier-text));
 }
 
+/* The events row: the scrubber strip plus any replay/close controls. */
+.timelineBarRow {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  min-width: 0;
+}
+
+/* Auto-playback controls (play/pause, restart, speed). */
+.timelinePlayback {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  flex: none;
+}
+
+.timelineSpeed {
+  min-width: 2.4rem;
+  padding: 0.2rem 0.4rem;
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 70%, transparent);
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--glacier-surface) 60%, transparent);
+  color: var(--glacier-text-secondary);
+  font-family: var(--glacier-font-mono);
+  font-size: 0.72rem;
+  font-weight: var(--glacier-font-weight-bold);
+  cursor: pointer;
+}
+
+.timelineSpeed:hover {
+  color: var(--glacier-text);
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 55%, transparent);
+}
+
 /* The event strip: evenly-spaced stops (a timeline of moves, not a clock), each
-   a mini card thumbnail over a track dot and a short label. Scrolls when long. */
+   a card thumbnail over a track dot and a short label. Scrolls when long. */
 .timelineEvents {
   flex: 1;
   min-width: 0;
@@ -3278,16 +4112,16 @@
   /* A faint rule runs through the row of dots, tying the stops together. */
   background-image: linear-gradient(color-mix(in oklch, var(--glacier-border) 60%, transparent), color-mix(in oklch, var(--glacier-border) 60%, transparent));
   background-size: 100% var(--glacier-hairline);
-  background-position: 0 calc(2.9rem + 5px);
+  background-position: 0 calc(5.8rem + 5px);
   background-repeat: no-repeat;
 }
 
 .tlEvent {
   flex: none;
-  width: 3.6rem;
+  width: 6rem;
   display: grid;
   justify-items: center;
-  gap: 2px;
+  gap: 3px;
   padding: 0;
   border: none;
   background: none;
@@ -3303,12 +4137,12 @@
 }
 
 .tlThumb {
-  width: 2rem;
-  height: 2.9rem;
+  width: 4rem;
+  height: 5.8rem;
   display: grid;
   place-items: center;
   overflow: hidden;
-  border-radius: var(--glacier-radius-sm);
+  border-radius: var(--glacier-radius-md);
   border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 70%, transparent);
   background: color-mix(in oklch, var(--glacier-surface) 60%, transparent);
 }
@@ -3415,4 +4249,58 @@
   text-transform: uppercase;
   color: var(--glacier-text-muted, #9aa);
   margin-bottom: -0.15rem;
+}
+
+/* ---- live presence: remote cursors + hovered-card rings ---- */
+
+.tablePresence {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  pointer-events: none;
+}
+
+/* A remote player's pointer, glued to the table by JS transform. The arrow
+   gets a soft drop-shadow and a slight perspective lean so it floats "above"
+   the felt. */
+.remoteCursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.25rem;
+  transform: translate3d(-100px, -100px, 0);
+  will-change: transform;
+  transition: transform 90ms linear;
+}
+
+.remoteCursorArrow {
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.55));
+  transform: perspective(240px) rotateX(24deg);
+  transform-origin: top left;
+}
+
+.remoteCursorName {
+  margin-top: 0.6rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--glacier-radius-full);
+  color: #0b0b0f;
+  font-size: 0.66rem;
+  font-weight: var(--glacier-font-weight-bold);
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+/* Ring drawn around whatever board card the remote player is hovering. */
+.remoteHoverRing {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 2px solid;
+  border-radius: var(--glacier-radius-md);
+  opacity: 0;
+  transform: translate3d(-100px, -100px, 0);
+  will-change: transform, width, height;
+  transition: opacity 120ms ease-out;
 }

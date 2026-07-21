@@ -9,13 +9,14 @@ import { useCardPopup } from '../../components/CardPopup.tsx';
 import type { CardInst, RoomState, TablePlayer } from '../../net/types.ts';
 import { useTableUi } from './tableUi.ts';
 import { AttackBadge, BlockCluster, CounterBadges, ZonePiles, groupAttachments } from './bits.tsx';
-import { restTilt } from './juice.ts';
+import { ambientDelay, restTilt } from './juice.ts';
 import { effectivePT, isCreature } from './boardModes.ts';
-import { playmatUrl } from '../../data/playmats.ts';
+import { playmatBackground } from '../../data/playmats.ts';
 import { cardBackUrl, effectiveCardBack } from '../../data/cardBacks.ts';
 import { useEdgeColor } from '../../data/edgeColor.ts';
 import { usePreference } from '../../hooks/usePreference.ts';
 import { getGame, zoneLabel } from '../../data/games.ts';
+import { ManaPoolReadout } from '../../components/Mana.tsx';
 
 /**
  * An opponent's seat: identity + vitals in the frame header, their battlefield
@@ -49,6 +50,7 @@ export function SeatFrame({
   const cardScale = useTableUi((state) => state.cardScale);
   const verticalCards = usePreference('verticalCards');
   const mirrorOpponent = usePreference('mirrorOpponent');
+  const ambientCards = usePreference('ambientCards');
 
   const combat = room.combat;
   // Opponent vitals are game-driven: Cyberpunk relabels the life/poison slots as
@@ -134,6 +136,7 @@ export function SeatFrame({
       <div
         key={card.iid}
         className="fieldCard"
+        data-iid={card.iid}
         data-preview-src={cardPreview}
         data-preview-name={cardPreview ? card.name : undefined}
         data-attacker={attacker ? '' : undefined}
@@ -142,6 +145,7 @@ export function SeatFrame({
         data-affordance={
           iAmDefender && attacker && attackerHitsMe(card.iid) ? 'block' : undefined
         }
+        data-ambient={ambientCards && stage ? '' : undefined}
         style={{
           left: offset ? `calc(${baseX * 100}% + ${offset}px)` : `${baseX * 100}%`,
           top: offset
@@ -149,6 +153,7 @@ export function SeatFrame({
             : `min(${baseY * 100}%, 100% - 8.75rem)`,
           zIndex: host ? 4 : 5,
           ['--rest-tilt' as string]: verticalCards ? '0deg' : `${restTilt(card.iid)}deg`,
+          ['--ambient-delay' as string]: `${ambientDelay(card.iid)}s`,
         }}
         onPointerEnter={() => onHover(card)}
         onPointerLeave={() => onHover(null)}
@@ -183,7 +188,7 @@ export function SeatFrame({
       style={{
         ['--pc-card-back' as string]: `url("${seatBackSrc}")`,
         ['--pc-card-back-edge' as string]: seatBackEdge,
-        ...(player.playmat ? { ['--pc-board-mat' as string]: `url("${playmatUrl(player.playmat)}")` } : {}),
+        ...(player.playmat ? { ['--pc-board-mat' as string]: playmatBackground(player.playmat) } : {}),
       }}
     >
       {iAmDefender && stage && (
@@ -238,6 +243,7 @@ export function SeatFrame({
             {cyber ? <Cpu size={11} /> : <Skull size={11} />} {player.poison}
           </span>
         )}
+        {!cyber && <ManaPoolReadout mana={player.mana} />}
         <span className="oppHandCount" title={t('tblHand')}>
           <HandIcon size={11} /> {player.handCount}
         </span>

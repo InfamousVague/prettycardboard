@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import * as ws from '../net/ws.ts';
-import type { CardInst, GameAction, GameActionV2, RoomState, ServerMessage, TablePlayer, TimelineEntry, Zone } from '../net/types.ts';
+import type { CardInst, GameAction, GameActionV2, ManaPool, RoomState, ServerMessage, TablePlayer, TimelineEntry, Zone } from '../net/types.ts';
+import { playSound } from '../sounds.ts';
 
 /**
  * Live table state. The server is authoritative: `room.state` snapshots replace
@@ -20,6 +21,38 @@ export interface LogLine {
   seq: number;
   text: string;
   ts: number;
+}
+
+/** Server life lines read "<name> gains/loses N life (total)". Consecutive
+ * life changes by the same player within a short window fold into one line so
+ * eight quick −1 taps read "loses 8 life" instead of eight "loses 1" rows. */
+const LIFE_LOG = /^(.+?) (gains|loses) (\d+) life \((-?\d+)\)$/;
+const LIFE_MERGE_MS = 6000;
+
+function lifeSigned(match: RegExpMatchArray): number {
+  const amount = Number(match[3]);
+  return match[2] === 'gains' ? amount : -amount;
+}
+
+function appendLog(log: LogLine[], next: LogLine): LogLine[] {
+  const prev = log[log.length - 1];
+  const nextMatch = next.text.match(LIFE_LOG);
+  if (prev && nextMatch) {
+    const prevMatch = prev.text.match(LIFE_LOG);
+    if (prevMatch && prevMatch[1] === nextMatch[1] && next.ts - prev.ts <= LIFE_MERGE_MS) {
+      const net = lifeSigned(prevMatch) + lifeSigned(nextMatch);
+      const name = nextMatch[1];
+      const total = nextMatch[4];
+      const text =
+        net > 0
+          ? `${name} gains ${net} life (${total})`
+          : net < 0
+            ? `${name} loses ${-net} life (${total})`
+            : `${name}'s life returns to ${total}`;
+      return [...log.slice(0, -1), { seq: next.seq, text, ts: next.ts }];
+    }
+  }
+  return [...log.slice(-299), next];
 }
 
 interface GameState {
@@ -100,7 +133,7 @@ function patchCard(player: TablePlayer, iid: string, fn: (card: CardInst) => Car
  * fields (revealed card details, counts); unknown shapes fall through as
  * no-ops and the next room.state reconciles.
  */
-function applyEvent(room: RoomState, actor: string, action: GameAction & Record<string, unknown>): RoomState {
+function applyEvent(room: RoomState, actor: string, action: (GameAction | GameActionV2) & Record<string, unknown>): RoomState {
   const players = room.players.map((player): TablePlayer => {
     if (player.userId !== actor) {
       // Cross-player effects: commander damage bookkeeping happens on the actor.
@@ -202,6 +235,15 @@ function applyEvent(room: RoomState, actor: string, action: GameAction & Record<
       }
       case 'poison.add':
         return { ...player, poison: Math.max(0, player.poison + action.delta) };
+      case 'mana.add': {
+        const mana: ManaPool = player.mana ?? { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
+        const value = typeof action.value === 'number'
+          ? action.value
+          : Math.min(999, Math.max(0, mana[action.color] + action.delta));
+        return { ...player, mana: { ...mana, [action.color]: value } };
+      }
+      case 'mana.clear':
+        return { ...player, mana: { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 } };
       default:
         return player;
     }
@@ -268,7 +310,7 @@ export const useGame = create<GameState>((set, get) => {
         set((state) => ({ chat: [...state.chat.slice(-199), { from: message.from, text: message.text, ts: message.ts }] }));
     } else if (message.type === 'log') {
       if (message.roomId === get().joinedRoomId)
-        set((state) => ({ log: [...state.log.slice(-299), { seq: message.seq, text: message.text, ts: message.ts }] }));
+        set((state) => ({ log: appendLog(state.log, { seq: message.seq, text: message.text, ts: message.ts }) }));
     } else if (message.type === 'room.closed') {
       // The table was ended by its host (or expired). Clearing the room drops
       // the shell back to the routed page automatically; drop any activity
@@ -326,6 +368,10 @@ export const useGame = create<GameState>((set, get) => {
     // Actions are frozen while scrubbing a replay - the board is a past frame.
     act: (action) => {
       if (get().replay.active) return;
+      if (action.kind === 'shuffle') playSound('deckShuffle');
+      else if (action.kind === 'card.tap' || action.kind === 'card.face' || action.kind === 'untap.all') {
+        playSound('cardTap');
+      }
       ws.sendAction(action);
     },
     redo: () => {

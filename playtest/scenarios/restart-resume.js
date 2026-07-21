@@ -9,7 +9,7 @@ import { spawn } from 'node:child_process';
 import { openSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { PlaytestClient, Assert, sleep, deleteRoom, BASE } from '../lib.js';
+import { PlaytestClient, Assert, sleep, deleteRoom, readyAll, BASE } from '../lib.js';
 import { ensureSeed, PASSWORD } from '../seed.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -127,6 +127,7 @@ async function main() {
     c.joinRoom(roomId, seeded[c.username].deckId);
     await c.expectState((s) => s.players.length === i + 1, `${c.username} seated`, 5000, { since: m });
   }
+  await readyAll(clients);
   let m = alice.mark();
   alice.send({ type: 'room.start' });
   await alice.expectState((s) => s.started, 'game started', 5000, { since: m });

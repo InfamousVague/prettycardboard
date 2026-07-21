@@ -76,6 +76,20 @@ export interface MatchRow {
   players: { username: string; isBot?: boolean }[];
   seats: number | null;
   playedAt: number;
+  /** The room this match was played in (links to its persisted replay). */
+  roomId?: string;
+  matchId?: string | null;
+  winnerUserId?: string | null;
+  winnerUsername?: string | null;
+  turns?: number | null;
+  durationMs?: number | null;
+  /** The caller's result in this match, when a finished-match record exists. */
+  won?: boolean | null;
+  conceded?: boolean | null;
+  cardsPlayed?: number | null;
+  cardsDrawn?: number | null;
+  /** Whether a persisted timeline exists to watch the match play back. */
+  replayable?: boolean;
 }
 
 /** GET /api/me/stats — the caller's all-time aggregates for the Home dashboard. */
@@ -129,12 +143,18 @@ export interface GigDie {
   from?: string;
 }
 
+export type ManaColor = 'W' | 'U' | 'B' | 'R' | 'G' | 'C';
+export type ManaPool = Record<ManaColor, number>;
+
 export interface TablePlayer {
   commanderTax?: Record<string, number>;
   cmdDamageByCommander?: Record<string, number>;
   mulligan?: MulliganState | null;
   userId: string;
   username: string;
+  /** Pregame state, public to every room viewer. */
+  ready?: boolean;
+  online?: boolean;
   /** The seat's chosen playmat id; the felt shows the active player's mat. */
   playmat?: string | null;
   /** The seat's chosen card-back id; every viewer paints THIS player's
@@ -148,6 +168,8 @@ export interface TablePlayer {
   seat: number;
   life: number;
   poison: number;
+  /** Public floating mana; only this seat's player may update it. */
+  mana?: ManaPool;
   cmdDamage: Record<string, number>;
   handCount: number;
   hand?: CardInst[];
@@ -177,6 +199,9 @@ export interface MatchResultPlayer {
   conceded: boolean;
   turnsTaken: number;
   avgTurnMs: number;
+  cardsPlayed: number;
+  cardsDrawn: number;
+  peakBattlefield: number;
   deckId?: string | null;
   deckName?: string | null;
   life: number;
@@ -208,11 +233,22 @@ export interface MatchStatsPlayer {
   conceded: boolean;
   turnsTaken: number;
   avgTurnMs: number;
+  cardsPlayed: number;
+  cardsDrawn: number;
+  peakBattlefield: number;
   wins: number;
   losses: number;
   endorsements: number;
   allTimeAvgTurnMs: number;
-  deck: { wins: number; losses: number; salt: number; saltCount: number } | null;
+  deck: {
+    wins: number;
+    losses: number;
+    salt: number;
+    saltCount: number;
+    avgCardsPerTurn: number;
+    avgCardsDrawn: number;
+    avgPeakBattlefield: number;
+  } | null;
   myEndorsed: boolean;
   mySalt: number | null;
 }
@@ -274,6 +310,15 @@ export type ServerMessage =
   | { type: 'friend.request'; id: string; from: { userId: string; username: string } }
   | { type: 'friend.accepted'; by: { userId: string; username: string } }
   | { type: 'room.state'; state: RoomState }
+  | {
+      type: 'room.ping';
+      from: { userId: string; username: string };
+      to: { userId: string; username: string };
+      ts: number;
+      roomId: string;
+    }
+  | { type: 'room.hand.hover'; fromUserId: string; position: number | null; roomId: string }
+  | { type: 'cursor'; fromUserId: string; username: string; seat: number; x: number; y: number; hover: string | null; roomId: string }
   | { type: 'room.event'; seq: number; actor: string; action: GameAction & Record<string, unknown>; roomId: string }
   | { type: 'chat'; from: { userId: string; username: string }; text: string; ts: number; roomId: string }
   | { type: 'log'; seq: number; text: string; ts: number; roomId: string }
@@ -334,6 +379,8 @@ export type GameActionV2 =
   | { kind: 'cmd.cast'; iid: string; x: number; y: number }
   | { kind: 'cmd.return'; iid: string; accept: boolean }
   | { kind: 'dice.roll'; sides: 2 | 4 | 6 | 8 | 10 | 12 | 20; count?: number }
+  | { kind: 'mana.add'; color: ManaColor; delta: number }
+  | { kind: 'mana.clear' }
   | { kind: 'marker.set'; marker: 'monarch' | 'initiative'; seat: number }
   | { kind: 'marker.day'; value: 'day' | 'night' | null }
   | { kind: 'marker.storm'; delta: number }
@@ -347,6 +394,7 @@ export type GameActionV2 =
   | { kind: 'library.search' }
   | { kind: 'library.reveal'; count: number }
   | { kind: 'card.attach'; iid: string; hostIid: string | null }
+  | { kind: 'card.give'; iid: string; toUser: string }
   | { kind: 'mull.take' }
   | { kind: 'mull.keep'; bottomIids: string[] }
   | { kind: 'undo' }

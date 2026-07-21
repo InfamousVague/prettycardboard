@@ -226,6 +226,35 @@
   white-space: nowrap;
 }
 
+/* Per-match derived stats, shown under the match name. */
+.matchStats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.15rem;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+
+.matchStat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.matchStat[data-win] {
+  color: var(--glacier-success-text, var(--glacier-success-solid));
+  font-weight: var(--glacier-font-weight-bold);
+}
+
+.matchRowSide {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  flex: none;
+}
+
 /* Create-table card header: title + game tag on one row. */
 .playCardHead {
   display: flex;

@@ -31,6 +31,8 @@ pub struct App {
     pub conns: DashMap<String, Vec<(u64, UnboundedSender<String>)>>,
     /// userId -> current room.
     pub user_rooms: DashMap<String, RoomRef>,
+    /// Last targeted ping per sender, used to prevent repeated sound alerts.
+    pub ping_at: DashMap<String, i64>,
     /// roomIds mutated since the last write-behind flush (drained every 2s).
     pub dirty: DashSet<String>,
     pub conn_seq: AtomicU64,
@@ -175,6 +177,7 @@ async fn main() {
         codes: DashMap::new(),
         conns: DashMap::new(),
         user_rooms: DashMap::new(),
+        ping_at: DashMap::new(),
         dirty: DashSet::new(),
         conn_seq: AtomicU64::new(1),
     });

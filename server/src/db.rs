@@ -134,6 +134,9 @@ CREATE TABLE IF NOT EXISTS match_players(
     conceded INTEGER NOT NULL DEFAULT 0,
     turns_taken INTEGER NOT NULL DEFAULT 0,
     avg_turn_ms INTEGER NOT NULL DEFAULT 0,
+    cards_played INTEGER NOT NULL DEFAULT 0,
+    cards_drawn INTEGER NOT NULL DEFAULT 0,
+    peak_battlefield INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY(match_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS idx_mp_user ON match_players(user_id);
@@ -167,6 +170,9 @@ pub fn open(path: &std::path::Path) -> Connection {
     let _ = conn.execute("ALTER TABLE decks ADD COLUMN header TEXT", []);
     let _ = conn.execute("ALTER TABLE decks ADD COLUMN game TEXT", []);
     let _ = conn.execute("ALTER TABLE match_history ADD COLUMN game TEXT", []);
+    let _ = conn.execute("ALTER TABLE match_players ADD COLUMN cards_played INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE match_players ADD COLUMN cards_drawn INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE match_players ADD COLUMN peak_battlefield INTEGER NOT NULL DEFAULT 0", []);
     conn
 }
 
@@ -254,22 +260,41 @@ pub fn match_record(
 pub fn matches_for(conn: &Connection, user_id: &str) -> Vec<serde_json::Value> {
     let mut stmt = conn
         .prepare(
-            "SELECT room_name, format, players_json, seats, played_at, game
-             FROM match_history WHERE user_id = ? ORDER BY played_at DESC LIMIT 50",
+            "SELECT mh.room_id, mh.room_name, mh.format, mh.players_json, mh.seats, mh.played_at, mh.game,
+                    m.id, m.winner_user_id, m.turns, m.duration_ms,
+                    (SELECT username FROM match_players mpw WHERE mpw.match_id = m.id AND mpw.user_id = m.winner_user_id),
+                    mp.won, mp.conceded, mp.cards_played, mp.cards_drawn,
+                    (SELECT COUNT(*) FROM room_history rh WHERE rh.room_id = mh.room_id)
+             FROM match_history mh
+             LEFT JOIN matches m ON m.room_id = mh.room_id
+             LEFT JOIN match_players mp ON mp.match_id = m.id AND mp.user_id = mh.user_id
+             WHERE mh.user_id = ? ORDER BY mh.played_at DESC LIMIT 50",
         )
         .unwrap();
     let rows = stmt
         .query_map([user_id], |row| {
-            let players_json: String = row.get(2)?;
+            let players_json: String = row.get(3)?;
             let players: serde_json::Value =
                 serde_json::from_str(&players_json).unwrap_or(serde_json::Value::Array(vec![]));
+            let hist_count: i64 = row.get(16)?;
             Ok(serde_json::json!({
-                "name": row.get::<_, Option<String>>(0)?,
-                "format": row.get::<_, Option<String>>(1)?,
+                "roomId": row.get::<_, String>(0)?,
+                "name": row.get::<_, Option<String>>(1)?,
+                "format": row.get::<_, Option<String>>(2)?,
                 "players": players,
-                "seats": row.get::<_, Option<i64>>(3)?,
-                "playedAt": row.get::<_, i64>(4)?,
-                "game": row.get::<_, Option<String>>(5)?.unwrap_or_else(|| "mtg".to_string()),
+                "seats": row.get::<_, Option<i64>>(4)?,
+                "playedAt": row.get::<_, i64>(5)?,
+                "game": row.get::<_, Option<String>>(6)?.unwrap_or_else(|| "mtg".to_string()),
+                "matchId": row.get::<_, Option<String>>(7)?,
+                "winnerUserId": row.get::<_, Option<String>>(8)?,
+                "turns": row.get::<_, Option<i64>>(9)?,
+                "durationMs": row.get::<_, Option<i64>>(10)?,
+                "winnerUsername": row.get::<_, Option<String>>(11)?,
+                "won": row.get::<_, Option<i64>>(12)?.map(|v| v != 0),
+                "conceded": row.get::<_, Option<i64>>(13)?.map(|v| v != 0),
+                "cardsPlayed": row.get::<_, Option<i64>>(14)?,
+                "cardsDrawn": row.get::<_, Option<i64>>(15)?,
+                "replayable": hist_count > 0,
             }))
         })
         .unwrap();
@@ -301,8 +326,8 @@ pub fn match_result_record(
     );
     for p in &result.players {
         let _ = conn.execute(
-            "INSERT OR IGNORE INTO match_players(match_id, user_id, username, seat, is_bot, deck_id, deck_name, won, conceded, turns_taken, avg_turn_ms)
-             VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR IGNORE INTO match_players(match_id, user_id, username, seat, is_bot, deck_id, deck_name, won, conceded, turns_taken, avg_turn_ms, cards_played, cards_drawn, peak_battlefield)
+             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             params![
                 result.match_id,
                 p.user_id,
@@ -314,7 +339,10 @@ pub fn match_result_record(
                 (p.user_id == result.winner_user_id) as i64,
                 p.conceded as i64,
                 p.turns_taken as i64,
-                p.avg_turn_ms
+                p.avg_turn_ms,
+                p.cards_played as i64,
+                p.cards_drawn as i64,
+                p.peak_battlefield as i64
             ],
         );
     }
@@ -332,12 +360,15 @@ pub struct MatchPlayerRow {
     pub conceded: bool,
     pub turns_taken: i64,
     pub avg_turn_ms: i64,
+    pub cards_played: i64,
+    pub cards_drawn: i64,
+    pub peak_battlefield: i64,
 }
 
 pub fn match_players_rows(conn: &Connection, match_id: &str) -> Vec<MatchPlayerRow> {
     let mut stmt = conn
         .prepare(
-            "SELECT user_id, username, seat, is_bot, deck_id, deck_name, won, conceded, turns_taken, avg_turn_ms
+            "SELECT user_id, username, seat, is_bot, deck_id, deck_name, won, conceded, turns_taken, avg_turn_ms, cards_played, cards_drawn, peak_battlefield
              FROM match_players WHERE match_id = ? ORDER BY seat",
         )
         .unwrap();
@@ -353,6 +384,9 @@ pub fn match_players_rows(conn: &Connection, match_id: &str) -> Vec<MatchPlayerR
             conceded: r.get::<_, i64>(7)? != 0,
             turns_taken: r.get(8)?,
             avg_turn_ms: r.get(9)?,
+            cards_played: r.get(10)?,
+            cards_drawn: r.get(11)?,
+            peak_battlefield: r.get(12)?,
         })
     })
     .unwrap()
@@ -453,6 +487,20 @@ pub fn deck_match_counts(conn: &Connection, deck_id: &str) -> (i64, i64) {
         |r| Ok((r.get(0)?, r.get(1)?)),
     )
     .unwrap_or((0, 0))
+}
+
+/// Weighted cards played per turn plus per-match draw and peak-board averages.
+pub fn deck_gameplay_stats(conn: &Connection, deck_id: &str) -> (f64, f64, f64) {
+    conn.query_row(
+        "SELECT
+            COALESCE(1.0 * SUM(cards_played) / NULLIF(SUM(turns_taken), 0), 0.0),
+            COALESCE(AVG(1.0 * cards_drawn), 0.0),
+            COALESCE(AVG(1.0 * peak_battlefield), 0.0)
+         FROM match_players WHERE deck_id = ?",
+        [deck_id],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )
+    .unwrap_or((0.0, 0.0, 0.0))
 }
 
 /// (average salt x100 to keep it integral, distinct-rater count) for a deck.

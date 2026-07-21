@@ -61,6 +61,17 @@ restores every persisted room so seats resume across restarts. Quick rooms
 expire 24 h after all seats go offline; persistent lobbies after 30 idle days
 (`rooms::sweeper`).
 
+Pregame state is also authoritative. Each `Player` carries public `ready`,
+`online`, `deckName`, and `mana`; only the viewer's own snapshot includes
+`deckId`. `room.deck.set` rebuilds that seat's zones and clears readiness,
+disconnects clear readiness, and `room.start` requires all seated players to be
+online, decked, and ready. Spectators are rejected from every mutation path.
+
+Turn timing is interaction-based: actions by the active seat credit elapsed time
+since its prior interaction, capped at 30 seconds per silent gap. Match rows also
+persist cards played/drawn and peak battlefield size; the stats API computes
+all-time active pace plus weighted deck cards-per-turn aggregates.
+
 ## Combat v3 (the locked declare → respond → resolve loop)
 
 Combat is a small state machine layered on the freeform board. The **state**

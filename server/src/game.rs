@@ -11,6 +11,7 @@ use turns::free_first_mulls;
 // Re-exported so callers keep using `game::next_occupied`, `game::auto_turn_begin`, etc.
 pub use turns::{
     auto_turn_begin, maybe_begin_first_turn, next_occupied, turn_clock_begin, turn_clock_credit,
+    turn_clock_interaction,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -90,6 +91,10 @@ pub enum Action {
         #[serde(default)]
         host_iid: Option<String>,
     },
+    /// Give a card to another seated player: it leaves the giver's zone and
+    /// lands in the recipient's hand (ownership transfers with it).
+    #[serde(rename = "card.give", rename_all = "camelCase")]
+    CardGive { iid: String, to_user: String },
     #[serde(rename = "token.create", rename_all = "camelCase")]
     TokenCreate {
         name: String,
@@ -142,6 +147,10 @@ pub enum Action {
     },
     #[serde(rename = "poison.add")]
     PoisonAdd { delta: i64 },
+    #[serde(rename = "mana.add")]
+    ManaAdd { color: String, delta: i64 },
+    #[serde(rename = "mana.clear")]
+    ManaClear,
     #[serde(rename = "reveal.hand")]
     RevealHand,
     #[serde(rename = "reveal.card", rename_all = "camelCase")]
@@ -441,6 +450,7 @@ pub fn action_card_iid(action: &Action) -> Option<&str> {
         | Action::CardFace { iid, .. }
         | Action::CardCounter { iid, .. }
         | Action::CardAttach { iid, .. }
+        | Action::CardGive { iid, .. }
         | Action::TokenClone { iid, .. }
         | Action::StackPush { iid }
         | Action::StackResolve { iid, .. }
@@ -648,6 +658,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
         .ok_or(("not_seated", "You are not seated in this room".to_string()))?;
     let username = room.players[pi].username.clone();
     let now = crate::now_ms();
+    let actor_seat = room.players[pi].seat;
 
     // A finished match freezes the table: the result screen owns the room and
     // every further action (including stray hotkeys) is rejected outright. The
@@ -659,6 +670,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
     if room.match_result.is_some() && !is_recovery {
         return Err(("match_over", "the match is already over".to_string()));
     }
+    turn_clock_interaction(room, actor_seat, now);
 
     let base = serde_json::to_value(&action).unwrap();
     let mut for_actor = base.clone();
@@ -676,6 +688,9 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
         Action::CardMove { ref iid, to, x, y, index } => {
             let (from, from_idx, mut card) =
                 take_card(&mut room.players[pi], iid).ok_or_else(|| not_found(iid))?;
+            if matches!(from, Zone::Hand | Zone::Library | Zone::Command) && to == Zone::Battlefield {
+                room.players[pi].cards_played += 1;
+            }
             let snapshot = card.clone();
             let was_hidden = from.hidden();
             if from == Zone::Battlefield {
@@ -858,6 +873,38 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             undo = Some(UndoKind::Counter { iid: iid.clone(), counter: counter.clone(), prev });
         }
 
+        Action::CardGive { ref iid, ref to_user } => {
+            let Some(ti) = room.players.iter().position(|p| &p.user_id == to_user) else {
+                return Err(("no_player", "That player is not at the table".to_string()));
+            };
+            if ti == pi {
+                return Err(("bad_target", "cannot give a card to yourself".to_string()));
+            }
+            let (from, _from_idx, mut card) =
+                take_card(&mut room.players[pi], iid).ok_or_else(|| not_found(iid))?;
+            let was_hidden = from.hidden();
+            if from == Zone::Battlefield {
+                clear_followers(room, iid);
+            }
+            if from == Zone::Library {
+                room.players[pi].peeked.clear();
+            }
+            // A given card resets to a clean, private hand card; ownership (and
+            // any commander flag) transfers with it.
+            card.tapped = false;
+            card.face_down = false;
+            card.revealed = false;
+            card.attached_to = None;
+            card.is_commander = false;
+            card.counters.clear();
+            let name = card.name.clone();
+            let recipient = room.players[ti].username.clone();
+            room.players[ti].hand.push(card);
+            let display = if was_hidden { "a card".to_string() } else { name };
+            log = format!("{username} gives {display} to {recipient}");
+            resync = true; // both hands (hidden) changed; everyone re-filters
+        }
+
         Action::CardAttach { ref iid, ref host_iid } => {
             match host_iid {
                 Some(h) => {
@@ -976,6 +1023,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             let p = &mut room.players[pi];
             let n = count.min(p.library.len());
             let drawn: Vec<Card> = p.library.drain(0..n).collect();
+            p.cards_drawn += n as u64;
             p.hand_revealed = false; // any draw makes the hand private again
             p.peeked.clear();
             for_actor["cards"] = serde_json::to_value(&drawn).unwrap();
@@ -998,6 +1046,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             p.peeked.clear();
             let name = card.name.clone();
             p.battlefield.push(card);
+            p.cards_played += 1;
             log = format!("{username} plays {name} from the top of their library");
             resync = true;
         }
@@ -1189,6 +1238,27 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             };
         }
 
+        Action::ManaAdd { ref color, delta } => {
+            if !matches!(color.as_str(), "W" | "U" | "B" | "R" | "G" | "C") {
+                return Err(("invalid_mana", "unsupported mana color".to_string()));
+            }
+            let value = room.players[pi]
+                .mana
+                .entry(color.clone())
+                .or_insert(0);
+            *value = value.saturating_add(delta).clamp(0, 999);
+            for_actor["value"] = json!(*value);
+            for_others["value"] = json!(*value);
+            log = String::new();
+            record = false;
+        }
+
+        Action::ManaClear => {
+            room.players[pi].mana = crate::rooms::empty_mana();
+            log = String::new();
+            record = false;
+        }
+
         Action::RevealHand => {
             room.players[pi].hand_revealed = true;
             log = format!("{username} reveals their hand");
@@ -1306,6 +1376,9 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             for_others["card"] = cv;
             log = format!("{username} puts {} on the stack", card.name);
             room.stack.push(StackEntry { owner: actor_id.to_string(), card });
+            if matches!(from, Zone::Hand | Zone::Library | Zone::Command) {
+                room.players[pi].cards_played += 1;
+            }
             resync = true;
         }
 
@@ -1449,6 +1522,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             for_actor["card"] = cv.clone();
             for_others["card"] = cv;
             p.battlefield.push(card);
+            p.cards_played += 1;
             p.commander_tax.insert(iid.clone(), prior_tax + 2);
             log = format!("{username} casts {name} (tax {prior_tax})");
             resync = true; // commanderTax changed
@@ -1853,5 +1927,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
     if let Some(kind) = undo {
         room.players[pi].undo = Some(UndoEntry { kind, ts: now });
     }
+    let battlefield_size = room.players[pi].battlefield.len() as u64;
+    room.players[pi].peak_battlefield = room.players[pi].peak_battlefield.max(battlefield_size);
     Ok(Applied { for_actor, for_others, log, extra_logs, resync, private, record })
 }

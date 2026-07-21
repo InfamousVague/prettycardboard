@@ -1,4 +1,8 @@
 import type { CSSProperties } from 'react';
+import type { ManaColor, ManaPool } from '../net/types.ts';
+
+export const MANA_ORDER: ManaColor[] = ['W', 'U', 'B', 'R', 'G', 'C'];
+export const EMPTY_MANA: ManaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
 
 /**
  * Official MTG mana/card symbols, rendered from the bundled Scryfall SVG set
@@ -78,6 +82,22 @@ export function ColorIdentity({ colors, size = '0.95em' }: { colors: string[]; s
     <span style={{ display: 'inline-flex', gap: '0.18em', alignItems: 'center' }}>
       {shown.map((color) => (
         <ManaSymbol key={color} symbol={color} size={size} />
+      ))}
+    </span>
+  );
+}
+
+export function ManaPoolReadout({ mana, className }: { mana?: ManaPool; className?: string }) {
+  const shown = MANA_ORDER.filter((color) => (mana?.[color] ?? 0) > 0);
+  if (shown.length === 0) return null;
+  const label = shown.map((color) => `${color}: ${mana?.[color] ?? 0}`).join(', ');
+  return (
+    <span className={`manaReadout${className ? ` ${className}` : ''}`} aria-label={`Floating mana: ${label}`}>
+      {shown.map((color) => (
+        <span key={color} className="manaReadoutPip" title={`${color}: ${mana?.[color] ?? 0}`}>
+          <ManaSymbol symbol={color} size={15} />
+          <span>{mana?.[color] ?? 0}</span>
+        </span>
       ))}
     </span>
   );

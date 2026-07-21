@@ -11,6 +11,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 
 const STEPS = [
   ['seed', join(HERE, 'seed.js')],
+  ['lobby-mana', join(HERE, 'scenarios', 'lobby-mana.js')],
   ['commander-pod', join(HERE, 'scenarios', 'commander-pod.js')],
   ['standard-duel', join(HERE, 'scenarios', 'standard-duel.js')],
   ['chaos-monkey', join(HERE, 'scenarios', 'chaos-monkey.js')],

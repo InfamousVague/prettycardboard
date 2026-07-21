@@ -16,8 +16,9 @@ deletes) its own room.
 ```sh
 cd playtest
 npm install
-npm run all        # seed + scenarios 1-3, summary table, exit code = failures
+npm run all        # seed + standard scenarios, summary table, exit code = failures
 npm run seed       # just create/refresh the pt_* users + precon decks
+npm run lobby      # readiness, deck privacy, targeted ping, and public mana
 npm run pod        # scenario 1
 npm run duel       # scenario 2
 npm run chaos      # scenario 3 (node scenarios/chaos-monkey.js <seed> to reproduce)
@@ -25,6 +26,18 @@ npm run restart    # scenario 4 — LOCAL ONLY: kills + relaunches the dev serve
 ```
 
 ## What each scenario proves
+
+### `scenarios/lobby-mana.js` — pregame and shared table aids
+- Readiness and online state are public; deck ids remain private to their owner.
+- Deck changes and disconnects clear readiness; start requires every seat
+  online, decked, and ready, and only the host may deal.
+- Spectators cannot ready, switch decks, start, or send game actions.
+- Targeted pings carry sender/recipient identity, stay private from spectators, and are rate-limited.
+- Floating mana reaches every player and spectator through `room.event`, is
+  recovered in `room.state`, and only the pool's owner can mutate it.
+
+Gameplay scenarios call `readyAll(clients)` after seating and before
+`room.start`, matching the same authoritative lobby gate as the real client.
 
 ### 1. `scenarios/commander-pod.js` — 4-player commander pod
 - Room create (commander / 4 seats / non-persistent), 4 seats taken with real

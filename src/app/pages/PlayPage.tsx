@@ -16,10 +16,11 @@ import {
   Switch,
   Text,
   TextTone,
+  Tooltip,
   useLocale,
   useToast,
 } from '@glacier/react';
-import { Flag, Swords, Ticket } from '@glacier/icons';
+import { Crown, Flag, Layers, Play, Swords, Ticket } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
@@ -29,6 +30,16 @@ import type { MatchRow, MyRoom } from '../net/types.ts';
 import { useVisibleGames } from '../hooks/useVisibleGames.ts';
 import { GameTag, GameBadge } from '../components/GameTag.tsx';
 import './play.css';
+
+/** "1h 02m" / "18m 30s" / "42s" from milliseconds. */
+function fmtDuration(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+  if (m > 0) return `${m}m ${String(s % 60).padStart(2, '0')}s`;
+  return `${s}s`;
+}
 
 /**
  * The lobby: your saved tables (rooms survive server restarts now), create a
@@ -176,6 +187,82 @@ export function PlayPage() {
         {t('playLede')}
       </Text>
 
+      <div className="playGrid">
+        <Card elevation={2} className="playCard">
+          <div className="playCardIcon" aria-hidden>
+            <Swords size={22} />
+          </div>
+          <div className="playCardHead">
+            <Heading level={3} noMargin>
+              {t('playNewTable')}
+            </Heading>
+            <GameTag game={game} />
+          </div>
+          <div className="control">
+            <Text as="span" size={Size.Small} tone={TextTone.Muted}>
+              {t('playTableName')}
+            </Text>
+            <Input value={tableName} onChange={(event) => setTableName(event.target.value)} placeholder="Friday pod" />
+          </div>
+          <div className="control">
+            <Text as="span" size={Size.Small} tone={TextTone.Muted}>
+              {t('playGame')}
+            </Text>
+            <SegmentedControl
+              fullWidth
+              aria-label={t('playGame')}
+              value={game}
+              onValueChange={setGame}
+              options={games.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') }))}
+            />
+          </div>
+          <div className="control">
+            <Text as="span" size={Size.Small} tone={TextTone.Muted}>
+              {t('playSeats')}
+            </Text>
+            <SegmentedControl
+              value={seats}
+              onValueChange={setSeats}
+              options={['2', '3', '4', '5', '6'].map((n) => ({ value: n, label: n }))}
+            />
+          </div>
+          <div className="control myPersistent">
+            <Switch label={t('plPersistent')} checked={persistent} onCheckedChange={setPersistent} />
+            <Text size={Size.XSmall} tone={TextTone.Subtle} className="myPersistentHint">
+              {t('plPersistentHint')}
+            </Text>
+          </div>
+          <DeckPicker value={chosenDeck} onChange={setDeckId} game={game} />
+          <Button onClick={create} loading={busy} disabled={gameDecks.length === 0}>
+            {t('playCreate')}
+          </Button>
+        </Card>
+
+        <Card elevation={2} className="playCard">
+          <div className="playCardIcon" aria-hidden>
+            <Ticket size={22} />
+          </div>
+          <Heading level={3} noMargin>
+            {t('playJoin')}
+          </Heading>
+          <div className="control">
+            <Text as="span" size={Size.Small} tone={TextTone.Muted}>
+              {t('playCodePlaceholder')}
+            </Text>
+            <Input
+              value={code}
+              onChange={(event) => setCode(event.target.value.toUpperCase())}
+              placeholder="ABC123"
+              maxLength={6}
+            />
+          </div>
+          <DeckPicker value={chosenDeck} onChange={setDeckId} />
+          <Button onClick={joinByCode} loading={busy} disabled={code.length < 6}>
+            {t('playJoinButton')}
+          </Button>
+        </Card>
+      </div>
+
       {invites.length > 0 && (
         <section>
           <Heading level={2}>{t('playInvites')}</Heading>
@@ -294,92 +381,55 @@ export function PlayPage() {
                     <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="matchWith">
                       {others.length > 0 ? `${t('plWith')} ${others.join(', ')}` : t('plSolo')}
                     </Text>
+                    {match.matchId && (
+                      <span className="matchStats">
+                        {match.won != null && (
+                          <span className="matchStat" data-win={match.won || undefined}>
+                            {match.won ? t('pmWinAbbr') : t('pmLossAbbr')}
+                          </span>
+                        )}
+                        {match.winnerUsername && (
+                          <span className="matchStat">
+                            <Crown size={11} /> {match.winnerUsername}
+                          </span>
+                        )}
+                        {match.turns != null && (
+                          <span className="matchStat">
+                            {match.turns} {t('pmTurnsWord')}
+                          </span>
+                        )}
+                        {match.durationMs != null && <span className="matchStat">{fmtDuration(match.durationMs)}</span>}
+                        {match.cardsPlayed != null && (
+                          <span className="matchStat">
+                            <Layers size={11} /> {match.cardsPlayed}
+                          </span>
+                        )}
+                      </span>
+                    )}
                   </div>
-                  <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
-                    {relativeUpdatedAt(match.playedAt, locale)}
-                  </Text>
+                  <div className="matchRowSide">
+                    <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+                      {relativeUpdatedAt(match.playedAt, locale)}
+                    </Text>
+                    {match.replayable && match.roomId && (
+                      <Tooltip content={t('gpWatchReplay')}>
+                        <IconButton
+                          size="sm"
+                          variant="soft"
+                          aria-label={t('gpWatchReplay')}
+                          onClick={() => join(match.roomId!)}
+                        >
+                          <Play size={15} />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </div>
                 </div>
               );
             })}
           </div>
         </section>
       )}
-
-      <div className="playGrid">
-        <Card elevation={2} className="playCard">
-          <div className="playCardIcon" aria-hidden>
-            <Swords size={22} />
-          </div>
-          <div className="playCardHead">
-            <Heading level={3} noMargin>
-              {t('playNewTable')}
-            </Heading>
-            <GameTag game={game} />
-          </div>
-          <div className="control">
-            <Text as="span" size={Size.Small} tone={TextTone.Muted}>
-              {t('playTableName')}
-            </Text>
-            <Input value={tableName} onChange={(event) => setTableName(event.target.value)} placeholder="Friday pod" />
-          </div>
-          <div className="control">
-            <Text as="span" size={Size.Small} tone={TextTone.Muted}>
-              {t('playGame')}
-            </Text>
-            <SegmentedControl
-              fullWidth
-              aria-label={t('playGame')}
-              value={game}
-              onValueChange={setGame}
-              options={games.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') }))}
-            />
-          </div>
-          <div className="control">
-            <Text as="span" size={Size.Small} tone={TextTone.Muted}>
-              {t('playSeats')}
-            </Text>
-            <SegmentedControl
-              value={seats}
-              onValueChange={setSeats}
-              options={['2', '3', '4', '5', '6'].map((n) => ({ value: n, label: n }))}
-            />
-          </div>
-          <div className="control myPersistent">
-            <Switch label={t('plPersistent')} checked={persistent} onCheckedChange={setPersistent} />
-            <Text size={Size.XSmall} tone={TextTone.Subtle} className="myPersistentHint">
-              {t('plPersistentHint')}
-            </Text>
-          </div>
-          <DeckPicker value={chosenDeck} onChange={setDeckId} game={game} />
-          <Button onClick={create} loading={busy} disabled={gameDecks.length === 0}>
-            {t('playCreate')}
-          </Button>
-        </Card>
-
-        <Card elevation={2} className="playCard">
-          <div className="playCardIcon" aria-hidden>
-            <Ticket size={22} />
-          </div>
-          <Heading level={3} noMargin>
-            {t('playJoin')}
-          </Heading>
-          <div className="control">
-            <Text as="span" size={Size.Small} tone={TextTone.Muted}>
-              {t('playCodePlaceholder')}
-            </Text>
-            <Input
-              value={code}
-              onChange={(event) => setCode(event.target.value.toUpperCase())}
-              placeholder="ABC123"
-              maxLength={6}
-            />
-          </div>
-          <DeckPicker value={chosenDeck} onChange={setDeckId} />
-          <Button onClick={joinByCode} loading={busy} disabled={code.length < 6}>
-            {t('playJoinButton')}
-          </Button>
-        </Card>
-      </div>
 
       <AlertDialog
         open={confirmClose !== null}

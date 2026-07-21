@@ -11,7 +11,8 @@ that swaps which player's board is in focus. This is the map.
 
 | File | Role |
 |------|------|
-| `TablePage.tsx` | The table shell: top bar (share / start / concede / **settings** / leave), the stage, the side rail (vitals + players + log), and all the overlays. Owns the pinned-seat/stage logic and the keyboard shortcuts. |
+| `TablePage.tsx` | The table shell: top bar, pregame/game stage switch, side rail, context menu, overlays, and configurable keyboard shortcuts. |
+| `PregameLobby.tsx` | The authoritative lobby: seat/readiness/online state, own-deck switching, invites, and host start gate. |
 | `MyBoard.tsx` | **Your** board: the battlefield (free placement + drag), the fanned hand (`HandCard`), the zone piles, and the drop/peek machinery. Also exports `Vitals` (life + conveniences). The largest, most coupled file — see the drag notes below. |
 | `SeatFrame.tsx` | An **opponent's** board. When staged, a 180° mirror (their cards face away; piles in the far corner; hand fans from the top). Blocking happens here. |
 | `bits.tsx` | Small shared table pieces (zone piles, the 3D `LibraryStack`, badges). |
@@ -28,6 +29,30 @@ that swaps which player's board is in focus. This is the map.
 
 ## The stage model
 
+Before the deal, `PregameLobby` replaces the empty-board layout. Every viewer
+sees public readiness, online state, and deck names; only a seated player can
+change their own deck/readiness, and only the host can deal after every seat is
+online, decked, and ready. Spectators remain read-only.
+
+The header stays deliberately narrow: room name/code, spectator state, the turn
+ribbon, and contextual Invite/Concede commands. It does not repeat the game tag
+or commander-damage player chips; those details already live in the table and
+player rows. Persistent Ping, Share, Settings, and Leave actions sit in a pinned
+four-icon navigation below the right rail's independently scrollable card stack.
+That navigation also renders in the lobby.
+
+For Ping, a seated player chooses another online seat; only the sender and
+recipient receive the identified event, and only the recipient hears the bell.
+Started games also show a compact bell on each eligible player row. Spectators
+cannot ping, self and offline targets are rejected, and the server enforces a
+three-second per-sender cooldown.
+
+Table audio is centralized in `src/app/sounds.ts`. The Table settings tab owns a
+master switch and volume slider. Turn, ping, draw, shuffle, card pickup/place/
+return, tap, and dice roll/landing cues prefer generated MP3 samples from
+`public/sounds/`, then fall back to short Web Audio synthesis when a file is
+missing. Generic interface buttons deliberately stay silent.
+
 A started game puts **one** board on the stage — the active player's by default.
 Everyone else is a clickable row in the side rail (the `PlayersCard` in
 `TablePage`). Clicking a player's row pins their seat. Combat auto-stages the
@@ -37,6 +62,25 @@ turn or your seat is staged; otherwise your hand strip docks at the bottom.
 
 The felt wears the **active** player's playmat (each `Player.playmat` is synced
 via the `playmat.set` WS message on join/reconnect/preference change).
+
+Moving through your hand emits a throttled, ephemeral `room.hand.hover` frame
+containing only a normalized `0..1` position. When another player stages your
+board, `OpponentHand` maps that position onto its local fan and drives the same
+dock-style lift through card backs; mirrored seating reverses the visual X.
+Leaving the hand, hiding it, dragging, blurring the window, disconnecting, or
+leaving the room clears the signal. It never contains card identity or enters
+room snapshots, logs, timelines, or persistence.
+
+Counter badges on your own battlefield are click-to-edit numeric controls. The
+P/T pill accepts a signed net value and canonicalizes the underlying +1/+1 vs
+-1/-1 counters; named badges accept 0–999. Configurable `[` / `]` shortcuts
+decrement/increment every existing counter on the hovered owned card, and an
+unbound digit pressed first supplies the repeat count for two seconds.
+
+The pointer-positioned card menu is app-owned (not a Glacier popover): it uses
+Lucide icons through `@glacier/icons`, a compact quick-action strip, and nested
+Counters / Attach / Move groups. Trigger-based deck/dice menus continue to use
+Glacier `Menu` / `MenuItem` directly.
 
 ## Drag-and-drop notes (read before touching MyBoard)
 

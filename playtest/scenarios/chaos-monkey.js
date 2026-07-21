@@ -8,7 +8,7 @@
 //       cmd.choice is pending and it is answered randomly);
 //   (c) the server stays alive (no error frames, REST still answers).
 // Seeded RNG: `node scenarios/chaos-monkey.js [seed]` reproduces a run.
-import { PlaytestClient, Assert, sleep, mulberry32, deleteRoom } from '../lib.js';
+import { PlaytestClient, Assert, sleep, mulberry32, deleteRoom, readyAll } from '../lib.js';
 import { ensureSeed, PASSWORD } from '../seed.js';
 
 const SEED = Number(process.argv[2]) || 20260717;
@@ -46,6 +46,7 @@ async function main() {
     c.joinRoom(roomId, seeded[c.username].deckId);
     await c.expectState((s) => s.players.length === i + 1, `${c.username} seated`, 5000, { since: m });
   }
+  await readyAll(clients);
   let m = alice.mark();
   alice.send({ type: 'room.start' });
   await alice.expectState((s) => s.started, 'game started', 5000, { since: m });

@@ -4,7 +4,7 @@
 // combat, commander damage attribution, stack push/counter, dice, all
 // markers, library viewers + privacy, attach + glued move, undo, reveal,
 // and disconnect/resume.
-import { PlaytestClient, Assert, sleep, deleteRoom } from '../lib.js';
+import { PlaytestClient, Assert, sleep, deleteRoom, readyAll } from '../lib.js';
 import { ensureSeed, PASSWORD } from '../seed.js';
 
 const PHASES = ['upkeep', 'main1', 'attack', 'block', 'damage', 'main2', 'end'];
@@ -50,6 +50,8 @@ async function main() {
   }
 
   // --- start + London mulligans -------------------------------------------
+  await readyAll(clients);
+  for (const client of clients) client.setAutoTurn();
   let m = alice.mark();
   alice.send({ type: 'room.start' });
   const started = await alice.expectState(

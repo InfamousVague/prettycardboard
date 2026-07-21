@@ -4,14 +4,15 @@ The server is Rust/axum (`server/`), listening on **http://127.0.0.1:8787** in d
 All REST bodies are JSON. Authenticated routes take `Authorization: Bearer <token>`.
 The client reads the base URL from `VITE_PC_SERVER` (default `http://127.0.0.1:8787`).
 
-Identity is username-only and temporary: registering returns a bearer token the
-client stores locally. No passwords; accounts become claimable later.
+Identity is username/password based: registering or logging in returns a bearer
+token the client stores locally.
 
 ## REST
 
 ### Identity
-- `POST /api/register` `{username}` → `201 {userId, username, token}`
+- `POST /api/register` `{username, password}` → `201 {userId, username, token}`
   - username: 3–24 chars, `[a-zA-Z0-9_]`, unique case-insensitive. `409` if taken.
+- `POST /api/login` `{username, password}` → `200 {userId, username, token}`
 - `GET /api/me` → `{userId, username, createdAt}`
 - `GET /api/users/search?q=<prefix>` → `[{userId, username, online}]` (max 20)
 
@@ -44,7 +45,11 @@ increasing `seq` per room; clients apply events in order.
 - `{type: "room.join", roomId, deckId?}` — take a seat (deckId loads that deck: library shuffled face-down, commanders to command zone)
 - `{type: "room.spectate", roomId}` — read-only subscribe (never sees hands/libraries)
 - `{type: "room.leave"}`
-- `{type: "room.start"}` — host only; deals opening hands (7) to every seat
+- `{type: "room.ready", ready}` — seated player only; a deck is required to become ready
+- `{type: "room.deck.set", deckId}` — switch to another owned deck for this game; clears readiness
+- `{type: "room.start"}` — host only; requires every seated player online, decked, and ready, then deals opening hands
+- `{type: "room.ping", targetUserId}` — seated player nudges another online seat; delivered only to sender and recipient, rate-limited to once per sender every 3 seconds
+- `{type: "room.hand.hover", position}` — seated player only; ephemeral normalized hand position (`0..1`), or `null` when leaving the hand
 - `{type: "chat.send", text}`
 - `{type: "invite.send", toUserId, roomId}`
 - `{type: "game.action", action: Action}`
@@ -64,6 +69,8 @@ increasing `seq` per room; clients apply events in order.
 - `{kind: "life.set", value}` / `{kind: "life.add", delta}`
 - `{kind: "cmd.damage", fromSeat, delta}`
 - `{kind: "poison.add", delta}`
+- `{kind: "mana.add", color, delta}` — color is `W | U | B | R | G | C`; clamped to 0–999
+- `{kind: "mana.clear"}` — clear the actor's floating mana pool
 - `{kind: "reveal.hand"}` — flip your hand public (until next draw)
 
 ### Server → client
@@ -71,6 +78,8 @@ increasing `seq` per room; clients apply events in order.
 - `{type: "presence", userId, online, roomId?}` — friends only
 - `{type: "invite", from: {userId, username}, roomId, roomName}`
 - `{type: "room.state", state: RoomState}` — full snapshot on join/spectate/resync
+- `{type: "room.ping", from: {userId, username}, to: {userId, username}, ts, roomId}` — ephemeral targeted alert delivered only to sender and recipient
+- `{type: "room.hand.hover", fromUserId, position, roomId}` — ephemeral hand-browsing motion; contains no card identity or contents and is never persisted
 - `{type: "room.event", seq, actor, action}` — the applied action, rebroadcast (with server-filled fields, e.g. drawn card details go only to the drawer)
 - `{type: "chat", from: {userId, username}, text, ts}`
 - `{type: "log", seq, text, ts}` — human-readable action log line
@@ -82,7 +91,11 @@ increasing `seq` per room; clients apply events in order.
   "roomId": "...", "name": "...", "code": "ABC123", "seats": 4, "started": true,
   "hostUserId": "...",
   "players": [{
-    "userId": "...", "username": "...", "seat": 0, "life": 40, "poison": 0,
+    "userId": "...", "username": "...", "seat": 0,
+    "ready": true, "online": true, "life": 40, "poison": 0,
+    "mana": {"W": 2, "U": 0, "B": 0, "R": 0, "G": 0, "C": 1},
+    "deckName": "Terra, Herald of Hope",
+    "deckId": "...",                 // ONLY for the viewer's own seat
     "cmdDamage": {"1": 6},           // by seat
     "handCount": 5,                  // always
     "hand": [CardInst],              // ONLY for the viewer's own seat
@@ -93,6 +106,12 @@ increasing `seq` per room; clients apply events in order.
 }
 ```
 `CardInst`: `{iid, scryfallId?, name, imageUrl, tapped, faceDown, counters: {}, x, y, isToken, power?, toughness?}`
+
+Readiness, online state, deck names, and mana pools are public to seated players
+and spectators. Only the authenticated seat may change its own readiness, deck,
+or mana. Disconnecting clears that seat's readiness; reconnecting resumes the
+same seat as unready. Spectators cannot ready, select decks, start, or send game
+actions.
 
 ## Server internals (implementation notes)
 - SQLite (rusqlite, bundled) at `server/data/pc.db`: `users`, `friend_requests`, `friendships`, `decks` (cards as JSON column).
@@ -269,6 +288,7 @@ deck salt ratings + aggregate stats).
     "players": [{
       "userId": "…", "username": "…", "seat": 0, "isBot": false,
       "conceded": true, "turnsTaken": 6, "avgTurnMs": 95000,
+      "cardsPlayed": 14, "cardsDrawn": 11, "peakBattlefield": 8,
       "deckId": "…", "deckName": "…", "life": 31
     }]
   }
@@ -277,10 +297,11 @@ deck salt ratings + aggregate stats).
 - `matchResult` is null until then and never clears for the life of the room.
   A log line `"<winner> wins the match"` is broadcast alongside the resync.
   Once set, ALL further game actions error `match_over` (the board freezes).
-- Turn timing: the server clocks the active seat from game start and from
-  every turn handoff; `avgTurnMs` = active time / turns begun. The mulligan
-  window is nobody's turn time: the active player's clock restarts when the
-  last keep (or a window-closing concede) lands.
+- Turn timing: the server credits time only when the active player interacts.
+  Each silent gap contributes at most 30 seconds, so an abandoned tab cannot
+  dominate the average; frequent interactions still accumulate real active
+  time. `avgTurnMs` = credited active time / turns begun. The mulligan window is
+  nobody's turn time: the clock restarts when the last keep lands.
 - `ranked` = at least 2 human seats, >= 3 turn rounds, and >= 2 minutes of
   play. Only ranked results are persisted server-side (`matches` +
   `match_players`) and feed the aggregate stats below; unranked results
@@ -305,8 +326,10 @@ deck salt ratings + aggregate stats).
       "userId": "…", "username": "…", "seat": 0, "isBot": false,
       "deckId": "…", "deckName": "…", "won": true, "conceded": false,
       "turnsTaken": 9, "avgTurnMs": 88000,
+      "cardsPlayed": 20, "cardsDrawn": 13, "peakBattlefield": 9,
       "wins": 4, "losses": 2, "endorsements": 7, "allTimeAvgTurnMs": 91000,
-      "deck": { "wins": 3, "losses": 1, "salt": 2.5, "saltCount": 4 },
+      "deck": { "wins": 3, "losses": 1, "salt": 2.5, "saltCount": 4,
+        "avgCardsPerTurn": 2.2, "avgCardsDrawn": 12.4, "avgPeakBattlefield": 8.1 },
       "myEndorsed": false, "mySalt": null
   }] }
   ```

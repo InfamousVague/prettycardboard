@@ -488,11 +488,16 @@ export function CmdChoiceDialog({ me }: { me: TablePlayer | undefined }) {
 
 // Dice results and combat damage both deserve the center-stage banner.
 const ROLLISH = /\broll(s|ed)?\b|\bHeads\b|\bTails\b|loses \d+ life|commander damage/i;
+// A dice/coin result: hold the banner until the 3D dice have settled so the
+// number isn't spoiled mid-tumble. Non-dice banners (life, combat) show at once.
+const DICE_RESULT = /\broll(s|ed)?\b|\bHeads\b|\bTails\b/i;
+const DICE_SETTLE_MS = 1700;
 
 export function RollBanner() {
   const log = useGame((state) => state.log);
   const [banner, setBanner] = useState<{ seq: number; text: string } | null>(null);
   const lastSeen = useRef<number>(0);
+  const pending = useRef<number | undefined>(undefined);
 
   // Never replay history on mount (rejoin/resume keeps its log).
   useEffect(() => {
@@ -500,11 +505,21 @@ export function RollBanner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => () => window.clearTimeout(pending.current), []);
+
   useEffect(() => {
     const last = log[log.length - 1];
     if (!last || last.seq <= lastSeen.current) return;
     lastSeen.current = last.seq;
-    if (ROLLISH.test(last.text)) {
+    if (!ROLLISH.test(last.text)) return;
+    window.clearTimeout(pending.current);
+    if (DICE_RESULT.test(last.text)) {
+      // Wait for the dice to stop moving before revealing the number.
+      pending.current = window.setTimeout(
+        () => setBanner({ seq: last.seq, text: last.text }),
+        DICE_SETTLE_MS,
+      );
+    } else {
       setBanner({ seq: last.seq, text: last.text });
     }
   }, [log]);

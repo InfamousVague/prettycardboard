@@ -5,6 +5,14 @@
 
 use crate::rooms::Room;
 
+/// A pause longer than this is treated as AFK after the first 30 seconds.
+/// Frequent interactions still accumulate the player's real active turn time.
+const MAX_INTERACTION_GAP_MS: i64 = 30_000;
+
+fn active_interval_ms(previous: i64, now: i64) -> i64 {
+    now.saturating_sub(previous).clamp(0, MAX_INTERACTION_GAP_MS)
+}
+
 /// Next occupied, non-conceded seat clockwise after `from`; true when it
 /// wrapped past the lowest such seat (a new turn round). Falls back to all
 /// occupied seats if everyone conceded (degenerate, but never panics).
@@ -28,13 +36,26 @@ pub fn next_occupied(room: &Room, from: usize) -> (usize, bool) {
 /// Credit the elapsed turn time to the current active player. Call BEFORE
 /// active_seat changes; safe when the clock never started (0).
 pub fn turn_clock_credit(room: &mut Room, now: i64) {
-    if room.turn_started_ms > 0 {
+    if room.turn_started_ms > 0 && room.turn_last_interaction_ms > 0 {
         let seat = room.active_seat;
         if let Some(p) = room.players.iter_mut().find(|p| p.seat == seat) {
-            p.turn_time_ms += (now - room.turn_started_ms).max(0);
+            p.turn_time_ms += active_interval_ms(room.turn_last_interaction_ms, now);
         }
     }
     room.turn_started_ms = 0;
+    room.turn_last_interaction_ms = 0;
+}
+
+/// Credit time only when the active player interacts. Long silent gaps are
+/// capped, so leaving a table open cannot dominate their average turn time.
+pub fn turn_clock_interaction(room: &mut Room, seat: usize, now: i64) {
+    if room.turn_started_ms <= 0 || room.turn_last_interaction_ms <= 0 || room.active_seat != seat {
+        return;
+    }
+    if let Some(p) = room.players.iter_mut().find(|p| p.seat == seat) {
+        p.turn_time_ms += active_interval_ms(room.turn_last_interaction_ms, now);
+        room.turn_last_interaction_ms = now;
+    }
 }
 
 /// Start the turn clock for `seat` and count the turn they are beginning.
@@ -43,6 +64,7 @@ pub fn turn_clock_begin(room: &mut Room, seat: usize, now: i64) {
         p.turns_taken += 1;
     }
     room.turn_started_ms = now;
+    room.turn_last_interaction_ms = now;
 }
 
 /// The opening-mulligan window: once every non-conceded seat has kept (a keep
@@ -63,6 +85,7 @@ pub fn maybe_begin_first_turn(room: &mut Room, now: i64) -> Vec<String> {
     }
     room.first_turn_begun = true;
     room.turn_started_ms = now;
+    room.turn_last_interaction_ms = now;
     if room.auto_turn {
         auto_turn_begin(room, room.active_seat)
     } else {
@@ -105,6 +128,7 @@ pub fn auto_turn_begin(room: &mut Room, seat: usize) -> Vec<String> {
     let drew = if do_draw && !p.library.is_empty() {
         let card = p.library.remove(0);
         p.hand.push(card);
+        p.cards_drawn += 1;
         p.hand_revealed = false;
         p.peeked.clear();
         true
@@ -123,5 +147,17 @@ pub fn auto_turn_begin(room: &mut Room, seat: usize) -> Vec<String> {
         vec![format!("{} draws a card", p.username)]
     } else {
         Vec::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn active_intervals_cap_afk_gaps() {
+        assert_eq!(active_interval_ms(1_000, 11_000), 10_000);
+        assert_eq!(active_interval_ms(1_000, 301_000), MAX_INTERACTION_GAP_MS);
+        assert_eq!(active_interval_ms(11_000, 1_000), 0);
     }
 }

@@ -3,7 +3,7 @@
 // mulligan in 1v1 standard; turn.set extra turns; stack push from the
 // battlefield; 1v1 combat without defenderSeat; concede via room.leave wipes
 // the leaver's cards everywhere.
-import { PlaytestClient, Assert, deleteRoom } from '../lib.js';
+import { PlaytestClient, Assert, deleteRoom, readyAll } from '../lib.js';
 import { ensureSeed, PASSWORD } from '../seed.js';
 
 async function main() {
@@ -35,6 +35,9 @@ async function main() {
   await bob.expectState((s) => s.players.length === 2, 'bob seated', 5000, { since: m });
 
   // --- start + mulligans (no free first in 1v1 standard) --------------------
+  await readyAll([alice, bob]);
+  alice.setAutoTurn();
+  bob.setAutoTurn();
   m = alice.mark();
   alice.send({ type: 'room.start' });
   st = await alice.expectState(
@@ -61,7 +64,7 @@ async function main() {
   await bob.expectLog(/pt_bob keeps at 6/, 'bob bottoms 1, keeps at 6', { since: mBob });
 
   // --- all kept -> starting seat's first turn: DRAW IS SKIPPED ----------------
-  await alice.expectLog(/pt_alice untaps \(first draw skipped\)/, 'starting seat skips its first draw (standard)', { since: m });
+  await alice.expectLog(/^pt_alice untaps$/, 'starting seat auto-untaps', { since: m });
   st = await alice.expectState(
     (s) => alice.me(s).handCount === 7 && alice.me(s).libraryCount === 92,
     'alice hand still 7 (no draw), library 92',

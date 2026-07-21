@@ -16,12 +16,13 @@ import {
   useToast,
   type TabbedModalSection,
 } from '@glacier/react';
-import { CircleUserRound, Globe, Info, Keyboard, LayoutGrid, Palette, Wrench } from '@glacier/icons';
+import { CircleUserRound, Globe, Info, Keyboard, LayoutGrid, Paintbrush, Palette, Wrench } from '@glacier/icons';
 import { accentSteps } from '@glacier/tokens';
 import { ACCENTS, DEFAULT_PREFERENCES, MONO_FONTS, SANS_FONTS, type Preferences } from './preferences.ts';
 import { LANGUAGES, useT, type AppLocale } from './i18n.ts';
 import { AccountTab } from './settings/AccountTab.tsx';
 import { AboutTab } from './settings/AboutTab.tsx';
+import { CustomizeTab } from './settings/CustomizeTab.tsx';
 import { KeybindsTab } from './settings/KeybindsTab.tsx';
 
 function resolveTheme(theme: Preferences['theme']): 'light' | 'dark' {
@@ -44,20 +45,32 @@ export function SettingsModal({
   onClose,
   preferences,
   onChange,
+  initialSection,
 }: {
   open: boolean;
   onClose: () => void;
   preferences: Preferences;
   onChange: (patch: Partial<Preferences>) => void;
+  /** Which tab to show when the modal opens (e.g. 'customize' from the rail). */
+  initialSection?: string;
 }) {
   const t = useT();
   const { toast } = useToast();
+  // The active tab is controlled so callers can deep-link (rail Customize, the
+  // in-game menu) straight to a section; it resets to the requested tab on each
+  // open.
+  const [section, setSection] = useState(initialSection ?? 'general');
+  useEffect(() => {
+    if (open) setSection(initialSection ?? 'general');
+  }, [open, initialSection]);
   const swatchTheme = resolveTheme(preferences.theme);
   // Fall back to the defaults for the numeric sliders, so a preferences object
   // that is missing a field (an older persisted version, or Fast Refresh state
   // that predates the field) renders instead of crashing on `undefined.toFixed`.
   const radiusScale = preferences.radiusScale ?? DEFAULT_PREFERENCES.radiusScale;
   const frostedness = preferences.frostedness ?? DEFAULT_PREFERENCES.frostedness;
+  const soundEffects = preferences.soundEffects ?? DEFAULT_PREFERENCES.soundEffects;
+  const soundVolume = preferences.soundVolume ?? DEFAULT_PREFERENCES.soundVolume;
 
   const general = (
     <div style={{ display: 'grid', gap: 'var(--glacier-space-6)' }}>
@@ -206,20 +219,6 @@ export function SettingsModal({
 
   const table = (
     <div style={{ display: 'grid', gap: 'var(--glacier-space-6)' }}>
-      <Fieldset legend={t('setCustomize')} description={t('setCustomizeHint')}>
-        <Button
-          variant="soft"
-          onClick={() => {
-            // Customize is its own modal (playmats + card backs + preview); hand
-            // off to it and close settings so only one modal is up.
-            onClose();
-            window.dispatchEvent(new Event('pc:open-customize'));
-          }}
-        >
-          <Palette size={16} /> {t('navCustomize')}
-        </Button>
-      </Fieldset>
-
       <div className="control">
         <Label>{t('setSidebar')}</Label>
         <SegmentedControl
@@ -248,6 +247,14 @@ export function SettingsModal({
         />
       </div>
 
+      <Fieldset legend={t('setAmbientCards')} description={t('setAmbientCardsHint')}>
+        <Switch
+          label={t('setAmbientCards')}
+          checked={preferences.ambientCards}
+          onCheckedChange={(checked) => onChange({ ambientCards: checked })}
+        />
+      </Fieldset>
+
       <Fieldset legend={t('setAutoTurn')} description={t('setAutoTurnHint')}>
         <div style={{ display: 'grid', gap: 'var(--glacier-space-3)' }}>
           <Switch
@@ -269,6 +276,31 @@ export function SettingsModal({
           checked={preferences.mirrorOpponent}
           onCheckedChange={(checked) => onChange({ mirrorOpponent: checked })}
         />
+      </Fieldset>
+
+      <Fieldset legend={t('setSounds')} description={t('setSoundsHint')}>
+        <Switch
+          label={t('setSounds')}
+          checked={soundEffects}
+          onCheckedChange={(checked) => onChange({ soundEffects: checked })}
+        />
+        {soundEffects && (
+          <Row gap={3} align="center" style={{ width: '100%', marginBlockStart: 'var(--glacier-space-3)' }}>
+            <div style={{ flex: 1 }}>
+              <Slider
+                aria-label={t('setSoundVolume')}
+                min={0}
+                max={1}
+                step={0.05}
+                value={soundVolume}
+                onValueChange={(next) => onChange({ soundVolume: next })}
+              />
+            </div>
+            <Text as="span" size={Size.Small} tone={TextTone.Muted} mono>
+              {Math.round(soundVolume * 100)}%
+            </Text>
+          </Row>
+        )}
       </Fieldset>
 
       <Fieldset legend={t('setHaptics')} description={t('setHapticsHint')}>
@@ -322,26 +354,18 @@ export function SettingsModal({
           </div>
         )}
       </Fieldset>
-
-      <Row justify="between" align="center" gap={3} wrap>
-        <Text as="span" size={Size.Small} tone={TextTone.Muted}>
-          {t('setCustomizeNote')}
-        </Text>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => window.dispatchEvent(new Event('pc:open-customize'))}
-        >
-          <Palette size={16} />
-          {t('setOpenCustomize')}
-        </Button>
-      </Row>
     </div>
   );
 
   const sections: TabbedModalSection[] = [
     { id: 'general', label: t('setGeneral'), icon: <Globe size={18} />, content: general },
     { id: 'appearance', label: t('setAppearance'), icon: <Palette size={18} />, content: appearance },
+    {
+      id: 'customize',
+      label: t('navCustomize'),
+      icon: <Paintbrush size={18} />,
+      content: <CustomizeTab preferences={preferences} onChange={onChange} />,
+    },
     { id: 'table', label: t('setTableTab'), icon: <LayoutGrid size={18} />, content: table },
     {
       id: 'keybinds',
@@ -363,7 +387,8 @@ export function SettingsModal({
       open={open}
       onClose={onClose}
       title={t('setTitle')}
-      defaultValue="general"
+      value={section}
+      onValueChange={setSection}
       sections={sections}
       footer={
         <Row justify="between" align="center">

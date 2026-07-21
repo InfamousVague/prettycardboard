@@ -844,6 +844,7 @@ body {
 /* Theme filter above each picker grid. */
 .pickerFilter {
   margin-block-end: var(--glacier-space-3);
+  max-width: 100%;
 }
 
 .matPicker {
@@ -871,6 +872,86 @@ body {
   object-fit: cover;
   display: block;
   border-radius: calc(var(--glacier-radius-md) - 2px);
+}
+
+/* Solid-color mats render their live token color + faint grid instead of art. */
+.matColorFill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-size: cover, cover;
+  background-position: center;
+  border-radius: calc(var(--glacier-radius-md) - 2px);
+}
+
+/* Dice skins: a die-face chip per skin. */
+.diceSkinPicker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr));
+  gap: var(--glacier-space-3);
+}
+
+.diceSwatch {
+  appearance: none;
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  border: 2px solid transparent;
+  border-radius: var(--glacier-radius-md);
+  background: none;
+  color: var(--glacier-text-secondary);
+  cursor: pointer;
+  transition: transform var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.diceSwatchFace {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.9rem;
+  font-family: var(--glacier-font-mono);
+  font-size: 0.95rem;
+  font-weight: var(--glacier-font-weight-bold);
+  box-shadow: inset 0 2px 6px rgba(255, 255, 255, 0.25), inset 0 -3px 8px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* Metal/glass finishes get a brighter specular sheen. */
+.diceSwatchFace[data-material='metal'] {
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.45), transparent 45%, rgba(0, 0, 0, 0.35));
+}
+
+.diceSwatchFace[data-material='glass'] {
+  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.55), transparent 55%);
+}
+
+/* Textured (resin/space) skins get a starry hint in the swatch. */
+.diceSwatchFace[data-texture] {
+  background-image:
+    radial-gradient(circle at 28% 32%, rgba(255, 255, 255, 0.85) 0.5px, transparent 1.6px),
+    radial-gradient(circle at 68% 58%, rgba(255, 255, 255, 0.7) 0.5px, transparent 1.6px),
+    radial-gradient(circle at 48% 78%, rgba(255, 255, 255, 0.6) 0.5px, transparent 1.6px),
+    radial-gradient(circle at 80% 24%, rgba(255, 255, 255, 0.5) 0.5px, transparent 1.4px),
+    linear-gradient(150deg, rgba(255, 255, 255, 0.25), transparent 60%);
+}
+
+.diceSwatchName {
+  font-size: var(--glacier-font-size-xs);
+}
+
+.diceSwatch:hover {
+  transform: translateY(-2px);
+}
+
+.diceSwatch[data-selected] {
+  border-color: var(--glacier-accent-solid);
+  color: var(--glacier-text);
+}
+
+.diceSwatch:focus-visible {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: 2px;
 }
 
 .matSwatchName {

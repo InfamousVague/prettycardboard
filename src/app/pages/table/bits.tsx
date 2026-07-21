@@ -1,6 +1,6 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { AlertDialog, Menu, MenuItem, MenuSub } from '@glacier/react';
-import { Ban, Crown, Skull, Swords } from '@glacier/icons';
+import { AlertDialog, Button, IconButton, Input, Menu, MenuItem, MenuSub, NumberInput, Popover } from '@glacier/react';
+import { Ban, Crown, Plus, Skull, SlidersHorizontal, Swords, Trash2 } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
@@ -11,6 +11,7 @@ import type { CardInst, CombatState, RoomState, TablePlayer, Zone } from '../../
 import { useTableUi } from './tableUi.ts';
 import { useLongPress, menuEventFrom } from '../../hooks/useLongPress.ts';
 import { flyFromAnchor, flightAnchor, setFlightAnchor } from './juice.ts';
+import { formatPtCounter, parsePtCounter, ptCounterModifier } from './boardModes.ts';
 
 /**
  * Split a battlefield into hosts and their attachments. Attached cards render
@@ -88,29 +89,194 @@ export function findFieldCard(room: RoomState, iid: string): CardInst | undefine
   return undefined;
 }
 
-/** Counter badges. +1/+1 and -1/-1 shift power AND toughness equally (and, being
- *  state-based, annihilate), so they collapse into one two-sided P/T pill that
- *  reads "+2 / +2" or "-1 / -1"; other counters (loyalty, charge…) stay compact
- *  chips like "L2". */
-export function CounterBadges({ card }: { card: CardInst }) {
-  const pt = (card.counters['+1/+1'] ?? 0) - (card.counters['-1/-1'] ?? 0);
-  const others = Object.entries(card.counters).filter(
-    ([kind, count]) => count > 0 && kind !== '+1/+1' && kind !== '-1/-1',
-  );
-  if (pt === 0 && others.length === 0) return null;
-  const sign = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+/** A card's counter editor, portalled by Glacier Popover: a labelled list of
+ * active counters with steppers plus a compact add row. Counter keys that parse
+ * as P/T modifiers (`+1/+1`, `+1/+6`) are summed independently for combat. */
+function CounterManager({ card, onSet }: { card: CardInst; onSet: (counter: string, value: number) => void }) {
+  const t = useT();
+  const [name, setName] = useState('');
+  const entries = Object.entries(card.counters)
+    .filter(([, count]) => count > 0)
+    .sort(([left], [right]) => Number(parsePtCounter(right) != null) - Number(parsePtCounter(left) != null) || left.localeCompare(right));
+  const ptEntries = entries.filter(([kind]) => parsePtCounter(kind) != null);
+  const others = entries.filter(([kind]) => parsePtCounter(kind) == null);
+  const pt = ptCounterModifier(card.counters);
+
+  const add = (kind: string) => {
+    const trimmed = kind.trim();
+    if (trimmed) onSet(trimmed, (card.counters[trimmed] ?? 0) + 1);
+  };
+
+  // Both P/T sides collapse into one canonical counter (e.g. "+1/+6"); editing
+  // a side rewrites that single counter and clears any other P/T keys.
+  const setPt = (power: number, toughness: number) => {
+    const p = Math.trunc(Math.min(99, Math.max(-99, power)));
+    const tuf = Math.trunc(Math.min(99, Math.max(-99, toughness)));
+    const key = formatPtCounter(p, tuf);
+    for (const [kind] of ptEntries) if (kind !== key) onSet(kind, 0);
+    onSet(key, p === 0 && tuf === 0 ? 0 : 1);
+  };
+
   return (
-    <span className="counterBadges">
-      {pt !== 0 && (
-        <span className="counterPill" data-tone={pt > 0 ? 'buff' : 'debuff'} title="+1/+1 counters">
-          {sign(pt)} <span className="counterPillSlash">/</span> {sign(pt)}
+    <div className="counterManager" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+      <div className="counterManagerHead">
+        <SlidersHorizontal size={15} aria-hidden />
+        <strong>{t('gpManageCounters')}</strong>
+      </div>
+
+      <div className="counterManagerSection">
+        <span className="counterManagerLabel">{t('gpActiveCounters')}</span>
+        {entries.length > 0 ? (
+          <div className="counterManagerList">
+            {ptEntries.length > 0 && (
+              <div className="counterPtRow">
+                <span className="counterManagerLabel">{t('gpPowerToughness')}</span>
+                <div className="counterPtControls">
+                  <div className="counterPtInputs">
+                    <NumberInput
+                      size="sm"
+                      min={-99}
+                      max={99}
+                      value={pt.power}
+                      aria-label={t('gpPowerModifier')}
+                      onValueChange={(value) => Number.isFinite(value) && setPt(value, pt.toughness)}
+                    />
+                    <span className="counterPtSlash" aria-hidden>/</span>
+                    <NumberInput
+                      size="sm"
+                      min={-99}
+                      max={99}
+                      value={pt.toughness}
+                      aria-label={t('gpToughnessModifier')}
+                      onValueChange={(value) => Number.isFinite(value) && setPt(pt.power, value)}
+                    />
+                  </div>
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    aria-label={t('gpRemoveCounter').replace('{name}', t('gpPowerToughness'))}
+                    onClick={() => setPt(0, 0)}
+                  >
+                    <Trash2 size={14} />
+                  </IconButton>
+                </div>
+              </div>
+            )}
+            {others.map(([kind, count]) => (
+              <div key={kind} className="counterManagerRow">
+                <span className="counterManagerName" title={kind}>{kind}</span>
+                <NumberInput
+                  size="sm"
+                  min={0}
+                  max={999}
+                  value={count}
+                  aria-label={`${kind}: ${t('gpCounterQuantity')}`}
+                  onValueChange={(value) => Number.isFinite(value) && onSet(kind, Math.trunc(value))}
+                />
+                <IconButton
+                  size="sm"
+                  variant="ghost"
+                  aria-label={t('gpRemoveCounter').replace('{name}', kind)}
+                  onClick={() => onSet(kind, 0)}
+                >
+                  <Trash2 size={14} />
+                </IconButton>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="counterManagerEmpty">{t('gpNoCounters')}</p>
+        )}
+      </div>
+
+      <div className="counterManagerSection">
+        <span className="counterManagerLabel">{t('gpAddCounter')}</span>
+        <div className="counterQuickAdds">
+          {['+1/+1', '-1/-1'].map((kind) => (
+            <Button key={kind} size="sm" variant="soft" onClick={() => add(kind)}>
+              {kind}
+            </Button>
+          ))}
+        </div>
+        <form
+          className="counterNamedAdd"
+          onSubmit={(event) => {
+            event.preventDefault();
+            add(name);
+            setName('');
+          }}
+        >
+          <Input
+            size="sm"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder={t('gpCounterNameHint')}
+            aria-label={t('gpCounterName')}
+          />
+          <IconButton size="sm" type="submit" variant="soft" disabled={!name.trim()} aria-label={t('gpAddCounter')}>
+            <Plus size={14} />
+          </IconButton>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export function CounterBadges({
+  card,
+  onSet,
+}: {
+  card: CardInst;
+  onSet?: (counter: string, value: number) => void;
+}) {
+  const t = useT();
+  const entries = Object.entries(card.counters).filter(([, count]) => count > 0);
+  const pt = ptCounterModifier(card.counters);
+  const others = entries.filter(([kind]) => parsePtCounter(kind) == null);
+  const hasPt = pt.power !== 0 || pt.toughness !== 0;
+  if (!onSet && !hasPt && others.length === 0) return null;
+  const sign = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+  const badges = (
+    <>
+      {hasPt && (
+        <span
+          className="counterPill"
+          data-tone={pt.power < 0 || pt.toughness < 0 ? 'debuff' : 'buff'}
+          title={entries.filter(([kind]) => parsePtCounter(kind) != null).map(([kind, count]) => `${kind} × ${count}`).join(' · ')}
+        >
+          {sign(pt.power)} <span className="counterPillSlash">/</span> {sign(pt.toughness)}
         </span>
       )}
       {others.map(([kind, count]) => (
-        <span key={kind} className="counterBadge" title={kind}>
+        <span key={kind} className="counterBadge" title={`${kind}: ${count}`}>
           {`${kind.charAt(0).toUpperCase()}${count}`}
         </span>
       ))}
+      {!hasPt && others.length === 0 && <Plus className="counterEmptyPlus" size={13} aria-hidden />}
+    </>
+  );
+
+  if (!onSet) return <span className="counterBadges">{badges}</span>;
+  return (
+    <span className="counterBadges" data-empty={entries.length === 0 || undefined}>
+      <Popover
+        className="counterPopover"
+        placement="right-start"
+        aria-label={t('gpManageCounters')}
+        trigger={
+          <button
+            type="button"
+            className="counterManagerTrigger"
+            aria-label={t('gpManageCounters')}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {badges}
+          </button>
+        }
+      >
+        <CounterManager card={card} onSet={onSet} />
+      </Popover>
     </span>
   );
 }

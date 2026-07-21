@@ -12,6 +12,11 @@ export type ClientMessage =
   | { type: 'room.spectate'; roomId: string }
   | { type: 'room.leave' }
   | { type: 'room.start' }
+  | { type: 'room.ready'; ready: boolean }
+  | { type: 'room.deck.set'; deckId: string }
+  | { type: 'room.ping'; targetUserId: string }
+  | { type: 'room.hand.hover'; position: number | null }
+  | { type: 'cursor.move'; x: number; y: number; hover: string | null }
   | { type: 'playmat.set'; id?: string }
   | { type: 'cardback.set'; id?: string }
   | { type: 'auto.set'; untap: boolean; draw: boolean }

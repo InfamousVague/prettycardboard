@@ -5,12 +5,14 @@ import {
   AlignStartVertical,
   ChevronDown,
   ChevronUp,
+  CircleDot,
   Crown,
   Dices,
   Minus,
   Moon,
   Plus,
   Settings,
+  Shapes,
   Sun,
   Swords,
   Tornado,
@@ -35,12 +37,15 @@ import {
   tidyPositions,
   type BoardMode,
 } from './boardModes.ts';
-import { SETTLE_EASE, dragTilt, flightAnchor, juicePulse, prefersReducedMotion, restTilt, setFlightAnchor } from './juice.ts';
-import { playmatUrl } from '../../data/playmats.ts';
+import { SETTLE_EASE, dragTilt, flightAnchor, juicePulse, prefersReducedMotion, restTilt, setFlightAnchor, ambientDelay } from './juice.ts';
+import { playmatBackground } from '../../data/playmats.ts';
 import { usePreference } from '../../hooks/usePreference.ts';
 import { TokenPicker } from './TokenPicker.tsx';
 import { HandCard, HAND_PEEK_ZONE } from './HandCard.tsx';
 import { DiceRoll3D } from './DiceRoll3D.tsx';
+import { DiceIcon } from '../../components/DiceIcon.tsx';
+import { send } from '../../net/ws.ts';
+import { playSound } from '../../sounds.ts';
 
 /**
  * My side of the table: free-placement battlefield with drag v2 (lift, tilt
@@ -81,6 +86,7 @@ const HAND_DROP_BUFFER = 44;
  * permanently occupying the bottom. Capped at a quarter of the field.
  */
 const RESERVED_BOTTOM_PX = 96;
+const HAND_HOVER_SEND_MS = 50;
 
 
 export function MyBoard({
@@ -113,6 +119,9 @@ export function MyBoard({
   // Perfectly-upright cards vs the natural slight per-card tilt (Settings ->
   // Table -> Card placement).
   const verticalCards = usePreference('verticalCards');
+  // Subtle continuous idle drift on battlefield cards (Settings -> Table ->
+  // Ambient card motion). Off by default; suppressed while dragging.
+  const ambientCards = usePreference('ambientCards');
 
   const fieldRef = useRef<HTMLDivElement>(null);
   const handRef = useRef<HTMLDivElement | null>(null);
@@ -164,6 +173,53 @@ export function MyBoard({
   }, [mtg]);
   // Pointer x over the hand fan; Infinity = not hovering (all bumps at rest).
   const handX = useMotionValue(Number.POSITIVE_INFINITY);
+  const handHoverTimer = useRef<number | null>(null);
+  const pendingHandHover = useRef<number | null>(null);
+  const lastHandHoverSent = useRef(0);
+  const handHoverActive = useRef(false);
+  const shareHandHover = (position: number | null) => {
+    if (position == null) {
+      pendingHandHover.current = null;
+      if (handHoverTimer.current != null) window.clearTimeout(handHoverTimer.current);
+      handHoverTimer.current = null;
+      if (handHoverActive.current) {
+        handHoverActive.current = false;
+        send({ type: 'room.hand.hover', position: null });
+      }
+      return;
+    }
+    pendingHandHover.current = position;
+    if (handHoverTimer.current != null) return;
+    const wait = Math.max(0, HAND_HOVER_SEND_MS - (performance.now() - lastHandHoverSent.current));
+    handHoverTimer.current = window.setTimeout(() => {
+      handHoverTimer.current = null;
+      const next = pendingHandHover.current;
+      pendingHandHover.current = null;
+      if (next == null) return;
+      handHoverActive.current = true;
+      lastHandHoverSent.current = performance.now();
+      send({ type: 'room.hand.hover', position: next });
+    }, wait);
+  };
+  useEffect(
+    () => {
+      const clearSharedHandHover = () => {
+        pendingHandHover.current = null;
+        if (handHoverTimer.current != null) window.clearTimeout(handHoverTimer.current);
+        handHoverTimer.current = null;
+        if (handHoverActive.current) {
+          handHoverActive.current = false;
+          send({ type: 'room.hand.hover', position: null });
+        }
+      };
+      window.addEventListener('blur', clearSharedHandHover);
+      return () => {
+        window.removeEventListener('blur', clearSharedHandHover);
+        clearSharedHandHover();
+      };
+    },
+    [],
+  );
   const velocity = useRef({ x: 0, t: 0, vx: 0 });
   // A drag only becomes real after the pointer travels a few pixels -
   // otherwise a plain click would count as a zero-distance drop and hand
@@ -369,6 +425,7 @@ export function MyBoard({
       origin.armed = true;
       // A real drag has started; it is not a press-and-hold.
       clearHold();
+      playSound('cardPickup');
     }
     const now = performance.now();
     const dt = Math.max(1, now - velocity.current.t);
@@ -459,17 +516,20 @@ export function MyBoard({
     const card = cardOf(from, iid);
     const pos = snapDrop(boardMode, rawPos, card, rect);
     const pile = pileUnderPoint(event.clientX, event.clientY);
+    let moved = false;
 
     if (card && pile && pile !== from && from !== 'library') {
       // Dropped straight onto a zone pile (deck/graveyard/exile/command): move
       // it there - no context menu needed. Library takes it on top.
       act({ kind: 'card.move', iid, to: pile, ...(pile === 'library' ? { index: 0 } : {}) });
+      moved = true;
     } else if (from === 'library') {
       // Drag from the TOP OF THE DECK onto the felt: the server pops the (hidden)
       // top card and plays it face up where it landed. Releasing back over a pile,
       // the hand, or the reserved bottom strip just cancels (no-op).
       if (!pile && !overHand && !inReservedBand(event.clientY)) {
         act({ kind: 'library.play', ...pos });
+        moved = true;
       }
     } else if (from === 'hand') {
       // Play the card only when it clears the hand's buffer AND the reserved
@@ -479,11 +539,13 @@ export function MyBoard({
         act({ kind: 'card.move', iid, to: 'battlefield', ...(host ? rawPos : pos) });
         if (host) act({ kind: 'card.attach', iid, hostIid: host.iid });
         bumpZ(iid);
+        moved = true;
       }
     } else if (from === 'battlefield' && card) {
       // Dropping a battlefield card into the hand buffer returns it to hand.
       if (overHand) {
         act({ kind: 'card.move', iid, to: 'hand' });
+        moved = true;
       } else {
         const host = boardMode === 'assist' ? hostUnderPoint(me.battlefield, rawPos, rect, iid) : null;
         if (host && host.iid !== card.attachedTo) {
@@ -500,17 +562,21 @@ export function MyBoard({
           bumpZ(iid);
         }
         settle(iid);
+        moved = true;
       }
     } else if ((from === 'graveyard' || from === 'exile') && card) {
       // Dragged a card back OUT of a pile: onto the hand, or onto the field.
       // A release still inside the strip just springs back (no-op).
       if (overHand) {
         act({ kind: 'card.move', iid, to: 'hand' });
+        moved = true;
       } else if (!inReservedBand(event.clientY)) {
         act({ kind: 'card.move', iid, to: 'battlefield', ...pos });
         bumpZ(iid);
+        moved = true;
       }
     }
+    playSound(moved ? 'cardPlace' : 'cardReturn');
     justDragged.current = true;
     setTimeout(() => {
       justDragged.current = false;
@@ -586,6 +652,12 @@ export function MyBoard({
     }, 230);
   };
 
+  const setCounterCount = (card: CardInst, counter: string, requested: number) => {
+    const target = Math.trunc(Math.min(999, Math.max(0, requested)));
+    const current = card.counters[counter] ?? 0;
+    if (target !== current) act({ kind: 'card.counter', iid: card.iid, counter, delta: target - current });
+  };
+
   /* ---------------- render ---------------- */
 
   const renderFieldCard = (card: CardInst, host?: CardInst, attachIndex = 0) => {
@@ -615,6 +687,7 @@ export function MyBoard({
       <div
         key={card.iid}
         className="fieldCard"
+        data-iid={card.iid}
         data-preview-src={fieldPreview}
         data-preview-name={fieldPreview ? card.name : undefined}
         data-dragging={dragging || undefined}
@@ -622,6 +695,7 @@ export function MyBoard({
         data-attachment={host ? '' : undefined}
         data-affordance={affordance}
         data-blocking={blockerIid === card.iid || undefined}
+        data-ambient={ambientCards && !dragging ? '' : undefined}
         style={{
           left: offset ? `calc(${baseX * 100}% + ${offset}px)` : `${baseX * 100}%`,
           top: offset ? `calc(${baseY * 100}% + ${offset * 0.8}px)` : `${baseY * 100}%`,
@@ -631,6 +705,7 @@ export function MyBoard({
           zIndex: dragging ? 100000 : host ? 4 : cardZ,
           ['--rest-tilt' as string]: verticalCards ? '0deg' : `${restTilt(card.iid)}deg`,
           ['--drag-tilt' as string]: dragging ? `${drag.tilt}deg` : '0deg',
+          ['--ambient-delay' as string]: `${ambientDelay(card.iid)}s`,
         }}
         ref={(el) => {
           if (el) cardEls.current.set(card.iid, el);
@@ -651,7 +726,7 @@ export function MyBoard({
             faceDown={card.faceDown}
             tilt={0}
           >
-            <CounterBadges card={card} />
+            <CounterBadges card={card} onSet={(counter, value) => setCounterCount(card, counter, value)} />
             {attacker && (
               <AttackBadge defenderName={room.players.find((p) => p.seat === attacker.defenderSeat)?.username} />
             )}
@@ -744,7 +819,7 @@ export function MyBoard({
           setFlightAnchor('field:mine', el);
         }}
         className="myField"
-        style={me.playmat ? { ['--pc-board-mat' as string]: `url("${playmatUrl(me.playmat)}")` } : undefined}
+        style={me.playmat ? { ['--pc-board-mat' as string]: playmatBackground(me.playmat) } : undefined}
         data-mode={boardMode}
         data-game={room.game || 'mtg'}
         data-lanes={(boardMode === 'rows' && drag != null) || undefined}
@@ -832,8 +907,12 @@ export function MyBoard({
               </IconButton>
             }
           >
-            <MenuItem onSelect={() => act({ kind: 'dice.roll', sides: 6 })}>d6</MenuItem>
-            <MenuItem onSelect={() => act({ kind: 'dice.roll', sides: 20 })}>d20</MenuItem>
+            <MenuItem icon={<DiceIcon sides={6} size={16} />} onSelect={() => act({ kind: 'dice.roll', sides: 6 })}>
+              d6
+            </MenuItem>
+            <MenuItem icon={<DiceIcon sides={20} size={16} />} onSelect={() => act({ kind: 'dice.roll', sides: 20 })}>
+              d20
+            </MenuItem>
             <MenuItem onSelect={() => act({ kind: 'dice.roll', sides: 2 })}>Coin flip</MenuItem>
           </Menu>
           <Menu
@@ -915,8 +994,13 @@ export function MyBoard({
               // busy dragging, and mid-drag the fan should hold still.
               if (event.pointerType !== 'mouse' || drag) return;
               handX.set(event.clientX);
+              const rect = event.currentTarget.getBoundingClientRect();
+              shareHandHover(Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))));
             }}
-            onPointerLeave={() => handX.set(Number.POSITIVE_INFINITY)}
+            onPointerLeave={() => {
+              handX.set(Number.POSITIVE_INFINITY);
+              shareHandHover(null);
+            }}
           >
             {(me.hand ?? []).map((card, index, hand) => (
               <HandCard
@@ -926,7 +1010,10 @@ export function MyBoard({
                 spread={index - (hand.length - 1) / 2}
                 dimmed={drag?.iid === card.iid && dragOrigin.current.armed}
                 handX={handX}
-                onPointerDown={(event) => beginDrag(event, card, 'hand')}
+                onPointerDown={(event) => {
+                  shareHandHover(null);
+                  beginDrag(event, card, 'hand');
+                }}
                 onPointerEnter={() => onHover(card)}
                 onPointerLeave={() => onHover(null)}
                 onClick={() => clickHandCard(card)}
@@ -940,7 +1027,10 @@ export function MyBoard({
           <button
             type="button"
             className="handTab"
-            onClick={() => setHandHidden((hidden) => !hidden)}
+            onClick={() => {
+              shareHandHover(null);
+              setHandHidden((hidden) => !hidden);
+            }}
             title={handHidden ? t('gpShowHand') : t('gpHideHand')}
           >
             {handHidden ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
@@ -973,33 +1063,40 @@ export function MyBoard({
       {/* right-click board menu: create a searched token, or a bare counter marker */}
       {boardMenu && (
         <div
-          className="cardMenu"
+          className="cardMenu cardMenuCompact"
           style={{
             left: Math.min(boardMenu.x, window.innerWidth - 220),
             top: Math.min(boardMenu.y, window.innerHeight - 140),
           }}
+          role="menu"
+          aria-label={t('tkCreateToken')}
           onPointerDown={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
+          <div className="menuSectionLabel"><Plus size={13} /> Create</div>
           <button
             type="button"
             className="menuItem"
+            role="menuitem"
             onClick={() => {
               setPickerAt({ x: boardMenu.bx, y: boardMenu.by });
               setBoardMenu(null);
             }}
           >
-            {t('tkCreateToken')}
+            <span className="menuItemIcon" aria-hidden><Shapes size={15} /></span>
+            <span>{t('tkCreateToken')}</span>
           </button>
           <button
             type="button"
             className="menuItem"
+            role="menuitem"
             onClick={() => {
               act({ kind: 'token.create', name: t('tkCounter'), x: boardMenu.bx, y: boardMenu.by });
               setBoardMenu(null);
             }}
           >
-            {t('tkNewCounter')}
+            <span className="menuItemIcon" aria-hidden><CircleDot size={15} /></span>
+            <span>{t('tkNewCounter')}</span>
           </button>
         </div>
       )}

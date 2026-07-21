@@ -77,7 +77,9 @@ The two modals (`SettingsModal`, `CustomizeModal`) use a **latch** so their chun
 
 #### Preferences → token look
 
-`preferences.ts` holds the app-wide look-and-feel knobs (theme, density, accent, fonts, radius/blur scales, locale, motion/haptics, card back, playmat, table-play options). `App()` seeds state from `loadPreferences()` (versioned localStorage read, with a v1→v2 migration for `radiusScale`), and an effect calls `applyPreferences()` + `savePreferences()` on every change. `applyPreferences` reflects each value onto `document.documentElement`: it stamps `data-theme`, `data-density`, `data-accent`, `data-font`, `data-mono`, and sets CSS vars like `--glacier-radius-scale`, `--glacier-glass-blur-scale`, `--pc-card-back`, `--pc-playmat`. Notably, any value equal to its default *clears* the attribute so the token `:root` defaults win, and it dispatches a `pc:preferences` window event so live surfaces (the table felt) can react.
+`preferences.ts` holds the app-wide look-and-feel knobs (theme, density, accent, fonts, radius/blur scales, locale, motion/haptics, table sound enable/volume, card back, playmat, table-play options). `App()` seeds state from `loadPreferences()` (versioned localStorage read, with a v1→v2 migration for `radiusScale`), and an effect calls `applyPreferences()` + `savePreferences()` on every change. `applyPreferences` reflects each value onto `document.documentElement`: it stamps `data-theme`, `data-density`, `data-accent`, `data-font`, `data-mono`, and sets CSS vars like `--glacier-radius-scale`, `--glacier-glass-blur-scale`, `--pc-card-back`, `--pc-playmat`. Notably, any value equal to its default *clears* the attribute so the token `:root` defaults win, and it dispatches a `pc:preferences` window event so live surfaces (the table felt) can react.
+
+`sounds.ts` is the single table-audio boundary. It unlocks Web Audio on the first real pointer gesture, preloads the exact MP3 names listed in `public/sounds/README.md`, applies the persisted master volume, and synthesizes short fallbacks when samples are absent. High-signal state transitions own notification cues (your turn, targeted ping, accepted draw); local gesture code owns tactile pickup/place/return cues; dice physics owns roll and settled cues. Generic interface clicks intentionally remain silent. A targeted `room.ping` is validated server-side, rate-limited per sender, and delivered only to its seated sender and online recipient; spectators never receive it.
 
 #### Tauri vs web
 
@@ -141,10 +143,10 @@ The client half of PrettyCardboard's authoritative-server model: four Zustand st
 - `src/app/state/appStore.ts` — useApp: identity + bearer token (persisted to localStorage), social graph (friends/invites/presence), and the deck list; drives sign-in/out, one-time deck seeding, and going online.
 - `src/app/state/gameStore.ts` — useGame: the live table. Holds the authoritative RoomState plus chat/log/timeline/undo/replay, routes every room-scoped ServerMessage, and applies room.event deltas via applyEvent().
 - `src/app/state/uiStore.ts` — useUi: tiny ephemeral cross-page UI state that must outlive a page remount — selected deck, pending join code, and the 'new deck' intent flag.
-- `src/app/pages/table/tableUi.ts` — useTableUi: purely presentational table-local UI — board layout mode + card scale (persisted per user), combat/blocker selection, library/pile viewers, and the client-only floating-mana pool.
+- `src/app/pages/table/tableUi.ts` — useTableUi: purely presentational table-local UI — board layout mode + card scale (persisted per user), combat/blocker selection, and library/pile viewers.
 - `src/app/state/boardModes.ts` — localStorage-backed load/save + clamp helpers for the per-user board mode and card-scale values that useTableUi hydrates.
 - `src/app/data/pendingJoin.ts` — sessionStorage stash for a share-link table code so it survives the auth gate/reload; useUi seeds pendingJoin from peekPendingJoin().
-- `PROTOCOL.md` — The REST + WebSocket contract the server implements and the client mirrors. Mostly current, but stale in two spots noted in Gotchas (identity is now password-based; a rewindTo typo).
+- `PROTOCOL.md` — The REST + WebSocket contract the server implements and the client mirrors.
 
 #### The shape of it
 
@@ -160,7 +162,7 @@ One socket for everything realtime — presence, invites, chat, and the whole ga
 
 #### The protocol shape (`types.ts`)
 
-`ClientMessage` (declared in `ws.ts`) is the client→server union: `room.join`/`spectate`/`leave`/`start`, `chat.send`, `invite.send`, `replay.seek`, cosmetic setters, and the catch-all `game.action` carrying a `GameAction | GameActionV2`. `GameAction` is freeform v1 table ops (`card.move`, `card.tap`, `draw`, `life.add`, `cmd.damage`, …); `GameActionV2` adds turns/phases/combat/stack/library-tools/undo (`turn.pass`, `combat.attack`, `stack.push`, `library.peek`, `undo`, `redo`, `rewindTo`, `concede`, …). `ServerMessage` is the server→client discriminated union keyed on `type`: global/social frames (`welcome`, `presence`, `invite`, `friend.request`, `friend.accepted`, `decks.changed`) and room-scoped frames that all carry a `roomId` (`room.state`, `room.event`, `chat`, `log`, `cmd.choice`, `library.cards`, `undo.state`, `timeline`, `replay.frame`, `room.closed`, `error`). The keystone is **`room.state` — a full per-viewer `RoomState` snapshot with hidden info (opponents' hands/libraries) filtered server-side**; it is sent on join/spectate/resync and simply *replaces* the client's `room`.
+`ClientMessage` (declared in `ws.ts`) is the client→server union: `room.join`/`spectate`/`leave`/`ready`/`deck.set`/`ping`/`hand.hover`/`start`, `chat.send`, `invite.send`, `replay.seek`, cosmetic setters, and the catch-all `game.action` carrying a `GameAction | GameActionV2`. `GameAction` is freeform v1 table ops (`card.move`, `card.tap`, `draw`, `life.add`, `cmd.damage`, …); `GameActionV2` adds turns/phases/combat/stack/library-tools/undo (`turn.pass`, `combat.attack`, `stack.push`, `library.peek`, `undo`, `redo`, `rewindTo`, `concede`, …). `ServerMessage` is the server→client discriminated union keyed on `type`: global/social frames (`welcome`, `presence`, `invite`, `friend.request`, `friend.accepted`, `decks.changed`) and room-scoped frames that all carry a `roomId` (`room.state`, `room.ping`, `room.hand.hover`, `room.event`, `chat`, `log`, `cmd.choice`, `library.cards`, `undo.state`, `timeline`, `replay.frame`, `room.closed`, `error`). `room.ping` carries explicit `from` and `to` identities and is sent only to those two users. `room.hand.hover` relays only a throttled normalized pointer position, never card identity, and remains outside room snapshots, logs, timelines, and persistence. The keystone is **`room.state` — a full per-viewer `RoomState` snapshot with hidden info (opponents' hands/libraries) filtered server-side**; it is sent on join/spectate/resync and simply *replaces* the client's `room`.
 
 #### appStore (`useApp`) — identity, social, decks
 
@@ -172,7 +174,7 @@ The biggest store. It subscribes to `ws.onStatus` — **on reconnect, if we hold
 
 #### uiStore & tableUi — the two UI stores
 
-`useUi` is deliberately tiny: cross-page state that must survive a page remount — `selectedDeckId`, `pendingJoin` (a share-link code seeded from the sessionStorage stash so a cold-opened invite resumes after auth), and `newDeckIntent` (a flag the Decks page consumes to open the wizard after a cross-navigation). `useTableUi` is *table-local presentational glue* — 'server truth stays in gameStore; this is purely presentational.' It holds `boardMode` and `cardScale` (both hydrated from and saved to localStorage per user via `boardModes.ts`), `blockerIid` (combat selection), `libIntent`/`pileView` (which zone viewer is open), and the **floating-mana pool** (`mana: Record<ManaColor, number>` over WUBRG+C). The mana pool is intentionally *not* persisted and *not* server-synced: it is high-frequency and empties between phases, so restoring a stale pool would be actively wrong.
+`useUi` is deliberately tiny: cross-page state that must survive a page remount — `selectedDeckId`, `pendingJoin` (a share-link code seeded from the sessionStorage stash so a cold-opened invite resumes after auth), and `newDeckIntent` (a flag the Decks page consumes to open the wizard after a cross-navigation). `useTableUi` is *table-local presentational glue* — 'server truth stays in gameStore; this is purely presentational.' It holds `boardMode` and `cardScale` (both hydrated from and saved to localStorage per user via `boardModes.ts`), `blockerIid` (combat selection), and `libIntent`/`pileView` (which zone viewer is open). Floating mana is authoritative `TablePlayer.mana` in `RoomState`, patched from public `room.event` deltas and recovered from snapshots.
 
 **Flow**
 
@@ -185,10 +187,9 @@ Outbound (user acts): component → store action (e.g. `useGame.act(action)`) �
 - The WebSocket replays nothing on reconnect — resync is 100% snapshot-based. `useGame`'s `ws.onStatus` re-sends `room.join`/`room.spectate` to trigger a fresh `room.state`. If you add per-connection server state, it must survive this or be re-fetched here.
 - `ws.connect(token)` is idempotent on purpose (StrictMode double-effects, repeat sign-ins). Don't 'simplify' it to always reopen — you'll stack sockets. Same for `useApp.bootstrap`'s `bootstrapped` guard.
 - The bearer token is module-level global state in `api.ts` (`authToken`). Any authed REST call before `setToken()` runs will 401. The token is also passed in the WS URL query string (`?token=`), which is the server's handshake design — don't route other user data through URLs.
-- PROTOCOL.md is stale on identity: it says 'username-only, no passwords', but `api.register`/`api.login` (and `useApp.register`/`login`) take and send a `password`. Trust the code.
 - PROTOCOL.md documents a `rewintTo` (sic) typo; the wire kind is actually `rewindTo`, which is what `useGame.rewindTo` sends. Match the code, not the doc's typo callout.
 - `act()` and `redo()` short-circuit while `replay.active` (the board is a past frame), but `rewindTo` deliberately is NOT blocked — it's a host action launched from the replay scrubber that exits replay right after.
-- The floating-mana pool in `useTableUi` is intentionally client-only: not persisted, not server-synced. Don't 'fix' it by syncing — a restored stale pool is wrong because mana empties between phases.
+- Floating mana is public room state and owner-only to mutate. Keep `mana.add`/`mana.clear` in the server action path and `applyEvent`; spectators render it but cannot act.
 - chat/log arrays are trimmed on every append (`slice(-199)` / `slice(-299)`); don't assume the client holds the full history — the server/timeline is the record.
 - Two different seeding guards in `useApp.adopt`: precons use the `pc.seeded` localStorage key (per-device, register-only), Cyberpunk starters use a server-truth check ('no cyberpunk decks yet') so they reach existing accounts and are cross-device safe. They are not interchangeable.
 
@@ -369,6 +370,7 @@ The live match screen: a server-authoritative, freeform 2.5D tabletop where one 
 **Key files**
 
 - `src/app/pages/TablePage.tsx` — Shell: stages ONE board, frames the rest, hosts the top bar/PhaseRibbon, right SidePanel (Vitals+Timeline+Players+log), the shared card context menu (CardMenu), and mounts every overlay. Also owns the Space/T hotkeys and preference-mirroring.
+- `src/app/pages/table/PregameLobby.tsx` — Server-backed pre-start surface: public seats/readiness/online status, private own-deck selector, invite control, and host start gate.
 - `src/app/pages/table/MyBoard.tsx` — My side: free-placement battlefield, the whole pointer drag engine (v2: arm-threshold, tilt, ghost, snap-on-drop, local droppedPos/zOrder), fanned hand, board-mode + dice/marker toolbars, board right-click menu, token picker. Still large; mid-refactor (Vitals + HandCard already split out).
 - `src/app/pages/table/Vitals.tsx` — Right-rail personal cluster: life stepper, draw/untap/shuffle/token/settings row, token form, the MTG-only floating-mana pad (ManaBar), and the commander-damage + poison tracker. All actions target `me`.
 - `src/app/pages/table/HandCard.tsx` — One fan card with macOS-Dock magnification driven by motion values off a shared `handX`; shared by MyBoard and OpponentHand.
@@ -378,7 +380,7 @@ The live match screen: a server-authoritative, freeform 2.5D tabletop where one 
 - `src/app/pages/table/juice.ts` — Feel primitives: restTilt, dragTilt, juicePulse, SETTLE_EASE, and the flight-anchor registry (setFlightAnchor/flightAnchor) + flyCard/flyToAnchor/flyFromAnchor WAAPI clone arcs. Fire-and-forget, never blocks input, degrades under reduced-motion.
 - `src/app/pages/table/SeatFrame.tsx` — An opponent's seat: header vitals, their battlefield at raw coords, public piles; big when staged. Owns the defender combat flow (click an attacker aimed at you → blocker picker).
 - `src/app/pages/table/OpponentHand.tsx` — The staged opponent's hand at screen level: same fan/peek/hide as mine but shows backs unless revealed, flips 180° in mirror mode.
-- `src/app/pages/table/tableUi.ts` — Zustand store for table-local UI: boardMode, cardScale, blockerIid, libIntent, pileView, and the ephemeral floating-mana pool. Presentational glue only; server truth is in gameStore.
+- `src/app/pages/table/tableUi.ts` — Zustand store for table-local UI: boardMode, cardScale, blockerIid, libIntent, and pileView. Presentational glue only; server truth is in gameStore.
 - `src/app/pages/table/TimelineCard.tsx` — Undo/redo + the event-strip scrubber; seeking enters read-only replay, host can rewind the table to a past stop.
 - `src/app/pages/table/PhaseRibbon.tsx / TurnCue.tsx / StackTray.tsx` — Turn chrome (marker chips, turn clock, End-Turn/combat cluster; per-phase strip parked behind `false`), the your-turn pill, and the shared center stack tray.
 - `src/app/pages/table/shims.ts` — Client-side contract patch: re-inserts freshly minted tokens the store reducer misses on token.create/token.clone v1 events, deduped by iid.
@@ -391,7 +393,7 @@ The live match screen: a server-authoritative, freeform 2.5D tabletop where one 
 
 `TablePage` is a thin shell over the game store. It reads `room` — normally the live authoritative `useGame(state => state.room)`, but **while scrubbing a replay it renders `replay.frame` instead**, so the whole table becomes a read-only past snapshot. Everything downstream just consumes `room`.
 
-Once a match starts, exactly **one board owns the stage**: `stagedSeat = room.started ? (pinnedSeat ?? room.activeSeat) : null`. If that seat is me, `MyBoard` renders; otherwise TablePage renders that opponent's `SeatFrame` with `stage`, plus their `OpponentHand` at the screen bottom and a floating "View my board" cue. A manual pin (clicking a `PlayersCard` row or the mini rail) overrides `activeSeat` but is cleared whenever the turn moves on or combat begins (see the `useEffect`s keyed on `activeSeatNow`/`combatOn`). Opponents that aren't staged show as compact `SeatFrame`s in the pre-start grid or the right rail. Combat always stages the active/attacker seat.
+Before a match starts, `PregameLobby` owns the canvas and the gameplay rail is unmounted. Once a match starts, exactly **one board owns the stage**: `stagedSeat = room.started ? (pinnedSeat ?? room.activeSeat) : null`. If that seat is me, `MyBoard` renders; otherwise TablePage renders that opponent's `SeatFrame` with `stage`, plus their `OpponentHand` at the screen bottom and a floating "View my board" cue. A manual pin (clicking a `PlayersCard` row or the mini rail) overrides `activeSeat` but is cleared whenever the turn moves on or combat begins. Combat always stages the active/attacker seat.
 
 #### MyBoard: the drag engine
 
@@ -406,7 +408,7 @@ Pointer handling is centralized on the `.myBoard` container (`onPointerMove=move
 
 #### Vitals, mana, and the game registry
 
-`Vitals` (in the `SidePanel`) is the personal cluster and only renders for the seated player. Labels are game-driven: `getGame(room.game).resources` relabels life/poison as Net/RAM for Cyberpunk. The **floating-mana pad** (`ManaBar`) self-gates on `getGame(room.game).stats.some(s => s.id === 'mana')` (MTG only). It is a pure client aid — freeform play has no rules engine feeding a mana pool — and its state lives in `useTableUi.mana`, deliberately **never persisted and never server-synced** (it's cleared on each fresh deal in TablePage's start effect). Left-tap adds a pip, right-click/minus-badge/hold spends, the Pill's `onRemove` empties the pool.
+`Vitals` (in the `SidePanel`) is the personal cluster and only renders for the seated player. Labels are game-driven: `getGame(room.game).resources` relabels life/poison as Net/RAM for Cyberpunk. The **floating-mana pad** self-gates on `getGame(room.game).stats.some(s => s.id === 'mana')` (MTG only). It renders `me.mana` from authoritative room state and dispatches owner-only `mana.add` / `mana.clear`; every seat and spectator sees the resulting pool through `ManaPoolReadout`.
 
 #### Zones, overlays, and flight
 
@@ -416,7 +418,7 @@ Pointer handling is centralized on the `.myBoard` container (`onPointerMove=move
 
 #### Two card viewers
 
-There are two distinct "look at a card" affordances, both app-wide, both wired through `GameCard`. **CardPopup** is the click lightbox (flip-in, full details). **HoverCardLayer** is the passive mouse-only hover-zoom that floats a bigger copy after a 400ms rest — it works with zero per-site wiring because `GameCard` emits `data-preview-src`/`data-preview-name` and HoverCard listens globally. Touch skips the hover path (tap → CardPopup is the right gesture).
+There are two distinct "look at a card" affordances, both app-wide, both wired through `GameCard`. **CardPopup** is the click lightbox with full card details. **HoverCardLayer** is a card-art-only mouse hover-zoom that floats a bigger copy after a 400ms rest; its external close button suppresses that card identity for seven seconds. It works with zero per-site wiring because `GameCard` emits `data-preview-src`/`data-preview-name` and HoverCard listens globally. Touch skips the hover path (tap → CardPopup is the right gesture).
 
 **Flow**
 
@@ -427,7 +429,7 @@ User gesture on a card (click/drag/menu) → optimistic local feedback (droppedP
 - MyBoard is still the big file and is mid-refactor: Vitals and HandCard have been extracted but the whole drag engine, board menus, token picker, and hand fan still live inline. Prefer extracting further over adding to it.
 - Board layout modes (free/assist/rows/grid) only shape where YOUR OWN drops land — they rewrite the x/y you send. Every other player's cards always render at raw server coordinates. `snapDrop`/`hostUnderPoint` are client-only heuristics; the server never classifies cards.
 - `act()` is frozen while `replay.active` (gameStore returns early). Any new interactive control must tolerate being on a read-only historical frame, and TablePage already gates the interactive overlays behind `!replay.active`.
-- The floating-mana pool is intentionally NOT persisted and NOT server-synced, and is wiped on each new deal. Don't 'fix' this by saving it — a restored pool would be wrong.
+- Floating mana is persisted room state. Only the matching authenticated seat may mutate it; readouts for opponents and spectators are intentionally public.
 - Card positions are committed only on drop, not streamed during the drag. The local `droppedPos` map masks the network round-trip; if you bypass it you'll reintroduce the release 'jitter' (task #13).
 - Flight anchors are a global mutable Map of live DOM elements keyed by string (often including userId). `flightAnchor` returns null if the element is unmounted/`!isConnected`; anchors must be registered via ref callbacks and are order/lifetime sensitive.
 - shims.ts patches a live-server contract mismatch (token.create/token.clone rebroadcast the token under action.card while the reducer expects action.token). It relies on running AFTER the store's own ws listener (insertion order) and dedupes by iid. Fixing the server or store could make it double-place if not removed together.
@@ -561,7 +563,7 @@ How PrettyCardboard is built, verified, and shipped: the Vite/tsc web build and 
 - `playtest/README.md` — Playtest harness overview: what each scenario proves, how to run, PC_BASE override, the requestResync trick.
 - `playtest/lib.js` — The protocol client: PlaytestClient (REST+WS), Assert with expect*/assertNever helpers, requestResync, mulberry32, connectAll/deckIdByName/deleteRoom.
 - `playtest/seed.js` — Idempotent seeding of pt_alice/bob/carol/dana + their FF precon decks from src/data/precons.json.
-- `playtest/run-all.js` — Runs seed + the 4 green scenarios sequentially, parses ##RESULT## lines into a summary table, exits nonzero on failure.
+- `playtest/run-all.js` — Runs seed + the standard scenarios (including lobby-mana) sequentially, parses ##RESULT## lines into a summary table, exits nonzero on failure.
 - `DEVELOPER.md` — New-dev onboarding: prerequisites, first run, everyday commands table, testing, deploying, conventions, where-things-are index.
 
 #### Build, test, and deploy
@@ -597,7 +599,7 @@ This is the closest thing to an integration test: real Node clients speaking the
 
 `lib.js` is the protocol client. `PlaytestClient` wraps REST (`api()`, `ensureUser()` = register-or-login) and WS: `connect()` opens `ws://…/api/ws?token=…`, logs every parsed frame into `this.messages`, and resolves waiters. Assertions are timeout-based helpers recorded into an `Assert` object: `expectState` (awaits a `room.state` for the current room satisfying a predicate), `expectLog`, `expectEvent`, `expectPrivate` (per-viewer frames like `library.cards` / `cmd.choice`), and `assertNever` (privacy check — asserts a frame type does NOT arrive). Because taps/moves/dice don't self-resync, `requestResync()` re-joins your own seat (a server no-op that rebroadcasts per-viewer `room.state`) so you can observe post-action state. `mulberry32` gives a seeded PRNG for reproducible chaos runs. Each scenario ends by calling `Assert.finish()`, which prints a `##RESULT## {json}` line.
 
-`run-all.js` spawns `seed` + the four green scenarios sequentially, tees their output, parses the `##RESULT##` lines into a summary table, and exits nonzero if any failed. `restart-resume` is deliberately not in the batch (it kills the local server).
+`run-all.js` spawns `seed` + the standard scenarios sequentially, beginning with the focused `lobby-mana` permissions test. It tees their output, parses the `##RESULT##` lines into a summary table, and exits nonzero if any failed. `restart-resume` is deliberately not in the batch (it kills the local server).
 
 **Flow**
 
@@ -623,7 +625,7 @@ Dev loop: `npm run dev` (Vite :5240) + `cargo run` in server/ (axum :8787). Clie
 
 1. `npm run typecheck` — `tsc --noEmit` over `src/` and `vite.config.ts`. This is the fast client inner loop.
 2. `cd server && cargo build` — compile-check the Rust backend (no run needed for a pure type check; `cargo run` to actually serve on :8787).
-3. Start a local server (`cd server && cargo run`), then `cd playtest && node run-all.js`. This seeds the four `pt_*` users and runs the four green scenarios against `127.0.0.1:8787`. Exit code is nonzero if any assertion fails; a `SUMMARY` table prints per-scenario pass/fail. `run-all.js` deliberately omits `restart-resume` (it kills your server) — run that one by hand with `npm run restart`.
+3. Start a local server (`cd server && cargo run`), then `cd playtest && node run-all.js`. This seeds the four `pt_*` users and runs the standard scenarios against `127.0.0.1:8787`. Exit code is nonzero if any assertion fails; a `SUMMARY` table prints per-scenario pass/fail. `run-all.js` deliberately omits `restart-resume` (it kills your server) — run that one by hand with `npm run restart`.
 4. `npm run build` — `tsc --noEmit && vite build`. Produces `dist/`.
 
 **To add a new playtest scenario:** create `playtest/scenarios/<name>.js`. Import `PlaytestClient`, `Assert`, and helpers from `../lib.js` and `ensureSeed`/`PASSWORD` from `../seed.js`. Construct clients with an attached `Assert` (`new PlaytestClient('pt_alice', { password: PASSWORD, assert: t })`), `await c.ensureUser()` then `await c.connect()`, create a room via `POST /api/rooms`, join with `c.joinRoom(roomId, deckId)`, drive the game with `c.act({ kind: '...', ... })`, and assert with `expectState` / `expectLog` / `expectEvent` / `expectPrivate` / `assertNever`. Because most in-game actions don't push a fresh `room.state`, call `c.requestResync()` (re-joins your own seat, a server no-op that rebroadcasts per-viewer state) before an `expectState`. End with `t.finish()` — it emits the `##RESULT## {json}` line that `run-all.js` parses. Add a `"<name>"` script to `playtest/package.json`, and (if it should run in CI-style batch) an entry to the `STEPS` array in `playtest/run-all.js`. Always create + `deleteRoom()` your own room so the shared dev DB isn't mutated.

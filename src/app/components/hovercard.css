@@ -11,8 +11,32 @@
   animation: hoverCardIn 130ms ease-out;
 }
 
-.hoverCard[data-below] {
+.hoverCard[data-placement='below'] {
   transform-origin: center top;
+}
+
+.hoverCard[data-placement='left'] {
+  transform-origin: right center;
+}
+
+.hoverCard[data-placement='right'] {
+  transform-origin: left center;
+}
+
+.hoverCardDismiss {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  left: calc(100% + 0.5rem);
+  color: white;
+  background: rgba(12, 14, 18, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(8px);
+}
+
+.hoverCardDismiss:hover {
+  background: rgba(12, 14, 18, 0.96);
 }
 
 /* Invisible bridge across the gap between the anchor card and the zoom, so the
@@ -26,70 +50,26 @@
   right: 0;
   top: 100%;
   height: 18px;
+  pointer-events: none;
 }
-.hoverCard[data-below]::after {
+.hoverCard[data-placement='below']::after {
   top: auto;
   bottom: 100%;
 }
-
-/* Card details beside the zoom — same content as the fullscreen CardPopup,
-   read-only. Anchored to the top edge of the card, on the roomy side. */
-.hoverDetails {
-  position: absolute;
-  top: 0;
-  /* A fixed cap (~the 446px zoom height) rather than 100%, which does not
-     resolve against the content-sized zoom - so long rules text reliably
-     scrolls within roughly the card's height. rem resolves everywhere. */
-  max-height: 27.5rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  display: flex;
-  flex-direction: column;
-  gap: var(--glacier-space-2);
-  padding: var(--glacier-space-4);
-  /* Match the zoomed card's own corner exactly: the card rounds at 4.75% of its
-     320px width, and (unlike the app's radius tokens) is not scaled by the user's
-     rounding preference - so pin the same fixed value here to read as one piece. */
-  border-radius: calc(320px * 0.0475);
-  background: var(--glacier-surface-raised, var(--glacier-surface));
-  border: 1px solid var(--glacier-border-subtle, var(--glacier-border));
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
-  animation: hoverDetailsIn 130ms ease-out;
-  scrollbar-width: thin;
-}
-.hoverCard[data-side='right'] .hoverDetails {
-  left: 100%;
-  margin-left: 0.75rem;
-}
-.hoverCard[data-side='left'] .hoverDetails {
-  right: 100%;
-  margin-right: 0.75rem;
-}
-/* Invisible bridge across the gap between the zoom and the details panel, so
-   sliding the pointer sideways onto the panel never crosses a dead zone. */
-.hoverDetails::before {
-  content: '';
-  position: absolute;
+.hoverCard[data-placement='left']::after,
+.hoverCard[data-placement='right']::after {
   top: 0;
   bottom: 0;
-  width: 1rem;
+  width: 18px;
+  height: auto;
 }
-.hoverCard[data-side='right'] .hoverDetails::before {
-  right: 100%;
-}
-.hoverCard[data-side='left'] .hoverDetails::before {
+.hoverCard[data-placement='left']::after {
   left: 100%;
+  right: auto;
 }
-
-@keyframes hoverDetailsIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.hoverCard[data-placement='right']::after {
+  right: 100%;
+  left: auto;
 }
 
 /* Scale-only entrance (no opacity ramp) so the preview is fully visible the

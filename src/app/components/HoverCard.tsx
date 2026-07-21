@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { IconButton } from '@glacier/react';
+import { X } from '@glacier/icons';
 import { GameCard } from './GameCard.tsx';
-import { CardDetailsBody, primeDetails } from './cardDetails.tsx';
+import { useT } from '../i18n.ts';
 import './hovercard.css';
 
 /**
  * Global hover-zoom. Resting the pointer on any front-facing card for a beat
- * floats a larger copy of it just above the card (or below, near the top edge),
- * with a readable details panel to one side — the same card data the fullscreen
- * CardPopup shows, so a quick rest reads rules text without a click. Driven
+ * floats a larger copy of it just above the card (or below, near the top edge).
+ * Full rules text remains exclusive to the click-opened CardPopup. Driven
  * entirely by `data-preview-src` / `data-preview-name` attributes that GameCard
  * emits, so every card in the app participates with no per-site wiring.
  *
  * The preview is INTERACTIVE: you can slide the pointer off the card up into
- * the zoom and across to the details panel to scroll long rules text. A short
- * hide-grace timer bridges the small gap between the card and the preview, and
+ * the zoom. A short hide-grace timer bridges the small gap between the card and the preview, and
  * the preview keeps itself open while the pointer is over it. Mouse-only (touch
  * keeps tap -> the full CardPopup), and never shown on the login/onboarding
  * screen (its decorative card fan should not pop previews over the form).
@@ -22,11 +22,16 @@ import './hovercard.css';
 
 const DELAY_MS = 400; // rest this long before the preview appears
 const HIDE_GRACE_MS = 220; // keep the preview alive this long after leaving the card, to bridge to it
+const DISMISS_COOLDOWN_MS = 7_000; // closing one card suppresses that card for a short beat
 const MAX_ANCHOR_W = 240; // only zoom cards smaller than this (skip already-big ones)
 const PREVIEW_W = 320;
 const RATIO = 680 / 488;
 const GAP = 12;
-const DETAIL_W = 264; // details panel width (matches the side offset in the CSS)
+const MARGIN = 8; // keep the whole preview at least this far from every viewport edge
+const DISMISS_GUTTER = 44; // room for the close button outside the card's top-right edge
+const MAX_ANCHOR_OVERLAP = 0.15;
+
+type PreviewPlacement = 'above' | 'below' | 'left' | 'right';
 
 /** Pull the card id (a UUID) back out of its image URL — both the MTG
  *  (cache/cards/<id>.jpg, Scryfall CDN) and Cyberpunk (cache/cyberpunk/<id>.webp)
@@ -36,17 +41,34 @@ function idFromSrc(src: string): string | undefined {
 }
 
 interface HoverState {
+  key: string;
   name: string;
   image: string;
   id?: string;
   x: number;
-  y: number;
-  /** Placed below the card (near the top edge) rather than above it. */
-  below: boolean;
-  /** Details panel side: more room to the right vs. left of the zoom. */
-  side: 'left' | 'right';
-  /** Whether to mount the details panel (resolved without a network flash). */
-  details: boolean;
+  /** Viewport Y of the preview box's top edge, already clamped to stay on screen. */
+  top: number;
+  placement: PreviewPlacement;
+}
+
+function overlapRatio(
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+  anchor: DOMRect,
+): number {
+  const overlapW = Math.max(0, Math.min(left + width, anchor.right) - Math.max(left, anchor.left));
+  const overlapH = Math.max(0, Math.min(top + height, anchor.bottom) - Math.max(top, anchor.top));
+  const anchorArea = anchor.width * anchor.height;
+  return anchorArea > 0 ? (overlapW * overlapH) / anchorArea : 0;
+}
+
+function previewKey(el: Element): string | null {
+  const src = el.getAttribute('data-preview-src');
+  if (!src) return null;
+  const name = el.getAttribute('data-preview-name') ?? '';
+  return `${idFromSrc(src) ?? src}\u0000${name}`;
 }
 
 /** A card is previewable if it is small enough (skip already-big cards), and not
@@ -62,6 +84,7 @@ function previewable(el: Element | null): el is Element {
 }
 
 export function HoverCardLayer() {
+  const t = useT();
   const [hover, setHover] = useState<HoverState | null>(null);
   // The card currently on screen (null = nothing shown). Used to switch targets
   // and to gate the scroll handler.
@@ -69,6 +92,7 @@ export function HoverCardLayer() {
   const revealTimer = useRef<number | undefined>(undefined);
   const revealPending = useRef(false);
   const hideTimer = useRef<number | undefined>(undefined);
+  const dismissedUntil = useRef(new Map<string, number>());
   // The last previewable card the pointer was over — a fallback for elementFromPoint.
   const currentCard = useRef<Element | null>(null);
   // Live pointer position, so the reveal fires on whatever card is ACTUALLY under
@@ -88,6 +112,20 @@ export function HoverCardLayer() {
     shownEl.current = null;
     setHover(null);
   }, [clearReveal, cancelHide]);
+  const isDismissed = useCallback((el: Element) => {
+    const key = previewKey(el);
+    if (!key) return false;
+    const until = dismissedUntil.current.get(key) ?? 0;
+    if (until <= Date.now()) {
+      dismissedUntil.current.delete(key);
+      return false;
+    }
+    return true;
+  }, []);
+  const dismiss = useCallback(() => {
+    if (hover) dismissedUntil.current.set(hover.key, Date.now() + DISMISS_COOLDOWN_MS);
+    hide();
+  }, [hover, hide]);
   // Leave the card (or the preview): hide after a short grace so the pointer can
   // bridge the gap between them without the preview vanishing underneath it.
   const scheduleHide = useCallback(() => {
@@ -108,30 +146,66 @@ export function HoverCardLayer() {
       // getBoundingClientRect() is all-zeros, which would pin a stray preview to
       // the top-left corner - read by the player as "no preview appeared". Bail.
       if (!(el as HTMLElement).isConnected) return;
+      if (isDismissed(el)) return;
       const src = el.getAttribute('data-preview-src');
       if (!src) return;
       const name = el.getAttribute('data-preview-name') ?? '';
+      const key = previewKey(el);
+      if (!key) return;
       const rect = el.getBoundingClientRect();
       // A collapsed (zero-size) rect means the anchor is detached or hidden mid
       // rest; never place a preview from a degenerate rect.
       if (rect.width === 0 && rect.height === 0) return;
       const previewH = PREVIEW_W * RATIO;
-      const x = Math.min(Math.max(rect.left + rect.width / 2, PREVIEW_W / 2 + 8), window.innerWidth - PREVIEW_W / 2 - 8);
-      // Prefer floating above the card; drop below when there is no room up top.
-      const below = rect.top - previewH - GAP < 8;
-      const y = below ? rect.bottom + GAP : rect.top - GAP;
+      const halfW = PREVIEW_W / 2;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const maxLeft = vw - PREVIEW_W - MARGIN - DISMISS_GUTTER;
+      const maxTop = vh - previewH - MARGIN;
+      if (maxLeft < MARGIN || maxTop < MARGIN) return;
+      const clampLeft = (left: number) => Math.max(MARGIN, Math.min(left, maxLeft));
+      const clampTop = (top: number) => Math.max(MARGIN, Math.min(top, maxTop));
+      const centeredLeft = clampLeft(rect.left + rect.width / 2 - halfW);
+      const centeredTop = clampTop(rect.top + rect.height / 2 - previewH / 2);
+      const preferBelow = rect.top - GAP - MARGIN < previewH;
+      const candidates: Array<{ left: number; top: number; placement: PreviewPlacement; priority: number }> = [
+        {
+          left: centeredLeft,
+          top: clampTop(rect.top - GAP - previewH),
+          placement: 'above',
+          priority: preferBelow ? 1 : 0,
+        },
+        {
+          left: centeredLeft,
+          top: clampTop(rect.bottom + GAP),
+          placement: 'below',
+          priority: preferBelow ? 0 : 1,
+        },
+        {
+          left: clampLeft(rect.left - GAP - PREVIEW_W),
+          top: centeredTop,
+          placement: 'left',
+          priority: 2,
+        },
+        {
+          left: clampLeft(rect.right + GAP),
+          top: centeredTop,
+          placement: 'right',
+          priority: 2,
+        },
+      ];
+      const best = candidates
+        .map((candidate) => ({
+          ...candidate,
+          overlap: overlapRatio(candidate.left, candidate.top, PREVIEW_W, previewH, rect),
+        }))
+        .sort((a, b) => a.overlap - b.overlap || a.priority - b.priority)[0];
+      if (!best || best.overlap > MAX_ANCHOR_OVERLAP) return;
+      const x = best.left + halfW;
+      const top = best.top;
       const id = idFromSrc(src);
-      // Mount the details panel whenever the card has an id. Cyberpunk and cached
-      // MTG fill instantly; an uncached MTG card shows its name right away and the
-      // rules fill in a beat later (primeDetails + the panel's own fetch), so the
-      // details are always there to read/scroll rather than withheld on first rest.
-      primeDetails(id);
-      const details = !!id;
-      // Put the details panel wherever there's more room next to the zoom.
-      const roomRight = window.innerWidth - (x + PREVIEW_W / 2);
-      const side: 'left' | 'right' = roomRight >= DETAIL_W + GAP + 8 ? 'right' : 'left';
       shownEl.current = el;
-      setHover({ name, image: src, id, x, y, below, side, details });
+      setHover({ key, name, image: src, id, x, top, placement: best.placement });
     };
 
     // Begin (or leave running) the rest countdown. It reveals whatever card is
@@ -167,6 +241,11 @@ export function HoverCardLayer() {
       if (previewable(el)) {
         cancelHide();
         currentCard.current = el;
+        if (isDismissed(el)) {
+          clearReveal();
+          if (shownEl.current) hide();
+          return;
+        }
         if (shownEl.current) {
           // A preview is up. Switch only for a genuinely different card (the
           // magnification churn re-fires this for the same one).
@@ -230,29 +309,28 @@ export function HoverCardLayer() {
       clearReveal();
       cancelHide();
     };
-  }, [hide, cancelHide, scheduleHide, clearReveal]);
+  }, [hide, cancelHide, scheduleHide, clearReveal, isDismissed]);
 
   if (!hover) return null;
   return createPortal(
     <div
       className="hoverCard"
-      data-below={hover.below || undefined}
-      data-side={hover.side}
-      style={{
-        left: hover.x,
-        top: hover.y,
-        transform: hover.below ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
-      }}
+      data-placement={hover.placement}
+      style={{ left: hover.x, top: hover.top, transform: 'translateX(-50%)' }}
       // Interactive: entering keeps it open, leaving starts the grace-hide.
       onPointerEnter={cancelHide}
       onPointerLeave={scheduleHide}
     >
+      <IconButton
+        className="hoverCardDismiss"
+        size="sm"
+        variant="soft"
+        aria-label={t('cpClose')}
+        onClick={dismiss}
+      >
+        <X size={16} />
+      </IconButton>
       <GameCard name={hover.name} imageUrl={hover.image} width={PREVIEW_W} tilt={0} foil={false} />
-      {hover.details && (
-        <div className="hoverDetails" style={{ width: DETAIL_W }}>
-          <CardDetailsBody scryfallId={hover.id} name={hover.name} compact headingLevel={3} />
-        </div>
-      )}
     </div>,
     document.body,
   );
