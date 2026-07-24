@@ -1,12 +1,24 @@
-import { Avatar, Button, Kbd, Pill, Select, Size, StatusDot, Text, TextTone } from '@glacier/react';
-import { Check, Circle, Crown, Eye, Layers, Link2, Play, UserPlus, WifiOff } from '@glacier/icons';
+import { useState } from 'react';
+import { Avatar, Button, Input, Kbd, Pill, SegmentedControl, Select, Size, StatusDot, Text, TextTone } from '@glacier/react';
+import { Check, Circle, Crown, Eye, Layers, Link2, Play, Settings2, UserPlus, WifiOff } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import { useApp } from '../../state/appStore.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { send } from '../../net/ws.ts';
 import { deckSummaryArt } from '../../data/deckCover.ts';
 import { GameTag } from '../../components/GameTag.tsx';
-import type { RoomState, TablePlayer } from '../../net/types.ts';
+import { formatFor } from '../../data/formats.ts';
+import type { GameSettings, RoomState, TablePlayer } from '../../net/types.ts';
+
+const DEFAULT_SETTINGS: GameSettings = {
+  startingLife: null,
+  startingHand: null,
+  freeMulligans: null,
+  mulliganRule: 'london',
+  firstPlayer: 'auto',
+  firstSeat: null,
+  skipFirstDraw: null,
+};
 
 export function PregameLobby({
   room,
@@ -31,6 +43,54 @@ export function PregameLobby({
   const playersBySeat = new Map(room.players.map((player) => [player.seat, player]));
   const seats = Array.from({ length: room.seats }, (_, seat) => playersBySeat.get(seat));
 
+  // Pre-game rule settings (host-editable in the lobby; read-only for others).
+  const cyber = game === 'cyberpunk';
+  const settings = room.settings ?? DEFAULT_SETTINGS;
+  const lifeDefault = cyber ? 0 : formatFor(room.format).startingLife;
+  const handDefault = cyber ? 6 : 7;
+  // The numeric rule fields buffer locally and commit on blur: patching per
+  // keystroke races the server echo (typing "25" could land as "2") and
+  // broadcasts a full room state per key.
+  const [lifeDraft, setLifeDraft] = useState<string | null>(null);
+  const [handDraft, setHandDraft] = useState<string | null>(null);
+  const patchSettings = (change: Partial<GameSettings>) =>
+    send({ type: 'room.settings', settings: { ...settings, ...change } });
+  const seatedFirstOptions = room.players
+    .slice()
+    .sort((a, b) => a.seat - b.seat)
+    .map((p) => ({ value: `seat:${p.seat}`, label: `${p.username} · ${t('preSeat')} ${p.seat + 1}` }));
+  const firstValue =
+    settings.firstPlayer === 'seat' && settings.firstSeat != null
+      ? `seat:${settings.firstSeat}`
+      : settings.firstPlayer;
+  const onFirstChange = (value: string) => {
+    if (value === 'auto' || value === 'random') patchSettings({ firstPlayer: value, firstSeat: null });
+    else patchSettings({ firstPlayer: 'seat', firstSeat: Number(value.split(':')[1]) });
+  };
+  const canEditSettings = isHost && !spectating;
+  const firstLabel =
+    settings.firstPlayer === 'random'
+      ? t('setFirstRandom')
+      : settings.firstPlayer === 'seat' && settings.firstSeat != null
+        ? seatedFirstOptions.find((o) => o.value === `seat:${settings.firstSeat}`)?.label ?? t('setFirstAuto')
+        : t('setFirstAuto');
+  const skipDrawLabel =
+    settings.skipFirstDraw == null ? t('setDefault') : settings.skipFirstDraw ? t('setOn') : t('setOff');
+  const summary: { label: string; value: string }[] = [
+    ...(cyber ? [] : [{ label: t('setStartLife'), value: String(settings.startingLife ?? lifeDefault) }]),
+    { label: t('setStartHand'), value: String(settings.startingHand ?? handDefault) },
+    {
+      label: t('setMullRule'),
+      value: settings.mulliganRule === 'vancouver' ? t('setMullVancouver') : t('setMullLondon'),
+    },
+    {
+      label: t('setFreeMulls'),
+      value: settings.freeMulligans == null ? t('setDefault') : String(settings.freeMulligans),
+    },
+    { label: t('setFirstPlayer'), value: firstLabel },
+    { label: t('setSkipDraw'), value: skipDrawLabel },
+  ];
+
   const offline = room.players.some((player) => player.online === false);
   const missingDeck = room.players.some((player) => !player.deckName);
   const waitingReady = room.players.some((player) => !player.ready);
@@ -49,7 +109,7 @@ export function PregameLobby({
         <div className="pregameHeading">
           <span className="pregameKicker">
             <GameTag game={room.game} />
-            {room.format}
+            {formatFor(room.format).name}
           </span>
           <h1 className="pregameTitle" id="pregame-title">{t('preLobbyTitle')}</h1>
           <Text as="span" size={Size.Small} tone={TextTone.Muted}>
@@ -110,6 +170,124 @@ export function PregameLobby({
           ),
         )}
       </div>
+
+      <section className="pregameSettings" aria-labelledby="pregame-settings-title">
+        <header className="pregameSettingsHead">
+          <Settings2 size={15} />
+          <h2 className="pregameSettingsTitle" id="pregame-settings-title">
+            {t('preSettings')}
+          </h2>
+          {!canEditSettings && (
+            <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+              <Crown size={11} /> {t('preSettingsHostOnly')}
+            </Text>
+          )}
+        </header>
+
+        {canEditSettings ? (
+          <div className="pregameSettingsGrid">
+            {!cyber && (
+              <label className="pregameSetting">
+                <span className="pregameSettingLabel">{t('setStartLife')}</span>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  value={lifeDraft ?? (settings.startingLife == null ? '' : String(settings.startingLife))}
+                  placeholder={String(lifeDefault)}
+                  onChange={(event) => setLifeDraft(event.target.value)}
+                  onBlur={() => {
+                    if (lifeDraft == null) return;
+                    patchSettings({ startingLife: lifeDraft === '' ? null : Number(lifeDraft) });
+                    setLifeDraft(null);
+                  }}
+                />
+              </label>
+            )}
+            <label className="pregameSetting">
+              <span className="pregameSettingLabel">{t('setStartHand')}</span>
+              <Input
+                type="number"
+                inputMode="numeric"
+                value={handDraft ?? (settings.startingHand == null ? '' : String(settings.startingHand))}
+                placeholder={String(handDefault)}
+                onChange={(event) => setHandDraft(event.target.value)}
+                onBlur={() => {
+                  if (handDraft == null) return;
+                  patchSettings({ startingHand: handDraft === '' ? null : Number(handDraft) });
+                  setHandDraft(null);
+                }}
+              />
+            </label>
+            <label className="pregameSetting">
+              <span className="pregameSettingLabel">{t('setMullRule')}</span>
+              <SegmentedControl
+                fullWidth
+                value={settings.mulliganRule}
+                onValueChange={(value) =>
+                  patchSettings({ mulliganRule: value as GameSettings['mulliganRule'] })
+                }
+                options={[
+                  { value: 'london', label: t('setMullLondon') },
+                  { value: 'vancouver', label: t('setMullVancouver') },
+                ]}
+              />
+            </label>
+            <label className="pregameSetting">
+              <span className="pregameSettingLabel">{t('setFreeMulls')}</span>
+              <Select
+                fullWidth
+                value={settings.freeMulligans == null ? 'default' : String(settings.freeMulligans)}
+                onValueChange={(value) =>
+                  patchSettings({ freeMulligans: value === 'default' ? null : Number(value) })
+                }
+                options={[
+                  { value: 'default', label: t('setDefault') },
+                  { value: '0', label: '0' },
+                  { value: '1', label: '1' },
+                  { value: '2', label: '2' },
+                  { value: '3', label: '3' },
+                ]}
+              />
+            </label>
+            <label className="pregameSetting">
+              <span className="pregameSettingLabel">{t('setFirstPlayer')}</span>
+              <Select
+                fullWidth
+                value={firstValue}
+                onValueChange={onFirstChange}
+                options={[
+                  { value: 'auto', label: t('setFirstAuto') },
+                  { value: 'random', label: t('setFirstRandom') },
+                  ...seatedFirstOptions,
+                ]}
+              />
+            </label>
+            <label className="pregameSetting">
+              <span className="pregameSettingLabel">{t('setSkipDraw')}</span>
+              <Select
+                fullWidth
+                value={settings.skipFirstDraw == null ? 'default' : settings.skipFirstDraw ? 'on' : 'off'}
+                onValueChange={(value) =>
+                  patchSettings({ skipFirstDraw: value === 'default' ? null : value === 'on' })
+                }
+                options={[
+                  { value: 'default', label: t('setDefault') },
+                  { value: 'on', label: t('setOn') },
+                  { value: 'off', label: t('setOff') },
+                ]}
+              />
+            </label>
+          </div>
+        ) : (
+          <div className="pregameSettingsSummary">
+            {summary.map((item) => (
+              <Pill key={item.label} size="sm" variant="soft">
+                {item.label}: <strong>{item.value}</strong>
+              </Pill>
+            ))}
+          </div>
+        )}
+      </section>
 
       <div className="pregameControls">
         {me && !spectating ? (

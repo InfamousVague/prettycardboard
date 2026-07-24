@@ -561,11 +561,11 @@ pub async fn room_create(
     } else {
         body.format.unwrap_or_else(|| "commander".to_string())
     };
-    if format != "commander" && format != "standard" {
+    if !crate::rooms::MTG_FORMATS.contains(&format.as_str()) {
         return err(
             StatusCode::BAD_REQUEST,
             "invalid_format",
-            "format must be commander or standard",
+            "unknown format preset",
         );
     }
     let name = body.name.trim();
@@ -590,6 +590,7 @@ pub async fn room_create(
         updated_at: now,
         format,
         game,
+        settings: Default::default(),
         turn_number: 1,
         active_seat: 0,
         phase: "main1".to_string(),

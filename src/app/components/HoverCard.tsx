@@ -152,7 +152,12 @@ export function HoverCardLayer() {
       const name = el.getAttribute('data-preview-name') ?? '';
       const key = previewKey(el);
       if (!key) return;
-      const rect = el.getBoundingClientRect();
+      // Measure the visual card face, not the anchor wrapper: on the battlefield
+      // the anchor is the .fieldCard wrapper, whose box ignores the inner tap
+      // rotation (.gcCard rotate 90) - a tapped card's true footprint is
+      // landscape, and placement math against the portrait wrapper box would
+      // float the zoom over/into the sideways card.
+      const rect = (el.querySelector('.gcCard') ?? el).getBoundingClientRect();
       // A collapsed (zero-size) rect means the anchor is detached or hidden mid
       // rest; never place a preview from a degenerate rect.
       if (rect.width === 0 && rect.height === 0) return;

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { send, onMessage } from '../../net/ws.ts';
 
 /**
@@ -21,8 +22,12 @@ const STALE_MS = 4000;
 const SEND_INTERVAL = 45;
 
 /** A distinct, legible hue per seat. */
-function seatColor(seat: number): string {
-  return `hsl(${(seat * 67) % 360} 85% 62%)`;
+function seatHue(seat: number): number {
+  return (seat * 67) % 360;
+}
+
+function seatColor(seat: number, alpha = 1): string {
+  return alpha < 1 ? `hsl(${seatHue(seat)} 85% 62% / ${alpha})` : `hsl(${seatHue(seat)} 85% 62%)`;
 }
 
 export function TablePresence({ meId, active }: { meId: string | undefined; active: boolean }) {
@@ -30,7 +35,11 @@ export function TablePresence({ meId, active }: { meId: string | undefined; acti
   // rAF loop can glue them to the table/cards without re-rendering every frame.
   const cursors = useRef(new Map<string, RemoteCursor>());
   const [ids, setIds] = useState<string[]>([]);
-  const nodes = useRef(new Map<string, { pointer: HTMLDivElement | null; ring: HTMLDivElement | null }>());
+  const nodes = useRef(new Map<string, HTMLDivElement | null>());
+  // Cards currently wearing a remote-hover outline, so they can be cleared when
+  // the hover moves on. The outline lives on the card element itself so it
+  // rotates with the card's tilt/tap transform instead of a detached box.
+  const outlined = useRef(new Set<HTMLElement>());
 
   const syncIds = () => {
     const next = [...cursors.current.keys()];
@@ -78,46 +87,62 @@ export function TablePresence({ meId, active }: { meId: string | undefined; acti
     return () => window.removeEventListener('pointermove', onMove);
   }, [active]);
 
-  // Glue pointers to the table and rings to their hovered cards; prune stale.
+  // Glue pointers to the table and outline hovered cards; prune stale.
   useEffect(() => {
     let raf = 0;
     const tick = () => {
       const table = document.querySelector('.table');
       const rect = table?.getBoundingClientRect();
       let dropped = false;
+      // Which card each live cursor hovers, so we can outline exactly those and
+      // clear the rest. Last writer wins if two players hover the same card.
+      const wanted = new Map<string, string>();
       for (const [id, cursor] of cursors.current) {
         if (Date.now() - cursor.ts > STALE_MS) {
           cursors.current.delete(id);
           dropped = true;
           continue;
         }
-        const node = nodes.current.get(id);
-        if (!node) continue;
-        if (node.pointer && rect) {
+        const pointer = nodes.current.get(id);
+        if (pointer && rect) {
           const px = rect.left + cursor.x * rect.width;
           const py = rect.top + cursor.y * rect.height;
-          node.pointer.style.transform = `translate3d(${px}px, ${py}px, 0)`;
+          pointer.style.transform = `translate3d(${px}px, ${py}px, 0)`;
         }
-        if (node.ring) {
-          const card = cursor.hover
-            ? document.querySelector<HTMLElement>(`.fieldCard[data-iid="${cursor.hover}"]`)
-            : null;
-          if (card) {
-            const r = card.getBoundingClientRect();
-            node.ring.style.opacity = '1';
-            node.ring.style.transform = `translate3d(${r.left}px, ${r.top}px, 0)`;
-            node.ring.style.width = `${r.width}px`;
-            node.ring.style.height = `${r.height}px`;
-          } else {
-            node.ring.style.opacity = '0';
-          }
-        }
+        if (cursor.hover) wanted.set(cursor.hover, seatColor(cursor.seat, 0.5));
+      }
+      // Apply outlines to hovered cards. The ring must ride the INNER .gcCard:
+      // it sits at the bottom of the whole transform chain (wrapper rest tilt ->
+      // shell hover-lift/drag -> tap rotate), so it tracks every pose. The
+      // wrapper's box never rotates on tap - a ring there reads misaligned.
+      const seen = new Set<HTMLElement>();
+      for (const [iid, color] of wanted) {
+        const card = document.querySelector<HTMLElement>(`.fieldCard[data-iid="${iid}"] .gcCard`);
+        if (!card) continue;
+        card.style.outline = `3px solid ${color}`;
+        card.style.outlineOffset = '-1px';
+        seen.add(card);
+        outlined.current.add(card);
+      }
+      for (const el of [...outlined.current]) {
+        if (seen.has(el)) continue;
+        el.style.outline = '';
+        el.style.outlineOffset = '';
+        outlined.current.delete(el);
       }
       if (dropped) syncIds();
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      // Leave no orphaned outlines behind on unmount.
+      for (const el of outlined.current) {
+        el.style.outline = '';
+        el.style.outlineOffset = '';
+      }
+      outlined.current.clear();
+    };
   }, []);
 
   if (ids.length === 0) return null;
@@ -131,32 +156,31 @@ export function TablePresence({ meId, active }: { meId: string | undefined; acti
         return (
           <div key={id}>
             <div
-              className="remoteHoverRing"
-              style={{ borderColor: color, boxShadow: `0 0 0 2px ${color}, 0 0 18px ${color}` }}
-              ref={(el) => {
-                const entry = nodes.current.get(id) ?? { pointer: null, ring: null };
-                entry.ring = el;
-                nodes.current.set(id, entry);
-              }}
-            />
-            <div
               className="remoteCursor"
               ref={(el) => {
-                const entry = nodes.current.get(id) ?? { pointer: null, ring: null };
-                entry.pointer = el;
-                nodes.current.set(id, entry);
+                nodes.current.set(id, el);
               }}
             >
-              <svg width="26" height="30" viewBox="0 0 26 30" className="remoteCursorArrow">
+              <svg
+                className="remoteCursorChevron"
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                aria-hidden
+              >
                 <path
-                  d="M3 2 L3 22 L9 17 L13 26 L17 24 L13 15 L21 15 Z"
-                  fill={color}
-                  stroke="rgba(0,0,0,0.55)"
-                  strokeWidth="1.5"
+                  d="M10 3 L3 3 L3 10"
+                  fill="none"
+                  stroke={color}
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
                   strokeLinejoin="round"
                 />
               </svg>
-              <span className="remoteCursorName" style={{ background: color }}>
+              <span
+                className="remoteCursorPill"
+                style={{ ['--cursor-color' as string]: color } as CSSProperties}
+              >
                 {cursor.username}
               </span>
             </div>

@@ -66,6 +66,7 @@ import { flightAnchor, flyCard } from './table/juice.ts';
 import { onMessage, onStatus, send } from '../net/ws.ts';
 import { playSound, primeSounds } from '../sounds.ts';
 import { DEFAULT_PREFERENCES, loadPreferences } from '../preferences.ts';
+import { formatFor } from '../data/formats.ts';
 import { applyAccentRamp, clearDeckTint } from '../state/accent.ts';
 import { installTableShims } from './table/shims.ts';
 import './table/table.css';
@@ -899,6 +900,8 @@ function CardMenu({
         <>
           {item(`${t('tblCommand')} → Battlefield`, <Play size={15} />, { kind: 'cmd.cast', iid: menu.iid, x: 0.55, y: 0.55 }, 'field:mine')}
           {item(t('tblHand'), <Hand size={15} />, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
+          {(me.commanderTax?.[menu.iid] ?? 0) > 0 &&
+            item(t('gpCmdTaxReduce'), <Crown size={15} />, { kind: 'cmd.tax', iid: menu.iid, delta: -2 })}
         </>
       )}
       {card && recipients.length > 0 && (
@@ -1155,7 +1158,7 @@ function PlayersCard({
                 <span className="playerStat" title={t('tblLife')}>
                   <Heart size={12} /> {player.life}
                 </span>
-                {room.format === 'commander' && (() => {
+                {formatFor(room.format).hasCommander && (() => {
                   const cmd = cmdDamageSummary(player, room);
                   return cmd.max > 0 ? (
                     <span

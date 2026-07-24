@@ -53,6 +53,20 @@ pub fn opening_hand(game: &str) -> usize {
     }
 }
 
+/// The opening-hand size in play: the host's override if set, else the game
+/// default (MTG 7, Cyberpunk 6).
+pub fn effective_hand_size(room: &crate::rooms::Room) -> usize {
+    room.settings
+        .starting_hand
+        .unwrap_or_else(|| opening_hand(&room.game))
+}
+
+/// Whether the room mulligans Vancouver-style (draw one fewer card each time,
+/// no bottoming) rather than London (draw a full hand, bottom N on keep).
+pub fn is_vancouver(room: &crate::rooms::Room) -> bool {
+    room.settings.mulligan_rule == "vancouver"
+}
+
 pub const CMD_CHOICE_MS: i64 = 30_000;
 /// Legacy single-slot undo window. The live undo path is now the snapshot
 /// timeline (see rooms::Room history/cursor); this and apply_undo below are
@@ -211,6 +225,8 @@ pub enum Action {
     CmdCast { iid: String, x: f64, y: f64 },
     #[serde(rename = "cmd.return", rename_all = "camelCase")]
     CmdReturn { iid: String, accept: bool },
+    #[serde(rename = "cmd.tax", rename_all = "camelCase")]
+    CmdTax { iid: String, delta: i64 },
 
     // --- gameplay v2: dice + markers ---
     #[serde(rename = "dice.roll")]
@@ -514,7 +530,7 @@ fn resolve_from_stack(
     if !room.players.iter().any(|p| p.user_id == entry.owner) {
         return Ok(format!("{name} leaves the stack (owner left the room)"));
     }
-    if room.format == "commander"
+    if crate::rooms::format_has_commander(&room.format)
         && card.is_commander
         && matches!(to, Zone::Graveyard | Zone::Exile | Zone::Hand | Zone::Library)
     {
@@ -700,7 +716,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             if from == Zone::Library || to == Zone::Library {
                 room.players[pi].peeked.clear();
             }
-            if room.format == "commander"
+            if crate::rooms::format_has_commander(&room.format)
                 && card.is_commander
                 && matches!(to, Zone::Graveyard | Zone::Exile | Zone::Hand | Zone::Library)
             {
@@ -1503,7 +1519,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
         // --- commander machinery ---
 
         Action::CmdCast { ref iid, x, y } => {
-            if room.format != "commander" {
+            if !crate::rooms::format_has_commander(&room.format) {
                 return Err(("not_commander_format", "this table is not a commander game".to_string()));
             }
             let p = &mut room.players[pi];
@@ -1523,9 +1539,37 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             for_others["card"] = cv;
             p.battlefield.push(card);
             p.cards_played += 1;
-            p.commander_tax.insert(iid.clone(), prior_tax + 2);
+            p.commander_tax.insert(iid.clone(), prior_tax.saturating_add(2));
             log = format!("{username} casts {name} (tax {prior_tax})");
             resync = true; // commanderTax changed
+        }
+
+        Action::CmdTax { ref iid, delta } => {
+            if !crate::rooms::format_has_commander(&room.format) {
+                return Err(("not_commander_format", "this table is not a commander game".to_string()));
+            }
+            let p = &mut room.players[pi];
+            // Only tax that exists can be adjusted - keeps the map free of junk keys.
+            let Some(prior) = p.commander_tax.get(iid).copied() else {
+                return Err(("no_tax", "no commander tax to adjust".to_string()));
+            };
+            // Saturating + capped: delta is untrusted client input, and an
+            // uncapped value could overflow here or in a later CmdCast +2.
+            let next = prior.saturating_add(delta).clamp(0, 999);
+            let name = p
+                .command
+                .iter()
+                .chain(p.battlefield.iter())
+                .find(|c| c.iid == *iid)
+                .map(|c| c.name.clone())
+                .unwrap_or_else(|| "commander".to_string());
+            if next == 0 {
+                p.commander_tax.remove(iid);
+            } else {
+                p.commander_tax.insert(iid.clone(), next);
+            }
+            log = format!("{username} sets {name}'s tax to {next}");
+            resync = true; // commanderTax only travels via state_for
         }
 
         Action::CmdReturn { ref iid, accept } => {
@@ -1747,7 +1791,8 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
 
         Action::MullTake => {
             let free_first = free_first_mulls(room);
-            let deal = opening_hand(&room.game);
+            let hand_size = effective_hand_size(room);
+            let vancouver = is_vancouver(room);
             let p = &mut room.players[pi];
             let Some(m) = p.mulligan.clone() else {
                 return Err(("no_mulligan", "the game has not started".to_string()));
@@ -1758,13 +1803,17 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             let hand: Vec<Card> = p.hand.drain(..).collect();
             p.library.extend(hand);
             p.library.shuffle(&mut rand::rng());
-            let n = deal.min(p.library.len());
+            let taken = m.taken + 1;
+            // Vancouver draws one fewer card per non-free mulligan; London always
+            // redraws a full hand and bottoms the difference on keep.
+            let net = taken.saturating_sub(free_first) as usize;
+            let target = if vancouver { hand_size.saturating_sub(net) } else { hand_size };
+            let n = target.min(p.library.len());
             let drawn: Vec<Card> = p.library.drain(0..n).collect();
             p.hand_revealed = false;
             p.peeked.clear();
             for_actor["cards"] = serde_json::to_value(&drawn).unwrap();
             p.hand.extend(drawn);
-            let taken = m.taken + 1;
             p.mulligan = Some(Mull { state: "deciding".to_string(), taken });
             log = if taken <= free_first {
                 format!("{username} mulligans to {n} (free)")
@@ -1776,6 +1825,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
 
         Action::MullKeep { ref bottom_iids } => {
             let free_first = free_first_mulls(room);
+            let vancouver = is_vancouver(room);
             {
                 let p = &mut room.players[pi];
                 let Some(m) = p.mulligan.clone() else {
@@ -1784,7 +1834,13 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                 if m.state != "deciding" {
                     return Err(("already_kept", "you already kept your hand".to_string()));
                 }
-                let n = (m.taken as i64 - free_first as i64).max(0) as usize;
+                // London bottoms one card per non-free mulligan; Vancouver already
+                // drew a smaller hand, so nothing is bottomed.
+                let n = if vancouver {
+                    0
+                } else {
+                    (m.taken as i64 - free_first as i64).max(0) as usize
+                };
                 let set: BTreeSet<&str> = bottom_iids.iter().map(String::as_str).collect();
                 if bottom_iids.len() != n || set.len() != n {
                     return Err(("bad_bottom", format!("must bottom exactly {n} distinct cards")));

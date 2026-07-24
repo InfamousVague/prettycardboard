@@ -29,8 +29,11 @@ export interface Preferences {
   locale: AppLocale;
   /** Force-minimize animations app-wide, independent of the OS setting. */
   reduceMotion: boolean;
-  /** Table notifications and tactile interaction sounds. */
+  /** Tactile table/interaction sounds (cards, dice, shuffle). Off by default. */
   soundEffects: boolean;
+  /** Alert sounds — the turn indicator and player ping. On by default, and
+   * independent of the table sounds. */
+  alertSounds: boolean;
   /** Master table-sound volume, normalized from 0 to 1. */
   soundVolume: number;
   haptics: boolean;
@@ -92,7 +95,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   frostedness: 1,
   locale: 'en',
   reduceMotion: false,
-  soundEffects: true,
+  soundEffects: false,
+  alertSounds: true,
   soundVolume: 0.65,
   haptics: false,
   visualFeedback: false,

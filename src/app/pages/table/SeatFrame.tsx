@@ -8,7 +8,7 @@ import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import type { CardInst, RoomState, TablePlayer } from '../../net/types.ts';
 import { useTableUi } from './tableUi.ts';
-import { AttackBadge, BlockCluster, CounterBadges, ZonePiles, groupAttachments } from './bits.tsx';
+import { AttackBadge, BlockCluster, CounterBadges, DEFAULT_MAT_LAYOUT, ZonePiles, groupAttachments } from './bits.tsx';
 import { ambientDelay, restTilt } from './juice.ts';
 import { effectivePT, isCreature } from './boardModes.ts';
 import { playmatBackground } from '../../data/playmats.ts';
@@ -262,7 +262,17 @@ export function SeatFrame({
           </span>
         ))}
       </div>
-      <ZonePiles player={player} big={stage} onHover={onHover} />
+      {(() => {
+        // The seat's custom mat layout (if any) lifts their piles into the same
+        // free-placement overlay used on my board; the staged mirror's 180°
+        // rotation maps (x,y)->(1-x,1-y) for free. Mini seats keep the strip.
+        const custom =
+          stage && room.game !== 'cyberpunk' && player.matLayout && Object.keys(player.matLayout).length > 0
+            ? { ...DEFAULT_MAT_LAYOUT, ...player.matLayout }
+            : undefined;
+        const piles = <ZonePiles player={player} big={stage} onHover={onHover} layout={custom} />;
+        return custom ? <div className="matZones">{piles}</div> : piles;
+      })()}
 
       {blockPick && me && (
         <div

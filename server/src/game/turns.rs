@@ -93,9 +93,13 @@ pub fn maybe_begin_first_turn(room: &mut Room, now: i64) -> Vec<String> {
     }
 }
 
-/// The free-mulligan allowance: 1 in 3+ player commander pods, else 0.
+/// The free-mulligan allowance: the host's override if set, else 1 in 3+ player
+/// commander pods and 0 elsewhere.
 pub(super) fn free_first_mulls(room: &Room) -> u32 {
-    if room.format == "commander" && room.players.len() >= 3 {
+    if let Some(free) = room.settings.free_mulligans {
+        return free;
+    }
+    if crate::rooms::format_has_commander(&room.format) && room.players.len() >= 3 {
         1
     } else {
         0
@@ -108,7 +112,10 @@ pub(super) fn free_first_mulls(room: &Room) -> u32 {
 pub fn auto_turn_begin(room: &mut Room, seat: usize) -> Vec<String> {
     let skip = room.turn_number == 1
         && seat == room.starting_seat
-        && (room.format == "standard" || room.players.len() == 2);
+        && match room.settings.skip_first_draw {
+            Some(force) => force,
+            None => !crate::rooms::format_has_commander(&room.format) || room.players.len() == 2,
+        };
     let Some(p) = room.players.iter_mut().find(|p| p.seat == seat) else {
         return Vec::new();
     };

@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { AlertDialog, Button, IconButton, Input, Menu, MenuItem, MenuSub, NumberInput, Popover } from '@glacier/react';
 import { Ban, Crown, Plus, Skull, SlidersHorizontal, Swords, Trash2 } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
@@ -7,7 +7,7 @@ import { cardImage } from '../../data/cards.ts';
 import { zoneLabel } from '../../data/games.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
-import type { CardInst, CombatState, RoomState, TablePlayer, Zone } from '../../net/types.ts';
+import type { CardInst, CombatState, MatPos, MatZone, RoomState, TablePlayer, Zone } from '../../net/types.ts';
 import { useTableUi } from './tableUi.ts';
 import { useLongPress, menuEventFrom } from '../../hooks/useLongPress.ts';
 import { flyFromAnchor, flightAnchor, setFlightAnchor } from './juice.ts';
@@ -351,6 +351,18 @@ export function TaxBadge({ value }: { value: number }) {
 /* Zone piles: library / graveyard / exile / command                         */
 /* ------------------------------------------------------------------------ */
 
+/** The pile zones a player can reposition, in DOM order. */
+export const MAT_ZONES: MatZone[] = ['library', 'graveyard', 'exile', 'command'];
+
+/** Fallback pile centers when a layout names only some zones (mirrors the
+ * default bottom-left strip). */
+export const DEFAULT_MAT_LAYOUT: Record<MatZone, MatPos> = {
+  library: { x: 0.055, y: 0.84 },
+  graveyard: { x: 0.135, y: 0.84 },
+  exile: { x: 0.215, y: 0.84 },
+  command: { x: 0.3, y: 0.84 },
+};
+
 export function ZonePiles({
   player,
   mine,
@@ -362,6 +374,9 @@ export function ZonePiles({
   onDragOut,
   dragSuppressed,
   dropHint,
+  layout,
+  editing,
+  onPileGrab,
 }: {
   player: TablePlayer;
   mine?: boolean;
@@ -377,11 +392,17 @@ export function ZonePiles({
   /** Start dragging the pile's top card out onto the board (my piles). For the
    * library the card is a face-down placeholder — the server plays the real top
    * card, since the client never holds the hidden library. */
-  onDragOut?: (event: ReactPointerEvent, card: CardInst, zone: 'graveyard' | 'exile' | 'library') => void;
+  onDragOut?: (event: ReactPointerEvent, card: CardInst, zone: 'graveyard' | 'exile' | 'library' | 'command') => void;
   /** True right after a drag/long-press so the pile's click (open viewer) is suppressed. */
   dragSuppressed?: () => boolean;
   /** The zone a card is currently being dragged over, for a drop-target ring. */
   dropHint?: Zone | null;
+  /** Custom pile placement (mat editor): normalized centers by logical zone.
+   * Any entry switches the piles to free placement over the board. */
+  layout?: Partial<Record<MatZone, MatPos>>;
+  /** Mat-edit mode: piles become drag handles and their own affordances mute. */
+  editing?: boolean;
+  onPileGrab?: (event: ReactPointerEvent, zone: MatZone) => void;
 }) {
   const t = useT();
   const act = useGame((state) => state.act);
@@ -427,9 +448,33 @@ export function ZonePiles({
     </div>
   );
 
+  // Free placement (mat editor): each pile rides a .pileSlot wrapper that both
+  // the Cyberpunk grid (data-zone slot names) and the custom layout target. The
+  // wrapper - not the pile - is positioned, so pile internals stay untouched.
+  const custom = !mat && (editing || Object.keys(layout ?? {}).length > 0);
+  const slotProps = (zone: MatZone, slot: string) => {
+    const pos = custom ? (layout?.[zone] ?? DEFAULT_MAT_LAYOUT[zone]) : undefined;
+    return {
+      className: 'pileSlot',
+      'data-zone': slot,
+      'data-mat-zone': zone,
+      style: pos
+        ? { position: 'absolute' as const, left: `${pos.x * 100}%`, top: `${pos.y * 100}%`, transform: 'translate(-50%, -50%)' }
+        : undefined,
+      onPointerDown: editing && onPileGrab ? (event: ReactPointerEvent) => onPileGrab(event, zone) : undefined,
+    };
+  };
+
   return (
-    <div className="zonePiles" data-mine={mine || undefined} data-mat={mat || undefined}>
+    <div
+      className="zonePiles"
+      data-mine={mine || undefined}
+      data-mat={mat || undefined}
+      data-custom={custom || undefined}
+      data-editing={editing || undefined}
+    >
       {/* library: mine opens the actions menu, theirs is a plain pile */}
+      <div {...slotProps('library', 'deck')}>
       {interactive ? (
         <>
           <Menu
@@ -438,7 +483,7 @@ export function ZonePiles({
             open={libMenuOpen}
             onOpenChange={setLibMenuOpen}
             trigger={
-              <span className="pileTrigger" data-zone="deck">
+              <span className="pileTrigger">
                 <button
                   type="button"
                   className="pileBtn"
@@ -526,12 +571,13 @@ export function ZonePiles({
       ) : (
         libraryPile
       )}
+      </div>
 
       {/* graveyard */}
+      <div {...slotProps('graveyard', 'trash')}>
       <button
         type="button"
         className="pileBtn zonePile"
-        data-zone="trash"
         data-drop={dropHint === 'graveyard' || undefined}
         title={graveLabel}
         onClick={() => {
@@ -571,12 +617,13 @@ export function ZonePiles({
           <span className="pileCount">{player.graveyard.length}</span>
         </span>
       </button>
+      </div>
 
       {/* exile */}
+      <div {...slotProps('exile', 'eddies')}>
       <button
         type="button"
         className="pileBtn zonePile"
-        data-zone="eddies"
         data-drop={dropHint === 'exile' || undefined}
         title={exileLabel}
         onClick={() => {
@@ -602,9 +649,11 @@ export function ZonePiles({
           <span className="pileCount">{player.exile.length}</span>
         </span>
       </button>
+      </div>
 
       {/* command zone */}
-      <div className="zonePile zoneCommand" data-zone="legends" data-drop={dropHint === 'command' || undefined} title={cmdLabel} ref={(el) => setFlightAnchor(`cmd:${player.userId}`, el)}>
+      <div {...slotProps('command', 'legends')}>
+      <div className="zonePile zoneCommand" data-drop={dropHint === 'command' || undefined} title={cmdLabel} ref={(el) => setFlightAnchor(`cmd:${player.userId}`, el)}>
         {player.command.map((card) => (
           <CmdCard
             key={card.iid}
@@ -615,9 +664,14 @@ export function ZonePiles({
             userId={player.userId}
             onMenu={onMenu}
             onHover={onHover}
+            // Cyberpunk Legends live in their tray and are Called in place, never
+            // dragged onto the felt - MTG commanders drag out to cast.
+            onDragOut={mat ? undefined : onDragOut}
+            dragSuppressed={dragSuppressed}
           />
         ))}
         {player.command.length === 0 && <div className="pileEmpty" style={{ width }} />}
+      </div>
       </div>
     </div>
   );
@@ -631,6 +685,8 @@ function CmdCard({
   userId,
   onMenu,
   onHover,
+  onDragOut,
+  dragSuppressed,
 }: {
   card: CardInst;
   tax: number;
@@ -639,6 +695,9 @@ function CmdCard({
   userId: string;
   onMenu?: (event: ReactPointerEvent | React.MouseEvent, iid: string, zone: Zone) => void;
   onHover?: (card: CardInst | null) => void;
+  onDragOut?: (event: ReactPointerEvent, card: CardInst, zone: 'graveyard' | 'exile' | 'library' | 'command') => void;
+  /** True right after a drag, so the post-drag click doesn't ALSO preview/cast. */
+  dragSuppressed?: () => boolean;
 }) {
   const t = useT();
   const act = useGame((state) => state.act);
@@ -668,10 +727,16 @@ function CmdCard({
       clickTimer.current = null;
     }
   };
+  // The commander can be cast (unmounting this card) with the preview timer
+  // still pending - never let it fire after unmount.
+  useEffect(() => clearClick, []);
   // A face-down Legend is hidden info even from its owner; single-click Calls it
   // (flips it face-up to reveal). A face-up commander/Legend previews on click.
   const call = () => act({ kind: 'card.face', iid: card.iid, faceDown: false });
   const onClick = () => {
+    // A drag-to-cast just ended: the browser still fires a click at the
+    // pointer-captured card - don't ALSO preview (or Call) it.
+    if (dragSuppressed?.()) return;
     if (card.faceDown) {
       if (interactive) call();
       return;
@@ -691,7 +756,16 @@ function CmdCard({
     <div
       className="cmdCard"
       onPointerEnter={() => onHover?.(card)}
-      onPointerDown={interactive ? longPress.onPointerDown : undefined}
+      onPointerDown={
+        interactive
+          ? (event) => {
+              longPress.onPointerDown(event);
+              // Arm a drag-to-cast alongside the long-press; the 6px threshold
+              // keeps clicks/double-clicks working (face-down Legends stay put).
+              if (!card.faceDown) onDragOut?.(event, card, 'command');
+            }
+          : undefined
+      }
       onPointerMove={interactive ? longPress.onPointerMove : undefined}
       onPointerUp={interactive ? longPress.onPointerUp : undefined}
       onPointerLeave={(event) => {

@@ -28,6 +28,7 @@ import * as api from '../net/api.ts';
 import * as ws from '../net/ws.ts';
 import type { MatchRow, MyRoom } from '../net/types.ts';
 import { useVisibleGames } from '../hooks/useVisibleGames.ts';
+import { FORMATS } from '../data/formats.ts';
 import { GameTag, GameBadge } from '../components/GameTag.tsx';
 import './play.css';
 
@@ -85,6 +86,7 @@ export function PlayPage() {
   const [tableName, setTableName] = useState('');
   const [seats, setSeats] = useState('4');
   const [persistent, setPersistent] = useState(true);
+  const [format, setFormat] = useState('commander');
   const games = useVisibleGames();
   const [game, setGame] = useState('mtg');
   const [deckId, setDeckId] = useState<string>('');
@@ -143,7 +145,8 @@ export function PlayPage() {
         tableName || `${t('playTitle')} - ${new Date().toLocaleTimeString()}`,
         Number(seats),
         persistent,
-        { game },
+        // The format preset drives starting life + commander machinery server-side.
+        { game, ...(game === 'mtg' ? { format } : {}) },
       );
       join(room.roomId, chosenDeck || undefined);
       void refreshRooms();
@@ -216,6 +219,23 @@ export function PlayPage() {
               options={games.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') }))}
             />
           </div>
+          {game === 'mtg' && (
+            <div className="control">
+              <Text as="span" size={Size.Small} tone={TextTone.Muted}>
+                {t('playFormat')}
+              </Text>
+              <Select
+                fullWidth
+                aria-label={t('playFormat')}
+                value={format}
+                onValueChange={setFormat}
+                options={FORMATS.map((f) => ({
+                  value: f.id,
+                  label: `${f.name} · ${f.startingLife} ${t('tblLife').toLowerCase()}`,
+                }))}
+              />
+            </div>
+          )}
           <div className="control">
             <Text as="span" size={Size.Small} tone={TextTone.Muted}>
               {t('playSeats')}

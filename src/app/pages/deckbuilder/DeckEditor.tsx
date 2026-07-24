@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { createPortal } from 'react-dom';
 import {
   AlertDialog,
   Button,
@@ -186,6 +187,23 @@ export function DeckEditor({ deckId }: { deckId: string }) {
       // The previous commander steps down into the main deck, never vanishing.
       const demoted = rest.map((c) => (c.board === 'commander' ? { ...c, board: 'main' as const } : c));
       return [{ scryfallId: card.id, name: card.name, quantity: 1, board: 'commander' }, ...demoted];
+    });
+
+  // Promote a card already in the deck to commander (right-click in the list).
+  // The previous commander steps down into the main deck.
+  const promoteToCommander = (card: DeckCard) =>
+    editCards((cards) => {
+      const rest = cards.filter(
+        (c) => !(c.scryfallId === card.scryfallId && c.board === card.board),
+      );
+      const demoted = rest.map((c) => (c.board === 'commander' ? { ...c, board: 'main' as const } : c));
+      // Only ONE copy leads; a multi-copy entry (basics, ex-constructed decks)
+      // keeps its remaining copies in the main deck instead of losing them.
+      const remainder =
+        card.quantity > 1
+          ? [{ scryfallId: card.scryfallId, name: card.name, quantity: card.quantity - 1, board: 'main' as const }]
+          : [];
+      return [{ scryfallId: card.scryfallId, name: card.name, quantity: 1, board: 'commander' }, ...remainder, ...demoted];
     });
 
   // Cyberpunk add: a Legend takes the anchor (command) slot, replacing any
@@ -840,6 +858,8 @@ export function DeckEditor({ deckId }: { deckId: string }) {
                   onHover={showPreview}
                   onLeave={hidePreview}
                   onArt={openArtPicker}
+                  onSetCommander={promoteToCommander}
+                  canCommander={fmt.hasCommander && !cyber}
                 />
               </DeckGroup>
             );
@@ -858,6 +878,8 @@ export function DeckEditor({ deckId }: { deckId: string }) {
                 onHover={showPreview}
                 onLeave={hidePreview}
                 onArt={openArtPicker}
+                onSetCommander={promoteToCommander}
+                canCommander={fmt.hasCommander && !cyber}
               />
             </DeckGroup>
           )}
@@ -988,6 +1010,8 @@ function CardGrid({
   onHover,
   onLeave,
   onArt,
+  onSetCommander,
+  canCommander,
 }: {
   cards: DeckCard[];
   violations: Set<string>;
@@ -998,6 +1022,8 @@ function CardGrid({
   onHover: (card: DeckCard) => (event: PointerEvent<HTMLElement>) => void;
   onLeave: () => void;
   onArt: (card: DeckCard) => void;
+  onSetCommander?: (card: DeckCard) => void;
+  canCommander?: boolean;
 }) {
   return (
     <div className="deckCardGrid">
@@ -1014,6 +1040,8 @@ function CardGrid({
             onHover={onHover}
             onLeave={onLeave}
             onArt={onArt}
+            onSetCommander={onSetCommander}
+            canCommander={canCommander}
           />
         ))}
       </AnimatePresence>
@@ -1031,6 +1059,8 @@ function CardCell({
   onHover,
   onLeave,
   onArt,
+  onSetCommander,
+  canCommander,
 }: {
   card: DeckCard;
   foil?: boolean;
@@ -1041,12 +1071,36 @@ function CardCell({
   onHover: (card: DeckCard) => (event: PointerEvent<HTMLElement>) => void;
   onLeave: () => void;
   onArt: (card: DeckCard) => void;
+  onSetCommander?: (card: DeckCard) => void;
+  canCommander?: boolean;
 }) {
   const t = useT();
   const popup = useCardPopup();
   // Long-press opens the artwork picker on touch; mouse uses onContextMenu.
   const longPress = useLongPress(() => onArt(card));
+  // Right-click context menu (set as commander / change art).
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const canPromote = Boolean(canCommander && onSetCommander && card.board !== 'commander');
+  useEffect(() => {
+    if (!menu) return;
+    const close = (event: Event) => {
+      // Ignore clicks inside the menu so item handlers can run before it closes.
+      if (menuRef.current?.contains(event.target as Node)) return;
+      setMenu(null);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenu(null);
+    };
+    window.addEventListener('pointerdown', close, true);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointerdown', close, true);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [menu]);
   return (
+    <>
     <motion.div
       layout="position"
       initial={{ opacity: 0, scale: 0.94 }}
@@ -1065,7 +1119,10 @@ function CardCell({
       onClickCapture={longPress.onClickCapture}
       onContextMenu={(event) => {
         event.preventDefault();
-        onArt(card);
+        // Commander decks get a menu (set commander / change art); otherwise
+        // right-click jumps straight to the art picker as before.
+        if (canPromote) setMenu({ x: event.clientX, y: event.clientY });
+        else onArt(card);
       }}
     >
       <GameCard
@@ -1109,5 +1166,45 @@ function CardCell({
         </IconButton>
       </span>
     </motion.div>
+    {menu &&
+      createPortal(
+        <div
+          className="deckCardMenu"
+          role="menu"
+          ref={menuRef}
+          style={{
+            left: Math.min(menu.x, window.innerWidth - 200),
+            top: Math.min(menu.y, window.innerHeight - 100),
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {canPromote && (
+            <button
+              type="button"
+              className="deckCardMenuItem"
+              role="menuitem"
+              onClick={() => {
+                onSetCommander?.(card);
+                setMenu(null);
+              }}
+            >
+              <Crown size={14} /> {t('dbSetCommander')}
+            </button>
+          )}
+          <button
+            type="button"
+            className="deckCardMenuItem"
+            role="menuitem"
+            onClick={() => {
+              onArt(card);
+              setMenu(null);
+            }}
+          >
+            <Sparkles size={14} /> {t('dbChangeArt')}
+          </button>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }

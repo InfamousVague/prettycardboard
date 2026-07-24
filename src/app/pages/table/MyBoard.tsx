@@ -8,6 +8,7 @@ import {
   CircleDot,
   Crown,
   Dices,
+  LayoutGrid,
   Minus,
   Moon,
   Plus,
@@ -23,9 +24,9 @@ import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
-import type { CardInst, RoomState, TablePlayer, Zone } from '../../net/types.ts';
+import type { CardInst, MatPos, MatZone, RoomState, TablePlayer, Zone } from '../../net/types.ts';
 import { useTableUi } from './tableUi.ts';
-import { AttackBadge, BlockCluster, CounterBadges, ZonePiles, groupAttachments } from './bits.tsx';
+import { AttackBadge, BlockCluster, CounterBadges, DEFAULT_MAT_LAYOUT, MAT_ZONES, ZonePiles, groupAttachments } from './bits.tsx';
 import {
   CARD_SCALE_MAX,
   CARD_SCALE_MIN,
@@ -45,6 +46,7 @@ import { HandCard, HAND_PEEK_ZONE } from './HandCard.tsx';
 import { DiceRoll3D } from './DiceRoll3D.tsx';
 import { DiceIcon } from '../../components/DiceIcon.tsx';
 import { send } from '../../net/ws.ts';
+import { formatFor } from '../../data/formats.ts';
 import { playSound } from '../../sounds.ts';
 
 /**
@@ -56,7 +58,7 @@ import { playSound } from '../../sounds.ts';
 
 /** Where a drag started. Battlefield cards move on the field; everything else
  * follows the pointer as a ghost and is played/moved on drop. */
-type DragFrom = 'hand' | 'battlefield' | 'graveyard' | 'exile' | 'library';
+type DragFrom = 'hand' | 'battlefield' | 'graveyard' | 'exile' | 'library' | 'command';
 
 interface DragState {
   iid: string;
@@ -125,9 +127,15 @@ export function MyBoard({
 
   const fieldRef = useRef<HTMLDivElement>(null);
   const handRef = useRef<HTMLDivElement | null>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
   const cardEls = useRef(new Map<string, HTMLElement>());
   const prevFaces = useRef(new Map<string, boolean>());
   const [drag, setDrag] = useState<DragState | null>(null);
+  // Mat editor: while editing, the working pile layout lives here (the server's
+  // copy is committed on each pile drop).
+  const [matEdit, setMatEdit] = useState(false);
+  const [matDraft, setMatDraft] = useState<Partial<Record<MatZone, MatPos>> | null>(null);
+  const matDraftRef = useRef<Partial<Record<MatZone, MatPos>> | null>(null);
   // Where a just-dropped card is held locally until the server echoes its new
   // position - stops the card snapping back to its old spot for one network
   // round-trip (the release "jitter").
@@ -460,6 +468,7 @@ export function MyBoard({
     if (from === 'battlefield') return me.battlefield.find((c) => c.iid === iid);
     if (from === 'graveyard') return me.graveyard.find((c) => c.iid === iid);
     if (from === 'exile') return me.exile.find((c) => c.iid === iid);
+    if (from === 'command') return me.command.find((c) => c.iid === iid);
     // The library is a hidden zone: the client never has its cards, so a
     // drag-from-deck rides a face-down placeholder (the server plays the real
     // top card on drop).
@@ -523,6 +532,10 @@ export function MyBoard({
       // it there - no context menu needed. Library takes it on top.
       act({ kind: 'card.move', iid, to: pile, ...(pile === 'library' ? { index: 0 } : {}) });
       moved = true;
+    } else if (card && pile && pile === from) {
+      // Released back over its own pile: a "never mind" - spring back. (With
+      // free-placed piles this can happen anywhere on the mat, so it must not
+      // fall through to the play/cast branches below.)
     } else if (from === 'library') {
       // Drag from the TOP OF THE DECK onto the felt: the server pops the (hidden)
       // top card and plays it face up where it landed. Releasing back over a pile,
@@ -572,6 +585,21 @@ export function MyBoard({
         moved = true;
       } else if (!inReservedBand(event.clientY)) {
         act({ kind: 'card.move', iid, to: 'battlefield', ...pos });
+        bumpZ(iid);
+        moved = true;
+      }
+    } else if (from === 'command' && card) {
+      // Commander dragged out of the command zone: onto the hand, or cast where
+      // it lands. cmd.cast keeps the tax accruing; non-commander formats (no tax
+      // machinery) fall back to a plain move.
+      if (overHand) {
+        act({ kind: 'card.move', iid, to: 'hand' });
+        moved = true;
+      } else if (!inReservedBand(event.clientY)) {
+        // hasCommander (not the literal 'commander') so Brawl accrues tax too,
+        // mirroring the server's format_has_commander gate.
+        if (formatFor(room.format).hasCommander) act({ kind: 'cmd.cast', iid, ...pos });
+        else act({ kind: 'card.move', iid, to: 'battlefield', ...pos });
         bumpZ(iid);
         moved = true;
       }
@@ -748,6 +776,89 @@ export function MyBoard({
 
   // The zone piles. In Cyberpunk they leave the bottom strip for the mat
   // quadrants (Deck/Trash right rail, Legends/Eddies bottom tray) via `mat`.
+  // ---- mat editor: free-place the zone piles, synced to every viewer ----
+  const matLayoutServer = me.matLayout ?? {};
+  const matActive = mtg && (matEdit || Object.keys(matLayoutServer).length > 0);
+  const matLayout = matDraft ?? matLayoutServer;
+
+  const updateMatDraft = (next: Partial<Record<MatZone, MatPos>> | null) => {
+    matDraftRef.current = next;
+    setMatDraft(next);
+  };
+
+  // Enter edit mode seamlessly: seed the draft from the piles' CURRENT on-screen
+  // spots (measured against the board), so nothing jumps when they lift into the
+  // free-placement overlay.
+  const startMatEdit = () => {
+    const board = boardRef.current;
+    const next: Record<MatZone, MatPos> = { ...DEFAULT_MAT_LAYOUT, ...matLayoutServer };
+    if (board) {
+      const b = board.getBoundingClientRect();
+      for (const zone of MAT_ZONES) {
+        const r = board.querySelector(`[data-mat-zone="${zone}"]`)?.getBoundingClientRect();
+        if (r && b.width > 0 && r.width > 0) {
+          next[zone] = {
+            x: (r.left + r.width / 2 - b.left) / b.width,
+            y: (r.top + r.height / 2 - b.top) / b.height,
+          };
+        }
+      }
+    }
+    updateMatDraft(next);
+    setMatEdit(true);
+  };
+  const stopMatEdit = () => {
+    setMatEdit(false);
+    updateMatDraft(null);
+  };
+  const resetMatLayout = () => {
+    send({ type: 'matlayout.set', layout: {} });
+    setMatEdit(false);
+    updateMatDraft(null);
+  };
+  const grabPile = (event: ReactPointerEvent, zone: MatZone) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!boardRef.current) return;
+    const pointerId = event.pointerId;
+    // Live rect per event (the board can resize mid-drag); clamp keeps piles
+    // inside the mat.
+    const clampPos = (cx: number, cy: number): MatPos => {
+      const rect = boardRef.current?.getBoundingClientRect();
+      if (!rect) return DEFAULT_MAT_LAYOUT[zone];
+      return {
+        x: Math.min(0.97, Math.max(0.03, (cx - rect.left) / Math.max(1, rect.width))),
+        y: Math.min(0.95, Math.max(0.04, (cy - rect.top) / Math.max(1, rect.height))),
+      };
+    };
+    const teardown = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cancel);
+    };
+    const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      updateMatDraft({ ...(matDraftRef.current ?? {}), [zone]: clampPos(ev.clientX, ev.clientY) });
+    };
+    const up = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      teardown();
+      const next = { ...DEFAULT_MAT_LAYOUT, ...(matDraftRef.current ?? {}), [zone]: clampPos(ev.clientX, ev.clientY) };
+      updateMatDraft(next);
+      send({ type: 'matlayout.set', layout: next });
+    };
+    // A cancelled pointer (system gesture, window blur) drops the drag without
+    // committing - otherwise the listeners leak and the next tap teleports the
+    // pile and broadcasts the accident.
+    const cancel = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      teardown();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
+  };
+
   const zonePilesEl = (
     <ZonePiles
       player={me}
@@ -759,11 +870,15 @@ export function MyBoard({
       onDragOut={(event, card, zone) => beginDrag(event, card, zone, { menu: false })}
       dragSuppressed={() => justDragged.current || heldFired.current}
       dropHint={dropPile}
+      layout={matActive ? matLayout : undefined}
+      editing={matEdit}
+      onPileGrab={grabPile}
     />
   );
 
   return (
     <div
+      ref={boardRef}
       className="myBoard"
       data-my-turn={(started && myTurn) || undefined}
       data-game={room.game || 'mtg'}
@@ -876,6 +991,23 @@ export function MyBoard({
 
         {/* dice + markers toolbar, docked bottom-end of the field */}
         <div className="boardTools boardToolsEnd">
+          {mtg && !matEdit && (
+            <Tooltip content={t('gpMatEdit')}>
+              <IconButton size="sm" variant="soft" aria-label={t('gpMatEdit')} onClick={startMatEdit}>
+                <LayoutGrid size={15} />
+              </IconButton>
+            </Tooltip>
+          )}
+          {mtg && matEdit && (
+            <>
+              <Button size="sm" variant="soft" onClick={resetMatLayout}>
+                {t('gpMatReset')}
+              </Button>
+              <Button size="sm" onClick={stopMatEdit}>
+                {t('gpMatDone')}
+              </Button>
+            </>
+          )}
           <Tooltip content={t('gpCardsSmaller')}>
             <IconButton
               size="sm"
@@ -963,8 +1095,9 @@ export function MyBoard({
       </>)}
 
       {/* Cyberpunk: the zones live in the mat quadrants (a board overlay), not
-          the bottom strip. Magic keeps them floating over the strip. */}
-      {!mtg && !hideField && <div className="matZones">{zonePilesEl}</div>}
+          the bottom strip. Magic keeps them floating over the strip - unless a
+          custom mat layout (or the mat editor) lifts them into free placement. */}
+      {(!mtg || matActive) && !hideField && <div className="matZones">{zonePilesEl}</div>}
 
       {/* Real polyhedral WebGL dice roll over the mat — Cyberpunk's Fixer dice and
           Magic's sidebar dice both land here on the server-chosen value. Falls
@@ -973,7 +1106,7 @@ export function MyBoard({
 
       {/* bottom strip: zones | hand | vitals */}
       <div className="myStrip">
-        {mtg && zonePilesEl}
+        {mtg && !matActive && zonePilesEl}
 
         {/* .myHand is a non-transforming frame; only the inner .myFan slides
             (rest/peek/hidden), so the tab below can centre on the hand and stay

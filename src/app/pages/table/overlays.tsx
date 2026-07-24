@@ -17,6 +17,7 @@ import { cardImage } from '../../data/cards.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import type { CardInst, RoomState, TablePlayer, Zone } from '../../net/types.ts';
+import { formatFor } from '../../data/formats.ts';
 import { useTableUi } from './tableUi.ts';
 import { flyToAnchor } from './juice.ts';
 
@@ -315,8 +316,14 @@ export function MulliganOverlay({ room, me }: { room: RoomState; me: TablePlayer
 
   const mulligan = me.mulligan;
   const hand = me.hand ?? [];
-  const freeFirst = room.format === 'commander' && room.players.length >= 3 ? 1 : 0;
-  const owed = Math.max(0, (mulligan?.taken ?? 0) - freeFirst);
+  // Mirror the server exactly (turns.rs free_first_mulls + MullKeep): the host's
+  // freeMulligans override beats the classic default (?? not ||: an explicit 0
+  // must win), and Vancouver never bottoms cards.
+  const freeFirst =
+    room.settings?.freeMulligans ??
+    (formatFor(room.format).hasCommander && room.players.length >= 3 ? 1 : 0);
+  const vancouver = room.settings?.mulliganRule === 'vancouver';
+  const owed = vancouver ? 0 : Math.max(0, (mulligan?.taken ?? 0) - freeFirst);
 
   // The fan fills the width of the screen: size each card so the whole hand
   // spans ~95vw. Cards overlap by 32px (margin-inline: -16px), so a card's

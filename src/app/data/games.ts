@@ -1,6 +1,7 @@
 import type { Board, Zone } from '../net/types.ts';
 import { cardImage } from './cards.ts';
 import { cyberpunkImage } from './cyberpunk.ts';
+import { FORMATS, formatFor } from './formats.ts';
 
 /**
  * The multi-game registry: one GameDef per supported card game. The server is a
@@ -92,7 +93,7 @@ const MTG: GameDef = {
     { slot: 'command', label: 'Command' },
   ],
   resources: [
-    { id: 'life', label: 'Life', start: (format) => (format === 'commander' ? 40 : 20), primary: true },
+    { id: 'life', label: 'Life', start: (format) => formatFor(format).startingLife, primary: true },
     { id: 'poison', label: 'Poison', start: 0, min: 0 },
   ],
   phases: [
@@ -114,10 +115,7 @@ const MTG: GameDef = {
     startingHand: 7,
     anchor: { board: 'commander', label: 'Commander', count: 1 },
   },
-  formats: [
-    { id: 'commander', label: 'Commander' },
-    { id: 'standard', label: 'Standard' },
-  ],
+  formats: FORMATS.map((f) => ({ id: f.id, label: f.name })),
   tapping: true,
   resolveImage: (id) => cardImage(id),
 };

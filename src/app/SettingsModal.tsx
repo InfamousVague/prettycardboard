@@ -70,6 +70,7 @@ export function SettingsModal({
   const radiusScale = preferences.radiusScale ?? DEFAULT_PREFERENCES.radiusScale;
   const frostedness = preferences.frostedness ?? DEFAULT_PREFERENCES.frostedness;
   const soundEffects = preferences.soundEffects ?? DEFAULT_PREFERENCES.soundEffects;
+  const alertSounds = preferences.alertSounds ?? DEFAULT_PREFERENCES.alertSounds;
   const soundVolume = preferences.soundVolume ?? DEFAULT_PREFERENCES.soundVolume;
 
   const general = (
@@ -279,12 +280,19 @@ export function SettingsModal({
       </Fieldset>
 
       <Fieldset legend={t('setSounds')} description={t('setSoundsHint')}>
-        <Switch
-          label={t('setSounds')}
-          checked={soundEffects}
-          onCheckedChange={(checked) => onChange({ soundEffects: checked })}
-        />
-        {soundEffects && (
+        <div style={{ display: 'grid', gap: 'var(--glacier-space-3)' }}>
+          <Switch
+            label={t('setAlertSounds')}
+            checked={alertSounds}
+            onCheckedChange={(checked) => onChange({ alertSounds: checked })}
+          />
+          <Switch
+            label={t('setTableSounds')}
+            checked={soundEffects}
+            onCheckedChange={(checked) => onChange({ soundEffects: checked })}
+          />
+        </div>
+        {(alertSounds || soundEffects) && (
           <Row gap={3} align="center" style={{ width: '100%', marginBlockStart: 'var(--glacier-space-3)' }}>
             <div style={{ flex: 1 }}>
               <Slider

@@ -29,6 +29,10 @@ enum ClientMsg {
     RoomReady { ready: bool },
     #[serde(rename = "room.deck.set", rename_all = "camelCase")]
     RoomDeckSet { deck_id: String },
+    /// Host-only pre-game rule changes (mulligans, starting life/hand, first
+    /// player). Rejected once the game has started.
+    #[serde(rename = "room.settings")]
+    RoomSettings { settings: rooms::GameSettings },
     #[serde(rename = "room.ping", rename_all = "camelCase")]
     RoomPing { target_user_id: String },
     #[serde(rename = "room.hand.hover")]
@@ -45,6 +49,10 @@ enum ClientMsg {
     GameAction { action: game::Action },
     #[serde(rename = "playmat.set")]
     PlaymatSet { id: Option<String> },
+    /// My custom zone-pile placement (normalized centers by logical zone id);
+    /// an empty map resets to the default strip layout.
+    #[serde(rename = "matlayout.set")]
+    MatLayoutSet { layout: std::collections::BTreeMap<String, rooms::MatPos> },
     /// My chosen card back, mirrored so every viewer paints my face-down cards
     /// with it (their board wears their back, not mine).
     #[serde(rename = "cardback.set")]
@@ -186,6 +194,7 @@ fn handle_msg(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
         ClientMsg::RoomStart => start_room(app, user, tx),
         ClientMsg::RoomReady { ready } => room_ready(app, user, ready, tx),
         ClientMsg::RoomDeckSet { deck_id } => room_deck_set(app, user, &deck_id, tx),
+        ClientMsg::RoomSettings { settings } => room_settings(app, user, settings, tx),
         ClientMsg::RoomPing { target_user_id } => room_ping(app, user, &target_user_id, tx),
         ClientMsg::RoomHandHover { position } => room_hand_hover(app, user, position, tx),
         ClientMsg::CursorMove { x, y, hover } => cursor_move(app, user, x, y, hover, tx),
@@ -193,6 +202,7 @@ fn handle_msg(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
         ClientMsg::InviteSend { to_user_id, room_id } => invite_send(app, user, &to_user_id, &room_id),
         ClientMsg::GameAction { action } => game_action(app, user, action, tx),
         ClientMsg::PlaymatSet { id } => playmat_set(app, user, id),
+        ClientMsg::MatLayoutSet { layout } => mat_layout_set(app, user, layout),
         ClientMsg::CardBackSet { id } => card_back_set(app, user, id),
         ClientMsg::AutoSet { untap, draw } => auto_set(app, user, untap, draw),
         ClientMsg::ReplaySeek { index } => replay_seek(app, user, index, tx),
@@ -358,13 +368,15 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
     // Commander-board cards are flagged isCommander only when MTG command-zone
     // machinery is active; a Cyberpunk Legend sits in the (relabeled) command
     // zone without triggering tax/return.
-    let is_commander_room = room.format == "commander";
+    let is_commander_room = rooms::format_has_commander(&room.format);
+    // Honor the host's startingLife override (mirrors start_room) so lobby
+    // seats and mid-game joiners match the table's actual rule.
     let starting_life = if room.game == "cyberpunk" {
         0
-    } else if is_commander_room {
-        40
     } else {
-        20
+        room.settings
+            .starting_life
+            .unwrap_or_else(|| rooms::format_default_life(&room.format))
     };
     // Snapshot the deck's name now: match results must survive a later
     // rename or delete of the deck row.
@@ -389,6 +401,7 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
         card_back: None,
         auto_untap: false,
         auto_draw: false,
+        mat_layout: Default::default(),
         gig_dice,
         roll_seq: 0,
         last_roll: None,
@@ -603,16 +616,41 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
         return;
     }
     room.started = true;
-    let deal = crate::game::opening_hand(&room.game);
+    let deal = crate::game::effective_hand_size(&room);
+    // Reset each seat's life to the effective starting total (host override or
+    // format default). Cyberpunk keeps its Net/RAM slots at 0.
+    let base_life = if room.game == "cyberpunk" {
+        0
+    } else {
+        rooms::format_default_life(&room.format)
+    };
+    let starting_life = if room.game == "cyberpunk" {
+        0
+    } else {
+        room.settings.starting_life.unwrap_or(base_life)
+    };
     for p in room.players.iter_mut() {
+        p.life = starting_life;
         let n = deal.min(p.library.len());
         let drawn: Vec<rooms::Card> = p.library.drain(0..n).collect();
         p.hand.extend(drawn);
-        // Every seat starts in the London-mulligan decision (freeform: no
-        // other action is gated on it).
+        // Every seat starts in the mulligan decision (freeform: no other action
+        // is gated on it).
         p.mulligan = Some(rooms::Mull { state: "deciding".to_string(), taken: 0 });
     }
-    let starting = room.players.iter().map(|p| p.seat).min().unwrap_or(0);
+    // Turn order anchor: host may force a random seat or a specific one; the
+    // default follows the lowest occupied seat.
+    let mut seats: Vec<usize> = room.players.iter().map(|p| p.seat).collect();
+    seats.sort_unstable();
+    let starting = match room.settings.first_player.as_str() {
+        "seat" => room
+            .settings
+            .first_seat
+            .filter(|s| seats.contains(s))
+            .unwrap_or_else(|| seats.first().copied().unwrap_or(0)),
+        "random" if !seats.is_empty() => seats[rand::random_range(0..seats.len())],
+        _ => seats.first().copied().unwrap_or(0),
+    };
     room.starting_seat = starting;
     room.active_seat = starting;
     room.turn_number = 1;
@@ -729,7 +767,7 @@ fn room_deck_set(app: &Arc<App>, user: &db::User, deck_id: &str, tx: &Tx) {
         send_err(tx, "wrong_game", "deck does not match this table's game");
         return;
     }
-    let (command, library) = rooms::build_zones(&deck.cards(), room.format == "commander", &room.game);
+    let (command, library) = rooms::build_zones(&deck.cards(), rooms::format_has_commander(&room.format), &room.game);
     let Some(player) = room.players.iter_mut().find(|p| p.user_id == user.id) else {
         send_err(tx, "not_seated", "you are not seated in this room");
         return;
@@ -743,6 +781,45 @@ fn room_deck_set(app: &Arc<App>, user: &db::User, deck_id: &str, tx: &Tx) {
     player.graveyard.clear();
     player.exile.clear();
     player.ready = false;
+    rooms::touch(app, &mut room);
+    room_send_states(app, &room);
+}
+
+/// Host-only pre-game rule change. Sanitizes free-form fields and rejects any
+/// change once the game is running.
+fn room_settings(app: &Arc<App>, user: &db::User, mut settings: rooms::GameSettings, tx: &Tx) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        send_err(tx, "not_in_room", "you are not in a room");
+        return;
+    };
+    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
+        send_err(tx, "room_not_found", "no such room");
+        return;
+    };
+    if room.host != user.id {
+        send_err(tx, "forbidden", "only the host can change settings");
+        return;
+    }
+    if room.started {
+        send_err(tx, "already_started", "settings are locked once the game starts");
+        return;
+    }
+    // Clamp into sane ranges so a crafted payload cannot wedge the game.
+    if settings.mulligan_rule != "vancouver" {
+        settings.mulligan_rule = "london".to_string();
+    }
+    if !matches!(settings.first_player.as_str(), "random" | "seat") {
+        settings.first_player = "auto".to_string();
+    }
+    settings.starting_life = settings.starting_life.map(|l| l.clamp(1, 999));
+    settings.starting_hand = settings.starting_hand.map(|h| h.clamp(0, 20));
+    settings.free_mulligans = settings.free_mulligans.map(|m| m.min(7));
+    if let Some(seat) = settings.first_seat {
+        if seat >= room.seats {
+            settings.first_seat = None;
+        }
+    }
+    room.settings = settings;
     rooms::touch(app, &mut room);
     room_send_states(app, &room);
 }
@@ -1170,6 +1247,30 @@ fn playmat_set(app: &Arc<App>, user: &db::User, id: Option<String>) {
             rooms::touch(app, &mut room);
             room_send_states(app, &room);
         }
+    }
+}
+
+/// A player's custom zone-pile placement, mirrored to every viewer. Untrusted
+/// input: keep only the four logical zones and clamp coordinates into the mat.
+fn mat_layout_set(app: &Arc<App>, user: &db::User, mut layout: std::collections::BTreeMap<String, rooms::MatPos>) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        return;
+    };
+    if rref.spectating {
+        return;
+    }
+    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
+        return;
+    };
+    layout.retain(|zone, _| matches!(zone.as_str(), "library" | "graveyard" | "exile" | "command"));
+    for pos in layout.values_mut() {
+        pos.x = pos.x.clamp(0.0, 1.0);
+        pos.y = pos.y.clamp(0.0, 1.0);
+    }
+    if let Some(p) = room.players.iter_mut().find(|p| p.user_id == user.id) {
+        p.mat_layout = layout;
+        rooms::touch(app, &mut room);
+        room_send_states(app, &room);
     }
 }
 

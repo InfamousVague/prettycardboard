@@ -21,6 +21,7 @@ import { EMPTY_MANA, MANA_ORDER, ManaSymbol } from '../../components/Mana.tsx';
 import { DiceIcon, type PolyhedralSides } from '../../components/DiceIcon.tsx';
 import { juicePulse } from './juice.ts';
 import { useTableUi } from './tableUi.ts';
+import { formatFor } from '../../data/formats.ts';
 import type { ManaColor, ManaPool, RoomState, TablePlayer } from '../../net/types.ts';
 
 /**
@@ -39,8 +40,9 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
   const lifeRef = useRef<HTMLSpanElement>(null);
   // Commander damage I've taken from each opponent's commander (21 = lethal).
   // Manual, like all damage now: steppers adjust cmdDamage[fromSeat].
-  const cmdFoes =
-    room.format === 'commander' ? room.players.filter((p) => p.seat !== me.seat && !p.conceded) : [];
+  const cmdFoes = formatFor(room.format).hasCommander
+    ? room.players.filter((p) => p.seat !== me.seat && !p.conceded)
+    : [];
 
   // Vitals are game-driven. MTG's `life`/`poison` slots are relabeled per the
   // registry: Cyberpunk shows Net (primary) + RAM (secondary), no poison-lethal.

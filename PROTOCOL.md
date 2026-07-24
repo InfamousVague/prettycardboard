@@ -161,10 +161,14 @@ judges legality. All new actions rebroadcast as `room.event` + a `log` line,
 and hidden-info rules from v1 apply unchanged.
 
 ### Room format
-- `POST /api/rooms` body gains `format?: "commander" | "standard"` (default
-  `"commander"`). Sets starting life (40 / 20), first-turn draw skip (2-player
-  and standard: the starting seat skips its first draw; 3+ seat commander: no
-  skip), and whether command-zone machinery is active.
+- `POST /api/rooms` body gains `format?` (default `"commander"`), one of the
+  preset ids `commander | brawl | standard | pioneer | modern | legacy |
+  vintage | pauper | freeform`. The preset sets starting life (commander 40,
+  brawl 25, everything else 20 — the host's `startingLife` setting still
+  overrides), the first-turn draw skip (2-player and non-commander formats:
+  the starting seat skips its first draw; 3+ seat commander/brawl: no skip),
+  and whether command-zone machinery (tax, cmd damage, return prompts) is
+  active (`commander` and `brawl`).
 - RoomState gains: `format`, `turnNumber` (1-based), `activeSeat`,
   `phase` ("upkeep" | "main1" | "attack" | "block" | "damage" | "main2" | "end"),
   `autoTurn` (bool, default true), `stack: [CardInst]` (shared, ordered),
@@ -211,6 +215,9 @@ lock/ready/prevent, no auto-resolution, and no `combat.results` message.
 Commander:
 - `{kind: "cmd.cast", iid, x, y}` — command zone -> battlefield; increments
   that commander's tax counter AFTER the cast (tax shown = 2 x prior casts).
+- `{kind: "cmd.tax", iid, delta}` — manually adjust a commander's tax (e.g.
+  "Reduce tax" undo). Self-only, clamped at 0, and only for iids that already
+  have tax; the entry is removed when it reaches 0.
 - On any `card.move` that takes a commander OFF the battlefield the server
   asks the owner via a new per-viewer message `{type: "cmd.choice", iid, to}`;
   the owner answers `{kind: "cmd.return", iid, accept: bool}` — accept sends
@@ -405,3 +412,19 @@ pre-multigame room/deck/snapshot reads back unchanged.
   (`/cache/cyberpunk/<id>.webp`); MTG still sends `imageUrl: null` and the client
   resolves Scryfall from the id. Card identity for Cyberpunk is the Netdeck UUID,
   stored in the same `scryfallId` slot.
+
+## Mat layout addendum (2026-07-24)
+
+Per-seat zone-pile placement (the "mat editor"), following the per-seat
+cosmetic-setting pattern (not a game action: no undo/timeline churn).
+
+- Client -> server: `{type: "matlayout.set", layout: {<zone>: {x, y}, ...}}` —
+  seated players only. Keys are the logical zone ids
+  `library | graveyard | exile | command`; values are the pile's normalized
+  center (0..1) within the seat's board. The server whitelists keys, clamps
+  coordinates, stores the map on the player, and rebroadcasts full state.
+  An empty map resets to the default strip layout.
+- Each player in `RoomState` gains `matLayout` (same shape; empty = default).
+  Every viewer renders that seat's piles at the custom spots; the staged
+  mirrored opponent view rotates the overlay 180°, so (x, y) reads as
+  (1-x, 1-y) across the table.

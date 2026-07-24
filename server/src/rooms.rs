@@ -44,6 +44,46 @@ pub struct Mull {
     pub taken: u32,
 }
 
+/// Host-configurable pre-game rules, negotiated in the lobby before start.
+/// Every field is optional/defaulted so pre-feature rooms deserialize to the
+/// old hardcoded behavior (`GameSettings::default()`).
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct GameSettings {
+    /// Life every seat starts with; `None` = format default (commander 40,
+    /// standard 20). Ignored for Cyberpunk (Net/RAM start at 0).
+    pub starting_life: Option<i64>,
+    /// Opening-hand size; `None` = game default (MTG 7, Cyberpunk 6).
+    pub starting_hand: Option<usize>,
+    /// Free mulligans before hands start shrinking; `None` = the classic rule
+    /// (1 in 3+ player commander, else 0).
+    pub free_mulligans: Option<u32>,
+    /// "london" (draw full, bottom N on keep) or "vancouver" (draw one fewer
+    /// each mulligan, no bottoming).
+    pub mulligan_rule: String,
+    /// Who takes the first turn: "auto" (lowest seat), "random", or "seat".
+    pub first_player: String,
+    /// The seat that goes first when `first_player == "seat"`.
+    pub first_seat: Option<usize>,
+    /// Force the starting player's first-draw skip on/off; `None` = the classic
+    /// rule (skipped in standard or any 2-player game).
+    pub skip_first_draw: Option<bool>,
+}
+
+impl Default for GameSettings {
+    fn default() -> Self {
+        Self {
+            starting_life: None,
+            starting_hand: None,
+            free_mulligans: None,
+            mulligan_rule: "london".to_string(),
+            first_player: "auto".to_string(),
+            first_seat: None,
+            skip_first_draw: None,
+        }
+    }
+}
+
 /// One of the Cyberpunk Gig dice a player holds. The base six (d4..d20) come
 /// from their Fixer; extra dice are STOLEN from rivals (+1 Gig per full 10 Power
 /// dealt), which is how a player pushes past six toward the 7-die win. `value`
@@ -126,6 +166,11 @@ pub struct Player {
     /// mat as the shared table felt.
     #[serde(default)]
     pub playmat: Option<String>,
+    /// Custom zone-pile placement on this player's mat (normalized 0..1 centers
+    /// by logical zone id: library/graveyard/exile/command). Empty = the default
+    /// strip layout. Synced via `matlayout.set` and shown to every viewer.
+    #[serde(default)]
+    pub mat_layout: BTreeMap<String, MatPos>,
     /// The player's chosen card-back id; every viewer paints THIS player's
     /// face-down cards with it (so an opponent's board wears their back, not
     /// yours). Synced from the client via `cardback.set`.
@@ -335,8 +380,36 @@ pub fn result_player(p: &Player) -> MatchResultPlayer {
     }
 }
 
+/// A normalized (0..1) zone-pile center on a player's mat.
+#[derive(Clone, Copy, Serialize, Deserialize)]
+pub struct MatPos {
+    pub x: f64,
+    pub y: f64,
+}
+
 fn default_format() -> String {
     "commander".to_string()
+}
+
+/// Every MTG format a room can be created with (the client's preset picker).
+pub const MTG_FORMATS: &[&str] = &[
+    "commander", "brawl", "standard", "pioneer", "modern", "legacy", "vintage", "pauper", "freeform",
+];
+
+/// Formats that run the full commander machinery: command zone casts, tax,
+/// commander damage, the return-to-command-zone prompt.
+pub fn format_has_commander(format: &str) -> bool {
+    matches!(format, "commander" | "brawl")
+}
+
+/// Default starting life for an MTG format; the host's startingLife setting
+/// overrides it at game start.
+pub fn format_default_life(format: &str) -> i64 {
+    match format {
+        "commander" => 40,
+        "brawl" => 25,
+        _ => 20,
+    }
 }
 fn default_game() -> String {
     "mtg".to_string()
@@ -402,6 +475,10 @@ pub struct Room {
     /// deserialize unchanged.
     #[serde(default = "default_game")]
     pub game: String,
+    /// Host-configured pre-game rules (mulligans, starting life/hand, first
+    /// player). Defaults reproduce the classic hardcoded behavior.
+    #[serde(default)]
+    pub settings: GameSettings,
     #[serde(default = "default_turn")]
     pub turn_number: u64,
     #[serde(default)]
@@ -576,11 +653,17 @@ impl Room {
         // resurrects someone who left.
         let mut live: std::collections::HashMap<String, Player> =
             std::mem::take(&mut self.players).into_iter().map(|p| (p.user_id.clone(), p)).collect();
-        // Drop snapshot players who have since left; keep survivors' live online.
+        // Drop snapshot players who have since left; keep survivors' live online
+        // state and their cosmetic per-seat prefs (mat layout, playmat, card
+        // back) - those are preferences, not game state, and an undo of a game
+        // move must not snap someone's mat arrangement back.
         restored.players.retain(|p| live.contains_key(&p.user_id));
         for p in restored.players.iter_mut() {
             if let Some(lp) = live.get(&p.user_id) {
                 p.online = lp.online;
+                p.mat_layout = lp.mat_layout.clone();
+                p.playmat = lp.playmat.clone();
+                p.card_back = lp.card_back.clone();
             }
         }
         // Re-seat anyone who joined AFTER this snapshot, carrying their live
@@ -685,6 +768,7 @@ impl Room {
                     "cmdDamage": cmd,
                     "cmdDamageByCommander": p.cmd_damage_by_commander,
                     "commanderTax": p.commander_tax,
+                    "matLayout": p.mat_layout,
                     "mulligan": p.mulligan,
                     "handCount": p.hand.len(),
                     "libraryCount": p.library.len(),
@@ -757,6 +841,7 @@ impl Room {
             "seq": self.seq,
             "format": self.format,
             "game": self.game,
+            "settings": self.settings,
             "turnNumber": self.turn_number,
             "activeSeat": self.active_seat,
             "phase": self.phase,

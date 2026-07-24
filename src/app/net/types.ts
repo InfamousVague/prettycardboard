@@ -8,6 +8,15 @@ export interface Identity {
 
 export type Board = 'commander' | 'main' | 'side';
 
+/** The pile zones a player can reposition on their mat. */
+export type MatZone = 'library' | 'graveyard' | 'exile' | 'command';
+
+/** A normalized (0..1) zone-pile center on a player's mat. */
+export interface MatPos {
+  x: number;
+  y: number;
+}
+
 export interface DeckCard {
   scryfallId: string;
   name: string;
@@ -157,6 +166,10 @@ export interface TablePlayer {
   online?: boolean;
   /** The seat's chosen playmat id; the felt shows the active player's mat. */
   playmat?: string | null;
+  /** Custom zone-pile placement (normalized 0..1 centers by logical zone).
+   * Empty/absent = default strip layout. Synced via `matlayout.set` and
+   * rendered on every viewer's copy of this player's board. */
+  matLayout?: Partial<Record<MatZone, MatPos>>;
   /** The seat's chosen card-back id; every viewer paints THIS player's
    * face-down cards with it (so an opponent's board wears their own back). */
   cardBack?: string | null;
@@ -253,6 +266,26 @@ export interface MatchStatsPlayer {
   mySalt: number | null;
 }
 
+/** Host-configurable pre-game rules, negotiated in the lobby before the game
+ * starts. The server fills unset (null) fields from format/game defaults. */
+export interface GameSettings {
+  /** Life every seat starts with; null for the format default (commander 40,
+   * standard 20). Ignored for Cyberpunk. */
+  startingLife?: number | null;
+  /** Opening-hand size; null for the game default (MTG 7, Cyberpunk 6). */
+  startingHand?: number | null;
+  /** Free mulligans before hands shrink; null for the classic rule. */
+  freeMulligans?: number | null;
+  /** "london" (draw full, bottom N) or "vancouver" (draw one fewer each time). */
+  mulliganRule: 'london' | 'vancouver';
+  /** Who takes the first turn: "auto" (lowest seat), "random", or "seat". */
+  firstPlayer: 'auto' | 'random' | 'seat';
+  /** The seat that goes first when firstPlayer is "seat". */
+  firstSeat?: number | null;
+  /** Force the starting player's first-draw skip; null for the classic rule. */
+  skipFirstDraw?: boolean | null;
+}
+
 export interface RoomState {
   roomId: string;
   name: string;
@@ -266,8 +299,11 @@ export interface RoomState {
    * vitals, phases, and card-art resolution. Absent on pre-multigame snapshots
    * (treat as "mtg"). */
   game?: string;
-  // gameplay v2 (absent on pre-v2 snapshots)
-  format?: 'commander' | 'standard';
+  // gameplay v2 (absent on pre-v2 snapshots). A format preset id ('commander',
+  // 'brawl', 'standard', 'legacy', ...) - resolve rules via formatFor().
+  format?: string;
+  /** Host-configured pre-game rules; absent on pre-feature snapshots. */
+  settings?: GameSettings;
   turnNumber?: number;
   activeSeat?: number;
   /** Lowest occupied seat at game start (turn order anchor). */
@@ -378,6 +414,7 @@ export type GameActionV2 =
   | { kind: 'combat.end' }
   | { kind: 'cmd.cast'; iid: string; x: number; y: number }
   | { kind: 'cmd.return'; iid: string; accept: boolean }
+  | { kind: 'cmd.tax'; iid: string; delta: number }
   | { kind: 'dice.roll'; sides: 2 | 4 | 6 | 8 | 10 | 12 | 20; count?: number }
   | { kind: 'mana.add'; color: ManaColor; delta: number }
   | { kind: 'mana.clear' }

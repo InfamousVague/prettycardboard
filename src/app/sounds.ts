@@ -1,4 +1,4 @@
-import { loadPreferences } from './preferences.ts';
+import { loadPreferences, type Preferences } from './preferences.ts';
 
 export const SOUND_FILES = {
   turn: 'turn-ready.mp3',
@@ -14,6 +14,15 @@ export const SOUND_FILES = {
 } as const;
 
 export type SoundCue = keyof typeof SOUND_FILES;
+
+/** Alert cues are notifications (turn ready, ping) — a separate category from
+ * the tactile table sounds, and on by default. */
+const ALERT_CUES = new Set<SoundCue>(['turn', 'ping']);
+
+/** Whether a cue may play, given its category and the user's preferences. */
+function cueEnabled(prefs: Preferences, cue: SoundCue): boolean {
+  return ALERT_CUES.has(cue) ? (prefs.alertSounds ?? true) : (prefs.soundEffects ?? false);
+}
 
 type AudioWindow = Window & typeof globalThis & {
   webkitAudioContext?: typeof AudioContext;
@@ -172,7 +181,8 @@ export function primeSounds(): void {
   const audio = context();
   if (!audio) return;
   if (audio.state === 'suspended') void audio.resume().catch(() => {});
-  if (!loadPreferences().soundEffects) return;
+  const prefs = loadPreferences();
+  if (!prefs.alertSounds && !prefs.soundEffects) return;
   for (const cue of Object.keys(SOUND_FILES) as SoundCue[]) void loadSample(audio, cue);
 }
 
@@ -180,13 +190,13 @@ export function primeSounds(): void {
 export function playSound(cue: SoundCue): void {
   const preferences = loadPreferences();
   const volume = Math.max(0, Math.min(1, preferences.soundVolume));
-  if (!preferences.soundEffects || volume === 0) return;
+  if (!cueEnabled(preferences, cue) || volume === 0) return;
   const audio = context();
   if (!audio) return;
 
   const play = async () => {
     const buffer = await loadSample(audio, cue);
-    if (!loadPreferences().soundEffects) return;
+    if (!cueEnabled(loadPreferences(), cue)) return;
     if (buffer) startBuffer(audio, buffer, cue, volume);
     else playFallback(audio, cue, volume);
   };
