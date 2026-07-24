@@ -28,6 +28,9 @@ import { useApp } from './state/appStore.ts';
 import { useGame } from './state/gameStore.ts';
 import { useUi } from './state/uiStore.ts';
 import { joinCodeFromHash, rememberPendingJoin } from './data/pendingJoin.ts';
+import { releasesSince, type ChangelogRelease } from './data/changelog.ts';
+import { WhatsNew } from './components/WhatsNew.tsx';
+import pkg from '../../package.json' with { type: 'json' };
 import { motion, MotionConfig } from 'motion/react';
 import { CardPopupProvider } from './components/CardPopup.tsx';
 import { HoverCardLayer } from './components/HoverCard.tsx';
@@ -54,6 +57,9 @@ const SettingsModal = lazy(() => import('./SettingsModal.tsx').then((m) => ({ de
 
 /** One-time flag: on first launch, Settings opens on the Customize tab. */
 const CUSTOMIZED_KEY = 'pc.customized';
+
+/** The app version this player last saw the changelog for. */
+const SEEN_VERSION_KEY = 'pc.lastSeenVersion';
 
 // Capture a #/join/CODE deep link before anything renders, so an invite opened
 // cold survives the auth gate (and any reload auth triggers).
@@ -197,6 +203,27 @@ function Shell({
   // playmat and card back; afterwards it lives behind the Customize rail button.
   const firstRun = useRef(localStorage.getItem(CUSTOMIZED_KEY) == null);
   const [settingsOpen, setSettingsOpen] = useState(firstRun.current);
+  // What's-new: announce releases newer than the version cached on this device.
+  // A brand-new player (first run) skips the announcement - everything is new to
+  // them anyway - and just seeds the cache; returning players see what changed.
+  const [whatsNew, setWhatsNew] = useState<ChangelogRelease[]>(() => {
+    const seen = localStorage.getItem(SEEN_VERSION_KEY);
+    if (seen === pkg.version) return [];
+    if (firstRun.current || !seen) {
+      // First run, or the feature just shipped: returning players (already
+      // customized) get the full backlog once; fresh installs seed silently.
+      if (firstRun.current) {
+        localStorage.setItem(SEEN_VERSION_KEY, pkg.version);
+        return [];
+      }
+      return releasesSince(null);
+    }
+    return releasesSince(seen);
+  });
+  const closeWhatsNew = () => {
+    localStorage.setItem(SEEN_VERSION_KEY, pkg.version);
+    setWhatsNew([]);
+  };
   const [settingsSection, setSettingsSection] = useState<string | undefined>(
     firstRun.current ? 'customize' : undefined,
   );
@@ -342,6 +369,7 @@ function Shell({
           />
         </Suspense>
       )}
+      <WhatsNew releases={whatsNew} open={whatsNew.length > 0} onClose={closeWhatsNew} />
     </div>
   );
 }

@@ -47,6 +47,7 @@ import { GameCard } from '../components/GameCard.tsx';
 import { ManaPoolReadout } from '../components/Mana.tsx';
 import type { CardInst, GameAction, GameActionV2, RoomState, TablePlayer, Zone } from '../net/types.ts';
 import { useTableUi } from './table/tableUi.ts';
+import { CARD_SCALE_MAX, CARD_SCALE_MIN, CARD_SCALE_STEP } from './table/boardModes.ts';
 import { MyBoard } from './table/MyBoard.tsx';
 import { Vitals } from './table/Vitals.tsx';
 import { SeatFrame } from './table/SeatFrame.tsx';
@@ -112,6 +113,9 @@ export function TablePage() {
   // A staged opponent's board is flipped 180° when this is on; the spectate cue
   // then floats at the bottom (their hand takes the top) instead of the top.
   const mirrorOpponent = usePreference('mirrorOpponent');
+  // Card size for the staged board - adjustable from the spectate cue, since
+  // spectators (and seated players watching another mat) have no board tools.
+  const cardScale = useTableUi((state) => state.cardScale);
   const keybinds = usePreference('keybinds');
   const cardBackSrc = cardBackUrl(effectiveCardBack(cardBackPref, room?.game));
   const tableCardBack = `url("${cardBackSrc}")`;
@@ -573,17 +577,42 @@ export function TablePage() {
           <OpponentHand key={`hand-${stagedPlayer.userId}`} player={stagedPlayer} />
         )}
 
-        {/* Watching another player's board (their turn, or you clicked their
-            seat): a floating cue to jump back to your own. */}
-        {room.started && stagedPlayer && !stagedIsMe && !spectating && me && (
+        {/* Watching another player's board (their turn, your click, or as a pure
+            spectator): a floating cue with a card-size control - spectators have
+            no board tools of their own - and, for seated players, a jump home. */}
+        {room.started && stagedPlayer && !stagedIsMe && (
           <div className="spectateCue" role="status" data-mirror={mirrorOpponent || undefined}>
             <Eye size={15} aria-hidden />
             <span className="spectateCueText">
               {t('tblSpectating')} · <b>{stagedPlayer.username}</b>
             </span>
-            <Button size="sm" variant="soft" onClick={() => setPinnedSeat(me.seat)}>
-              {t('tblViewMyBoard')}
-            </Button>
+            <Tooltip content={t('gpCardsSmaller')}>
+              <IconButton
+                size="sm"
+                variant="soft"
+                aria-label={t('gpCardsSmaller')}
+                disabled={cardScale <= CARD_SCALE_MIN}
+                onClick={() => useTableUi.getState().setCardScale(cardScale - CARD_SCALE_STEP, identity?.userId)}
+              >
+                <CircleMinus size={15} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip content={t('gpCardsLarger')}>
+              <IconButton
+                size="sm"
+                variant="soft"
+                aria-label={t('gpCardsLarger')}
+                disabled={cardScale >= CARD_SCALE_MAX}
+                onClick={() => useTableUi.getState().setCardScale(cardScale + CARD_SCALE_STEP, identity?.userId)}
+              >
+                <CirclePlus size={15} />
+              </IconButton>
+            </Tooltip>
+            {me && !spectating && (
+              <Button size="sm" variant="soft" onClick={() => setPinnedSeat(me.seat)}>
+                {t('tblViewMyBoard')}
+              </Button>
+            )}
           </div>
         )}
 
