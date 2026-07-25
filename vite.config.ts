@@ -8,7 +8,11 @@ export default defineConfig({
   base: './',
   plugins: [react()],
   server: {
-    port: 5240,
+    // PORT lets a harness (e.g. the preview panel) assign a free port when
+    // 5240 is already taken by another dev-server instance. (globalThis cast:
+    // this config's tsconfig has no node types.)
+    port:
+      Number((globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.PORT) || 5240,
     strictPort: true,
   },
   clearScreen: false,

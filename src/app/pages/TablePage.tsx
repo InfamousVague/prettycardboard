@@ -42,6 +42,8 @@ import { useEdgeColor } from '../data/edgeColor.ts';
 import { tableShareUrl } from '../data/pendingJoin.ts';
 import { usePreference } from '../hooks/usePreference.ts';
 import { resolveKeybinds, KEYBIND_DEF, type ActionId } from '../data/keybinds.ts';
+import { getDeck } from '../net/api.ts';
+import { computeDeckMeta } from '../data/deckMeta.ts';
 import type { GameId } from '../data/games.ts';
 import { GameCard } from '../components/GameCard.tsx';
 import { ManaPoolReadout } from '../components/Mana.tsx';
@@ -55,7 +57,7 @@ import { OpponentHand } from './table/OpponentHand.tsx';
 import { CyberpunkDicePanel } from './table/CyberpunkDicePanel.tsx';
 import { PhaseRibbon } from './table/PhaseRibbon.tsx';
 import { StackTray } from './table/StackTray.tsx';
-import { CmdChoiceDialog, LibraryViewer, MulliganOverlay, PileViewer, RollBanner } from './table/overlays.tsx';
+import { CmdChoiceDialog, LibraryViewer, MulliganOverlay, PileViewer, RevealTray, RollBanner } from './table/overlays.tsx';
 import { TablePresence } from './table/TablePresence.tsx';
 import { LibrarySidebar } from './table/LibrarySidebar.tsx';
 import { PostMatch } from './table/PostMatch.tsx';
@@ -248,6 +250,33 @@ export function TablePage() {
       offStatus();
     };
   }, [roomId, spectating]);
+
+  // Share my deck's public metrics (colors/curve/counts) for the matchup
+  // splash whenever my seat has a deck but no metrics yet - the server clears
+  // deckMeta on every deck switch (including re-picking the same deck), so
+  // "meta missing" is the resync signal. Computed client-side because the
+  // server has no card data (see data/deckMeta.ts). `me` is declared further
+  // down, so read the seat straight off the room snapshot here.
+  const mySeat = room?.players.find((p) => p.userId === identity?.userId);
+  const myDeckId = mySeat?.deckId ?? null;
+  const myMetaMissing = mySeat != null && mySeat.deckMeta == null;
+  useEffect(() => {
+    if (!roomId || spectating || !myDeckId || !myMetaMissing) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const deck = await getDeck(myDeckId);
+        const meta = await computeDeckMeta(deck, room?.game ?? 'mtg');
+        if (alive) send({ type: 'deckmeta.set', meta });
+      } catch {
+        // Metrics are cosmetic; a failed fetch just leaves the splash plain.
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, spectating, myDeckId, myMetaMissing]);
 
   // In a Cyberpunk match, repaint the whole app's primary from Glacier blue to
   // the Cyberpunk yellow; restore the user's configured accent on leave.
@@ -662,6 +691,8 @@ export function TablePage() {
           replay: `room` is a historical frame then, so a past mulligan/combat
           state must not resurface as a live modal over the read-only shield. */}
       <LibraryViewer />
+      {/* Unconditional: spectators see reveals too. */}
+      <RevealTray room={room} canAct={canAct} meId={me?.userId} />
       {me && !spectating && !replay.active && <LibrarySidebar />}
       <PileViewer room={room} me={me} canAct={!spectating && me != null} />
       {me && !spectating && !preMatch && !replay.active && <MulliganOverlay room={room} me={me} />}

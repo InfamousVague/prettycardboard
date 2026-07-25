@@ -64,6 +64,11 @@ interface GameState {
   cmdChoice: { iid: string; to: string } | null;
   /** Your private library peek/search window (server-filtered, viewer-only). */
   libraryCards: CardInst[] | null;
+  /** A live "reveals the top N" fan, shown to EVERY viewer (spectators too).
+   * Ephemeral by design: fed by the library.reveal room.event (whose payload
+   * carries the full cards for all viewers), pruned as revealed cards are
+   * taken, and never rebuilt from room.state. */
+  revealTray: { actor: string; cards: CardInst[] } | null;
   /** Set when the room we were seated at was closed by its host; pages toast it once and ack. */
   closedRoomId: string | null;
   /** The room the user is ACTIVELY viewing. Background updates for any other
@@ -95,6 +100,7 @@ interface GameState {
   ackClosed: () => void;
   answerCmdChoice: (iid: string, accept: boolean) => void;
   clearLibraryCards: () => void;
+  clearRevealTray: () => void;
   clearActivity: (roomId: string) => void;
 }
 
@@ -303,8 +309,23 @@ export const useGame = create<GameState>((set, get) => {
             : state,
         );
     } else if (message.type === 'room.event') {
-      const { room, joinedRoomId } = get();
-      if (room && message.roomId === joinedRoomId) set({ room: applyEvent(room, message.actor, message.action) });
+      const { room, joinedRoomId, revealTray } = get();
+      if (room && message.roomId === joinedRoomId) {
+        const action = message.action as { kind?: string; iid?: unknown; cards?: unknown };
+        let nextTray = revealTray;
+        if (action.kind === 'library.reveal' && Array.isArray(action.cards) && action.cards.length > 0) {
+          // The reveal payload carries the full card list for every viewer.
+          // (An empty-library reveal has nothing to show - no tray.)
+          nextTray = { actor: message.actor, cards: action.cards as CardInst[] };
+        } else if (nextTray && typeof action.iid === 'string' && nextTray.cards.some((c) => c.iid === action.iid)) {
+          // A revealed card moved (taken to hand / played / etc.) - prune it
+          // from every viewer's tray by the event's iid (hands are hidden, so
+          // room.state can never tell us).
+          const cards = nextTray.cards.filter((c) => c.iid !== action.iid);
+          nextTray = cards.length > 0 ? { ...nextTray, cards } : null;
+        }
+        set({ room: applyEvent(room, message.actor, message.action), revealTray: nextTray });
+      }
     } else if (message.type === 'chat') {
       if (message.roomId === get().joinedRoomId)
         set((state) => ({ chat: [...state.chat.slice(-199), { from: message.from, text: message.text, ts: message.ts }] }));
@@ -319,7 +340,7 @@ export const useGame = create<GameState>((set, get) => {
       const nextActivity = { ...activity };
       delete nextActivity[message.roomId];
       if (room && room.roomId === message.roomId) {
-        set({ room: null, spectating: false, chat: [], log: [], joinedRoomId: null, closedRoomId: message.roomId, cmdChoice: null, libraryCards: null, activity: nextActivity, replay: { active: false, index: 0, head: 0, frame: null }, undoState: { canUndo: false, canRedo: false, cursor: 0, head: 0, isHost: false }, timeline: [] });
+        set({ room: null, spectating: false, chat: [], log: [], joinedRoomId: null, closedRoomId: message.roomId, cmdChoice: null, libraryCards: null, revealTray: null, activity: nextActivity, replay: { active: false, index: 0, head: 0, frame: null }, undoState: { canUndo: false, canRedo: false, cursor: 0, head: 0, isHost: false }, timeline: [] });
       } else {
         set({ activity: nextActivity });
       }
@@ -337,7 +358,9 @@ export const useGame = create<GameState>((set, get) => {
       ws.sendAction({ kind: 'cmd.return', iid, accept });
       set({ cmdChoice: null });
     },
+    revealTray: null,
     clearLibraryCards: () => set({ libraryCards: null }),
+    clearRevealTray: () => set({ revealTray: null }),
     closedRoomId: null,
     joinedRoomId: null,
     activity: {},

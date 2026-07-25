@@ -428,3 +428,26 @@ cosmetic-setting pattern (not a game action: no undo/timeline churn).
   Every viewer renders that seat's piles at the custom spots; the staged
   mirrored opponent view rotates the overlay 180°, so (x, y) reads as
   (1-x, 1-y) across the table.
+
+## Custom playmats + matchup metrics addendum (2026-07-24)
+
+- `POST /api/playmat` (Bearer) — body is raw PNG/JPEG/WebP bytes (≤8MB, magic-
+  byte sniffed). Stores ONE custom mat per account (re-upload replaces) and
+  returns `{id: "custom-<file>", url: "/api/mats/<file>"}`. The id flows
+  through the normal playmat preference + `playmat.set` sync; `playmat.set`
+  accepts `custom-<file>` ids that name an existing stored mat.
+- `GET /api/mats/{file}` — public (CSS url() can't send auth); serves the
+  stored image with immutable caching. Filenames are per-upload unique.
+- `GET /api/users/{id}/stats` (Bearer) — any player's all-time aggregates,
+  same shape as `/api/me/stats`; unknown ids return zeros.
+- Client -> server `{type: "deckmeta.set", meta}` — seated players push a
+  small client-computed public metrics blob for their current deck (colors /
+  curve / type counts; the server stores decks as bare card ids and cannot
+  derive these). Object-only, clamped to 2KB, cleared on `room.deck.set`.
+  Each player in `RoomState` gains `deckMeta` (public to all viewers).
+- `library.reveal`'s `room.event` payload has always carried the full `cards`
+  array to every viewer INCLUDING spectators; clients now render it as a
+  fanned reveal tray (dismiss is viewer-local; reveals are never in
+  `room.state`). Taking a card out of a peek window (`card.move` by iid from
+  the library) now shrinks the window instead of clearing it, so
+  `library.reorder` / `library.bottom` keep working on the rest.

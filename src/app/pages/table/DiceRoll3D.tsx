@@ -215,12 +215,17 @@ export function DiceRoll3D({
   return <div className="diceRoll3d" id={containerId.current} ref={wrapRef} aria-hidden />;
 }
 
-/** Resolve `--glacier-accent` (the Cyberpunk yellow while in a match) to a hex
- *  string the library reads for the die colour. */
+/** Resolve the live theme accent (`--glacier-accent-solid`) to a hex string the
+ *  library reads for the die colour. Probed through an element so var() chains
+ *  resolve; the computed value may stay `oklch(...)` (Glacier's ramps are
+ *  OKLCH and engines don't reserialize wide-gamut colours to rgb). */
 function resolveAccent(): string {
-  const raw = getComputedStyle(document.documentElement).getPropertyValue('--glacier-accent-solid').trim();
-  const hex = toHex(raw);
-  return hex ?? '#f4d03f';
+  const probe = document.createElement('span');
+  probe.style.color = 'var(--glacier-accent-solid)';
+  document.body.appendChild(probe);
+  const computed = getComputedStyle(probe).color;
+  probe.remove();
+  return toHex(computed) ?? '#f4d03f';
 }
 
 /** Dark ink on a light die, light ink on a dark die. */
@@ -236,15 +241,50 @@ function inkFor(hex: string): string {
 
 /** Normalise any CSS colour (hex/rgb/oklch) to #rrggbb via the browser. */
 function toHex(raw: string): string | null {
-  if (/^#[0-9a-f]{6}$/i.test(raw)) return raw;
   if (!raw) return null;
+  if (/^#[0-9a-f]{6}$/i.test(raw)) return raw.toLowerCase();
+  // Resolve keywords / var() chains through a probe. The computed value may
+  // still be a modern colour function - engines do NOT reserialize wide-gamut
+  // colours (Glacier's OKLCH ramps) into legacy rgb() - so parse those too.
   const probe = document.createElement('span');
   probe.style.color = raw;
   document.body.appendChild(probe);
-  const rgb = getComputedStyle(probe).color;
+  const computed = getComputedStyle(probe).color || raw;
   probe.remove();
-  const m = /(\d+),\s*(\d+),\s*(\d+)/.exec(rgb);
-  if (!m) return null;
-  const h = (n: string) => Number(n).toString(16).padStart(2, '0');
-  return `#${h(m[1]!)}${h(m[2]!)}${h(m[3]!)}`;
+  const rgb = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i.exec(computed);
+  if (rgb) return hexOf(Number(rgb[1]) / 255, Number(rgb[2]) / 255, Number(rgb[3]) / 255);
+  const srgb = /color\(\s*srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/i.exec(computed);
+  if (srgb) return hexOf(Number(srgb[1]), Number(srgb[2]), Number(srgb[3]));
+  const ok = /oklch\(\s*([\d.]+%?)\s+([\d.]+%?)\s+([\d.]+)(?:deg)?/i.exec(computed);
+  if (ok) return oklchToHex(cssNum(ok[1]!, 1), cssNum(ok[2]!, 0.4), Number(ok[3]));
+  return null;
+}
+
+/** '64%' -> 0.64 * scale100; plain numbers pass through. */
+function cssNum(v: string, scale100: number): number {
+  return v.endsWith('%') ? (Number(v.slice(0, -1)) / 100) * scale100 : Number(v);
+}
+
+function hexOf(r: number, g: number, b: number): string {
+  const h = (c: number) =>
+    Math.round(Math.min(1, Math.max(0, c)) * 255)
+      .toString(16)
+      .padStart(2, '0');
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+
+/** OKLCH -> sRGB hex (CSS Color 4 reference math), gamut-clamped per channel. */
+function oklchToHex(L: number, C: number, hueDeg: number): string {
+  const hr = (hueDeg * Math.PI) / 180;
+  const a = C * Math.cos(hr);
+  const b = C * Math.sin(hr);
+  const l_ = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m_ = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s_ = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  const lin = [
+    4.0767416621 * l_ - 3.3077115913 * m_ + 0.2309699292 * s_,
+    -1.2684380046 * l_ + 2.6097574011 * m_ - 0.3413193965 * s_,
+    -0.0041960863 * l_ - 0.7034186147 * m_ + 1.707614701 * s_,
+  ].map((c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.max(0, c) ** (1 / 2.4) - 0.055));
+  return hexOf(lin[0]!, lin[1]!, lin[2]!);
 }

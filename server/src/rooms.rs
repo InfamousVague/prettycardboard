@@ -176,6 +176,11 @@ pub struct Player {
     /// yours). Synced from the client via `cardback.set`.
     #[serde(default)]
     pub card_back: Option<String>,
+    /// Client-computed public deck metrics (colors/curve/counts) for the
+    /// matchup splash; opaque to the server. Synced via `deckmeta.set` and
+    /// cleared on deck switch.
+    #[serde(default)]
+    pub deck_meta: Option<serde_json::Value>,
     /// Per-player turn conveniences, OFF by default and synced from the client
     /// via `auto.set`: when set, this player's permanents untap and/or one card
     /// is drawn automatically at the start of their turn. (Bots, when present,
@@ -664,6 +669,7 @@ impl Room {
                 p.mat_layout = lp.mat_layout.clone();
                 p.playmat = lp.playmat.clone();
                 p.card_back = lp.card_back.clone();
+                p.deck_meta = lp.deck_meta.clone();
             }
         }
         // Re-seat anyone who joined AFTER this snapshot, carrying their live
@@ -782,6 +788,7 @@ impl Room {
                     "handRevealed": p.hand_revealed,
                     "playmat": p.playmat,
                     "cardBack": p.card_back,
+                    "deckMeta": p.deck_meta,
                     "gigDice": p.gig_dice,
                     "lastRoll": p.last_roll,
                     "conceded": p.conceded,

@@ -1,9 +1,11 @@
 import type { ComponentType } from 'react';
 import {
+  BarChart2,
   Crown,
   Dices,
   Eye,
   Hand,
+  Image,
   Keyboard,
   LayoutGrid,
   Palette,
@@ -34,6 +36,15 @@ export interface ChangelogRelease {
 
 /** Newest release first. */
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.3.0',
+    entries: [
+      { icon: Image, title: 'clCustomMat', desc: 'clCustomMatDesc' },
+      { icon: Eye, title: 'clRevealTray', desc: 'clRevealTrayDesc' },
+      { icon: BarChart2, title: 'clMatchupStats', desc: 'clMatchupStatsDesc' },
+      { icon: Crown, title: 'clPolish030', desc: 'clPolish030Desc' },
+    ],
+  },
   {
     version: '0.2.0',
     entries: [

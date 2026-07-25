@@ -654,23 +654,44 @@ export function ZonePiles({
       {/* command zone */}
       <div {...slotProps('command', 'legends')}>
       <div className="zonePile zoneCommand" data-drop={dropHint === 'command' || undefined} title={cmdLabel} ref={(el) => setFlightAnchor(`cmd:${player.userId}`, el)}>
-        {player.command.map((card) => (
-          <CmdCard
-            key={card.iid}
-            card={card}
-            tax={player.commanderTax?.[card.iid] ?? 0}
-            width={width}
-            interactive={!!interactive}
-            userId={player.userId}
-            onMenu={onMenu}
-            onHover={onHover}
-            // Cyberpunk Legends live in their tray and are Called in place, never
-            // dragged onto the felt - MTG commanders drag out to cast.
-            onDragOut={mat ? undefined : onDragOut}
-            dragSuppressed={dragSuppressed}
-          />
-        ))}
-        {player.command.length === 0 && <div className="pileEmpty" style={{ width }} />}
+        {/* Partner commanders sit side by side in this row; the caption below
+            matches the graveyard/exile piles. */}
+        <div className="zoneCommandRow">
+          {player.command.map((card) => (
+            <CmdCard
+              key={card.iid}
+              card={card}
+              width={width}
+              interactive={!!interactive}
+              userId={player.userId}
+              onMenu={onMenu}
+              onHover={onHover}
+              // Cyberpunk Legends live in their tray and are Called in place, never
+              // dragged onto the felt - MTG commanders drag out to cast.
+              onDragOut={mat ? undefined : onDragOut}
+              dragSuppressed={dragSuppressed}
+            />
+          ))}
+          {player.command.length === 0 && (
+            <div className="pileEmpty pileEmptyIcon" style={{ width }}>
+              <Crown size={emptyIcon} />
+            </div>
+          )}
+        </div>
+        <span className="pileCaption">
+          <span className="pileLabel">{cmdLabel}</span>
+          <span className="pileCount">{player.command.length}</span>
+        </span>
+        {/* Commander tax rides under the Command label (one badge per taxed
+            commander still in the zone). */}
+        {player.command.some((card) => (player.commanderTax?.[card.iid] ?? 0) > 0) && (
+          <div className="cmdTaxRow">
+            {player.command.map((card) => {
+              const tax = player.commanderTax?.[card.iid] ?? 0;
+              return tax > 0 ? <TaxBadge key={card.iid} value={tax} /> : null;
+            })}
+          </div>
+        )}
       </div>
       </div>
     </div>
@@ -679,7 +700,6 @@ export function ZonePiles({
 
 function CmdCard({
   card,
-  tax,
   width,
   interactive,
   userId,
@@ -689,7 +709,6 @@ function CmdCard({
   dragSuppressed,
 }: {
   card: CardInst;
-  tax: number;
   width: number;
   interactive: boolean;
   userId: string;
@@ -785,7 +804,7 @@ function CmdCard({
     >
       {/* No name tooltip — the hover preview (HoverCardLayer) shows a face-up
           card on rest; a face-down Legend wears the card back (hidden info until
-          Called). Commander tax stays on the badge below. */}
+          Called). Commander tax rides under the pile's Command label. */}
       <GameCard
         name={card.name}
         imageUrl={card.imageUrl || cardImage(card.scryfallId)}
@@ -794,7 +813,6 @@ function CmdCard({
         foil
         onClick={onClick}
       />
-      <TaxBadge value={tax} />
     </div>
   );
 }

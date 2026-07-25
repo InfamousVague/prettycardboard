@@ -83,6 +83,28 @@ export function LibraryViewer() {
     setSelected(new Set());
   };
 
+  // Take a peeked card to hand / straight onto the battlefield. The server
+  // shrinks the peek window instead of dropping it (CardMove retains the rest),
+  // so the remaining fan still reorders and bottoms.
+  const takeCard = (card: CardInst, to: 'hand' | 'battlefield') => {
+    act(
+      to === 'hand'
+        ? { kind: 'card.move', iid: card.iid, to: 'hand' }
+        : { kind: 'card.move', iid: card.iid, to: 'battlefield', x: 0.5, y: 0.45 },
+    );
+    const rest = orderRef.current.filter((c) => c.iid !== card.iid);
+    if (rest.length === 0) {
+      close();
+      return;
+    }
+    setOrder(rest);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.delete(card.iid);
+      return next;
+    });
+  };
+
   const searchResults = useMemo(() => {
     const query = filter.trim().toLowerCase();
     if (!query) return order;
@@ -142,6 +164,15 @@ export function LibraryViewer() {
                     popup.open({ scryfallId: card.scryfallId, name: card.name, imageUrl: card.imageUrl });
                   }}
                 />
+                {/* Stop pointerdown so the buttons never arm the drag/tap-select. */}
+                <div className="libCardActions" onPointerDown={(event) => event.stopPropagation()}>
+                  <Button size="sm" variant="soft" onClick={() => takeCard(card, 'hand')}>
+                    {t('tblHand')}
+                  </Button>
+                  <Button size="sm" variant="soft" onClick={() => takeCard(card, 'battlefield')}>
+                    {t('gpPlayCard')}
+                  </Button>
+                </div>
               </Reorder.Item>
             ))}
           </Reorder.Group>
@@ -210,6 +241,72 @@ export function LibraryViewer() {
           </div>
         </div>
       )}
+    </Modal>
+  );
+}
+
+/* ------------------------------------------------------------------------ */
+/* Reveal tray: "reveals the top N", fanned for EVERY viewer                 */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * The shared reveal fan. `library.reveal` broadcasts the full card list to all
+ * viewers (spectators included) in its room.event payload; the store keeps it
+ * as revealTray and prunes cards as they move. The revealing player also gets
+ * per-card Take / Play actions - plain card.move by iid, which the server
+ * already accepts from the library. Dismissing is viewer-local (reveals are
+ * ephemeral: never in room.state, gone on reload).
+ */
+export function RevealTray({ room, canAct, meId }: { room: RoomState; canAct: boolean; meId?: string }) {
+  const t = useT();
+  const act = useGame((state) => state.act);
+  const tray = useGame((state) => state.revealTray);
+  const clearRevealTray = useGame((state) => state.clearRevealTray);
+  const popup = useCardPopup();
+  if (!tray) return null;
+  const actor = room.players.find((player) => player.userId === tray.actor);
+  const mine = canAct && meId != null && meId === tray.actor;
+  return (
+    <Modal
+      open
+      onClose={clearRevealTray}
+      size="lg"
+      title={`${actor?.username ?? '?'} ${t('gpReveals')}`}
+      description={`${t('tblLibrary')} · ${tray.cards.length}`}
+    >
+      <div className="libPeek">
+        <div className="libPeekRow">
+          {tray.cards.map((card, index) => (
+            <div key={card.iid} className="libPeekCard">
+              <span className="libIndex">{index + 1}</span>
+              <GameCard
+                name={card.name}
+                imageUrl={card.imageUrl || cardImage(card.scryfallId)}
+                width={118}
+                tilt={0}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  popup.open({ scryfallId: card.scryfallId, name: card.name, imageUrl: card.imageUrl });
+                }}
+              />
+              {mine && (
+                <div className="libCardActions">
+                  <Button size="sm" variant="soft" onClick={() => act({ kind: 'card.move', iid: card.iid, to: 'hand' })}>
+                    {t('tblHand')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="soft"
+                    onClick={() => act({ kind: 'card.move', iid: card.iid, to: 'battlefield', x: 0.5, y: 0.45 })}
+                  >
+                    {t('gpPlayCard')}
+                  </Button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
     </Modal>
   );
 }

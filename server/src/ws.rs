@@ -57,6 +57,11 @@ enum ClientMsg {
     /// with it (their board wears their back, not mine).
     #[serde(rename = "cardback.set")]
     CardBackSet { id: Option<String> },
+    /// Client-computed public metrics for my current deck (colors, curve,
+    /// counts) shown on the matchup splash. Opaque to the server beyond a size
+    /// clamp - the server has no card metadata to verify against.
+    #[serde(rename = "deckmeta.set")]
+    DeckMetaSet { meta: Option<serde_json::Value> },
     /// Per-player turn automation: untap/draw at the start of my turn (off by
     /// default; synced from the client's settings).
     #[serde(rename = "auto.set")]
@@ -204,6 +209,7 @@ fn handle_msg(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
         ClientMsg::PlaymatSet { id } => playmat_set(app, user, id),
         ClientMsg::MatLayoutSet { layout } => mat_layout_set(app, user, layout),
         ClientMsg::CardBackSet { id } => card_back_set(app, user, id),
+        ClientMsg::DeckMetaSet { meta } => deck_meta_set(app, user, meta),
         ClientMsg::AutoSet { untap, draw } => auto_set(app, user, untap, draw),
         ClientMsg::ReplaySeek { index } => replay_seek(app, user, index, tx),
     }
@@ -399,6 +405,7 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
         mulligan: None,
         playmat: None,
         card_back: None,
+        deck_meta: None,
         auto_untap: false,
         auto_draw: false,
         mat_layout: Default::default(),
@@ -774,6 +781,9 @@ fn room_deck_set(app: &Arc<App>, user: &db::User, deck_id: &str, tx: &Tx) {
     };
     player.deck_id = Some(deck.id);
     player.deck_name = Some(deck.name);
+    // Metrics describe the previous deck; the owner's client re-sends fresh
+    // ones (deckmeta.set) once it recomputes for the new list.
+    player.deck_meta = None;
     player.command = command;
     player.library = library;
     player.hand.clear();
@@ -1240,7 +1250,18 @@ fn playmat_set(app: &Arc<App>, user: &db::User, id: Option<String>) {
     let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
         return;
     };
-    let valid = id.filter(|v| PLAYMATS.contains(&v.as_str()));
+    // Bundled ids come from the fixed list; `custom-<file>` ids must name a
+    // mat that exists in our upload store AND belongs to the sender (files are
+    // named `<user id>-<suffix>` - without the prefix check anyone could adopt
+    // a tablemate's upload).
+    let valid = id.filter(|v| {
+        PLAYMATS.contains(&v.as_str())
+            || v.strip_prefix("custom-").is_some_and(|f| {
+                crate::api::valid_mat_file(f)
+                    && f.starts_with(&format!("{}-", user.id))
+                    && app.mats_dir.join(f).is_file()
+            })
+    });
     if let Some(p) = room.players.iter_mut().find(|p| p.user_id == user.id) {
         if p.playmat != valid {
             p.playmat = valid;
@@ -1294,6 +1315,63 @@ fn card_back_set(app: &Arc<App>, user: &db::User, id: Option<String>) {
             room_send_states(app, &room);
         }
     }
+}
+
+/// Client-computed deck metrics for the matchup splash: stored verbatim (the
+/// server has no card data to verify), clamped so the blob can't bloat room
+/// state, and public to every viewer via state_for.
+fn deck_meta_set(app: &Arc<App>, user: &db::User, meta: Option<serde_json::Value>) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        return;
+    };
+    if rref.spectating {
+        return;
+    }
+    let meta = meta.and_then(sanitize_deck_meta);
+    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
+        return;
+    };
+    if let Some(p) = room.players.iter_mut().find(|p| p.user_id == user.id) {
+        if p.deck_meta != meta {
+            p.deck_meta = meta;
+            rooms::touch(app, &mut room);
+            room_send_states(app, &room);
+        }
+    }
+}
+
+/// Rebuild the metrics blob from a strict whitelist: numeric fields clamped,
+/// colors a short array of 1-char strings. Everything is rebroadcast to every
+/// client and rendered as React children, so a crafted payload (objects where
+/// numbers belong) must never survive to the wire.
+fn sanitize_deck_meta(raw: serde_json::Value) -> Option<serde_json::Value> {
+    let obj = raw.as_object()?;
+    let num = |key: &str, max: f64| -> Option<f64> {
+        obj.get(key).and_then(|v| v.as_f64()).map(|n| (n.clamp(0.0, max) * 10.0).round() / 10.0)
+    };
+    let mut clean = serde_json::Map::new();
+    clean.insert("size".into(), serde_json::json!(num("size", 100_000.0).unwrap_or(0.0) as u64));
+    for key in ["creatures", "lands", "spells", "other", "ram"] {
+        if let Some(n) = num(key, 100_000.0) {
+            clean.insert(key.into(), serde_json::json!(n as u64));
+        }
+    }
+    for key in ["avgMv", "avgCost"] {
+        if let Some(n) = num(key, 99.0) {
+            clean.insert(key.into(), serde_json::json!(n));
+        }
+    }
+    if let Some(colors) = obj.get("colors").and_then(|v| v.as_array()) {
+        let letters: Vec<String> = colors
+            .iter()
+            .filter_map(|c| c.as_str())
+            .filter(|s| matches!(*s, "W" | "U" | "B" | "R" | "G" | "C"))
+            .take(6)
+            .map(str::to_string)
+            .collect();
+        clean.insert("colors".into(), serde_json::json!(letters));
+    }
+    Some(serde_json::Value::Object(clean))
 }
 
 /// A player's turn-automation choices (untap/draw at their own turn start),

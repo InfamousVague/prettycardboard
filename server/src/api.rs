@@ -691,6 +691,24 @@ pub async fn my_stats(
     .into_response()
 }
 
+/// GET /api/users/{id}/stats: any player's all-time aggregates - the matchup
+/// splash shows every seat's record. Same queries as /api/me/stats; unknown
+/// ids just come back all zeros.
+pub async fn user_stats(State(app): State<Arc<App>>, Path(user_id): Path<String>) -> Response {
+    let conn = app.db.lock().unwrap();
+    let (wins, losses) = db::user_match_counts(&conn, &user_id);
+    let endorsements = db::user_endorsement_count(&conn, &user_id);
+    let avg_turn_ms = db::user_avg_turn_ms(&conn, &user_id);
+    Json(json!({
+        "wins": wins,
+        "losses": losses,
+        "played": wins + losses,
+        "endorsements": endorsements,
+        "avgTurnMs": avg_turn_ms,
+    }))
+    .into_response()
+}
+
 /// DELETE /api/rooms/{id}: host only. Ends the table for everyone; seated
 /// users' sockets get {type:"room.closed", roomId}.
 pub async fn room_delete(
@@ -856,4 +874,112 @@ pub async fn match_stats(
         })
         .collect();
     Json(json!({ "players": players })).into_response()
+}
+
+// --- custom playmats -------------------------------------------------------
+
+/// Upload cap for a custom playmat image (also the route's body limit).
+pub const MAT_MAX_BYTES: usize = 8 * 1024 * 1024;
+
+/// Magic-byte sniff: only real PNG / JPEG / WebP bytes are stored, whatever
+/// the request claims.
+fn sniff_image(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.len() > 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        return Some("webp");
+    }
+    if bytes.starts_with(&[0x89, b'P', b'N', b'G']) {
+        return Some("png");
+    }
+    if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        return Some("jpg");
+    }
+    None
+}
+
+/// A servable mat filename: `<hex user id>-<hex suffix>.<ext>`, nothing that
+/// could walk the filesystem.
+pub fn valid_mat_file(file: &str) -> bool {
+    let Some((stem, ext)) = file.rsplit_once('.') else {
+        return false;
+    };
+    matches!(ext, "webp" | "png" | "jpg")
+        && !stem.is_empty()
+        && stem.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
+/// POST /api/playmat — body is the raw image bytes. Each player keeps ONE
+/// custom mat (a new upload replaces the previous file), stored under
+/// data/mats and served at /api/mats/{file}. The returned id (`custom-<file>`)
+/// goes through the normal playmat preference + `playmat.set` sync, so every
+/// viewer of the table resolves the same URL.
+pub async fn playmat_upload(
+    State(app): State<Arc<App>>,
+    Extension(user): Extension<db::User>,
+    body: axum::body::Bytes,
+) -> Response {
+    if body.is_empty() {
+        return err(StatusCode::BAD_REQUEST, "empty_upload", "no image data received");
+    }
+    let Some(ext) = sniff_image(&body) else {
+        return err(StatusCode::BAD_REQUEST, "bad_image", "upload a PNG, JPEG, or WebP image");
+    };
+    // One writer at a time: the scan-delete-write below is racy unguarded
+    // (parallel uploads from one account would each survive the scan and
+    // strand orphans), and the global-cap check must see a settled dir.
+    let _guard = app.mats_lock.lock().await;
+    // Replace any previous upload by this player - storage stays bounded at
+    // one mat per account - and cap the store as a whole so open registration
+    // can't be scripted into filling the disk.
+    let mut total: u64 = 0;
+    if let Ok(entries) = std::fs::read_dir(&app.mats_dir) {
+        let mine = format!("{}-", user.id);
+        for entry in entries.flatten() {
+            if entry.file_name().to_string_lossy().starts_with(&mine) {
+                let _ = std::fs::remove_file(entry.path());
+            } else {
+                total += entry.metadata().map(|m| m.len()).unwrap_or(0);
+            }
+        }
+    }
+    const MATS_TOTAL_CAP: u64 = 2 * 1024 * 1024 * 1024; // 2GiB across all accounts
+    if total + body.len() as u64 > MATS_TOTAL_CAP {
+        return err(
+            StatusCode::INSUFFICIENT_STORAGE,
+            "mats_full",
+            "custom playmat storage is full right now - try again later",
+        );
+    }
+    let file = format!("{}-{}.{ext}", user.id, hex_id(4));
+    if !valid_mat_file(&file) {
+        return err(StatusCode::BAD_REQUEST, "bad_image", "unexpected upload name");
+    }
+    if std::fs::write(app.mats_dir.join(&file), &body).is_err() {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, "write_failed", "could not store the image");
+    }
+    Json(json!({ "id": format!("custom-{file}"), "url": format!("/api/mats/{file}") })).into_response()
+}
+
+/// GET /api/mats/{file} — serves stored custom mats. Public: mats are painted
+/// from CSS url() / <img>, which cannot attach auth headers.
+pub async fn playmat_serve(State(app): State<Arc<App>>, Path(file): Path<String>) -> Response {
+    if !valid_mat_file(&file) {
+        return err(StatusCode::BAD_REQUEST, "bad_name", "not a mat file");
+    }
+    let ctype = match file.rsplit_once('.').map(|(_, e)| e) {
+        Some("webp") => "image/webp",
+        Some("png") => "image/png",
+        _ => "image/jpeg",
+    };
+    match std::fs::read(app.mats_dir.join(&file)) {
+        Ok(bytes) => (
+            [
+                (header::CONTENT_TYPE, ctype),
+                // Filenames are unique per upload - safe to cache hard.
+                (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(_) => err(StatusCode::NOT_FOUND, "not_found", "no such mat"),
+    }
 }

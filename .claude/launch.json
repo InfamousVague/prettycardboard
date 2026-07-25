@@ -6,7 +6,8 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "cwd": "/Users/matt/Development/Apps/PrettyCardboard",
-      "port": 5240
+      "port": 5240,
+      "autoPort": true
     }
   ]
 }

@@ -713,8 +713,14 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                 clear_followers(room, iid);
                 card.attached_to = None;
             }
-            if from == Zone::Library || to == Zone::Library {
+            if to == Zone::Library {
+                // An insert can displace the whole peek window.
                 room.players[pi].peeked.clear();
+            } else if from == Zone::Library {
+                // Taking one peeked card (to hand / battlefield) shrinks the
+                // window instead of killing it, so reorder/bottom on the
+                // remaining fan keep working (mirrors LibraryBottom's retain).
+                room.players[pi].peeked.retain(|w| w != iid);
             }
             if crate::rooms::format_has_commander(&room.format)
                 && card.is_commander

@@ -17,6 +17,21 @@ export interface MatPos {
   y: number;
 }
 
+/** Public deck metrics for the matchup splash, computed by the deck OWNER's
+ * client (the server stores decks as bare card ids and can't derive these).
+ * MTG decks fill colors/avgMv/type counts; Cyberpunk fills ram/avgCost. */
+export interface DeckMeta {
+  size: number;
+  colors?: string[];
+  avgMv?: number;
+  creatures?: number;
+  lands?: number;
+  spells?: number;
+  other?: number;
+  ram?: number;
+  avgCost?: number;
+}
+
 export interface DeckCard {
   scryfallId: string;
   name: string;
@@ -173,6 +188,9 @@ export interface TablePlayer {
   /** The seat's chosen card-back id; every viewer paints THIS player's
    * face-down cards with it (so an opponent's board wears their own back). */
   cardBack?: string | null;
+  /** Client-computed public deck metrics for the matchup splash (synced via
+   * `deckmeta.set`, cleared on deck switch). */
+  deckMeta?: DeckMeta | null;
   /** Cyberpunk Gig dice (the six d4-d20 in the Fixer); absent for other games. */
   gigDice?: GigDie[];
   /** The last single die this player rolled (any game) — drives the 3D dice on

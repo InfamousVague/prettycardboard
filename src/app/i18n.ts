@@ -138,6 +138,104 @@ export const messages = {
   playGame: { en: 'Game', es: 'Juego', fr: 'Jeu', ar: 'اللعبة' },
   playFormat: { en: 'Format', es: 'Formato', fr: 'Format', ar: 'الصيغة' },
 
+  // Changelog: 0.3.0
+  clCustomMat: {
+    en: 'Your own playmat',
+    es: 'Tu propio tapete',
+    fr: 'Votre propre tapis',
+    ar: 'سجادتك الخاصة',
+  },
+  clCustomMatDesc: {
+    en: 'Upload any image as your playmat — everyone at the table sees it under your board.',
+    es: 'Sube cualquier imagen como tapete; todos en la mesa la verán bajo tu tablero.',
+    fr: 'Importez une image comme tapis — toute la table la voit sous votre plateau.',
+    ar: 'ارفع أي صورة كسجادة لك — يراها الجميع تحت لوحتك.',
+  },
+  clRevealTray: {
+    en: 'Reveals & peeks, fanned out',
+    es: 'Revelar y mirar, en abanico',
+    fr: 'Révélations en éventail',
+    ar: 'كشف واستطلاع بشكل مروحة',
+  },
+  clRevealTrayDesc: {
+    en: 'Revealing the top of your library fans the cards out for the whole table (spectators too); peeks stay private — and both let you take cards to hand or play them.',
+    es: 'Revelar muestra las cartas en abanico a toda la mesa; mirar sigue siendo privado, y ambos permiten robar o jugar cartas.',
+    fr: 'Révéler déploie les cartes pour toute la table ; regarder reste privé — et les deux permettent de prendre en main ou de jouer.',
+    ar: 'الكشف يعرض البطاقات للجميع (والمشاهدين)؛ الاستطلاع خاص — وكلاهما يتيح أخذ البطاقات لليد أو لعبها.',
+  },
+  clMatchupStats: {
+    en: 'Smarter matchup screen',
+    es: 'Pantalla de enfrentamiento mejorada',
+    fr: 'Écran de confrontation enrichi',
+    ar: 'شاشة مواجهة أذكى',
+  },
+  clMatchupStatsDesc: {
+    en: "Every match opens with each deck's colors, curve and type spread, plus every player's all-time record.",
+    es: 'Cada partida abre con colores, curva y tipos de cada mazo, más el historial de cada jugador.',
+    fr: 'Chaque partie affiche couleurs, courbe et types de chaque deck, plus le palmarès des joueurs.',
+    ar: 'كل مباراة تبدأ بألوان كل مجموعة ومنحناها وأنواعها، وسجل كل لاعب.',
+  },
+  clPolish030: {
+    en: 'Table polish',
+    es: 'Pulido de mesa',
+    fr: 'Finitions de table',
+    ar: 'تحسينات الطاولة',
+  },
+  clPolish030Desc: {
+    en: 'The command pile is labeled like the other zones with tax underneath, accent dice match your true theme color, and spectators can resize cards.',
+    es: 'La zona de comandante lleva etiqueta como las demás con el impuesto debajo, los dados de acento usan tu color real y los espectadores ajustan el tamaño.',
+    fr: 'La zone de commandant est étiquetée comme les autres avec la taxe dessous, les dés accent suivent votre vraie couleur, et les spectateurs zooment les cartes.',
+    ar: 'منطقة القائد معنونة كبقية المناطق مع الضريبة أسفلها، ونرد اللون المميز يطابق لونك الحقيقي، والمشاهدون يغيّرون حجم البطاقات.',
+  },
+
+  // Reveal tray / peek actions
+  gpReveals: {
+    en: 'reveals the top of their library',
+    es: 'revela la parte superior de su biblioteca',
+    fr: 'révèle le dessus de sa bibliothèque',
+    ar: 'يكشف أعلى مكتبته',
+  },
+  gpPlayCard: { en: 'Play', es: 'Jugar', fr: 'Jouer', ar: 'العب' },
+
+  // Matchup splash metrics
+  preAvgMv: { en: 'avg', es: 'media', fr: 'moy.', ar: 'متوسط' },
+  preCreatures: { en: 'creatures', es: 'criaturas', fr: 'créatures', ar: 'مخلوقات' },
+  preLands: { en: 'lands', es: 'tierras', fr: 'terrains', ar: 'أراضٍ' },
+  preSpells: { en: 'spells', es: 'hechizos', fr: 'sorts', ar: 'تعاويذ' },
+  preGames: { en: 'games', es: 'partidas', fr: 'parties', ar: 'مباريات' },
+
+  // Custom playmat upload
+  custUpload: {
+    en: 'Upload your own',
+    es: 'Sube el tuyo',
+    fr: 'Importer le vôtre',
+    ar: 'ارفع تصميمك',
+  },
+  custUploadYours: {
+    en: 'Your upload',
+    es: 'Tu imagen',
+    fr: 'Votre image',
+    ar: 'صورتك',
+  },
+  custUploadHint: {
+    en: 'PNG, JPEG, or WebP up to 8MB — everyone at your table sees it.',
+    es: 'PNG, JPEG o WebP hasta 8MB; todos en tu mesa lo verán.',
+    fr: 'PNG, JPEG ou WebP jusqu’à 8 Mo — visible par toute la table.',
+    ar: 'PNG أو JPEG أو WebP حتى 8MB — يراه الجميع على طاولتك.',
+  },
+  custUploadTooBig: {
+    en: 'That image is over 8MB — try a smaller one.',
+    es: 'La imagen supera los 8MB; prueba una más pequeña.',
+    fr: 'Image au-delà de 8 Mo — essayez plus petit.',
+    ar: 'الصورة أكبر من 8MB — جرّب صورة أصغر.',
+  },
+  custUploadFailed: {
+    en: 'Upload failed — use a PNG, JPEG, or WebP image.',
+    es: 'Error al subir; usa una imagen PNG, JPEG o WebP.',
+    fr: 'Échec de l’import — utilisez PNG, JPEG ou WebP.',
+    ar: 'فشل الرفع — استخدم صورة PNG أو JPEG أو WebP.',
+  },
+
   // What's-new changelog (version announcement on refresh after an update)
   clTitle: { en: "What's new", es: 'Novedades', fr: 'Nouveautés', ar: 'ما الجديد' },
   clGotIt: { en: 'Got it', es: 'Entendido', fr: 'Compris', ar: 'حسنًا' },

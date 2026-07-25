@@ -1,5 +1,5 @@
 import { SERVER_URL } from './api.ts';
-import type { GameAction, GameActionV2, GameSettings, MatPos, MatZone, ServerMessage } from './types.ts';
+import type { DeckMeta, GameAction, GameActionV2, GameSettings, MatPos, MatZone, ServerMessage } from './types.ts';
 
 /**
  * The realtime channel: one WebSocket for presence, invites, chat, and the
@@ -21,6 +21,7 @@ export type ClientMessage =
   | { type: 'playmat.set'; id?: string }
   | { type: 'matlayout.set'; layout: Partial<Record<MatZone, MatPos>> }
   | { type: 'cardback.set'; id?: string }
+  | { type: 'deckmeta.set'; meta: DeckMeta | null }
   | { type: 'auto.set'; untap: boolean; draw: boolean }
   | { type: 'chat.send'; text: string }
   | { type: 'invite.send'; toUserId: string; roomId: string }

@@ -6,6 +6,7 @@
  * app follows.
  */
 import { assetUrl } from './assets.ts';
+import { SERVER_URL } from '../net/api.ts';
 import type { AssetTheme } from './themes.ts';
 
 export interface Playmat {
@@ -75,7 +76,18 @@ export const PLAYMATS: Playmat[] = [...COLOR_PLAYMATS, ...IMAGE_PLAYMATS];
 
 export const DEFAULT_PLAYMAT = 'arcane-study';
 
+/** Player-uploaded mats: `custom-<file>`, stored and served by the API. Every
+ * viewer resolves the same URL from the synced id alone. */
+export const CUSTOM_PLAYMAT_PREFIX = 'custom-';
+
+export function isCustomPlaymat(id: string): boolean {
+  return id.startsWith(CUSTOM_PLAYMAT_PREFIX);
+}
+
 export function playmatUrl(id: string): string {
+  if (isCustomPlaymat(id)) {
+    return `${SERVER_URL}/api/mats/${id.slice(CUSTOM_PLAYMAT_PREFIX.length)}`;
+  }
   const known = IMAGE_PLAYMATS.some((mat) => mat.id === id) ? id : DEFAULT_PLAYMAT;
   // Absolute: this feeds the --pc-playmat custom property (see assetUrl).
   return assetUrl(`${import.meta.env.BASE_URL}mats/${known}.webp`);

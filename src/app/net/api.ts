@@ -191,3 +191,36 @@ export function closeRoom(id: string): Promise<void> {
 export function moxfieldDeck(deckId: string): Promise<unknown> {
   return request('GET', `/api/import/moxfield/${encodeURIComponent(deckId)}`);
 }
+
+// --- custom playmats ---
+
+/**
+ * Upload an image as your custom playmat (raw bytes; the server sniffs the
+ * real type and keeps ONE mat per account). The returned id (`custom-…`) flows
+ * through the normal playmat preference + `playmat.set` sync, so everyone at
+ * the table resolves the same /api/mats URL.
+ */
+export async function uploadPlaymat(file: Blob): Promise<{ id: string; url: string }> {
+  const headers: Record<string, string> = {};
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
+  const response = await fetch(`${SERVER_URL}/api/playmat`, { method: 'POST', headers, body: file });
+  if (!response.ok) {
+    let code = 'error';
+    let message = response.statusText;
+    try {
+      const data = (await response.json()) as { code?: string; message?: string };
+      code = data.code ?? code;
+      message = data.message ?? message;
+    } catch {
+      // non-JSON error body
+    }
+    throw new ApiError(response.status, code, message);
+  }
+  return (await response.json()) as { id: string; url: string };
+}
+
+/** Any player's all-time record (wins/losses/endorsements) - the matchup
+ * splash shows every seat's. Unknown ids come back all zeros. */
+export function userStats(userId: string): Promise<UserStats> {
+  return request('GET', `/api/users/${encodeURIComponent(userId)}/stats`);
+}

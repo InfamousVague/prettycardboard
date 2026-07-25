@@ -1071,3 +1071,23 @@ body {
   font-weight: var(--glacier-font-weight-semibold);
   font-size: var(--glacier-font-size-sm);
 }
+
+/* Custom playmat upload row (Customize -> Playmat). */
+.matUploadRow {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  flex-wrap: wrap;
+}
+
+.matUploadActions {
+  display: grid;
+  gap: var(--glacier-space-1);
+  justify-items: start;
+}
+
+.matSwatchCustom img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

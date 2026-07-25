@@ -1463,10 +1463,27 @@
   cursor: pointer;
 }
 
-.zoneCommand {
+/* The command pile inherits .zonePile's grid so its caption sits below the
+   cards like graveyard/exile; partners share the inner row. */
+.zoneCommandRow {
   display: flex;
   gap: var(--glacier-space-2);
   align-items: flex-start;
+}
+
+/* Commander tax badges float under the Command label WITHOUT joining the
+   pile's grid height - tax appearing/clearing must never make the strip jump. */
+.cmdTaxRow {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 2px;
+  display: flex;
+  gap: var(--glacier-space-1);
+  justify-content: center;
+  white-space: nowrap;
+  z-index: 2;
 }
 
 .cmdCard {
@@ -4412,4 +4429,44 @@
 
 .seatFrame[data-stage][data-mirror] .matZones {
   transform: rotate(180deg);
+}
+
+/* ---- matchup splash: deck metrics + player records ---- */
+
+.preMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+
+.preMetaStat {
+  font-family: var(--glacier-font-mono);
+  white-space: nowrap;
+}
+
+.preMetaTypes {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle);
+  text-align: center;
+  line-height: 1.3;
+}
+
+.preRecord {
+  font-family: var(--glacier-font-mono);
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
+  border-radius: var(--glacier-radius-full);
+  padding: 0 0.5rem;
+  line-height: 1.5;
+}
+
+/* Per-card actions under the peek / reveal fans. */
+.libCardActions {
+  display: flex;
+  gap: var(--glacier-space-1);
+  justify-content: center;
+  margin-top: var(--glacier-space-1);
 }

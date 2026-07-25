@@ -36,6 +36,10 @@ pub struct App {
     /// roomIds mutated since the last write-behind flush (drained every 2s).
     pub dirty: DashSet<String>,
     pub conn_seq: AtomicU64,
+    /// Player-uploaded custom playmats (served at /api/mats/{file}).
+    pub mats_dir: std::path::PathBuf,
+    /// Serializes mat uploads (scan-delete-write is racy unguarded).
+    pub mats_lock: tokio::sync::Mutex<()>,
 }
 
 impl App {
@@ -171,6 +175,9 @@ async fn main() {
         }
     }
 
+    let mats_dir = data_dir.join("mats");
+    std::fs::create_dir_all(&mats_dir).expect("create mats dir");
+
     let app = Arc::new(App {
         db: Mutex::new(conn),
         rooms: DashMap::new(),
@@ -180,6 +187,8 @@ async fn main() {
         ping_at: DashMap::new(),
         dirty: DashSet::new(),
         conn_seq: AtomicU64::new(1),
+        mats_dir,
+        mats_lock: tokio::sync::Mutex::new(()),
     });
 
     // Rebuild the secondary indexes so codes resolve and seated players
@@ -208,6 +217,7 @@ async fn main() {
         .route("/api/me", get(api::me))
         .route("/api/me/stats", get(api::my_stats))
         .route("/api/users/search", get(api::search_users))
+        .route("/api/users/{id}/stats", get(api::user_stats))
         .route("/api/friends", get(api::friends))
         .route("/api/friends/requests", post(api::friend_request))
         .route("/api/friends/requests/{id}/accept", post(api::friend_accept))
@@ -226,11 +236,18 @@ async fn main() {
         .route("/api/matches/{id}/salt", post(api::match_salt))
         .route("/api/matches/{id}/stats", get(api::match_stats))
         .route("/api/rooms/{code}", get(api::room_get).delete(api::room_delete))
+        .route(
+            "/api/playmat",
+            post(api::playmat_upload).layer(axum::extract::DefaultBodyLimit::max(api::MAT_MAX_BYTES)),
+        )
         .route_layer(middleware::from_fn_with_state(app.clone(), api::auth_mw));
 
     let router = Router::new()
         .route("/api/register", post(api::register))
         .route("/api/login", post(api::login))
+        // Public: custom playmats load from CSS url()/<img>, which can't send
+        // Bearer headers. Filenames are unguessable (user id + random suffix).
+        .route("/api/mats/{file}", get(api::playmat_serve))
         .route("/api/ws", get(ws::ws_handler))
         .merge(protected)
         .layer(cors)

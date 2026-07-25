@@ -48,6 +48,10 @@ export interface Preferences {
   playmat: string;
   /** The 3D dice look, one of the entries in data/diceSkins.ts. */
   diceSkin: string;
+  /** The player's uploaded custom playmat id (`custom-<file>` on the server),
+   * remembered so the upload stays pickable after switching to a bundled mat.
+   * Empty = never uploaded. */
+  customPlaymat: string;
   /** Lay battlefield cards perfectly upright instead of the natural slight
    * per-card tilt. */
   verticalCards: boolean;
@@ -106,6 +110,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   cardBack: DEFAULT_CARD_BACK,
   playmat: DEFAULT_PLAYMAT,
   diceSkin: DEFAULT_DICE_SKIN,
+  customPlaymat: '',
   verticalCards: false,
   mirrorOpponent: true,
   ambientCards: false,
