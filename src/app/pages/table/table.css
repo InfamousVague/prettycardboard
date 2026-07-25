@@ -1471,19 +1471,15 @@
   align-items: flex-start;
 }
 
-/* Commander tax badges float under the Command label WITHOUT joining the
-   pile's grid height - tax appearing/clearing must never make the strip jump. */
-.cmdTaxRow {
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-top: 2px;
+/* Commander tax rides inline in the caption's count row: always on-screen
+   (the pile hugs the viewport edge, so nothing can hang below it) and the row
+   reserves its height so tax appearing never makes the strip jump. */
+.pileCountRow {
   display: flex;
-  gap: var(--glacier-space-1);
+  align-items: center;
   justify-content: center;
-  white-space: nowrap;
-  z-index: 2;
+  gap: var(--glacier-space-1);
+  min-height: 1.05rem;
 }
 
 .cmdCard {

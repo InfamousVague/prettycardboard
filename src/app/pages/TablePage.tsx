@@ -675,6 +675,7 @@ export function TablePage() {
         <CardMenu
           menu={menu}
           me={me}
+          hasCommander={formatFor(room.format).hasCommander}
           recipients={room.players
             .filter((player) => player.userId !== me.userId)
             .map((player) => ({ userId: player.userId, username: player.username }))}
@@ -719,12 +720,15 @@ const COUNTER_PALETTE: { label: string; counter: string; delta: number }[] = [
 function CardMenu({
   menu,
   me,
+  hasCommander,
   recipients,
   onAction,
   onClose,
 }: {
   menu: Menu;
   me: TablePlayer;
+  /** Commander machinery active (commander/brawl) - gates the tax items. */
+  hasCommander: boolean;
   recipients: { userId: string; username: string }[];
   onAction: (action: AnyAction) => void;
   onClose: () => void;
@@ -960,7 +964,13 @@ function CardMenu({
         <>
           {item(`${t('tblCommand')} → Battlefield`, <Play size={15} />, { kind: 'cmd.cast', iid: menu.iid, x: 0.55, y: 0.55 }, 'field:mine')}
           {item(t('tblHand'), <Hand size={15} />, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
-          {(me.commanderTax?.[menu.iid] ?? 0) > 0 &&
+          {/* Manual tax control: +2 always (the server creates the entry), -2
+              once any tax exists. Commander formats only - Cyberpunk Legends
+              share this zone but have no tax. */}
+          {hasCommander &&
+            item(t('gpCmdTaxAdd'), <Crown size={15} />, { kind: 'cmd.tax', iid: menu.iid, delta: 2 })}
+          {hasCommander &&
+            (me.commanderTax?.[menu.iid] ?? 0) > 0 &&
             item(t('gpCmdTaxReduce'), <Crown size={15} />, { kind: 'cmd.tax', iid: menu.iid, delta: -2 })}
         </>
       )}

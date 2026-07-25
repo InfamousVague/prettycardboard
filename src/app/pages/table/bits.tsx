@@ -680,18 +680,16 @@ export function ZonePiles({
         </div>
         <span className="pileCaption">
           <span className="pileLabel">{cmdLabel}</span>
-          <span className="pileCount">{player.command.length}</span>
-        </span>
-        {/* Commander tax rides under the Command label (one badge per taxed
-            commander still in the zone). */}
-        {player.command.some((card) => (player.commanderTax?.[card.iid] ?? 0) > 0) && (
-          <div className="cmdTaxRow">
+          {/* Tax rides inline under the label, beside the count - the pile sits
+              at the screen edge, so anything hung BELOW the pile box clips. */}
+          <span className="pileCountRow">
+            <span className="pileCount">{player.command.length}</span>
             {player.command.map((card) => {
               const tax = player.commanderTax?.[card.iid] ?? 0;
               return tax > 0 ? <TaxBadge key={card.iid} value={tax} /> : null;
             })}
-          </div>
-        )}
+          </span>
+        </span>
       </div>
       </div>
     </div>

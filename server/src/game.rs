@@ -1555,10 +1555,16 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                 return Err(("not_commander_format", "this table is not a commander game".to_string()));
             }
             let p = &mut room.players[pi];
-            // Only tax that exists can be adjusted - keeps the map free of junk keys.
-            let Some(prior) = p.commander_tax.get(iid).copied() else {
-                return Err(("no_tax", "no commander tax to adjust".to_string()));
-            };
+            // The iid must be one of this player's commanders (command zone or
+            // battlefield) - a positive delta may CREATE the entry (manual tax
+            // for casts the server didn't see), a negative one needs tax to cut.
+            if !p.command.iter().chain(p.battlefield.iter()).any(|c| c.iid == *iid) {
+                return Err(("card_not_found", format!("No commander {iid} to tax")));
+            }
+            let prior = p.commander_tax.get(iid).copied().unwrap_or(0);
+            if prior == 0 && delta <= 0 {
+                return Err(("no_tax", "no commander tax to reduce".to_string()));
+            }
             // Saturating + capped: delta is untrusted client input, and an
             // uncapped value could overflow here or in a later CmdCast +2.
             let next = prior.saturating_add(delta).clamp(0, 999);
