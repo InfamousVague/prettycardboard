@@ -521,6 +521,85 @@ pub fn deck_salt(conn: &Connection, deck_id: &str) -> (i64, i64) {
     .unwrap_or((0, 0))
 }
 
+/// (average salt x100, distinct raters) across every deck this player has ever
+/// brought to a table. Deck-level ratings aggregated up to an account: each
+/// rater still contributes one vote overall, so a single opponent who has
+/// salted five of your decks cannot outweigh five different opponents.
+///
+/// This is the honest reading of the data: nobody rates a PERSON. The number
+/// says how salty this player's decks have felt to the table, and the UI must
+/// word it that way.
+pub fn user_deck_salt(conn: &Connection, user_id: &str) -> (i64, i64) {
+    conn.query_row(
+        "SELECT COALESCE(CAST(ROUND(AVG(s) * 100.0) AS INTEGER), 0), COUNT(*)
+         FROM (SELECT AVG(salt) AS s FROM salt_ratings WHERE owner_id = ? GROUP BY from_id)",
+        [user_id],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )
+    .unwrap_or((0, 0))
+}
+
+/// One row per deck this player has actually played, newest-first by last use:
+/// (deck_id, deck_name, wins, losses, salt x100, distinct salt raters,
+/// endorsements earned while playing it, matches, last played).
+///
+/// The endorsement column is a JOIN, not a stored fact: endorsements name a
+/// PLAYER, and match_players says which deck that player had in that match. So
+/// it means "endorsements earned while playing this deck" and the UI must not
+/// shorten that to "endorsements for this deck".
+///
+/// Bots are excluded - a bot seat can accrue salt but has no profile.
+pub fn user_deck_breakdown(conn: &Connection, user_id: &str) -> Vec<serde_json::Value> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT mp.deck_id,
+                    -- The deck's name TODAY, falling back to the last snapshot
+                    -- for a deck since deleted. MAX() over the snapshots would
+                    -- be alphabetical, not latest, so a renamed deck could be
+                    -- labelled with a name its owner retired.
+                    COALESCE((SELECT d.name FROM decks d WHERE d.id = mp.deck_id), MAX(mp.deck_name)),
+                    COALESCE(SUM(mp.won), 0),
+                    COALESCE(SUM(1 - mp.won), 0),
+                    COUNT(*),
+                    MAX(m.ended_at),
+                    (SELECT COALESCE(CAST(ROUND(AVG(s) * 100.0) AS INTEGER), 0)
+                       FROM (SELECT AVG(sr.salt) AS s FROM salt_ratings sr
+                              WHERE sr.deck_id = mp.deck_id GROUP BY sr.from_id)),
+                    (SELECT COUNT(*)
+                       FROM (SELECT 1 FROM salt_ratings sr
+                              WHERE sr.deck_id = mp.deck_id GROUP BY sr.from_id)),
+                    (SELECT COUNT(DISTINCT e.from_id)
+                       FROM endorsements e
+                       JOIN match_players emp
+                         ON emp.match_id = e.match_id AND emp.user_id = e.to_id
+                      WHERE e.to_id = mp.user_id AND emp.deck_id = mp.deck_id)
+             FROM match_players mp
+             JOIN matches m ON m.id = mp.match_id
+             WHERE mp.user_id = ? AND mp.is_bot = 0 AND mp.deck_id IS NOT NULL
+             GROUP BY mp.deck_id
+             ORDER BY MAX(m.ended_at) DESC",
+        )
+        .unwrap();
+    let rows = stmt.query_map([user_id], |r| {
+        let salt_x100: i64 = r.get(6)?;
+        Ok(serde_json::json!({
+            "deckId": r.get::<_, String>(0)?,
+            "name": r.get::<_, Option<String>>(1)?,
+            "wins": r.get::<_, i64>(2)?,
+            "losses": r.get::<_, i64>(3)?,
+            "played": r.get::<_, i64>(4)?,
+            "lastPlayedAt": r.get::<_, Option<i64>>(5)?,
+            "salt": salt_x100 as f64 / 100.0,
+            "saltCount": r.get::<_, i64>(7)?,
+            "endorsements": r.get::<_, i64>(8)?,
+        }))
+    });
+    match rows {
+        Ok(iter) => iter.filter_map(|r| r.ok()).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
 pub fn endorsed_by(conn: &Connection, match_id: &str, from: &str, to: &str) -> bool {
     conn.query_row(
         "SELECT 1 FROM endorsements WHERE match_id = ? AND from_id = ? AND to_id = ?",

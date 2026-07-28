@@ -1,5 +1,5 @@
 import { isTauri } from '../tauri.ts';
-import type { Deck, DeckCard, DeckStats, DeckSummary, FriendsPayload, Identity, MatchRow, MatchStatsPlayer, MyRoom, RoomInfo, UserHit, UserStats } from './types.ts';
+import type { Deck, DeckCard, DeckStats, DeckSummary, FriendsPayload, Identity, MatchRow, MatchStatsPlayer, MyDeckStats, MyRoom, RoomInfo, UserHit, UserStats } from './types.ts';
 
 /**
  * REST client for the PrettyCardboard server (see PROTOCOL.md). Where it points:
@@ -225,6 +225,13 @@ export async function uploadPlaymat(file: Blob): Promise<{ id: string; url: stri
  * splash shows every seat's. Unknown ids come back all zeros. */
 export function userStats(userId: string): Promise<UserStats> {
   return request('GET', `/api/users/${encodeURIComponent(userId)}/stats`);
+}
+
+/** My decks, one row each: record, saltiness, endorsements earned with it.
+ *  Self only - a deck-by-deck salt breakdown of someone else would be a
+ *  shaming board, and no endpoint publishes another player's deck names. */
+export function myDeckStats(): Promise<MyDeckStats[]> {
+  return request('GET', '/api/me/decks/stats');
 }
 
 /** A deck's all-time record + saltiness, for the deck inspector. */

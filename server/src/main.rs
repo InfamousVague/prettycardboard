@@ -225,6 +225,7 @@ async fn main() {
     let protected = Router::new()
         .route("/api/me", get(api::me))
         .route("/api/me/stats", get(api::my_stats))
+        .route("/api/me/decks/stats", get(api::my_deck_stats))
         .route("/api/users/search", get(api::search_users))
         .route("/api/users/{id}/stats", get(api::user_stats))
         .route("/api/friends", get(api::friends))

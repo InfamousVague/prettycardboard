@@ -9,6 +9,7 @@ import { userStats } from '../../net/api.ts';
 import { deckSummaryArt } from '../../data/deckCover.ts';
 import { rankFor, winRate } from '../../data/ranks.ts';
 import { GameTag } from '../../components/GameTag.tsx';
+import { SaltPile } from '../../components/SaltPile.tsx';
 import { formatFor } from '../../data/formats.ts';
 import { LobbyChat } from './LobbyChat.tsx';
 import type { GameSettings, RoomState, TablePlayer, UserStats } from '../../net/types.ts';
@@ -192,6 +193,15 @@ export function PregameLobby({
                     {stats != null && stats.endorsements > 0 && (
                       <span className="pregameStat pregameEndorse" title={t('preEndorsements')}>
                         <ThumbsUp size={11} /> {stats.endorsements}
+                      </span>
+                    )}
+                    {/* How salty this seat's DECKS have played, averaged. Held
+                        back until more than one opponent has rated something:
+                        in a duel a single rating names its rater. Which deck
+                        earned it stays on that player's own profile. */}
+                    {stats != null && stats.saltCount > 1 && (
+                      <span className="pregameStat pregameSalt" title={t('preSaltHint')}>
+                        <SaltPile size={11} /> {stats.salt.toFixed(1)}
                       </span>
                     )}
                   </div>

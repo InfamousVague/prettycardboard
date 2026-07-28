@@ -5,7 +5,6 @@ import {
   Button,
   Card,
   Heading,
-  IconButton,
   Input,
   Kbd,
   Pill,
@@ -16,11 +15,10 @@ import {
   Switch,
   Text,
   TextTone,
-  Tooltip,
   useLocale,
   useToast,
 } from '@glacier/react';
-import { Crown, Flag, Layers, Play, Swords, Ticket } from '@glacier/icons';
+import { Flag, Swords, Ticket } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
@@ -30,17 +28,8 @@ import type { MatchRow, MyRoom } from '../net/types.ts';
 import { useVisibleGames } from '../hooks/useVisibleGames.ts';
 import { FORMATS } from '../data/formats.ts';
 import { GameTag, GameBadge } from '../components/GameTag.tsx';
+import { MatchHistory, relativeWhen } from '../components/MatchHistory.tsx';
 import './play.css';
-
-/** "1h 02m" / "18m 30s" / "42s" from milliseconds. */
-function fmtDuration(ms: number): string {
-  const s = Math.max(0, Math.round(ms / 1000));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
-  if (m > 0) return `${m}m ${String(s % 60).padStart(2, '0')}s`;
-  return `${s}s`;
-}
 
 /**
  * The lobby: your saved tables (rooms survive server restarts now), create a
@@ -48,26 +37,6 @@ function fmtDuration(ms: number): string {
  * bring - the fanned-out game itself lives in TablePage. Resuming a saved
  * table sends no deckId: the seat already holds the deck.
  */
-
-/** Coarse "5 minutes ago" style label from an ISO timestamp. */
-function relativeUpdatedAt(when: string | number, locale: string): string {
-  const then = typeof when === 'number' ? when : new Date(when).getTime();
-  if (Number.isNaN(then)) return '';
-  const seconds = Math.round((then - Date.now()) / 1000);
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
-  const steps: [Intl.RelativeTimeFormatUnit, number][] = [
-    ['year', 31536000],
-    ['month', 2592000],
-    ['week', 604800],
-    ['day', 86400],
-    ['hour', 3600],
-    ['minute', 60],
-  ];
-  for (const [unit, size] of steps) {
-    if (Math.abs(seconds) >= size) return rtf.format(Math.round(seconds / size), unit);
-  }
-  return rtf.format(seconds, 'second');
-}
 
 export function PlayPage() {
   const t = useT();
@@ -353,7 +322,7 @@ export function PlayPage() {
                       ))}
                     </div>
                     <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
-                      {relativeUpdatedAt(room.updatedAt, locale)}
+                      {relativeWhen(room.updatedAt, locale)}
                     </Text>
                   </div>
                   </div>
@@ -387,67 +356,7 @@ export function PlayPage() {
       {history !== null && history.length > 0 && (
         <section className="matchHistory">
           <Heading level={2}>{t('plHistory')}</Heading>
-          <div className="matchList">
-            {history.map((match, index) => {
-              const others = match.players
-                .map((p) => p.username)
-                .filter((n) => n !== identity?.username);
-              return (
-                <div key={`${match.playedAt}-${index}`} className="matchRow">
-                  <div className="matchRowMain">
-                    <span className="matchName">
-                      <GameTag game={match.game} showName={false} /> {match.name || t('playTitle')}
-                    </span>
-                    <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="matchWith">
-                      {others.length > 0 ? `${t('plWith')} ${others.join(', ')}` : t('plSolo')}
-                    </Text>
-                    {match.matchId && (
-                      <span className="matchStats">
-                        {match.won != null && (
-                          <span className="matchStat" data-win={match.won || undefined}>
-                            {match.won ? t('pmWinAbbr') : t('pmLossAbbr')}
-                          </span>
-                        )}
-                        {match.winnerUsername && (
-                          <span className="matchStat">
-                            <Crown size={11} /> {match.winnerUsername}
-                          </span>
-                        )}
-                        {match.turns != null && (
-                          <span className="matchStat">
-                            {match.turns} {t('pmTurnsWord')}
-                          </span>
-                        )}
-                        {match.durationMs != null && <span className="matchStat">{fmtDuration(match.durationMs)}</span>}
-                        {match.cardsPlayed != null && (
-                          <span className="matchStat">
-                            <Layers size={11} /> {match.cardsPlayed}
-                          </span>
-                        )}
-                      </span>
-                    )}
-                  </div>
-                  <div className="matchRowSide">
-                    <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
-                      {relativeUpdatedAt(match.playedAt, locale)}
-                    </Text>
-                    {match.replayable && match.roomId && (
-                      <Tooltip content={t('gpWatchReplay')}>
-                        <IconButton
-                          size="sm"
-                          variant="soft"
-                          aria-label={t('gpWatchReplay')}
-                          onClick={() => join(match.roomId!)}
-                        >
-                          <Play size={15} />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <MatchHistory matches={history} myUsername={identity?.username} onReplay={(roomId) => join(roomId)} />
         </section>
       )}
 

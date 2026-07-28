@@ -44,6 +44,7 @@ export const CHANGELOG: ChangelogRelease[] = [
       { icon: Rows3, title: 'clPiles', desc: 'clPilesDesc' },
       { icon: Swords, title: 'clTotals', desc: 'clTotalsDesc' },
       { icon: Image, title: 'clDeckMat', desc: 'clDeckMatDesc' },
+      { icon: BarChart2, title: 'clProfileStats', desc: 'clProfileStatsDesc' },
       { icon: LayoutGrid, title: 'clGrid050', desc: 'clGrid050Desc' },
     ],
   },

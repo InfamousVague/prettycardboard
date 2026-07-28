@@ -691,12 +691,17 @@ pub async fn my_stats(
     let (wins, losses) = db::user_match_counts(&conn, &user.id);
     let endorsements = db::user_endorsement_count(&conn, &user.id);
     let avg_turn_ms = db::user_avg_turn_ms(&conn, &user.id);
+    let (salt_x100, salt_count) = db::user_deck_salt(&conn, &user.id);
     Json(json!({
         "wins": wins,
         "losses": losses,
         "played": wins + losses,
         "endorsements": endorsements,
         "avgTurnMs": avg_turn_ms,
+        // How salty this player's DECKS have felt to the table (1-5, 0 when
+        // nobody has rated one). Never a judgement of the player.
+        "salt": salt_x100 as f64 / 100.0,
+        "saltCount": salt_count,
     }))
     .into_response()
 }
@@ -709,14 +714,30 @@ pub async fn user_stats(State(app): State<Arc<App>>, Path(user_id): Path<String>
     let (wins, losses) = db::user_match_counts(&conn, &user_id);
     let endorsements = db::user_endorsement_count(&conn, &user_id);
     let avg_turn_ms = db::user_avg_turn_ms(&conn, &user_id);
+    let (salt_x100, salt_count) = db::user_deck_salt(&conn, &user_id);
     Json(json!({
         "wins": wins,
         "losses": losses,
         "played": wins + losses,
         "endorsements": endorsements,
         "avgTurnMs": avg_turn_ms,
+        "salt": salt_x100 as f64 / 100.0,
+        "saltCount": salt_count,
     }))
     .into_response()
+}
+
+/// GET /api/me/decks/stats: MY decks, one row each, with their record, how
+/// salty the table found them, and how many endorsements I earned while
+/// playing each. Self only - nothing here publishes another player's deck
+/// names, and a deck-by-deck breakdown of someone else's salt would be a
+/// shaming board rather than a stat.
+pub async fn my_deck_stats(
+    State(app): State<Arc<App>>,
+    Extension(user): Extension<db::User>,
+) -> Response {
+    let conn = app.db.lock().unwrap();
+    Json(db::user_deck_breakdown(&conn, &user.id)).into_response()
 }
 
 /// GET /api/decks/{id}/stats: a deck's all-time record + saltiness (how salty

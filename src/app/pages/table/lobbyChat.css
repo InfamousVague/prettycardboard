@@ -139,6 +139,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Deck saltiness, in the same warm orange the post-match rating uses. */
+.pregameSalt {
+  color: oklch(0.75 0.15 45);
+}
+
 .pregameEndorse {
   color: var(--glacier-success-text, var(--glacier-text-muted));
 }

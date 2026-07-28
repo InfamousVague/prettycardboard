@@ -128,6 +128,27 @@ export interface UserStats {
   played: number;
   endorsements: number;
   avgTurnMs: number;
+  /** How salty this player's DECKS have felt to the tables they sat at (1-5);
+   *  0 when nobody has rated one. Never a rating of the player. */
+  salt: number;
+  /** Distinct opponents who have rated any of their decks. */
+  saltCount: number;
+}
+
+/** GET /api/me/decks/stats — one row per deck I have actually played. */
+export interface MyDeckStats {
+  deckId: string;
+  name: string | null;
+  wins: number;
+  losses: number;
+  played: number;
+  lastPlayedAt: number | null;
+  /** Average saltiness opponents rated this deck (1-5); 0 when unrated. */
+  salt: number;
+  saltCount: number;
+  /** Endorsements earned while playing this deck - endorsements name a player,
+   *  so this is "earned with", not "for the deck". */
+  endorsements: number;
 }
 
 /** GET /api/decks/{id}/stats — a deck's all-time record + saltiness. */

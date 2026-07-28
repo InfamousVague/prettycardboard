@@ -190,3 +190,77 @@
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
+
+/* The W/L slash sits between two numbers, so it reads better dimmed. */
+.pfStatSep {
+  color: var(--glacier-text-subtle);
+  margin-inline: 0.15em;
+}
+
+.pfStatEndorse,
+.pfStatSalt {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.pfStatEndorse {
+  color: var(--glacier-success-text, var(--glacier-text));
+}
+
+/* The same warm orange the post-match salt rating and the deck inspector use,
+   so saltiness reads as one thing everywhere it appears. */
+.pfStatSalt {
+  color: oklch(0.75 0.15 45);
+}
+
+/* Deck reputation: two short leaderboards of your own decks, side by side. */
+.pfDeckStats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+}
+
+.pfDeckCols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--glacier-space-3);
+  margin-block-start: var(--glacier-space-2);
+}
+
+.pfDeckCol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+}
+
+.pfDeckColHead {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.pfDeckRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border-radius: var(--glacier-radius-md);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 45%, transparent);
+  background: color-mix(in oklch, var(--glacier-surface) 60%, transparent);
+}
+
+.pfDeckName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pfDeckFig {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--glacier-font-weight-medium);
+}

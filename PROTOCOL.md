@@ -462,7 +462,19 @@ cosmetic-setting pattern (not a game action: no undo/timeline churn).
   `playmat.set` while the seated deck has a mat, or every unrelated preference
   change would overwrite it.
 - `GET /api/users/{id}/stats` (Bearer) — any player's all-time aggregates,
-  same shape as `/api/me/stats`; unknown ids return zeros.
+  same shape as `/api/me/stats`; unknown ids return zeros. Both now also carry
+  `salt` + `saltCount`: how salty that player's DECKS have felt to the tables
+  they sat at (1-5, `0`/`0` when nothing of theirs has been rated), aggregated
+  one-vote-per-rater across every deck they own. Salt rates a deck, never a
+  person, and rater identity is never exposed - clients must word it that way
+  and should hide it at `saltCount <= 1`, where a duel identifies its rater.
+- `GET /api/me/decks/stats` (Bearer) — SELF ONLY. One row per deck you have
+  actually played: `{deckId, name, wins, losses, played, lastPlayedAt, salt,
+  saltCount, endorsements}`. `endorsements` is endorsements you earned while
+  playing that deck (endorsements name a player; `match_players` says which
+  deck they had), not endorsements of the deck. Bots excluded. There is no
+  other-user equivalent: a deck-by-deck salt breakdown of someone else would
+  publish deck names no endpoint otherwise exposes.
 - Client -> server `{type: "deckmeta.set", meta}` — seated players push a
   small client-computed public metrics blob for their current deck (colors /
   curve / type counts; the server stores decks as bare card ids and cannot

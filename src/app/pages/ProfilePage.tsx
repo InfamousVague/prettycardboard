@@ -9,6 +9,11 @@ import { COLOR_ORDER, cardImage, commanderArt } from '../data/cards.ts';
 import { PRECONS, preconCommander } from '../data/precons.ts';
 import { DeckStack } from '../components/DeckStack.tsx';
 import { useCardPopup } from '../components/CardPopup.tsx';
+import { MatchHistory } from '../components/MatchHistory.tsx';
+import { SaltPile } from '../components/SaltPile.tsx';
+import { rankFor, winRate } from '../data/ranks.ts';
+import type { MatchRow, MyDeckStats, UserStats } from '../net/types.ts';
+import { ThumbsUp } from '@glacier/icons';
 import './social.css';
 
 const GAME_TAG: Record<string, string> = {
@@ -71,6 +76,42 @@ export function ProfilePage() {
       cancelled = true;
     };
   }, []);
+
+  // The record: lifetime aggregates, my decks broken down, and the games
+  // themselves. All three are garnish - a failure leaves the section off
+  // rather than blocking the page.
+  const [stats, setStats] = useState<UserStats | null>(null);
+  const [deckStats, setDeckStats] = useState<MyDeckStats[] | null>(null);
+  const [history, setHistory] = useState<MatchRow[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const [s, d, h] = await Promise.all([
+        api.myStats().catch(() => null),
+        api.myDeckStats().catch(() => null),
+        api.matches().catch(() => null),
+      ]);
+      if (cancelled) return;
+      setStats(s);
+      setDeckStats(d);
+      setHistory(h);
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Only decks the table has actually rated can be ranked by saltiness, and a
+  // single rater is identifiable in a duel - so a lone rating stays private.
+  const ratedDecks = (deckStats ?? []).filter((deck) => deck.saltCount > 1);
+  const saltiest = [...ratedDecks].sort((a, b) => b.salt - a.salt).slice(0, 3);
+  const mostEndorsed = [...(deckStats ?? [])]
+    .filter((deck) => deck.endorsements > 0)
+    .sort((a, b) => b.endorsements - a.endorsements)
+    .slice(0, 3);
+  const rank = stats ? rankFor(stats.played) : null;
+  const rate = stats ? winRate(stats) : null;
 
   const memberSince = (() => {
     if (!createdAt) return null;
@@ -159,7 +200,97 @@ export function ProfilePage() {
             </Text>
           </div>
         )}
+        {stats && stats.played > 0 && (
+          <>
+            <div className="pfStat">
+              <span className="pfStatValue">
+                {stats.wins}<span className="pfStatSep">/</span>{stats.losses}
+              </span>
+              <Text size={Size.Small} tone={TextTone.Muted}>
+                {rate != null ? `${t('pfRecord')} · ${rate}%` : t('pfRecord')}
+              </Text>
+            </div>
+            {rank && (
+              <div className="pfStat">
+                <span className="pfStatValue">{rank.title}</span>
+                <Text size={Size.Small} tone={TextTone.Muted}>
+                  {t('pfRank')} {rank.level}
+                </Text>
+              </div>
+            )}
+            <div className="pfStat">
+              <span className="pfStatValue pfStatEndorse">
+                <ThumbsUp size={18} aria-hidden /> {stats.endorsements}
+              </span>
+              <Text size={Size.Small} tone={TextTone.Muted}>
+                {t('pmEndorseCount')}
+              </Text>
+            </div>
+            <div className="pfStat">
+              <span className="pfStatValue pfStatSalt">
+                {/* Held back at a single rater: in a duel, one rating names
+                    its rater - the same threshold the lobby and the deck list
+                    below use. */}
+                <SaltPile size={18} aria-hidden /> {stats.saltCount > 1 ? stats.salt.toFixed(1) : '—'}
+              </span>
+              <Text size={Size.Small} tone={TextTone.Muted} title={t('pfSaltHint')}>
+                {t('pfSalt')}
+              </Text>
+            </div>
+          </>
+        )}
       </motion.div>
+
+      {/* Your decks, judged by the people who had to play against them. Salt
+          rates a DECK, never its owner, so every label here says so. */}
+      {(saltiest.length > 0 || mostEndorsed.length > 0) && (
+        <section className="pfDeckStats">
+          <Heading level={2}>{t('pfDeckRep')}</Heading>
+          <Text tone={TextTone.Muted}>{t('pfDeckRepLede')}</Text>
+          <div className="pfDeckCols">
+            {saltiest.length > 0 && (
+              <div className="pfDeckCol">
+                <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="pfDeckColHead">
+                  {t('pfSaltiest')}
+                </Text>
+                {saltiest.map((deck) => (
+                  <div key={deck.deckId} className="pfDeckRow">
+                    <span className="pfDeckName">{deck.name ?? t('dbUntitled')}</span>
+                    <span className="pfDeckFig pfStatSalt">
+                      <SaltPile size={13} aria-hidden /> {deck.salt.toFixed(1)}
+                      <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+                        ({deck.saltCount})
+                      </Text>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {mostEndorsed.length > 0 && (
+              <div className="pfDeckCol">
+                <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="pfDeckColHead">
+                  {t('pfMostEndorsed')}
+                </Text>
+                {mostEndorsed.map((deck) => (
+                  <div key={deck.deckId} className="pfDeckRow">
+                    <span className="pfDeckName">{deck.name ?? t('dbUntitled')}</span>
+                    <span className="pfDeckFig pfStatEndorse">
+                      <ThumbsUp size={13} aria-hidden /> {deck.endorsements}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {history != null && history.length > 0 && (
+        <section className="matchHistory">
+          <Heading level={2}>{t('plHistory')}</Heading>
+          <MatchHistory matches={history} myUsername={identity?.username} />
+        </section>
+      )}
 
       <section>
         <Heading level={2}>{t('pfPrecons')}</Heading>
