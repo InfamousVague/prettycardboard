@@ -125,6 +125,16 @@ export interface UserStats {
   avgTurnMs: number;
 }
 
+/** GET /api/decks/{id}/stats — a deck's all-time record + saltiness. */
+export interface DeckStats {
+  wins: number;
+  losses: number;
+  /** Average saltiness opponents rated this deck (1-5); 0 when unrated. */
+  salt: number;
+  /** How many distinct opponents have rated it. */
+  saltCount: number;
+}
+
 export interface MyRoom {
   roomId: string;
   code: string;
@@ -152,8 +162,15 @@ export interface CardInst {
   power?: string;
   toughness?: string;
   attachedTo?: string;
+  /** This attachment is a PILE member (squared up under its base and counted as
+   *  one object) rather than an aura fanned out beside it. Only ever meaningful
+   *  alongside `attachedTo`; the server never sends it without one. */
+  piled?: boolean;
   isCommander?: boolean;
   revealed?: boolean;
+  /** A double-faced card flipped to its back face; the client resolves the back
+   *  art from the card's Scryfall faces. */
+  transformed?: boolean;
 }
 
 /** A Cyberpunk Gig die: one of the six d4-d20 in the Fixer. `inGig` = rolled
@@ -342,6 +359,7 @@ export type GameAction =
   | { kind: 'card.pos'; iid: string; x: number; y: number }
   | { kind: 'card.tap'; iid: string; tapped: boolean }
   | { kind: 'card.face'; iid: string; faceDown: boolean }
+  | { kind: 'card.transform'; iid: string; transformed: boolean }
   | { kind: 'card.counter'; iid: string; counter: string; delta: number }
   | { kind: 'token.create'; name: string; imageUrl?: string; power?: string; toughness?: string; x: number; y: number }
   | { kind: 'token.clone'; iid: string; x: number; y: number }
@@ -448,7 +466,7 @@ export type GameActionV2 =
   | { kind: 'library.bottom'; iids: string[] }
   | { kind: 'library.search' }
   | { kind: 'library.reveal'; count: number }
-  | { kind: 'card.attach'; iid: string; hostIid: string | null }
+  | { kind: 'card.attach'; iid: string; hostIid: string | null; piled?: boolean }
   | { kind: 'card.give'; iid: string; toUser: string }
   | { kind: 'mull.take' }
   | { kind: 'mull.keep'; bottomIids: string[] }

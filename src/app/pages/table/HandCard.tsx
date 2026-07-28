@@ -2,6 +2,7 @@ import { useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import { motion, useSpring, useTransform, type MotionValue } from 'motion/react';
 import { GameCard } from '../../components/GameCard.tsx';
 import { cardImage } from '../../data/cards.ts';
+import { isFoilInst } from '../../data/foil.ts';
 import { prefersReducedMotion } from './juice.ts';
 import type { CardInst } from '../../net/types.ts';
 
@@ -16,6 +17,7 @@ export const HAND_PEEK_ZONE = 230;
  */
 export function HandCard({
   card,
+  dataIid,
   width,
   spread,
   dimmed,
@@ -28,6 +30,8 @@ export function HandCard({
   onContextMenu,
 }: {
   card: CardInst;
+  /** Marks the card for hit-testing during a touch hand-scrub (MyBoard). */
+  dataIid?: string;
   width: number;
   spread: number;
   dimmed: boolean;
@@ -69,6 +73,7 @@ export function HandCard({
       ref={ref}
       className="handCard"
       style={{ zIndex: z }}
+      data-hand-iid={dataIid}
       data-preview-src={previewSrc}
       data-preview-name={previewSrc ? card.name : undefined}
       initial={{ y: 60, opacity: 0 }}
@@ -90,6 +95,7 @@ export function HandCard({
           imageUrl={faceDown ? undefined : card.imageUrl || cardImage(card.scryfallId)}
           faceDown={faceDown}
           width={width}
+          foil={isFoilInst(card)}
           tilt={0}
         />
       </motion.div>

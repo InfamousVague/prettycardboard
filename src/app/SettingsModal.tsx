@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Button,
   DensitySelector,
@@ -16,7 +16,8 @@ import {
   useToast,
   type TabbedModalSection,
 } from '@glacier/react';
-import { CircleUserRound, Globe, Info, Keyboard, LayoutGrid, Paintbrush, Palette, Wrench } from '@glacier/icons';
+import { ChevronLeft, CircleUserRound, Globe, Info, Keyboard, LayoutGrid, Paintbrush, Palette, Wrench } from '@glacier/icons';
+import { useMobileLayout } from './hooks/useIsPhone.ts';
 import { accentSteps } from '@glacier/tokens';
 import { ACCENTS, DEFAULT_PREFERENCES, MONO_FONTS, SANS_FONTS, type Preferences } from './preferences.ts';
 import { LANGUAGES, useT, type AppLocale } from './i18n.ts';
@@ -56,12 +57,20 @@ export function SettingsModal({
 }) {
   const t = useT();
   const { toast } = useToast();
+  const phone = useMobileLayout();
   // The active tab is controlled so callers can deep-link (rail Customize, the
   // in-game menu) straight to a section; it resets to the requested tab on each
   // open.
   const [section, setSection] = useState(initialSection ?? 'general');
+  // Phones swap the side-by-side rail+pane for a master-detail flow: the
+  // section list first, then the picked section fullscreen with a back row.
+  // Deep links (rail Customize, in-game menu) land directly on the section.
+  const [mobilePane, setMobilePane] = useState<'list' | 'section'>(initialSection ? 'section' : 'list');
   useEffect(() => {
-    if (open) setSection(initialSection ?? 'general');
+    if (open) {
+      setSection(initialSection ?? 'general');
+      setMobilePane(initialSection ? 'section' : 'list');
+    }
   }, [open, initialSection]);
   const swatchTheme = resolveTheme(preferences.theme);
   // Fall back to the defaults for the numeric sliders, so a preferences object
@@ -161,6 +170,7 @@ export function SettingsModal({
           <Label>{t('setTypeface')}</Label>
           <SegmentedControl
             aria-label={t('setTypeface')}
+            fullWidth={phone}
             value={preferences.font}
             onValueChange={(value) => onChange({ font: value as Preferences['font'] })}
             options={SANS_FONTS}
@@ -170,6 +180,7 @@ export function SettingsModal({
           <Label>{t('setMonospace')}</Label>
           <SegmentedControl
             aria-label={t('setMonospace')}
+            fullWidth={phone}
             value={preferences.mono}
             onValueChange={(value) => onChange({ mono: value as Preferences['mono'] })}
             options={MONO_FONTS}
@@ -221,18 +232,40 @@ export function SettingsModal({
   const table = (
     <div style={{ display: 'grid', gap: 'var(--glacier-space-6)' }}>
       <div className="control">
-        <Label>{t('setSidebar')}</Label>
+        <Label>{t('setMobileLayout')}</Label>
         <SegmentedControl
-          aria-label={t('setSidebar')}
+          aria-label={t('setMobileLayout')}
           fullWidth
-          value={preferences.layout}
-          onValueChange={(value) => onChange({ layout: value as Preferences['layout'] })}
+          value={preferences.mobileLayout ?? 'auto'}
+          onValueChange={(value) => onChange({ mobileLayout: value as Preferences['mobileLayout'] })}
           options={[
-            { value: 'floating', label: t('setFloating') },
-            { value: 'full', label: t('setFullHeight') },
+            { value: 'auto', label: t('setMobileAuto') },
+            { value: 'on', label: t('setMobileOn') },
+            { value: 'off', label: t('setMobileOff') },
           ]}
         />
+        <Text size={Size.XSmall} tone={TextTone.Subtle}>
+          {t('setMobileLayoutHint')}
+        </Text>
       </div>
+
+      {/* The floating/full sidebar choice is desktop chrome; phones have no
+          sidebar to lay out. */}
+      {!phone && (
+        <div className="control">
+          <Label>{t('setSidebar')}</Label>
+          <SegmentedControl
+            aria-label={t('setSidebar')}
+            fullWidth
+            value={preferences.layout}
+            onValueChange={(value) => onChange({ layout: value as Preferences['layout'] })}
+            options={[
+              { value: 'floating', label: t('setFloating') },
+              { value: 'full', label: t('setFullHeight') },
+            ]}
+          />
+        </div>
+      )}
 
       <div className="control">
         <Label>{t('setCardPlacement')}</Label>
@@ -331,6 +364,7 @@ export function SettingsModal({
               <Label>{t('setEffect')}</Label>
               <SegmentedControl
                 aria-label={t('setEffect')}
+                fullWidth={phone}
                 value={preferences.visualFeedbackVariant}
                 onValueChange={(value) =>
                   onChange({ visualFeedbackVariant: value as Preferences['visualFeedbackVariant'] })
@@ -348,6 +382,7 @@ export function SettingsModal({
               <SegmentedControl
                 size={Size.Small}
                 aria-label={t('setIntensity')}
+                fullWidth={phone}
                 value={preferences.visualFeedbackIntensity}
                 onValueChange={(value) =>
                   onChange({ visualFeedbackIntensity: value as Preferences['visualFeedbackIntensity'] })
@@ -390,14 +425,36 @@ export function SettingsModal({
     { id: 'about', label: t('setAbout'), icon: <Info size={18} />, content: <AboutTab /> },
   ];
 
+  // Phones: keybinds are meaningless without a keyboard, and every section
+  // gains a back row returning to the list pane.
+  const withBack = (label: ReactNode, content: ReactNode) => (
+    <div className="setMobileSection">
+      <Button variant="ghost" size="sm" className="setMobileBack" onClick={() => setMobilePane('list')}>
+        <ChevronLeft size={16} aria-hidden />
+        {label}
+      </Button>
+      {content}
+    </div>
+  );
+  // The controlled value must name a section the kit actually got: a desktop
+  // selection of Keybinds survives a flip to phone, where that tab is gone.
+  const shownSections = phone
+    ? sections.filter((s) => s.id !== 'keybinds').map((s) => ({ ...s, content: withBack(s.label, s.content) }))
+    : sections;
+  const shownValue = shownSections.some((s) => s.id === section) ? section : (shownSections[0]?.id ?? 'general');
+
   return (
     <TabbedModal
+      className={`pcMobileFull pcSettings ${phone ? (mobilePane === 'list' ? 'pcPaneList' : 'pcPaneSection') : ''}`}
       open={open}
       onClose={onClose}
       title={t('setTitle')}
-      value={section}
-      onValueChange={setSection}
-      sections={sections}
+      value={shownValue}
+      onValueChange={(value) => {
+        setSection(value);
+        setMobilePane('section');
+      }}
+      sections={shownSections}
       footer={
         <Row justify="between" align="center">
           <Button

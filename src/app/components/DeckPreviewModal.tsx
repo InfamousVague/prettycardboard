@@ -45,7 +45,7 @@ export function DeckPreviewModal({
       {/* `data-modal-overflow="contained"` switches the panel to a fixed height
           (overflow hidden) so this column can bound itself and scroll only the
           card grid, keeping the head + footer pinned. */}
-      <div className="deckPreviewModal" data-modal-overflow="contained">
+      <div className="deckPreviewModal pcMobileFull" data-modal-overflow="contained">
         <div className="deckPreviewHead">
           {deck.identity}
           {deck.subtitle && (

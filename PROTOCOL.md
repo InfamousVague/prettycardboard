@@ -243,9 +243,22 @@ Zone viewers (all logged; server filters what each viewer may see):
 - Graveyard/exile are public: full contents already in RoomState.
 
 Attach / stacking:
-- `{kind: "card.attach", iid, hostIid}` — attach iid to a host battlefield
-  card (CardInst gains `attachedTo?: iid`); detach with hostIid null. Attached
-  cards render tucked under their host and move with it.
+- `{kind: "card.attach", iid, hostIid, piled?}` — attach iid to a host
+  battlefield card (CardInst gains `attachedTo?: iid`); detach with hostIid
+  null. Attached cards render tucked under their host and move with it.
+- `piled: true` makes it a PILE member instead of an aura (CardInst gains
+  `piled?: bool`, absent = false = an aura): the card squares up UNDER its base
+  and the group renders as one object with a count, the way stacked lands do on
+  a real table. The base must be on YOUR battlefield (`bad_pile`) — unlike an
+  aura, which may sit on an opponent's creature. A piled card is never a host: a
+  drop aimed at one resolves to its base (one hop, never nested). Board order is
+  pile order, so a joining card moves to the end of its owner's battlefield and
+  the last member is the top of the pile. Detaching a member (hostIid null)
+  lands it beside its base. When a pile's base leaves the battlefield the top
+  member is promoted to base at the leaver's position and the rest re-point to
+  it, so a pile survives its base. Same relation, so a pile travels with its
+  base, resyncs, and is undoable exactly like an attachment. Unrelated to the
+  shared spell `stack`. NOT a tap group: tapping a pile taps only its base.
 
 Mulligan (game start):
 - `room.start` now puts every seated player in `mulligan: {state: "deciding",
@@ -262,8 +275,9 @@ Undo:
 - `{kind: "undo"}` — revert it if present and still valid; logs "X undoes ...".
 
 ### CardInst additions
-`attachedTo?: string`, `isCommander?: bool`, `revealed?: bool` (temporarily
-public while on the stack from a hidden zone).
+`attachedTo?: string`, `piled?: bool` (that attachment is a pile member, not an
+aura; only ever sent alongside `attachedTo`), `isCommander?: bool`, `revealed?:
+bool` (temporarily public while on the stack from a hidden zone).
 
 ## Match end addendum (2026-07-18)
 

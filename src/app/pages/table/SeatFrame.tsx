@@ -4,13 +4,14 @@ import { BookCopy, Check, Cpu, Crown, Hand as HandIcon, Shield, Skull, Zap } fro
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
+import { isFoilInst } from '../../data/foil.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import type { CardInst, RoomState, TablePlayer } from '../../net/types.ts';
-import { useTableUi } from './tableUi.ts';
-import { AttackBadge, BlockCluster, CounterBadges, DEFAULT_MAT_LAYOUT, ZonePiles, groupAttachments } from './bits.tsx';
+import { selectCardScale, useTableUi } from './tableUi.ts';
+import { AttackBadge, BlockCluster, CounterBadges, DEFAULT_MAT_LAYOUT, ZonePiles, groupAttachments, splitPile } from './bits.tsx';
 import { ambientDelay, restTilt } from './juice.ts';
-import { effectivePT, isCreature } from './boardModes.ts';
+import { PILE_MAX_EDGES, PILE_STEP_PX, effectivePT, isCreature } from './boardModes.ts';
 import { playmatBackground } from '../../data/playmats.ts';
 import { cardBackUrl, effectiveCardBack } from '../../data/cardBacks.ts';
 import { useEdgeColor } from '../../data/edgeColor.ts';
@@ -47,7 +48,7 @@ export function SeatFrame({
   const blockerIid = useTableUi((state) => state.blockerIid);
   const setBlocker = useTableUi((state) => state.setBlocker);
   // The viewer's battlefield-size preference applies to the staged board too.
-  const cardScale = useTableUi((state) => state.cardScale);
+  const cardScale = useTableUi(selectCardScale);
   const verticalCards = usePreference('verticalCards');
   const mirrorOpponent = usePreference('mirrorOpponent');
   const ambientCards = usePreference('ambientCards');
@@ -123,11 +124,25 @@ export function SeatFrame({
     if (!card.faceDown) popup.open({ scryfallId: card.scryfallId, name: card.name, imageUrl: card.imageUrl });
   };
 
-  const renderCard = (card: CardInst, host?: CardInst, attachIndex = 0) => {
+  const renderCard = (
+    card: CardInst,
+    host?: CardInst,
+    attachIndex = 0,
+    /** Distance from the base, 1..PILE_MAX_EDGES. 0 = not a pile member. */
+    pileDepth = 0,
+    /** How many cards are stacked on THIS card. 0 = not a pile base. */
+    pileCount = 0,
+  ) => {
     const attacker = attackerEntry(card.iid);
     const baseX = host ? host.x : card.x;
     const baseY = host ? host.y : card.y;
-    const offset = host ? Math.round(18 * (stage ? cardScale : 0.6)) * (attachIndex + 1) : 0;
+    const scale = stage ? cardScale : 0.6;
+    const piled = pileDepth > 0;
+    const offset = !host
+      ? 0
+      : piled
+        ? Math.round(PILE_STEP_PX * scale) * pileDepth
+        : Math.round(18 * scale) * (attachIndex + 1);
     // The .fieldCard::after hitbox paints over the GameCard, so elementFromPoint
     // lands on .fieldCard (no data-preview-src) and the hover preview never fires.
     // Mirror the preview attrs onto the wrapper so the opponent's board previews too.
@@ -140,16 +155,17 @@ export function SeatFrame({
         data-preview-src={cardPreview}
         data-preview-name={cardPreview ? card.name : undefined}
         data-attacker={attacker ? '' : undefined}
-        data-attachment={host ? '' : undefined}
+        data-attachment={host ? (card.piled ? 'pile' : 'aura') : undefined}
+        data-pile={pileCount > 0 ? pileCount : undefined}
         data-block-target={canAct && blockerIid && attacker ? '' : undefined}
         data-affordance={
           iAmDefender && attacker && attackerHitsMe(card.iid) ? 'block' : undefined
         }
         data-ambient={ambientCards && stage ? '' : undefined}
         style={{
-          left: offset ? `calc(${baseX * 100}% + ${offset}px)` : `${baseX * 100}%`,
+          left: offset ? `calc(${baseX * 100}% + ${piled ? -offset : offset}px)` : `${baseX * 100}%`,
           top: offset
-            ? `calc(min(${baseY * 100}%, 100% - 8.75rem) + ${offset * 0.8}px)`
+            ? `calc(min(${baseY * 100}%, 100% - 8.75rem) + ${piled ? -offset : offset * 0.8}px)`
             : `min(${baseY * 100}%, 100% - 8.75rem)`,
           zIndex: host ? 4 : 5,
           ['--rest-tilt' as string]: verticalCards ? '0deg' : `${restTilt(card.iid)}deg`,
@@ -165,9 +181,12 @@ export function SeatFrame({
           width={stage ? Math.round(120 * cardScale) : 56}
           tapped={card.tapped}
           faceDown={card.faceDown}
+          foil={isFoilInst(card)}
           tilt={0}
         >
           <CounterBadges card={card} />
+          {/* A span, not a button: only the pile's owner can peel it. */}
+          {pileCount > 0 && <span className="pileTally">{pileCount + 1}</span>}
           {attacker && (
             <AttackBadge
               defenderName={room.players.find((p) => p.seat === attacker.defenderSeat)?.username}
@@ -255,12 +274,18 @@ export function SeatFrame({
           TablePage) so it can hang off the very bottom edge exactly like mine,
           rather than being trapped inside this board's border. */}
       <div className="oppField">
-        {hosts.map((card) => (
-          <span key={card.iid} style={{ display: 'contents' }}>
-            {(attachments.get(card.iid) ?? []).map((att, index) => renderCard(att, card, index))}
-            {renderCard(card)}
-          </span>
-        ))}
+        {hosts.map((card) => {
+          const { piled, auras } = splitPile(attachments.get(card.iid) ?? []);
+          return (
+            <span key={card.iid} style={{ display: 'contents' }}>
+              {piled.map((att, index) =>
+                renderCard(att, card, index, Math.min(piled.length - index, PILE_MAX_EDGES)),
+              )}
+              {auras.map((att, index) => renderCard(att, card, index))}
+              {renderCard(card, undefined, 0, 0, piled.length)}
+            </span>
+          );
+        })}
       </div>
       {(() => {
         // The seat's custom mat layout (if any) lifts their piles into the same

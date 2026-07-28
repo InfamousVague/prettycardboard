@@ -1,0 +1,537 @@
+/* Fullscreen pack opening: a wrapper that tears along a jagged seam, then the
+   pack spilling into two fans. Sized off the viewport so a phone in either
+   orientation gets the same choreography as a desktop window. */
+
+.poRoot {
+  position: fixed;
+  inset: 0;
+  /* Over the app shell and its tab bar. */
+  z-index: 120;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: color-mix(in oklch, var(--glacier-bg) 94%, black);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  overflow: hidden;
+  /* Visible by default, with the fade as pure enhancement: a surface covering
+     the whole screen must never depend on an animation running to be seen. No
+     fill-mode, so if animations are suppressed it simply appears. */
+  opacity: 1;
+  animation: poFadeIn 180ms var(--glacier-ease-out);
+}
+
+@keyframes poFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* The expansion art floods the room, heavily blurred and dimmed: the theatre
+   should feel like it happens inside the set. */
+.poBackdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-size: cover;
+  background-position: center 30%;
+  filter: blur(42px) saturate(1.2) brightness(0.34);
+  transform: scale(1.18);
+  animation: poFadeIn 500ms var(--glacier-ease-out);
+}
+
+.poAmbient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    62% 52% at 50% 46%,
+    color-mix(in oklch, var(--glacier-accent-solid) 16%, transparent),
+    transparent 70%
+  );
+  opacity: 0.5;
+  transition:
+    background 420ms var(--glacier-ease-out),
+    opacity 420ms var(--glacier-ease-out);
+}
+
+.poAmbient[data-rarity='rare'] {
+  opacity: 0.9;
+  background: radial-gradient(62% 52% at 50% 46%, rgb(217 164 65 / 0.26), transparent 70%);
+}
+
+.poAmbient[data-rarity='mythic'] {
+  opacity: 1;
+  background: radial-gradient(66% 56% at 50% 46%, rgb(210 98 47 / 0.36), transparent 72%);
+}
+
+/* ---- chrome ---- */
+
+.poBar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-3) var(--glacier-space-4);
+}
+
+.poSetTag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  min-width: 0;
+}
+
+.poSetIcon {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: none;
+  /* Set symbols are dark-on-transparent SVGs; lift them onto the dark stage. */
+  filter: invert(1) brightness(1.6);
+  opacity: 0.85;
+}
+
+.poStage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  padding: var(--glacier-space-2) var(--glacier-space-4);
+}
+
+.poRoot[data-phase='sealed'] .poStage {
+  cursor: pointer;
+}
+
+.poFoot {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-4);
+  min-height: 4.5rem;
+}
+
+.poFoot button svg {
+  margin-inline-end: var(--glacier-space-1);
+}
+
+/* ---- the pack + its tear ---- */
+
+.poPack {
+  position: relative;
+  width: clamp(9rem, 30vh, 16rem);
+  aspect-ratio: 488 / 680;
+  animation: poFloat 3.4s ease-in-out infinite;
+}
+
+/* The tense-then-rip: the pack braces for a beat before the seam gives. */
+.poPack[data-tearing] {
+  animation: poShake 260ms ease-in-out 1;
+}
+
+/* What is inside: the top card of the stack, lit as the wrapper opens. */
+.poInner {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+}
+
+.poPack[data-tearing] .poInner {
+  animation: poInnerIn 620ms 200ms var(--glacier-ease-out) forwards;
+}
+
+.poInnerCard {
+  position: absolute;
+  inset: 6% 8%;
+  border-radius: var(--glacier-radius-md);
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 18px 40px rgb(0 0 0 / 0.6);
+}
+
+/* Light spilling out of the torn pack. */
+.poInnerGlow {
+  position: absolute;
+  inset: -18%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in oklch, var(--glacier-accent-solid) 42%, transparent) 0%,
+    transparent 62%
+  );
+  filter: blur(12px);
+}
+
+/* Each half carries the whole wrapper image and is clipped to its side of the
+   seam, so the two pieces line up exactly however the pack is scaled. */
+.poHalf {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  border-radius: var(--glacier-radius-lg);
+  box-shadow: 0 26px 54px rgb(0 0 0 / 0.5);
+  overflow: hidden;
+}
+
+.poPack[data-tearing] .poHalfTop {
+  animation: poRipTop 780ms 240ms cubic-bezier(0.3, 0, 0.2, 1) forwards;
+}
+
+.poPack[data-tearing] .poHalfBottom {
+  animation: poRipBottom 780ms 240ms cubic-bezier(0.3, 0, 0.2, 1) forwards;
+}
+
+.poSheen {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    114deg,
+    transparent 32%,
+    rgb(255 255 255 / 0.3) 48%,
+    rgb(255 255 255 / 0.05) 56%,
+    transparent 70%
+  );
+  background-size: 260% 100%;
+  animation: poSheen 2.8s ease-in-out infinite;
+}
+
+/* With poster art the halves are the printed wrapper: a scrim keeps the base
+   readable where the name sits, and crimps seal both ends. */
+.poHalf[data-art] {
+  background-position: center 26%;
+}
+
+.poHalf[data-art]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgb(0 0 0 / 0.24), transparent 30%, transparent 52%, rgb(0 0 0 / 0.72) 88%);
+}
+
+.poCrimp {
+  position: absolute;
+  inset-inline: 0;
+  height: 5.5%;
+  z-index: 2;
+  background: repeating-linear-gradient(
+    90deg,
+    color-mix(in oklch, var(--glacier-surface-raised, #23262b) 68%, white 7%),
+    color-mix(in oklch, var(--glacier-surface-sunken, #101114) 84%, white 2%) 4px,
+    color-mix(in oklch, var(--glacier-surface-raised, #23262b) 76%, white 9%) 8px
+  );
+}
+
+/* Only the half that owns the pack's edge shows a crimp - the seam itself is
+   the tear, not a seal. */
+.poCrimp[data-edge='top'] {
+  inset-block-start: 0;
+}
+
+.poCrimp[data-edge='bottom'] {
+  inset-block-end: 0;
+}
+
+.poHalf:not([data-art]) .poCrimp {
+  display: none;
+}
+
+.poWrapperName {
+  position: absolute;
+  inset-block-end: 3.2%;
+  inset-inline: 8%;
+  z-index: 3;
+  text-align: center;
+  font-size: clamp(0.55rem, 1.9vh, 0.8rem);
+  font-weight: var(--glacier-font-weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  color: rgb(255 255 255 / 0.94);
+  text-shadow: 0 1px 5px rgb(0 0 0 / 0.9);
+}
+
+.poWrapperIcon {
+  position: absolute;
+  z-index: 3;
+  inset-block-end: 12%;
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  width: 32%;
+  filter: invert(1) brightness(1.8) drop-shadow(0 2px 6px rgb(0 0 0 / 0.6));
+  opacity: 0.9;
+}
+
+@keyframes poFloat {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1.2deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(1.2deg);
+  }
+}
+
+@keyframes poShake {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  25% {
+    transform: translateX(-5px) rotate(-1.6deg);
+  }
+  75% {
+    transform: translateX(5px) rotate(1.6deg);
+  }
+}
+
+/* The top piece is pulled up and flicked aside, the way a wrapper actually
+   comes off; the bottom sags and drops away. */
+@keyframes poRipTop {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  22% {
+    transform: translate(2%, -6%) rotate(-3deg);
+  }
+  100% {
+    transform: translate(26%, -128%) rotate(-24deg);
+    opacity: 0;
+  }
+}
+
+@keyframes poRipBottom {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  22% {
+    transform: translate(-2%, 3%) rotate(2deg);
+  }
+  100% {
+    transform: translate(-22%, 92%) rotate(16deg);
+    opacity: 0;
+  }
+}
+
+@keyframes poInnerIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.14);
+  }
+}
+
+@keyframes poSheen {
+  0% {
+    background-position: 130% 0;
+  }
+  100% {
+    background-position: -130% 0;
+  }
+}
+
+/* ---- mobile: one swipeable line ---- */
+
+.poLine {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  /* Each card parks centred as you flick through the pack. */
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  /* The first and last cards can still reach the middle of the screen. */
+  padding-inline: 50%;
+  padding-block: var(--glacier-space-3);
+}
+
+.poLine::-webkit-scrollbar {
+  display: none;
+}
+
+.poLineCard {
+  flex: none;
+  width: clamp(7rem, 42vh, 12rem);
+  scroll-snap-align: center;
+  animation: poLineIn 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@keyframes poLineIn {
+  from {
+    opacity: 0;
+    transform: translateY(40px) scale(0.82);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.poLineCard[data-rarity='rare'] {
+  filter: drop-shadow(0 0 11px rgb(217 164 65 / 0.55));
+}
+
+.poLineCard[data-rarity='mythic'] {
+  filter: drop-shadow(0 0 15px rgb(240 132 72 / 0.65));
+}
+
+/* ---- the two fans ---- */
+
+.poFans {
+  display: grid;
+  gap: clamp(var(--glacier-space-2), 2.5vh, var(--glacier-space-6));
+  place-items: center;
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  padding-block: var(--glacier-space-2);
+}
+
+.poFan {
+  display: grid;
+  justify-items: center;
+  /* Clears the corners of the outermost cards, which dip below the arc's
+     baseline as they rotate. */
+  gap: var(--glacier-space-3);
+  width: 100%;
+}
+
+/* The arc reserves its own height: the cards inside are absolutely placed, so
+   without this the fans collapse onto each other and onto their labels. The
+   extra 34% is the room the rotation sweeps into above the pivot. */
+.poFanArc {
+  position: relative;
+  width: 100%;
+  /* Room for the whole sweep: the deep pivot radius (see transform-origin on
+     .poFanCard) lifts the outer cards well above the centre one. */
+  height: calc(var(--po-card-h) * 1.55);
+}
+
+.poFan[data-feature] {
+  --po-card-w: clamp(5.5rem, 18vh, 10.5rem);
+}
+
+.poFan:not([data-feature]) {
+  --po-card-w: clamp(3.5rem, 11vh, 7.25rem);
+}
+
+.poFanArc {
+  --po-card-h: calc(var(--po-card-w) * 1.393);
+}
+
+.poFanCard {
+  position: absolute;
+  /* Anchored near the bottom centre of the arc; the sweep rises into the space
+     reserved above. The small lift leaves room for the outermost cards, whose
+     corners swing below the baseline as they rotate. */
+  inset-block-end: 1.4rem;
+  inset-inline-start: 50%;
+  width: var(--po-card-w);
+  margin-inline-start: calc(var(--po-card-w) / -2);
+  /* Pivot below the card, so a rotation sweeps it into an arc like a held
+     hand rather than spinning it in place. */
+  transform-origin: 50% 320%;
+  cursor: default;
+  /* `rotate` above holds the fan angle; the entrance animates `transform`, so
+     the two compose instead of overwriting each other. `backwards` keeps a card
+     hidden through its stagger delay. */
+  animation: poFanIn 480ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@keyframes poFanIn {
+  from {
+    opacity: 0;
+    transform: translateY(70px) scale(0.72);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.poFanCard[data-rarity='rare'] {
+  filter: drop-shadow(0 0 10px rgb(217 164 65 / 0.55));
+}
+
+.poFanCard[data-rarity='mythic'] {
+  filter: drop-shadow(0 0 14px rgb(240 132 72 / 0.65));
+}
+
+.poFanLabel {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* Landscape phones are short: shrink everything so the fans, their labels and
+   the buttons all fit without scrolling. */
+@media (max-height: 480px) {
+  .poBar,
+  .poFoot {
+    padding: var(--glacier-space-2) var(--glacier-space-3);
+  }
+
+  .poFoot {
+    min-height: 0;
+  }
+
+  .poPack {
+    width: clamp(6rem, 34vh, 10rem);
+  }
+
+  .poFan[data-feature] {
+    --po-card-w: clamp(3.5rem, 24vh, 7rem);
+  }
+
+  .poFan:not([data-feature]) {
+    --po-card-w: clamp(2.75rem, 17vh, 5.25rem);
+  }
+
+  .poFans {
+    gap: var(--glacier-space-3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .poPack,
+  .poSheen {
+    animation: none;
+  }
+
+  /* The rip still has to clear the screen, just without the flourish. */
+  .poPack[data-tearing] .poHalfTop,
+  .poPack[data-tearing] .poHalfBottom {
+    animation: poFadeOut 300ms 120ms linear forwards;
+  }
+
+  .poPack[data-tearing] .poInner {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+@keyframes poFadeOut {
+  to {
+    opacity: 0;
+  }
+}

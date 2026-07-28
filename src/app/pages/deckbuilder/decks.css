@@ -1127,6 +1127,15 @@
   box-shadow: 0 18px 44px rgb(0 0 0 / 0.5);
 }
 
+/* Phone keyboards eat half the viewport: never grow past what's left. The vh
+   line is the fallback for browsers without dvh (iOS Safari < 15.4). */
+@media (max-width: 700px), (max-height: 480px) {
+  .cardSearchDrop {
+    max-height: min(22rem, 50vh);
+    max-height: min(22rem, 50dvh);
+  }
+}
+
 .cardSearchHint {
   padding: var(--glacier-space-3);
 }

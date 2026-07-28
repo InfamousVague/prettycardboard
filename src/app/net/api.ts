@@ -1,5 +1,5 @@
 import { isTauri } from '../tauri.ts';
-import type { Deck, DeckCard, DeckSummary, FriendsPayload, Identity, MatchRow, MatchStatsPlayer, MyRoom, RoomInfo, UserHit, UserStats } from './types.ts';
+import type { Deck, DeckCard, DeckStats, DeckSummary, FriendsPayload, Identity, MatchRow, MatchStatsPlayer, MyRoom, RoomInfo, UserHit, UserStats } from './types.ts';
 
 /**
  * REST client for the PrettyCardboard server (see PROTOCOL.md). Where it points:
@@ -223,4 +223,9 @@ export async function uploadPlaymat(file: Blob): Promise<{ id: string; url: stri
  * splash shows every seat's. Unknown ids come back all zeros. */
 export function userStats(userId: string): Promise<UserStats> {
   return request('GET', `/api/users/${encodeURIComponent(userId)}/stats`);
+}
+
+/** A deck's all-time record + saltiness, for the deck inspector. */
+export function deckStats(deckId: string): Promise<DeckStats> {
+  return request('GET', `/api/decks/${encodeURIComponent(deckId)}/stats`);
 }

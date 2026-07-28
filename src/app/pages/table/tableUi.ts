@@ -1,10 +1,18 @@
 import { create } from 'zustand';
 import {
+  GRID_ZOOM_DEFAULT,
+  MOBILE_SCALE_DEFAULT,
   clampCardScale,
+  clampGridZoom,
+  clampMobileScale,
   loadBoardMode,
   loadCardScale,
+  loadGridZoom,
+  loadMobileScale,
   saveBoardMode,
   saveCardScale,
+  saveGridZoom,
+  saveMobileScale,
   type BoardMode,
 } from './boardModes.ts';
 
@@ -28,6 +36,26 @@ interface TableUiState {
   cardScale: number;
   hydrateCardScale: (userId: string | undefined) => void;
   setCardScale: (scale: number, userId: string | undefined) => void;
+  /** Phone-layout ceiling on the effective scale (null = uncapped). Set by the
+   * table when the mobile layout is active so a desktop-tuned preference never
+   * renders postage-stamp-only boards on a 390px screen. Read via
+   * selectCardScale, never directly. */
+  scaleCap: number | null;
+  setScaleCap: (cap: number | null) => void;
+  /** The phone board's own scale, on its own three-step ladder and persisted
+   * separately - a desktop-tuned scale means nothing on a 390px screen, and
+   * sharing one value made the +/- buttons appear dead on phones. */
+  mobileScale: number;
+  hydrateMobileScale: (userId: string | undefined) => void;
+  setMobileScale: (scale: number, userId: string | undefined) => void;
+  /** Desktop overview: every seat's playmat side by side in a grid. */
+  gridView: boolean;
+  setGridView: (on: boolean) => void;
+  /** How far the grid's miniatures are zoomed out, on top of the fit-to-cell
+   * factor the grid derives from its column count. Persisted per user. */
+  gridZoom: number;
+  hydrateGridZoom: (userId: string | undefined) => void;
+  setGridZoom: (zoom: number, userId: string | undefined) => void;
 
   /** My selected blocker awaiting an attacker click (or vice versa). */
   blockerIid: string | null;
@@ -58,6 +86,24 @@ export const useTableUi = create<TableUiState>((set) => ({
     saveCardScale(userId, clamped);
     set({ cardScale: clamped });
   },
+  scaleCap: null,
+  setScaleCap: (cap) => set({ scaleCap: cap }),
+  mobileScale: MOBILE_SCALE_DEFAULT,
+  hydrateMobileScale: (userId) => set({ mobileScale: loadMobileScale(userId) }),
+  setMobileScale: (scale, userId) => {
+    const clamped = clampMobileScale(scale);
+    saveMobileScale(userId, clamped);
+    set({ mobileScale: clamped });
+  },
+  gridView: false,
+  setGridView: (on) => set({ gridView: on }),
+  gridZoom: GRID_ZOOM_DEFAULT,
+  hydrateGridZoom: (userId) => set({ gridZoom: loadGridZoom(userId) }),
+  setGridZoom: (zoom, userId) => {
+    const clamped = clampGridZoom(zoom);
+    saveGridZoom(userId, clamped);
+    set({ gridZoom: clamped });
+  },
 
   blockerIid: null,
   setBlocker: (iid) => set({ blockerIid: iid }),
@@ -68,3 +114,9 @@ export const useTableUi = create<TableUiState>((set) => ({
   pileView: null,
   setPileView: (view) => set({ pileView: view }),
 }));
+
+/** The scale every card-sizing site should use: the phone board's own ladder
+ * while the mobile layout is active, otherwise the user's desktop preference. */
+export function selectCardScale(state: TableUiState): number {
+  return state.scaleCap != null ? state.mobileScale : state.cardScale;
+}

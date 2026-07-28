@@ -33,6 +33,7 @@ export type ActionId =
   | 'endCombat'
   | 'stormUp'
   | 'cycleDayNight'
+  | 'peelPile'
   | 'concede';
 
 /** The guard the handler checks before firing an action. */
@@ -63,6 +64,7 @@ export const KEYBIND_DEFS: KeybindDef[] = [
   { action: 'incrementCounters', labelKey: 'kbCountersUp', group: 'common', games: ['mtg'], defaultCode: 'BracketRight', guard: 'hoveredMine' },
   { action: 'decrementCounters', labelKey: 'kbCountersDown', group: 'common', games: ['mtg'], defaultCode: 'BracketLeft', guard: 'hoveredMine' },
   { action: 'rollD20', labelKey: 'kbRollD20', group: 'common', games: ['mtg'], defaultCode: 'KeyR', guard: 'canAct' },
+  { action: 'peelPile', labelKey: 'kbPeelPile', group: 'common', games: ['mtg', 'cyberpunk'], defaultCode: '', guard: 'hoveredMine' },
   // turn
   { action: 'passTurn', labelKey: 'kbPass', group: 'turn', games: ['mtg', 'cyberpunk'], defaultCode: 'Space', guard: 'myTurn' },
   // vitals (labels rendered game-aware in the UI: Life/Net, Poison/RAM)

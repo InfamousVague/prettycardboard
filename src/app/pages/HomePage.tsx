@@ -9,6 +9,7 @@ import {
   Kbd,
   OtpField,
   Pill,
+  ProgressBar,
   ProgressRing,
   SegmentedControl,
   Select,
@@ -28,8 +29,10 @@ import * as api from '../net/api.ts';
 import * as ws from '../net/ws.ts';
 import type { MyRoom, UserStats } from '../net/types.ts';
 import { cardImage } from '../data/cards.ts';
+import { rankFor, winRate } from '../data/ranks.ts';
 import { featuredDecks } from '../data/catalog.ts';
 import { useVisibleGames } from '../hooks/useVisibleGames.ts';
+import { useMobileLayout } from '../hooks/useIsPhone.ts';
 import { cyberpunkImage, cyberpunkStarters } from '../data/cyberpunk.ts';
 import { deckSummaryArt, deckSummaryCover } from '../data/deckCover.ts';
 import { DeckStack } from '../components/DeckStack.tsx';
@@ -132,22 +135,6 @@ export function HomePage() {
   );
 }
 
-/** Flavor rank titles, unlocked by lifetime games played; level is sqrt-scaled. */
-const RANKS: { at: number; title: string }[] = [
-  { at: 0, title: 'Fresh Meat' },
-  { at: 1, title: 'Rookie' },
-  { at: 10, title: 'Regular' },
-  { at: 30, title: 'Sharp' },
-  { at: 75, title: 'Veteran' },
-  { at: 150, title: 'Ringer' },
-  { at: 300, title: 'Legend' },
-];
-function rankFor(played: number): { title: string; level: number } {
-  let title = RANKS[0]!.title;
-  for (const rank of RANKS) if (played >= rank.at) title = rank.title;
-  return { title, level: Math.floor(Math.sqrt(played)) + 1 };
-}
-
 /**
  * The gamified header: a player card (avatar, rank, level, at-a-glance line +
  * a win-rate ring) beside a big Continue / Start-a-table call to action.
@@ -168,7 +155,7 @@ function PlayerHero({
   const friends = useApp((state) => state.friends);
   const join = useGame((state) => state.join);
   const played = stats?.played ?? 0;
-  const winRate = played > 0 ? Math.round(((stats?.wins ?? 0) / played) * 100) : null;
+  const wr = stats ? winRate(stats) : null;
   const rank = rankFor(played);
   const online = friends.friends.filter((friend) => friend.online).length;
 
@@ -192,17 +179,31 @@ function PlayerHero({
               <Text as="span" size={Size.Small} tone={TextTone.Muted}>
                 {played} {t('hmGames')} · {decks.length} {t('decksTitle')} · {online} {t('frOnline')}
               </Text>
+              {rank.next != null && (
+                <div className="heroRankProgress">
+                  <ProgressBar
+                    value={Math.round(rank.progress * 100)}
+                    max={100}
+                    size="sm"
+                    tone="accent"
+                    aria-label={t('hmNextRank')}
+                  />
+                  <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+                    {rank.next - played} {t('hmToNextRank')}
+                  </Text>
+                </div>
+              )}
             </div>
           </div>
         </div>
-        {winRate != null && (
+        {wr != null && (
           <div className="heroRing">
             <ProgressRing
-              value={winRate}
+              value={wr}
               max={100}
               size={104}
               thickness={9}
-              tone={winRate >= 50 ? 'success' : 'accent'}
+              tone={wr >= 50 ? 'success' : 'accent'}
               showValue
               aria-label={t('hmWinRate')}
             />
@@ -240,7 +241,7 @@ function StatStrip({ stats, order }: { stats: UserStats | null; order: number })
   const t = useT();
   const decks = useApp((state) => state.decks);
   const played = stats?.played ?? 0;
-  const winRate = played > 0 ? Math.round(((stats?.wins ?? 0) / played) * 100) : null;
+  const wr = stats ? winRate(stats) : null;
   return (
     <Section order={order} className="homeStats">
       <StatTile
@@ -248,7 +249,7 @@ function StatStrip({ stats, order }: { stats: UserStats | null; order: number })
         icon={<Trophy size={18} />}
         value={stats?.wins ?? 0}
         label={t('hmWins')}
-        hint={winRate != null ? `${winRate}% ${t('hmWinRate')}` : undefined}
+        hint={wr != null ? `${wr}% ${t('hmWinRate')}` : undefined}
       />
       <StatTile glass icon={<Swords size={18} />} value={played} label={t('hmGames')} />
       <StatTile glass icon={<Heart size={18} />} value={stats?.endorsements ?? 0} label={t('hmEndorse')} />
@@ -267,6 +268,7 @@ function QuickPlay({ order }: { order: number }) {
   const { toast } = useToast();
   const decks = useApp((state) => state.decks);
   const join = useGame((state) => state.join);
+  const phone = useMobileLayout();
 
   const [tableName, setTableName] = useState('');
   const [seats, setSeats] = useState('4');
@@ -400,6 +402,7 @@ function QuickPlay({ order }: { order: number }) {
               <OtpField
                 length={6}
                 type="alphanumeric"
+                size={phone ? 'sm' : 'md'}
                 value={code}
                 onValueChange={(value) => setCode(value.toUpperCase())}
                 onComplete={(value) => void joinByCode(value)}

@@ -8,6 +8,10 @@
   /* The bottom strip's fixed height; the dock locks its bottom edge to the
      playmat with it. */
   --pc-strip-h: 11.5rem;
+  /* The right rail: its width and the gutter the main column clears for it.
+     Tokenized so the phone layout can zero both in one place. */
+  --pc-rail-w: 18.5rem;
+  --pc-rail-clear: 19.5rem;
   /* The staged playmat card: shared radius + resting/active glow. */
   --pc-mat-radius: 1.4rem;
   --pc-mat-shadow:
@@ -148,6 +152,14 @@
   gap: var(--glacier-space-2);
 }
 
+/* Grid zoom stepper: rides beside the grid toggle and only while the grid is
+   up, so it reads as that view's own control rather than a table-wide one. */
+.gridZoomer {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 /* ---- phase ribbon + turn chrome ---- */
 
 .ribbonRow {
@@ -156,7 +168,7 @@
   justify-content: center;
   gap: var(--glacier-space-3);
   padding: 0 var(--glacier-space-4) var(--glacier-space-2);
-  padding-inline-end: 19.5rem; /* clear the right rail */
+  padding-inline-end: var(--pc-rail-clear); /* clear the right rail */
   flex-wrap: wrap;
 }
 
@@ -304,7 +316,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding-inline-end: 19.5rem; /* right rail */
+  padding-inline-end: var(--pc-rail-clear); /* right rail */
   /* Sit above the right rail so the hand fan always overlays the log. The main
      column paints nothing of its own and its board content stays left of the
      rail gutter, so only the overflowing hand cards actually cover the log. */
@@ -857,6 +869,72 @@
   z-index: 1;
 }
 
+/* ---- attach-by-dwell ----
+   Hovering a dragged card over another announces itself in two beats: a quiet
+   dashed outline while the dwell is counting ("this is what you are aiming
+   at"), then a solid accent ring the moment it latches ("let go and it sticks").
+   Two distinct states matter - without the first, the latch fires out of
+   nowhere; without the second, there is no way to know it took. */
+.fieldCard[data-attach-target] .fieldCardShell {
+  position: relative;
+}
+
+.fieldCard[data-attach-target] .fieldCardShell::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: calc(var(--glacier-radius-md) + 4px);
+  pointer-events: none;
+  transition:
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    box-shadow var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+/* Counting down. */
+.fieldCard[data-attach-target='aiming'] .fieldCardShell::after {
+  border: 2px dashed color-mix(in oklch, var(--glacier-accent-solid) 65%, transparent);
+}
+
+/* Latched: release now and it attaches. */
+.fieldCard[data-attach-target='armed'] .fieldCardShell::after {
+  border: 2px solid var(--glacier-accent-solid);
+  box-shadow:
+    0 0 0 4px color-mix(in oklch, var(--glacier-accent-solid) 22%, transparent),
+    0 0 22px color-mix(in oklch, var(--glacier-accent-solid) 55%, transparent);
+  animation: pcAttachLatch 220ms var(--glacier-ease-out);
+}
+
+/* One confirming pulse on the beat it latches - the state itself is static, so
+   an interrupted animation can never leave the ring stuck mid-way. */
+@keyframes pcAttachLatch {
+  from {
+    box-shadow:
+      0 0 0 10px color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent),
+      0 0 28px color-mix(in oklch, var(--glacier-accent-solid) 60%, transparent);
+  }
+}
+
+/* Latched onto a PILE rather than onto a host. Same accent, but the ring grows
+   two offset echoes UP-LEFT - a preview of the shingle it is about to join, so
+   the two outcomes can never be read for each other at the moment of release.
+   This is also the required visual confirm: haptics default to OFF, so the
+   dwell flip has to be visible on its own. */
+.fieldCard[data-attach-target='pile'] .fieldCardShell::after {
+  border: 2px solid var(--glacier-accent-solid);
+  box-shadow:
+    -3px -3px 0 0 color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent),
+    -6px -6px 0 0 color-mix(in oklch, var(--glacier-accent-solid) 22%, transparent),
+    0 0 22px color-mix(in oklch, var(--glacier-accent-solid) 55%, transparent);
+  animation: pcAttachLatch 220ms var(--glacier-ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fieldCard[data-attach-target='armed'] .fieldCardShell::after,
+  .fieldCard[data-attach-target='pile'] .fieldCardShell::after {
+    animation: none;
+  }
+}
+
 /* Living backlight: on your turn, two soft accent lights of differing opacity
    drift organically BEHIND the playmat and spill a slow-moving glow out past
    its edges - a lamp wandering behind the mat, not a pulse. Transform-only
@@ -1091,9 +1169,13 @@
   transition: transform 320ms var(--pc-settle);
 }
 
-.fieldCard:hover .fieldCardShell {
-  transform: translateY(-12px) scale(1.05);
-  transition: transform 150ms ease-out;
+/* Hover lift is a mouse idiom: iOS synthesizes :hover on tap, which would
+   leave the last-touched card stuck lifted and z-boosted. */
+@media (hover: hover) {
+  .fieldCard:hover .fieldCardShell {
+    transform: translateY(-12px) scale(1.05);
+    transition: transform 150ms ease-out;
+  }
 }
 
 /* Pointerdown lift, before the 6px drag threshold arms. */
@@ -1105,8 +1187,10 @@
 
 /* Above every placed card's newest-on-top z (10 + counter) but below the card
    being dragged (z-100000), so hovering always lifts a card to the front. */
-.fieldCard:hover {
-  z-index: 99990 !important;
+@media (hover: hover) {
+  .fieldCard:hover {
+    z-index: 99990 !important;
+  }
 }
 
 .fieldCard[data-dragging] {
@@ -1191,6 +1275,66 @@
 
 .fieldCard[data-attachment] {
   filter: brightness(0.92);
+}
+
+/* A pile is the SAME relation read differently (attachedTo + piled). Auras
+   shrink and dim so each stays individually legible; a pile squares up at full
+   size and full brightness, because the whole point of piling on a real table
+   is that the group reads as ONE object. */
+.fieldCard[data-attachment='pile'] > .fieldCardShell,
+.fieldCard[data-attachment='pile'] > .gcPerspective {
+  scale: 1;
+}
+
+.fieldCard[data-attachment='pile'] {
+  filter: none;
+}
+
+/* One object: raising a single member above its own base would tear the stack
+   apart, so members and their base opt out of the hover lift entirely. The
+   z-index override needs the extra attribute of specificity to beat
+   `.fieldCard:hover { z-index: 99990 !important }` - an inline style cannot. */
+@media (hover: hover) {
+  .fieldCard[data-attachment='pile']:hover {
+    z-index: 4 !important;
+  }
+
+  .fieldCard[data-attachment='pile']:hover .fieldCardShell,
+  .fieldCard[data-pile]:hover .fieldCardShell {
+    transform: none;
+  }
+}
+
+.fieldCard[data-attachment='pile']:active > .fieldCardShell,
+.fieldCard[data-pile]:active > .fieldCardShell {
+  transform: none;
+  filter: none;
+}
+
+/* The pile's card count, doubling as its peel-one-off button on my own board.
+   Deliberately a neutral surface chip rather than the accent .counterBadge, so
+   it never reads as a +1/+1 counter sitting on the card. Bottom-inline-start is
+   the only free corner: counters own top/end, the attack badge top/start. */
+.pileTally {
+  position: absolute;
+  inset-block-end: 5%;
+  inset-inline-start: 5%;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding-inline: 0.25rem;
+  border: 1px solid var(--glacier-border);
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--glacier-surface) 90%, black);
+  color: var(--glacier-text);
+  font-family: var(--glacier-font-mono);
+  font-size: 0.62rem;
+  font-weight: var(--glacier-font-weight-bold);
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
 /* Combat affordances: green invitation to attack, blue to block. */
@@ -1323,6 +1467,13 @@
 
 .boardTools:hover {
   opacity: 1;
+}
+
+/* No hover on touch: the tools would read permanently half-disabled. */
+@media (hover: none) {
+  .boardTools {
+    opacity: 1;
+  }
 }
 
 .boardToolsStart {
@@ -1593,41 +1744,23 @@
    parent .myHand, not the whole strip) and pinned to the bottom, so it never
    moves as the fan rests, peeks or tucks away, and stays clickable every state.
    It sits above the fan so a card can never bury it. */
+/* Placement only - the look belongs to the kit Button this is applied to, so
+   the tab picks up the app's button styling instead of a hand-rolled copy. */
 .handTab {
   position: absolute;
   left: 50%;
-  bottom: 0.6rem;
+  /* Clear phones' home-indicator / gesture strip. */
+  bottom: calc(0.6rem + env(safe-area-inset-bottom, 0px));
   translate: -50% 0;
   z-index: 20;
-  display: inline-flex;
-  align-items: center;
   gap: 0.4em;
-  padding: 0.5rem 1.15rem;
-  font-size: var(--glacier-font-size-sm, 0.875rem);
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0.01em;
-  color: var(--glacier-text-subtle);
-  background: color-mix(in oklch, var(--glacier-surface) 88%, transparent);
-  border: 1px solid var(--glacier-border-subtle);
-  border-radius: var(--glacier-radius-full, 999px);
-  box-shadow: var(--glacier-shadow-sm, 0 2px 8px rgb(0 0 0 / 0.28));
-  backdrop-filter: blur(8px);
-  cursor: pointer;
+  border-radius: var(--glacier-radius-full);
   opacity: 0.85;
-  transition: opacity 160ms ease-out, color 160ms ease-out, background 160ms ease-out;
+  transition: opacity 160ms ease-out;
 }
 
 .handTab:hover {
   opacity: 1;
-  color: var(--glacier-text);
-}
-
-/* Size the icon here (not via the JSX size prop) so the button scales as one. */
-.handTab > svg {
-  width: 1.05rem;
-  height: 1.05rem;
-  opacity: 0.85;
 }
 
 /* A battlefield card hovers the hand's buffer: light it up as a drop target. */
@@ -2697,7 +2830,7 @@
   top: 4.4rem;
   bottom: var(--glacier-space-3);
   inset-inline-end: var(--glacier-space-3);
-  width: 18.5rem;
+  width: var(--pc-rail-w);
   display: flex;
   flex-direction: column;
   gap: var(--glacier-space-2);
@@ -3867,7 +4000,7 @@
    border can't hang off), clearing the right rail like my board's gutter. */
 .oppHandStrip {
   position: fixed;
-  inset-inline: 0 19.5rem;
+  inset-inline: 0 var(--pc-rail-clear);
   bottom: 0;
   z-index: 34; /* same layer as .myStrip */
   display: flex;
@@ -4138,7 +4271,10 @@
 /* The events row: the scrubber strip plus any replay/close controls. */
 .timelineBarRow {
   display: flex;
-  align-items: center;
+  /* Playback controls read as a footer under the events strip rather than a
+     column crowding its inline end. */
+  flex-direction: column;
+  align-items: stretch;
   gap: var(--glacier-space-3);
   min-width: 0;
 }
@@ -4147,8 +4283,28 @@
 .timelinePlayback {
   display: flex;
   align-items: center;
-  gap: var(--glacier-space-1);
+  justify-content: center;
+  /* Wraps rather than overflowing once rewind + back-to-live joined the row. */
+  flex-wrap: wrap;
+  gap: var(--glacier-space-2);
   flex: none;
+}
+
+/* Unavailable controls stay in place, greyed, so the row never reflows. */
+.timelinePlayback :disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* The close button sits on the bar's top-inline-end corner, outside the panel
+   so it never competes with the controls inside it. */
+.timelineBarClose {
+  position: absolute;
+  top: calc(var(--glacier-space-3) * -1);
+  inset-inline-end: calc(var(--glacier-space-3) * -1);
+  z-index: 1;
+  background: var(--glacier-surface);
+  box-shadow: var(--glacier-shadow-3);
 }
 
 .timelineSpeed {
@@ -4466,3 +4622,959 @@
   justify-content: center;
   margin-top: var(--glacier-space-1);
 }
+
+/* ---- touch hardening (M0 of the mobile pass) ----------------------------- */
+
+/* Every surface that can START a card drag must own its gestures, or the
+   browser claims the swipe for scrolling and the drag dies mid-flight. */
+.pileBtn,
+.pileTrigger,
+.cmdCard {
+  touch-action: none;
+}
+
+/* Coarse-pointer minimum target sizes: visuals stay compact, the HIT AREA
+   grows (Apple 44pt / Material 48dp guidance). */
+@media (pointer: coarse) {
+  .counterManagerTrigger,
+  .counterBadge,
+  .counterEmptyPlus {
+    position: relative;
+  }
+
+  /* .pileTally is already absolutely positioned, so it is its own containing
+     block - it only needs the invisible 44pt halo. */
+  .counterManagerTrigger::after,
+  .counterBadge::after,
+  .counterEmptyPlus::after,
+  .pileTally::after {
+    content: '';
+    position: absolute;
+    inset: -10px;
+  }
+
+  .blockThumb {
+    position: relative;
+  }
+
+  .blockThumb::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+
+  .diceTrayDie,
+  .diceTrayCoin {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+}
+
+/* ---- phone layout (.table[data-mobile]) ---------------------------------- */
+/* A purpose-built composition, not the desktop squeezed: the board owns the
+   full width, seat chips are the camera, the rail folds into a bottom sheet,
+   and End turn rides the thumb corner. */
+
+.table[data-mobile] {
+  --pc-rail-clear: 0px;
+  --pc-rail-w: 0px;
+  --pc-strip-h: 9rem;
+  /* One height for everything along the top edge - the players and life pills,
+     the history cluster and the board tools - so the row reads as one bar
+     rather than a set of mismatched chips. Matches the kit's sm IconButton. */
+  --pc-top-h: 2.25rem;
+  /* The mat is a full-bleed playing surface: it runs UNDER the home indicator
+     on purpose, so the table reserves nothing at the bottom (and the shell
+     stops reserving it here too - see .appWindow[data-in-game] in app.css;
+     both were padding, stacking a double band under the felt).
+     --pc-safe-b survives only for the floating chrome that genuinely must
+     clear the gesture bar: the End-turn dock reads it below. */
+  --pc-safe-b: env(safe-area-inset-bottom, 0px);
+}
+
+/* The rail column never renders as a column on phones (SidePanel switches to
+   the dock markup), but belt-and-braces for any straggler rules. */
+.table[data-mobile] .tableSide {
+  display: none;
+}
+
+/* That lift exists solely so the hand fan paints over the right rail - which is
+   display:none above. Keeping it would leave a stacking context that traps the
+   scrub preview (60) and the drag ghost (95) beneath the floating chrome
+   (42-44). One flat scale on .table instead. */
+.table[data-mobile] .tableMain {
+  z-index: auto;
+}
+
+/* Lobby header condenses: identity only. Mid-match the header isn't rendered
+   at all on phones (TablePage skips it) - the mat owns every pixel. */
+.table[data-mobile] .tableTop {
+  gap: var(--glacier-space-2);
+  padding-inline: var(--glacier-space-3);
+}
+
+.table[data-mobile] .tableCode kbd {
+  display: none;
+}
+
+/* Overflow guards, phone-scoped: on a narrow screen these surfaces are the
+   spectator's / stack's only controls, so they wrap and scroll rather than
+   clip. Desktop keeps the original unbounded layout. */
+.table[data-mobile] .spectateCue {
+  max-width: calc(100vw - 1rem);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.table[data-mobile] .stackTray {
+  max-width: calc(100vw - 1rem);
+}
+
+.table[data-mobile] .stackFan {
+  overflow-x: auto;
+}
+
+/* ---- desktop grid overview ----
+   Every seat's playmat at once. Cells are read-only previews sized to the
+   available space; clicking one stages that board and leaves the grid. */
+.playerGrid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: var(--glacier-space-1);
+  padding: var(--glacier-space-1);
+  /* Two across from three seats up; a duel stays side by side. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  /* Each cell lays its board out at full stage width and draws it shrunk, so a
+     quadrant is a true miniature of the staged view rather than a reflow of it.
+     Track the column count: 1 / columns keeps the mini's layout viewport the
+     same width the big view would get. */
+  --pc-grid-zoom: 0.5;
+}
+
+.playerGrid[data-seats='1'] {
+  grid-template-columns: minmax(0, 1fr);
+  --pc-grid-zoom: 1;
+}
+
+.playerGrid[data-seats='2'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+}
+
+.playerGrid[data-seats='5'],
+.playerGrid[data-seats='6'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  --pc-grid-zoom: 0.3334;
+}
+
+.playerGridCell {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  /* Name plate, then the miniature under it. */
+  flex-direction: column;
+  padding: 0;
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  border-radius: var(--pc-mat-radius);
+  background: none;
+  overflow: hidden;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition:
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    box-shadow var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.playerGridCell:hover {
+  border-color: var(--glacier-border-strong);
+}
+
+.playerGridCell[data-turn] {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 60%, transparent);
+  box-shadow: 0 0 14px color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent);
+}
+
+.playerGridCell[data-mine] {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border));
+}
+
+/* An overhead map: nothing in a grid cell is rotated, even when the
+   across-the-table mirror preference is on for the single staged board. */
+.playerGridCell .seatFrame[data-stage][data-mirror] .zonePiles:not([data-mine]) {
+  position: static;
+  transform: none;
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  order: 3;
+  align-self: flex-start;
+}
+
+.playerGridCell .seatFrame[data-stage][data-mirror] .oppField {
+  transform: none;
+}
+
+/* A seat that used the mat editor wraps its piles in .matZones, which carries
+   its own 180deg mirror - un-rotate that too or those cells stay upside down. */
+.playerGridCell .seatFrame[data-stage][data-mirror] .matZones {
+  transform: none;
+}
+
+/* The preview fills the cell; the hit target overlays it so one click stages
+   the seat without the preview's own controls ever receiving it. `zoom` (not a
+   transform) is what makes the cell a miniature: the board still lays itself
+   out against a full-width viewport - same wraps, same proportions, same card
+   sizes as the staged view - and is only painted smaller. */
+.playerGridPreview {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  /* Fit-to-cell times the user's own grid zoom (see .gridZoomer): below 1 the
+     board lays out against a wider viewport, so it is painted smaller. */
+  zoom: calc(var(--pc-grid-zoom, 0.5) * var(--pc-grid-user-zoom, 1));
+}
+
+.playerGridHit {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+/* The cell is a preview: its board must not swallow the click that stages it. */
+.playerGridCell .seatFrame {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
+/* ...except my own cell, which is the live board rather than a preview of one.
+   It has no staging hit area to protect, so it takes its clicks back and cards
+   can be dragged without the grid closing under you. */
+.playerGridPreview[data-live] {
+  pointer-events: auto;
+}
+
+.playerGridPreview[data-live] .myBoard {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+}
+
+/* Phone zone cascade: the library rests on the floor at the inline start with
+   graveyard / exile / command stacked upwards behind it, each overlapping the
+   one below. Everything stays live - cards drag straight out onto the board and
+   back in - so no drawer stands between the player and their piles. */
+.mobileZones {
+  position: absolute;
+  inset-inline-start: calc(var(--glacier-space-2) + env(safe-area-inset-left, 0px));
+  /* Anchored inside .myBoard, which is flow content and therefore already sits
+     above the table's reserved home-indicator strip - so this is measured from
+     the real bottom edge and must NOT add the inset again. (.mobileTurnDock is
+     the one that anchors to .table's padding box and does add it.)
+     Flush, not gutter-ed: this is the bottom-left corner element, so any offset
+     here is the most visible "the deck sits too high/low" on the board. */
+  bottom: 0;
+  z-index: 34;
+}
+
+/* A row: the library (first in DOM order) sits at the inline start and the
+   other zones deal out beside it, each fully clear of its neighbour. */
+.mobileZones .zonePiles {
+  flex-direction: row;
+  align-items: flex-end;
+  gap: var(--glacier-space-2);
+}
+
+
+
+
+
+/* Dealt out, the row reaches under the hand fan (both sat at z-34, and the
+   strip wins a tie by DOM order). Lift it while open so the zones stay visible
+   and draggable; gathered, it drops back so the hand owns the corner. */
+.mobileZones[data-open] {
+  z-index: 36;
+}
+
+/* Gathered in: only the deck shows. display:none keeps the row's spacing
+   honest - a zero-width flex item would still take a gap. */
+.mobileZones:not([data-open]) .zonePiles > *:not(:first-child) {
+  display: none;
+}
+
+/* The swipe surface over the deck's face: right deals the zones out, left
+   gathers them back, a tap falls through to the library's draw. */
+.mobileZonesSwipe {
+  position: absolute;
+  inset-inline-start: 0;
+  bottom: 0;
+  width: var(--pc-zone-peek, 5rem);
+  /* Only the deck's bottom band. The card face above it must stay live so the
+     library's long-press menu (peek / search / reveal / mulligan) and dragging
+     the top card out still reach .pileBtn underneath - covering the whole face
+     left drawing as the deck's ONLY reachable action. */
+  height: calc(var(--pc-zone-peek, 5rem) * 0.42);
+  /* Above .zonePiles (z-7) or the deck's own card paints over the surface and
+     a real finger never reaches this handler. */
+  z-index: 9;
+  cursor: pointer;
+  /* The gesture owns the touch so the board never pans under it. */
+  touch-action: none;
+}
+
+/* Captions would double the stack's height, so they ride ON the pile instead of
+   under it - an empty graveyard still says what it is without costing a row. */
+.mobileZones .zonePiles > * {
+  position: relative;
+}
+
+/* Only the count survives on a phone: the pile's own art already says which
+   zone it is, and a word under each card both crowded the cascade and pushed
+   the captioned piles out of line with the deck (which has no caption). */
+.mobileZones .pileCaption,
+.mobileZones .pileCount {
+  position: absolute;
+  inset-block-end: 0.15rem;
+  inset-inline: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.2rem;
+  font-size: 0.55rem;
+  line-height: 1.2;
+  text-shadow: 0 1px 3px oklch(0.05 0.02 265 / 0.9);
+  pointer-events: none;
+}
+
+.mobileZones .pileLabel {
+  display: none;
+}
+
+/* Piles shrink to the cascade's width so the stack stays a thumb-sized target
+   without crowding the battlefield. */
+.mobileZones .zonePiles > * {
+  width: var(--pc-zone-peek, 5rem);
+}
+
+/* The deck's decorative lean foreshortens it, so it renders visibly shorter and
+   narrower than the flat cards beside it. On a phone, where the piles sit in a
+   row and any size difference reads as a mistake, it lies flat instead - the
+   offset under-layers still carry the "this is a stack" cue. */
+.mobileZones .libStack3d {
+  transform: none;
+}
+
+/* The library's card is wrapped in an inline span+button, which reserves a few
+   pixels of baseline descender under it and pushes the deck out of line with
+   the flat piles beside it. */
+.mobileZones .pileTrigger,
+.mobileZones .pileBtn {
+  display: block;
+}
+
+/* The hand-scrub preview: rides above the fan, centred on the finger, and
+   never intercepts the stroke that is driving it. */
+.handScrubPeek {
+  position: fixed;
+  /* Clears the REAL fan: --pc-hand-h is the live card height MyBoard measures,
+     so this tracks every mobile card size. The old fixed --pc-strip-h guess
+     only held at one size and let the preview sit on top of the hand at the
+     larger ones. */
+  bottom: calc(var(--pc-hand-h, var(--pc-strip-h)) + 1rem);
+  z-index: 60;
+  translate: -50% 0;
+  pointer-events: none;
+  filter: drop-shadow(0 12px 28px oklch(0.05 0.02 265 / 0.6));
+  animation: pcScrubPeek 120ms var(--pc-settle);
+}
+
+@keyframes pcScrubPeek {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .handScrubPeek {
+    animation: none;
+  }
+}
+
+/* Satellites on the end-turn circle's outer edge: settings and concede ride
+   the arc that faces the board, so the thumb's path to End turn stays clear. */
+.turnOrbit {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.turnOrbitBtn {
+  position: absolute;
+  pointer-events: auto;
+}
+
+/* Straight up from the circle. */
+.turnOrbitBtn[data-slot='settings'] {
+  top: -2.6rem;
+  inset-inline-end: 0.35rem;
+}
+
+/* Up and inboard, 45 degrees round the arc from settings. */
+.turnOrbitBtn[data-slot='concede'] {
+  top: -1.7rem;
+  inset-inline-end: 2.9rem;
+}
+
+/* The combat button is a satellite, not a second primary: it matches the
+   give-turn menu and the board tools rather than sitting between them and the
+   play button at its own in-between size. */
+.table[data-mobile] .turnActionsMain > .turnAttackBtn {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+/* History controls on the mat: undo / timeline / redo, centred on the board's
+   top edge. The corners are taken (players + life at the start, board tools at
+   the end), so the middle is the only free run across the top. */
+.mobileHistory {
+  position: absolute;
+  top: calc(0.5rem + env(safe-area-inset-top, 0px));
+  left: 50%;
+  translate: -50% 0;
+  z-index: 44;
+}
+
+/* No card chrome: the row itself is the surface, and it matches the height of
+   every other cluster along the top edge (--pc-top-h). */
+.timelineFloat {
+  display: flex;
+  align-items: center;
+  height: var(--pc-top-h);
+  padding-inline: 0.25rem;
+  border-radius: var(--glacier-radius-full);
+  background: var(--glacier-surface);
+}
+
+/* Phone chrome is seamless: the safe-area insets must reserve space without
+   drawing a frame, so the floating controls drop their borders, translucency
+   and blur rather than outlining the inset as a visible band. */
+.table[data-mobile] .handTab {
+  /* Flush with .myHand's bottom, which is also where the fan is now clipped
+     (see .myHand below) - so the pill and the cards share one bottom edge and
+     it needs no pull to look settled. */
+  bottom: 0;
+  border: none;
+  border-radius: var(--glacier-radius-full);
+  box-shadow: none;
+  opacity: 1;
+}
+
+.table[data-mobile] .mobileDockHandle,
+.table[data-mobile] .spectateCue {
+  border: none;
+}
+
+/* The roster drawer portals to <body>, outside .table, so its chips need their
+   own borderless rule - the phone breakpoint stands in for [data-mobile]. */
+@media (max-width: 700px), (max-height: 480px) {
+  .seatChipsDrawer .seatChip {
+    border: none;
+    backdrop-filter: none;
+    background: var(--glacier-surface);
+  }
+}
+
+.table[data-mobile] .mobileSheet {
+  border: none;
+  backdrop-filter: none;
+  background: var(--glacier-surface);
+}
+
+/* The board's own safe-area gutters: reserved, never painted. */
+.table[data-mobile] .boardToolsEnd {
+  inset-inline-end: calc(var(--glacier-space-3) + env(safe-area-inset-right, 0px));
+  top: calc(var(--glacier-space-3) + env(safe-area-inset-top, 0px));
+}
+
+/* The strip's bottom padding is the last gutter between the hand/piles and the
+   screen edge; phones play edge to edge, so it goes. */
+.table[data-mobile] .myStrip {
+  padding-bottom: 0;
+}
+
+/* Empty zones are just space on a phone - no dashed placeholder outlining
+   where a pile "would" go. */
+.table[data-mobile] .pileEmpty,
+.mobileZones .pileEmpty {
+  border: none;
+}
+
+/* The hand fan rests far below its frame (that's how peek works - the cards
+   slide up out of the tuck). Off the bottom of a phone that overflow is just
+   painted past the board edge, which made every bottom-anchored control look
+   misplaced next to it. Clip the frame's bottom so the cards stop at the board
+   edge while still being free to travel upward: inset()'s negative top leaves
+   the lift, peek and dock magnification unclipped. */
+.table[data-mobile] .myHand {
+  clip-path: inset(-100% 0 0 0);
+}
+
+/* Fullscreen mat: no floating-card inset, border, or rounding on phones. */
+.table[data-mobile] .myField {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+}
+
+.table[data-mobile] .stageArea {
+  padding: 0;
+}
+
+.table[data-mobile] .stageArea .seatFrame[data-stage] {
+  margin: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Seat chips: the horizontal camera rail, hugging the top edge now that the
+   header is gone mid-match. */
+/* The roster lives in a drawer on phones; the board only carries its trigger. */
+.seatChipsTrigger {
+  position: absolute;
+  top: calc(0.5rem + env(safe-area-inset-top, 0px));
+  inset-inline-start: calc(0.5rem + env(safe-area-inset-left, 0px));
+  z-index: 44;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  /* Sized to sit level with the board-tool buttons opposite; the ::after below
+     keeps the tap target at 44px without inflating the pill. */
+  min-height: 2.25rem;
+  padding-inline: 0.6rem;
+  border: none;
+  border-radius: var(--glacier-radius-full);
+  background: var(--glacier-surface);
+  color: var(--glacier-text);
+  font: inherit;
+  font-family: var(--glacier-font-mono);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.seatChipsCount {
+  font-size: var(--glacier-font-size-sm);
+}
+
+.seatChips {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-3);
+}
+
+/* In the drawer each seat is a full-width row. */
+.seatChipsDrawer .seatChip {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.seatChipsDrawer .seatChipName {
+  flex: 1;
+  max-width: none;
+  text-align: start;
+}
+
+.seatChip {
+  pointer-events: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.75rem;
+  padding-block: 0.25rem;
+  /* Logical: tight against the leading Avatar, roomy after the life count -
+     flips correctly under dir=rtl. */
+  padding-inline: 0.35rem 0.7rem;
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  background: var(--glacier-glass-regular);
+  backdrop-filter: blur(8px);
+  color: var(--glacier-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.seatChip[data-staged] {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 60%, transparent);
+  box-shadow: 0 0 10px color-mix(in oklch, var(--glacier-accent-solid) 35%, transparent);
+}
+
+/* The active-turn indicator rides the avatar as a presence dot rather than
+   sitting loose ahead of it. */
+.seatChipAvatar {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.seatChipDot {
+  position: absolute;
+  inset-block-end: -1px;
+  inset-inline-end: -1px;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--glacier-accent-solid);
+  /* A surface-colored ring so the dot reads as a badge, not a smudge. */
+  box-shadow: 0 0 0 2px var(--glacier-surface);
+}
+
+.seatChip[data-conceded] {
+  opacity: 0.45;
+}
+
+.seatChipName {
+  max-width: 7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-medium);
+}
+
+.seatChipLife {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-family: var(--glacier-font-mono);
+  font-size: var(--glacier-font-size-sm);
+}
+
+/* End-turn corner dock: PhaseRibbon's mobile branch mounts here as two large
+   icon buttons in the thumb corner, over a soft blur gradient. */
+.mobileTurnDock {
+  position: absolute;
+  /* Truly in the corner - hard against the bottom edge, clearing the reserved
+     home-indicator strip the same way the zone row does. */
+  bottom: var(--pc-safe-b, 0px);
+  inset-inline-end: 0.75rem;
+  z-index: 42;
+}
+
+.mobileTurnDock .ribbonRow {
+  padding: 0;
+}
+
+.mobileTurnDock .markerChips,
+.mobileTurnDock .phaseRibbon,
+.mobileTurnDock .turnLabel {
+  display: none;
+}
+
+.turnActions {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--glacier-space-2);
+  padding: 0.35rem;
+}
+
+/* ---- frosting the phone HUD ----
+   Each control frosts the board behind ITSELF, so the blur is exactly the shape
+   of the thing you are looking at. A shared plate behind a group can only ever
+   be a rectangle around them, which reads as a hard slab floating over the mat.
+   Solid-variant buttons are opaque anyway and simply ignore the filter. */
+.table[data-mobile] .turnActionsMain > button,
+.table[data-mobile] .turnActionsMain > .endTurnWrap > button,
+.table[data-mobile] .turnActionsAside button,
+.table[data-mobile] .boardToolsEnd button,
+.table[data-mobile] .handTab,
+.table[data-mobile] .mobileDockHandle,
+.table[data-mobile] .spectateCue,
+.mobileDeckPeek,
+.seatChipsTrigger {
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* Translucent enough for that blur to actually read; the kit's own soft variant
+   is near-opaque because it normally sits on a flat surface, not a playmat. */
+.table[data-mobile] .boardToolsEnd button:not([data-lit]),
+.table[data-mobile] .turnActionsAside button,
+.table[data-mobile] .handTab,
+.table[data-mobile] .mobileDockHandle,
+.table[data-mobile] .spectateCue,
+.mobileDeckPeek,
+.seatChipsTrigger {
+  background: color-mix(in oklch, var(--glacier-surface) 58%, transparent);
+}
+
+/* Give-turn floats above the pair of primary actions. */
+.turnActionsAside {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.turnActionsMain {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+/* End turn is the play button - the single large circle in the corner.
+   Everything orbiting it (combat, give-turn) matches the board tools' 2.25rem,
+   so the cluster reads as one primary with equal satellites rather than a
+   staircase of three different sizes. Sizing only the real <button> keeps the
+   Menu's trigger wrapper out of it, which otherwise stretched and left the
+   chevron floating outside its own circle. */
+.turnActionsMain > button,
+.turnActionsAside button {
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  border-radius: var(--glacier-radius-full);
+}
+
+.turnActionsMain > .endTurnWrap > button {
+  min-width: 3.75rem;
+  min-height: 3.75rem;
+  border-radius: var(--glacier-radius-full);
+}
+
+/* Only the play button's glyph scales up with it; the satellites keep the icon
+   size their JSX asked for. */
+.turnActionsMain > .endTurnWrap > button svg {
+  width: 26px;
+  height: 26px;
+}
+
+.turnActions [data-lit] {
+  box-shadow: 0 0 18px color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent);
+}
+
+
+
+/* ---- deck peek + zone drawer (phones) ----
+   The deck lives at the board's leading edge and opens the kit Drawer that
+   holds every pile. */
+
+.mobileDeckPeekCount {
+  font-family: var(--glacier-font-mono);
+  font-size: var(--glacier-font-size-sm);
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--glacier-bg) 70%, transparent);
+}
+
+/* Inside the drawer the four piles sit in a 2x2 grid: a single column would
+   scroll on a landscape phone, a single row would run off the sheet. */
+.mobileZonesDrawer .zonePiles {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  justify-content: center;
+  gap: var(--glacier-space-5) var(--glacier-space-4);
+}
+
+/* The always-live edge strip that starts an open swipe. */
+
+/* The mat-layout picker is desktop chrome: phones play in one mode and need
+   the top-left corner for the turn chips. */
+.table[data-mobile] .boardToolsStart {
+  display: none;
+}
+
+/* Level with the players/life pills opposite. The fullscreen mat shares its top
+   edge with the table on phones, so repeating the pills' own offset lines the
+   two clusters up exactly - and keeps them lined up under a notch. */
+.table[data-mobile] .boardTools {
+  top: calc(0.5rem + env(safe-area-inset-top, 0px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobileZones {
+    transition: none;
+  }
+}
+
+/* Pregame: the dock carries only the nav row, which has no position of its
+   own - without this it lays out statically at the top of the full-bleed dock,
+   as a full-width bar across the lobby. Corner it, and lift it over .tableMain
+   (the dock deliberately sets no stacking context, so this z competes in
+   .table's own context, the same trick .mobileSheet uses). */
+.mobileDock[data-nav-only] .tableSideNav {
+  position: absolute;
+  z-index: 70;
+  width: auto;
+  inset-inline-end: calc(var(--glacier-space-3) + env(safe-area-inset-right, 0px));
+  bottom: calc(var(--glacier-space-3) + var(--pc-safe-b, 0px));
+}
+
+/* The bottom-sheet dock replacing the rail. */
+.mobileDock {
+  position: absolute;
+  /* Full-bleed (and click-through) so children can anchor to either edge: the
+     handle rides the top, the sheet the floor. */
+  inset: 0;
+  /* Deliberately NO z-index: the dock must not form a stacking context, so the
+     handle can sit under the board's piles while the sheet floats above them. */
+  pointer-events: none;
+}
+
+.mobileDockHandle {
+  pointer-events: auto;
+  position: absolute;
+  /* Rides the top edge beside the players button; the zone cascade owns the
+     bottom-inline-start corner now. */
+  z-index: 44;
+  top: calc(0.5rem + env(safe-area-inset-top, 0px));
+  bottom: auto;
+  inset-inline-start: calc(4.4rem + env(safe-area-inset-left, 0px));
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  /* Matches the players pill and the board tools opposite; the ::after below
+     restores the 44px tap target. */
+  min-height: 2.25rem;
+  padding: 0.25rem 0.7rem;
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  background: var(--glacier-glass-regular);
+  backdrop-filter: blur(8px);
+  color: var(--glacier-text);
+  font: inherit;
+  font-family: var(--glacier-font-mono);
+  cursor: pointer;
+}
+
+/* The two top-left pills read at the same weight as the board-tool buttons, so
+   their tap targets are grown invisibly rather than by making them taller. */
+.seatChipsTrigger::after,
+.mobileDockHandle::after {
+  content: '';
+  position: absolute;
+  inset: -0.35rem -0.25rem;
+  border-radius: inherit;
+}
+
+.mobileDockChevron {
+  transition: rotate 160ms ease-out;
+  rotate: -90deg;
+}
+
+.mobileDock[data-open] .mobileDockChevron {
+  rotate: 90deg;
+}
+
+.mobileSheet {
+  pointer-events: auto;
+  position: absolute;
+  /* The sheet must clear everything on the board (the dock itself sets no
+     stacking context, so this z applies against the table's own children). */
+  z-index: 70;
+  inset-inline: 0;
+  bottom: 0;
+  height: min(62dvh, 34rem);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--glacier-radius-2xl) var(--glacier-radius-2xl) 0 0;
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  border-bottom: none;
+  background: color-mix(in oklch, var(--glacier-surface) 92%, transparent);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 -12px 40px oklch(0.05 0.02 265 / 0.5);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.mobileSheetHead {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border-bottom: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
+}
+
+.mobileSheetTabs {
+  display: flex;
+  gap: var(--glacier-space-1);
+  flex: 1;
+  min-width: 0;
+}
+
+.mobileSheetTab {
+  min-height: 2.5rem;
+  padding: 0.3rem 0.9rem;
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid transparent;
+  background: none;
+  color: var(--glacier-text-muted);
+  font: inherit;
+  font-weight: var(--glacier-font-weight-medium);
+  cursor: pointer;
+}
+
+.mobileSheetTab[data-active] {
+  color: var(--glacier-text);
+  border-color: var(--glacier-glass-border);
+  background: var(--glacier-glass-regular);
+}
+
+/* The nav icons reuse the rail's pinned cluster, inlined into the sheet head. */
+.mobileSheetHead .tableSideNav {
+  position: static;
+  display: flex;
+  gap: 0.15rem;
+  pointer-events: auto;
+}
+
+.mobileSheetBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--glacier-space-3);
+  display: grid;
+  gap: var(--glacier-space-2);
+  align-content: start;
+  touch-action: pan-y;
+}
+
+/* The rail cards render full-width inside the sheet. */
+.mobileSheetBody > * {
+  width: 100%;
+}
+
+/* The staged opponent hand tucks harder on phones so it never covers chips. */
+.table[data-mobile] .oppHandStrip {
+  inset-inline: 0;
+}
+
+/* Cyberpunk mat: the fixed side rail would leave a negative field on phones -
+   tighten the reserved gutters. */
+.table[data-mobile] .myBoard[data-game='cyberpunk'] .myField {
+  /* Logical, so the inline-end clearance follows the grid-placed deck/trash
+     rail under dir=rtl instead of stranding it on the physical right. */
+  margin-block: 0.5rem 8.5rem;
+  margin-inline: 0.5rem 4.75rem;
+}
+
+.table[data-mobile] .zonePiles[data-mat] {
+  grid-template-columns: auto 1fr 4.5rem;
+}
+
+/* ---- rotate-to-landscape overlay ---- */
+

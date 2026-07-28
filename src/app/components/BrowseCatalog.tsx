@@ -178,6 +178,21 @@ export function BrowseCatalog({
         )}
       </div>
 
+      {sections.length > 1 && (
+        <nav className="browseJump" aria-label={t('brGroupBy')}>
+          {sections.map((section) => (
+            <Button
+              key={section.id}
+              size="sm"
+              variant="soft"
+              onClick={() => document.getElementById(section.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            >
+              {section.title}
+            </Button>
+          ))}
+        </nav>
+      )}
+
       {!filtersActive && featured.length > 0 && (
         <section>
           <div className="browseYearHead">

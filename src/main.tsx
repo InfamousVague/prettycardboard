@@ -13,6 +13,10 @@ import './app/app.css';
 // a Cyberpunk match.
 import './app/cyberpunk-accent.css';
 import { App } from './app/App.tsx';
+import { trackViewportHeight } from './app/viewportHeight.ts';
+
+// Before first paint: the shell sizes off the measured viewport, not 100dvh.
+trackViewportHeight();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

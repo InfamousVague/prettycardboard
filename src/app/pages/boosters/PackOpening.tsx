@@ -1,0 +1,301 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { motion } from 'motion/react';
+import { Button, Size, Text, TextTone } from '@glacier/react';
+import { PackageOpen, X } from '@glacier/icons';
+import { useT } from '../../i18n.ts';
+import { cardImage } from '../../data/cards.ts';
+import { GameCard } from '../../components/GameCard.tsx';
+import { useMobileLayout } from '../../hooks/useIsPhone.ts';
+import type { PackCard } from '../../data/boosters.ts';
+import './packOpening.css';
+
+/**
+ * The fullscreen pack opening.
+ *
+ * A pack is a small piece of theatre, so this takes over the screen and plays
+ * it out: the wrapper tears along a jagged seam, the two halves fly apart, and
+ * the cards spill into two fans - the bulk of the pack in one, the cards you
+ * actually care about in the other, so the payoff reads at a glance.
+ *
+ * The tear is two copies of the wrapper clipped by complementary polygons, so
+ * the seam always matches perfectly no matter the pack's size on screen.
+ */
+
+type Phase = 'sealed' | 'tearing' | 'fanned';
+
+/**
+ * Body-scroll lock, reference counted. A naive snapshot-and-restore breaks when
+ * two overlays overlap for a tick (React mounts the replacement before it
+ * unmounts the outgoing one), which left the page permanently unscrollable
+ * after closing. Only the first lock snapshots, only the last one restores.
+ */
+let scrollLocks = 0;
+let scrollPrevious = '';
+
+function lockBodyScroll(): () => void {
+  if (scrollLocks === 0) {
+    scrollPrevious = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+  scrollLocks += 1;
+  return () => {
+    scrollLocks -= 1;
+    if (scrollLocks === 0) document.body.style.overflow = scrollPrevious;
+  };
+}
+
+/** How long the rip runs before the cards take over. */
+const TEAR_MS = 900;
+
+/**
+ * The seam. Both halves are cut from the SAME list of points, so the top piece
+ * ends exactly where the bottom piece begins and the tear never shows a gap.
+ */
+const SEAM = [
+  [0, 32],
+  [7, 27],
+  [15, 34],
+  [23, 28],
+  [31, 35],
+  [39, 29],
+  [47, 36],
+  [55, 30],
+  [63, 37],
+  [71, 31],
+  [79, 36],
+  [87, 30],
+  [94, 35],
+  [100, 29],
+] as const;
+
+const seamPath = SEAM.map(([x, y]) => `${x}% ${y}%`).join(', ');
+const CLIP_TOP = `polygon(0 0, 100% 0, ${[...SEAM].reverse().map(([x, y]) => `${x}% ${y}%`).join(', ')})`;
+const CLIP_BOTTOM = `polygon(${seamPath}, 100% 100%, 0 100%)`;
+
+export function PackOpening({
+  cards,
+  setName,
+  setIcon,
+  art,
+  backSrc,
+  onOpenAnother,
+  onClose,
+}: {
+  cards: PackCard[];
+  setName: string;
+  setIcon?: string;
+  /** The set's cached poster art: wraps the sealed pack and floods the room.
+      Null degrades to the card-back wrapper on a plain stage. */
+  art: string | null;
+  backSrc: string;
+  onOpenAnother: () => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const mobile = useMobileLayout();
+  const [phase, setPhase] = useState<Phase>('sealed');
+
+  // The pack splits into what you flip past and what you stop on.
+  const { bulk, highlights } = useMemo(() => {
+    const bulk: PackCard[] = [];
+    const highlights: PackCard[] = [];
+    for (const card of cards) {
+      if (card.slot === 'common' || card.slot === 'land') bulk.push(card);
+      else highlights.push(card);
+    }
+    return { bulk, highlights };
+  }, [cards]);
+
+  const best = useMemo(
+    () => (cards.some((c) => c.rarity === 'mythic') ? 'mythic' : cards.some((c) => c.rarity === 'rare') ? 'rare' : undefined),
+    [cards],
+  );
+
+  // The first pack arrives sealed, to be torn. Every pack after it comes from
+  // "Open another", which already reads as the tear - so it rips immediately
+  // rather than making the player click twice for the same thing.
+  //
+  // Comparing the previous pack rather than flipping a boolean keeps this
+  // correct under StrictMode, which runs effects twice on mount: a flag would
+  // be cleared by the first run and leave the very first pack pre-torn.
+  const previousPack = useRef<PackCard[] | null>(null);
+  useEffect(() => {
+    const isFirst = previousPack.current === null || previousPack.current === cards;
+    previousPack.current = cards;
+    setPhase(isFirst ? 'sealed' : 'tearing');
+  }, [cards]);
+
+  // The rip is timed, not frame-driven, so it completes even if the tab is
+  // backgrounded mid-animation.
+  useEffect(() => {
+    if (phase !== 'tearing') return;
+    const timer = setTimeout(() => setPhase('fanned'), TEAR_MS);
+    return () => clearTimeout(timer);
+  }, [phase]);
+
+  const tear = useCallback(() => {
+    setPhase((current) => (current === 'sealed' ? 'tearing' : current));
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key === ' ' || event.key === 'Enter') {
+        event.preventDefault();
+        tear();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [tear, onClose]);
+
+  // The page behind must not scroll while the overlay owns the screen.
+  useEffect(lockBodyScroll, []);
+
+  // Portalled to <body> deliberately: the route frame is an animated element,
+  // and a transformed ancestor becomes the containing block for position:fixed
+  // - inside it the overlay would only cover the content column, not the app.
+  return createPortal(
+    <div className="poRoot" data-phase={phase} role="dialog" aria-modal="true" aria-label={setName}>
+      {art && <div className="poBackdrop" style={{ backgroundImage: `url("${art}")` }} aria-hidden />}
+      <div className="poAmbient" data-rarity={phase === 'fanned' ? best : undefined} aria-hidden />
+
+      <div className="poBar">
+        <span className="poSetTag">
+          {setIcon && <img className="poSetIcon" src={setIcon} alt="" aria-hidden />}
+          <Text as="span" size={Size.Small} tone={TextTone.Muted}>
+            {setName}
+          </Text>
+        </span>
+        <Button variant="ghost" size="sm" onClick={onClose} aria-label={t('cpClose')}>
+          <X size={18} />
+        </Button>
+      </div>
+
+      <div className="poStage" onClick={phase === 'sealed' ? tear : undefined}>
+        {phase !== 'fanned' ? (
+          <div className="poPack" data-tearing={phase === 'tearing' || undefined}>
+            {/* The stack inside, revealed as the wrapper comes apart. */}
+            <div className="poInner" aria-hidden>
+              <div className="poInnerCard" style={{ backgroundImage: `url("${backSrc}")` }} />
+              <div className="poInnerGlow" />
+            </div>
+
+            {/* Two halves of one wrapper, cut along the same seam. With poster
+                art the wrapper is the set's real booster: art panel, foil
+                crimps, set name - otherwise the card back stands in. */}
+            <div
+              className="poHalf poHalfTop"
+              data-art={art ? '' : undefined}
+              style={{ backgroundImage: `url("${art ?? backSrc}")`, clipPath: CLIP_TOP }}
+              aria-hidden
+            >
+              <div className="poCrimp" data-edge="top" />
+              <div className="poSheen" />
+            </div>
+            <div
+              className="poHalf poHalfBottom"
+              data-art={art ? '' : undefined}
+              style={{ backgroundImage: `url("${art ?? backSrc}")`, clipPath: CLIP_BOTTOM }}
+              aria-hidden
+            >
+              <div className="poSheen" />
+              {setIcon && <img className="poWrapperIcon" src={setIcon} alt="" />}
+              {art && <span className="poWrapperName">{setName}</span>}
+              <div className="poCrimp" data-edge="bottom" />
+            </div>
+          </div>
+        ) : mobile ? (
+          // A phone has no room for two arcs: the pack lays out as one line you
+          // swipe, best cards first so the payoff is what you land on.
+          <div className="poLine">
+            {[...highlights, ...bulk].map((card, index) => (
+              <div
+                key={`${card.id}-${index}`}
+                className="poLineCard"
+                data-rarity={card.rarity}
+                style={{ animationDelay: `${Math.min(index, 12) * 0.045}s` }}
+              >
+                <GameCard name={card.name} imageUrl={cardImage(card.id)} fluid foil={card.foil} tilt={4} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="poFans">
+            <Fan cards={highlights} label={t('boTheGoods')} feature />
+            <Fan cards={bulk} label={t('boTheRest')} />
+          </div>
+        )}
+      </div>
+
+      <div className="poFoot" onClick={(event) => event.stopPropagation()}>
+        {phase === 'sealed' && (
+          <Button size="lg" onClick={tear}>
+            <PackageOpen size={18} aria-hidden />
+            {t('boOpenPack')}
+          </Button>
+        )}
+        {phase === 'fanned' && (
+          <>
+            <Button size="lg" onClick={onOpenAnother}>
+              <PackageOpen size={18} aria-hidden />
+              {t('boOpenAnother')}
+            </Button>
+            <Button size="lg" variant="soft" onClick={onClose}>
+              {t('boDone')}
+            </Button>
+          </>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * One arc of cards. Each card pivots around a point below the fan, which is
+ * what makes a spread of cards read as a hand rather than a row.
+ */
+function Fan({ cards, label, feature }: { cards: PackCard[]; label: string; feature?: boolean }) {
+  if (cards.length === 0) return null;
+  const count = cards.length;
+  // Wide fans need a tighter per-card angle or the ends point at the floor.
+  // The pivot sits deep below the cards (see .poFanCard), so even at this
+  // spread the arc stays shallow while sweeping most of the screen's width.
+  const spread = Math.min(74, count * 10);
+  const step = count > 1 ? spread / (count - 1) : 0;
+
+  return (
+    <div className="poFan" data-feature={feature || undefined}>
+      <div className="poFanArc">
+        {cards.map((card, index) => {
+          const angle = count > 1 ? -spread / 2 + step * index : 0;
+          return (
+            <div
+              key={`${card.id}-${index}`}
+              className="poFanCard"
+              data-rarity={card.rarity}
+              // `rotate` is its own CSS property, so the static fan angle and the
+              // keyframed `transform` entrance compose instead of fighting.
+              style={{
+                rotate: `${angle}deg`,
+                zIndex: index,
+                animationDelay: `${0.045 * index + (feature ? 0 : 0.14)}s`,
+              }}
+            >
+              <GameCard name={card.name} imageUrl={cardImage(card.id)} fluid foil={card.foil} tilt={4} />
+            </div>
+          );
+        })}
+      </div>
+      <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="poFanLabel">
+        {label}
+      </Text>
+    </div>
+  );
+}

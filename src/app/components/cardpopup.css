@@ -16,15 +16,18 @@
 .cpStage {
   position: relative;
   display: flex;
-  align-items: center;
+  /* Stretch, so the details column runs the full height of the card beside it. */
+  align-items: stretch;
   gap: var(--glacier-space-8);
   max-width: min(58rem, calc(100vw - 3rem));
+  max-height: calc(100dvh - 3rem);
 }
 
 /* flip container: both faces stacked, back pre-rotated */
 .cpFlip {
   position: relative;
   flex: none;
+  align-self: center;
   transform-style: preserve-3d;
   perspective: 1200px;
 }
@@ -52,7 +55,8 @@
   gap: var(--glacier-space-3);
   min-width: 0;
   max-width: 24rem;
-  max-height: min(32rem, calc(100vh - 6rem));
+  /* Full height beside the card; the body scrolls inside it. */
+  max-height: 100%;
   overflow-y: auto;
   padding: var(--glacier-space-5);
   border-radius: var(--glacier-radius-xl);
@@ -157,11 +161,53 @@
   }
 }
 
-/* The larger card can outgrow a phone; scale the whole stage to fit. */
-@media (max-width: 28rem) {
-  .cpStage {
-    transform: scale(0.78);
-    transform-origin: center;
+
+
+/* --- Landscape phone: a two-pane reader ---
+   The card owns the leading third (pannable by touch, centered in its pane) and
+   the details fill the trailing two-thirds edge to edge, full height, with the
+   close button tucked inside the panel. Mirrors isSplit() in CardPopup.tsx. */
+@media (max-height: 480px) and (orientation: landscape) {
+  .cpBackdrop {
+    padding: 0;
+  }
+
+  .cpStage[data-split] {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    align-items: stretch;
+    gap: 0;
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+  }
+
+  /* Centered in its pane, and the pan gesture owns the touch. */
+  .cpStage[data-split] .cpFlip {
+    align-self: center;
+    justify-self: center;
+    touch-action: none;
+    cursor: grab;
+  }
+
+  /* Flush to the trailing edge: full height, no outer margin or rounding. */
+  .cpStage[data-split] .cpDetails {
+    max-width: none;
+    max-height: none;
+    height: 100%;
+    border-radius: 0;
+    border-block: none;
+    border-inline-end: none;
+    padding-inline-end: calc(var(--glacier-space-5) + env(safe-area-inset-right, 0px));
+    padding-block-start: calc(var(--glacier-space-5) + env(safe-area-inset-top, 0px));
+  }
+
+  /* Inside the panel, not hanging off the stage corner. */
+  .cpStage[data-split] .cpClose {
+    position: absolute;
+    top: calc(var(--glacier-space-3) + env(safe-area-inset-top, 0px));
+    inset-inline-end: calc(var(--glacier-space-3) + env(safe-area-inset-right, 0px));
   }
 }
 

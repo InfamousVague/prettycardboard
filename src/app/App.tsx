@@ -13,7 +13,7 @@ import {
   VisualFeedbackProvider,
   direction,
 } from '@glacier/react';
-import { Compass, House, Layers, PanelLeft, Paintbrush, Settings, Swords, User, Users } from '@glacier/icons';
+import { Compass, House, Layers, PackageOpen, PanelLeft, Paintbrush, Settings, Swords, User, Users } from '@glacier/icons';
 import {
   applyPreferences,
   loadPreferences,
@@ -37,6 +37,8 @@ import { HoverCardLayer } from './components/HoverCard.tsx';
 import { Notifier } from './components/Notifier.tsx';
 import { InvitePopup } from './components/InvitePopup.tsx';
 import { DownloadBanner } from './components/DownloadBanner.tsx';
+import { RotateOverlay } from './pages/table/RotateOverlay.tsx';
+import { useMobileLayout, usePhoneViewport, usePortrait } from './hooks/useIsPhone.ts';
 
 // Route pages, the whole table engine, the deck builder, the modals, and the
 // command palette load on first use rather than up front - so the initial
@@ -48,6 +50,7 @@ const OnboardingPage = lazy(() => import('./pages/OnboardingPage.tsx').then((m) 
 const PlayPage = lazy(() => import('./pages/PlayPage.tsx').then((m) => ({ default: m.PlayPage })));
 const DecksPage = lazy(() => import('./pages/DecksPage.tsx').then((m) => ({ default: m.DecksPage })));
 const BrowsePage = lazy(() => import('./pages/BrowsePage.tsx').then((m) => ({ default: m.BrowsePage })));
+const BoostersPage = lazy(() => import('./pages/BoostersPage.tsx').then((m) => ({ default: m.BoostersPage })));
 const FriendsPage = lazy(() => import('./pages/FriendsPage.tsx').then((m) => ({ default: m.FriendsPage })));
 const ProfilePage = lazy(() => import('./pages/ProfilePage.tsx').then((m) => ({ default: m.ProfilePage })));
 const TablePage = lazy(() => import('./pages/TablePage.tsx').then((m) => ({ default: m.TablePage })));
@@ -82,11 +85,12 @@ function PageFallback() {
   );
 }
 
-const SIDEBAR_LABEL: Record<Route, 'sbPlayTables' | 'sbDecksLibrary' | 'sbBrowseCatalog' | 'sbFriendsPeople' | 'sbProfileYou'> = {
+const SIDEBAR_LABEL: Record<Route, 'sbPlayTables' | 'sbDecksLibrary' | 'sbBrowseCatalog' | 'sbBoosterSets' | 'sbFriendsPeople' | 'sbProfileYou'> = {
   home: 'sbPlayTables',
   play: 'sbPlayTables',
   decks: 'sbDecksLibrary',
   browse: 'sbBrowseCatalog',
+  boosters: 'sbBoosterSets',
   friends: 'sbFriendsPeople',
   profile: 'sbProfileYou',
   download: 'sbProfileYou',
@@ -130,24 +134,33 @@ function AppRail({
   onNavigate,
   onOpenSettings,
   onOpenCustomize,
+  horizontal,
 }: {
   route: Route;
   onNavigate: (route: Route) => void;
   onOpenSettings: () => void;
   onOpenCustomize: () => void;
+  /** The phone bottom tab bar: the same items, horizontal, full width. The
+   * kit NavBar supports both orientations, so one component serves both and
+   * CSS swaps which is visible at the phone breakpoint. */
+  horizontal?: boolean;
 }) {
   const t = useT();
   const incoming = useApp((state) => state.friends.incoming.length);
   return (
     <NavBar
-      orientation="vertical"
+      orientation={horizontal ? 'horizontal' : 'vertical'}
       aria-label={t('navPrimary')}
-      className="appRail"
+      className={horizontal ? 'appTabBar' : 'appRail'}
       end={
-        <>
-          <NavBarItem icon={<Paintbrush size={20} />} label={t('navCustomize')} onClick={onOpenCustomize} />
+        horizontal ? (
           <NavBarItem icon={<Settings size={20} />} label={t('navSettings')} onClick={onOpenSettings} />
-        </>
+        ) : (
+          <>
+            <NavBarItem icon={<Paintbrush size={20} />} label={t('navCustomize')} onClick={onOpenCustomize} />
+            <NavBarItem icon={<Settings size={20} />} label={t('navSettings')} onClick={onOpenSettings} />
+          </>
+        )
       }
     >
       <NavBarItem
@@ -175,6 +188,12 @@ function AppRail({
         onClick={() => onNavigate('browse')}
       />
       <NavBarItem
+        icon={<PackageOpen size={20} />}
+        label={t('navBoosters')}
+        active={route === 'boosters'}
+        onClick={() => onNavigate('boosters')}
+      />
+      <NavBarItem
         icon={<Users size={20} />}
         label={incoming > 0 ? `${t('navFriends')} (${incoming})` : t('navFriends')}
         active={route === 'friends'}
@@ -199,6 +218,15 @@ function Shell({
 }) {
   const t = useT();
   const [route, navigate] = useRoute();
+  const phone = usePhoneViewport();
+  const landscape = !usePortrait();
+  // The whole shell's phone layout keys off this one attribute rather than a
+  // media query, so the Mobile-layout preference can force it either way -
+  // otherwise a short desktop window puts you in the phone shell for good.
+  const phoneLayout = useMobileLayout();
+  useEffect(() => {
+    document.documentElement.dataset.phone = phoneLayout ? 'on' : 'off';
+  }, [phoneLayout]);
   // First launch opens Settings on the Customize tab so the player sets up their
   // playmat and card back; afterwards it lives behind the Customize rail button.
   const firstRun = useRef(localStorage.getItem(CUSTOMIZED_KEY) == null);
@@ -275,6 +303,8 @@ function Shell({
     <DecksPage />
   ) : route === 'browse' ? (
     <BrowsePage />
+  ) : route === 'boosters' ? (
+    <BoostersPage />
   ) : route === 'friends' ? (
     <FriendsPage />
   ) : route === 'download' ? (
@@ -358,6 +388,26 @@ function Shell({
           </motion.div>
         </main>
       </div>
+      {/* Phone bottom tab bar: same items as the rail, horizontal, swapped in
+          by CSS at the phone breakpoint (rail+sidebar hide there). */}
+      {!inRoom && (
+        <AppRail
+          horizontal
+          route={route}
+          onNavigate={navigate}
+          onOpenSettings={() => {
+            setSettingsSection(undefined);
+            setSettingsOpen(true);
+          }}
+          onOpenCustomize={() => {
+            setSettingsSection('customize');
+            setSettingsOpen(true);
+          }}
+        />
+      )}
+      {/* Away from the table the app is a portrait document: a phone turned
+          sideways gets the mirror of the board's rotate ask. */}
+      {phone && landscape && !inRoom && <RotateOverlay to="portrait" />}
       {settingsSeen.current && (
         <Suspense fallback={null}>
           <SettingsModal

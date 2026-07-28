@@ -88,3 +88,42 @@
     animation: none;
   }
 }
+
+/* The hovered card's mana cost, pinned just above the card itself (not above
+   the zoom preview, which flips to whichever side has room). Centred on the
+   card and lifted clear of its top edge; never interactive, so it can't steal
+   the hover that is producing it. */
+.hoverManaCost {
+  position: fixed;
+  /* Above the zoom preview (z-9000), which overlaps the hovered card and would
+     otherwise bury the very readout this is for. */
+  z-index: 9001;
+  transform: translate(-50%, -100%);
+  margin-top: -0.35rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--glacier-surface) 92%, transparent);
+  box-shadow: var(--glacier-shadow-3);
+  pointer-events: none;
+  animation: pcManaCostIn 120ms var(--glacier-ease-out, ease-out);
+}
+
+@keyframes pcManaCostIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-100% + 4px));
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hoverManaCost {
+    animation: none;
+  }
+}

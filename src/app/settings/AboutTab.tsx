@@ -4,6 +4,7 @@ import { Download, ExternalLink, RefreshCw } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { canSelfUpdate, checkForUpdate, currentVersion, installUpdate, type PendingUpdate } from '../updater.ts';
 import { isTauri } from '../tauri.ts';
+import { useMobileLayout } from '../hooks/useIsPhone.ts';
 
 /** The public marketing name, brand-fixed across locales. */
 const APP_NAME = 'PrettyCardboard';
@@ -29,6 +30,7 @@ type UpdateState = 'idle' | 'checking' | 'uptodate' | 'available' | 'installing'
 /** About & Updates: version, self-update flow (desktop only), and links. */
 export function AboutTab() {
   const t = useT();
+  const phone = useMobileLayout();
   const [version, setVersion] = useState<string | null>(null);
   const [state, setState] = useState<UpdateState>('idle');
   const [pending, setPending] = useState<PendingUpdate | null>(null);
@@ -153,7 +155,7 @@ export function AboutTab() {
             </div>
           )}
         </div>
-      ) : (
+      ) : phone ? null : (
         <div style={{ display: 'grid', gap: 'var(--glacier-space-3)' }}>
           <Text as="span" size={Size.Small} tone={TextTone.Muted}>
             {t('setDesktopAutoUpdates')}

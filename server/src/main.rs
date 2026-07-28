@@ -40,6 +40,11 @@ pub struct App {
     pub mats_dir: std::path::PathBuf,
     /// Serializes mat uploads (scan-delete-write is racy unguarded).
     pub mats_lock: tokio::sync::Mutex<()>,
+    /// Cached booster-set poster art (served at /api/boosters/art/{code}).
+    pub booster_art_dir: std::path::PathBuf,
+    /// Serializes cache misses: one Scryfall fetch at a time keeps us far
+    /// inside their published rate limit however many tiles land at once.
+    pub booster_art_lock: tokio::sync::Mutex<()>,
 }
 
 impl App {
@@ -177,6 +182,8 @@ async fn main() {
 
     let mats_dir = data_dir.join("mats");
     std::fs::create_dir_all(&mats_dir).expect("create mats dir");
+    let booster_art_dir = data_dir.join("booster-art");
+    std::fs::create_dir_all(&booster_art_dir).expect("create booster art dir");
 
     let app = Arc::new(App {
         db: Mutex::new(conn),
@@ -189,6 +196,8 @@ async fn main() {
         conn_seq: AtomicU64::new(1),
         mats_dir,
         mats_lock: tokio::sync::Mutex::new(()),
+        booster_art_dir,
+        booster_art_lock: tokio::sync::Mutex::new(()),
     });
 
     // Rebuild the secondary indexes so codes resolve and seated players
@@ -228,6 +237,7 @@ async fn main() {
             "/api/decks/{id}",
             get(api::deck_get).put(api::deck_update).delete(api::deck_delete),
         )
+        .route("/api/decks/{id}/stats", get(api::deck_stats))
         .route("/api/import/moxfield/{id}", get(api::import_moxfield))
         .route("/api/rooms", post(api::room_create))
         .route("/api/rooms/mine", get(api::rooms_mine))
@@ -248,6 +258,8 @@ async fn main() {
         // Public: custom playmats load from CSS url()/<img>, which can't send
         // Bearer headers. Filenames are unguessable (user id + random suffix).
         .route("/api/mats/{file}", get(api::playmat_serve))
+        .route("/api/boosters/art/{code}", get(api::booster_art))
+        .route("/api/boosters/card/{code}/{index}", get(api::booster_card))
         .route("/api/ws", get(ws::ws_handler))
         .merge(protected)
         .layer(cors)

@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from 'motion/react';
-import { Button, IconButton, Input, Menu, MenuItem, MenuSub, Pill, SegmentedControl, Size, Text, TextTone, Tooltip } from '@glacier/react';
+import { Button, IconButton, Input, Menu, MenuItem, MenuSub, Pill, SegmentedControl, Size, Text, TextTone, Tooltip, useHaptics, useToast } from '@glacier/react';
 import {
   AlignStartVertical,
   ChevronDown,
   ChevronUp,
   CircleDot,
   Crown,
+  Coins,
   Dices,
   LayoutGrid,
+  LogOut,
   Minus,
   Moon,
   Plus,
@@ -22,29 +24,40 @@ import {
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
+import { isFoilInst } from '../../data/foil.ts';
+import { getFaces, loadFaces, useFacesVersion } from '../../data/faces.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import type { CardInst, MatPos, MatZone, RoomState, TablePlayer, Zone } from '../../net/types.ts';
-import { useTableUi } from './tableUi.ts';
-import { AttackBadge, BlockCluster, CounterBadges, DEFAULT_MAT_LAYOUT, MAT_ZONES, ZonePiles, groupAttachments } from './bits.tsx';
+import { selectCardScale, useTableUi } from './tableUi.ts';
+import { AttackBadge, BlockCluster, CounterBadges, DEFAULT_MAT_LAYOUT, MAT_ZONES, ZonePiles, groupAttachments, splitPile } from './bits.tsx';
 import {
   CARD_SCALE_MAX,
   CARD_SCALE_MIN,
   CARD_SCALE_STEP,
+  MOBILE_SCALE_MAX,
+  MOBILE_SCALE_MIN,
+  MOBILE_SCALE_STEP,
+  PILE_MAX_EDGES,
+  PILE_STEP_PX,
   effectivePT,
   hostUnderPoint,
   isCreature,
+  resolveDropTarget,
   snapDrop,
   tidyPositions,
   type BoardMode,
 } from './boardModes.ts';
 import { SETTLE_EASE, dragTilt, flightAnchor, juicePulse, prefersReducedMotion, restTilt, setFlightAnchor, ambientDelay } from './juice.ts';
+import { zoneLabel } from '../../data/games.ts';
 import { playmatBackground } from '../../data/playmats.ts';
 import { usePreference } from '../../hooks/usePreference.ts';
+import { useMobileLayout } from '../../hooks/useIsPhone.ts';
+import { MobileZones } from './MobileZones.tsx';
 import { TokenPicker } from './TokenPicker.tsx';
 import { HandCard, HAND_PEEK_ZONE } from './HandCard.tsx';
 import { DiceRoll3D } from './DiceRoll3D.tsx';
-import { DiceIcon } from '../../components/DiceIcon.tsx';
+import { DICE_SIDES, DiceIcon } from '../../components/DiceIcon.tsx';
 import { send } from '../../net/ws.ts';
 import { formatFor } from '../../data/formats.ts';
 import { playSound } from '../../sounds.ts';
@@ -73,6 +86,10 @@ interface DragState {
    * on the pointer). Zero for ghost drags from hand/piles. */
   grabX: number;
   grabY: number;
+  /** Shift held on the last sample. It inverts what the dwell latch commits to
+   * (attach <-> pile), so the ring can answer the key live; the COMMIT reads
+   * `event.shiftKey` off the release event, which is authoritative. */
+  shift: boolean;
 }
 
 /**
@@ -81,6 +98,22 @@ interface DragState {
  * into the hand. Outside the buffer, a hand card lands on the felt.
  */
 const HAND_DROP_BUFFER = 44;
+
+/** How long a dragged card must rest on another before it latches onto it.
+ *  Long enough that crossing the board never attaches by accident, short
+ *  enough that deliberately hovering feels answered rather than laggy. */
+const ATTACH_DWELL_MS = 500;
+
+/** Keep resting on the same card past the attach latch and the relation flips
+ *  to the other one. The only touch route to a pile of mixed cards, since a
+ *  phone has no Shift. 600ms past the latch: unmistakably deliberate, still one
+ *  motion, and well clear of the 450ms card-menu hold (which arming the drag
+ *  already cancelled). */
+const PILE_DWELL_MS = 1100;
+
+/** Drag origins that live in the phone's zone row, where a leftward stroke
+ *  gathers the row instead of lifting the card under the finger. */
+const PILE_ZONES = new Set<DragFrom>(['library', 'graveyard', 'exile', 'command']);
 
 /**
  * The bottom band of the playmat (where the deck/piles float) is reserved:
@@ -107,15 +140,46 @@ export function MyBoard({
 }) {
   const t = useT();
   const act = useGame((state) => state.act);
+  const leaveTable = useGame((state) => state.leave);
+  const { toast } = useToast();
+  const haptics = useHaptics();
   const popup = useCardPopup();
   const clickTimer = useRef<number | null>(null);
   useEffect(() => () => { if (clickTimer.current != null) window.clearTimeout(clickTimer.current); }, []);
+  // Re-render when a double-faced card's back art finishes loading, so a flipped
+  // Clive (etc.) swaps to its alt form for every viewer.
+  useFacesVersion();
   const boardMode = useTableUi((state) => state.boardMode);
-  const cardScale = useTableUi((state) => state.cardScale);
+  const cardScale = useTableUi(selectCardScale);
+  // Phones dock the zone piles into a swipe-out drawer instead of the strip.
+  const mobile = useMobileLayout();
+  // The +/- buttons step whichever ladder is in play - the phone's own three
+  // sizes, or the desktop preference - never the rendered value, so a phone can
+  // never overwrite a desktop-tuned scale.
+  const storedScale = useTableUi((state) => (state.scaleCap != null ? state.mobileScale : state.cardScale));
+  const scaleMin = mobile ? MOBILE_SCALE_MIN : CARD_SCALE_MIN;
+  const scaleMax = mobile ? MOBILE_SCALE_MAX : CARD_SCALE_MAX;
+  const scaleStep = mobile ? MOBILE_SCALE_STEP : CARD_SCALE_STEP;
+  const stepScale = (delta: number) => {
+    const state = useTableUi.getState();
+    if (state.scaleCap != null) state.setMobileScale(state.mobileScale + delta, me.userId);
+    else state.setCardScale(state.cardScale + delta, me.userId);
+  };
   // Base 120 = the old 92 plus ~30%; the +/- toolbar scales from there. The
   // hand rides the same scale so the whole playmat resizes together.
   const fieldCardWidth = Math.round(120 * cardScale);
-  const handCardWidth = Math.round(132 * cardScale);
+  // Hand cards solve against the viewport on small screens (the mulligan fan's
+  // pattern) so a 7-card Commander hand always fits; desktop keeps the fixed
+  // scale-driven width.
+  const handCount = Math.max(1, me.hand?.length ?? 1);
+  const handCardWidth = Math.round(
+    mobile
+      ? // The hand runs bigger than the board's cards on a phone: it is the one
+        // row you actually read, and the viewport solve below still stops a big
+        // Commander hand from overflowing.
+        Math.min(168 * cardScale, Math.max(64, (window.innerWidth * 0.96 - 24) / handCount + 34))
+      : 132 * cardScale,
+  );
   const blockerIid = useTableUi((state) => state.blockerIid);
   const setBlocker = useTableUi((state) => state.setBlocker);
   // Perfectly-upright cards vs the natural slight per-card tilt (Settings ->
@@ -131,6 +195,10 @@ export function MyBoard({
   const cardEls = useRef(new Map<string, HTMLElement>());
   const prevFaces = useRef(new Map<string, boolean>());
   const [drag, setDrag] = useState<DragState | null>(null);
+  // The phone zone cascade's dealt/gathered state. Owned here, not inside
+  // MobileZones, because the board opens it on a dwelling drag and closes it on
+  // a leftward swipe that starts on any of the piles.
+  const [zonesOpen, setZonesOpen] = useState(false);
   // Mat editor: while editing, the working pile layout lives here (the server's
   // copy is committed on each pile drop).
   const [matEdit, setMatEdit] = useState(false);
@@ -242,6 +310,20 @@ export function MyBoard({
   // otherwise follow the hold.
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heldFired = useRef(false);
+  /** The bare-felt hold's own fired flag. Kept separate from heldFired, which is
+   *  owned by the beginDrag / card-click cycle that resets it - the felt has no
+   *  such cycle, so sharing it would leave dragSuppressed() latched on. */
+  const feltHeld = useRef(false);
+  /** Where a press on the bare felt started, so travel can cancel its hold. */
+  const fieldHoldFrom = useRef<{ x: number; y: number } | null>(null);
+  /**
+   * Touch hand-scrub: sliding sideways along the fan previews each card it
+   * passes instead of dragging one out. The gesture commits to an axis on the
+   * first real movement - sideways scrubs, upward lifts the card to play it -
+   * so neither intent can steal the other.
+   */
+  const [scrub, setScrub] = useState<{ iid: string; x: number } | null>(null);
+  const scrubbing = useRef(false);
   const clearHold = () => {
     if (holdTimer.current) {
       clearTimeout(holdTimer.current);
@@ -277,17 +359,56 @@ export function MyBoard({
   // ws event, which re-render this component.
   const { hosts, attachments } = useMemo(() => groupAttachments(me.battlefield), [me.battlefield]);
 
+  // Resting past the latch flips the relation the drop will commit to. It is
+  // the only touch route to a pile of unlike cards - a phone has no Shift.
+  const [dwellInvert, setDwellInvert] = useState(false);
+
+  /** Cards physically stacked on `base`. Board order is pile order. */
+  const pileOf = (base: CardInst) => (attachments.get(base.iid) ?? []).filter((c) => c.piled);
+
+  /**
+   * Does a drop on `base` mean PILE or ATTACH?
+   *
+   * Default: duplicates pile (that is what stacking is for at a real table -
+   * you square up your Forests, you do not staple them together), and a base
+   * that is already a pile keeps taking members, so a twelve-land pile needs
+   * no modifier at all. Anything else is the aura attach this gesture has
+   * always been.
+   *
+   * Inverter: Shift (desktop) or the escalated dwell (touch), XORed - so an
+   * unlike card can join a pile, and a duplicate can still be attached.
+   */
+  const wantsPile = (base: CardInst, moving: CardInst | undefined, shift: boolean) => {
+    const natural = pileOf(base).length > 0 || (moving != null && moving.name === base.name);
+    return natural !== (shift !== dwellInvert);
+  };
+
+
   // Peek the hand up whenever the pointer is in the bottom band of the screen.
   // Driving this off a STABLE viewport threshold (not the hand's own moving
   // box) avoids a raise/lower oscillation when the pointer sits near the edge.
+  // The half-tucked rest is a HOVER affordance: the fan lifts as the pointer
+  // nears the bottom. The mobile layout has no hover and tucks deliberately via
+  // the Hide-hand pill instead, so there the fan rests fully up - otherwise it
+  // sits permanently off the bottom edge looking like a layout bug. Keyed on the
+  // layout, not just the pointer, so forcing mobile on a desktop behaves too.
+  const coarse = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
   useEffect(() => {
     if (hideField) return;
+    if (coarse || mobile) {
+      setHandPeek(true);
+      return;
+    }
     const onMove = (event: PointerEvent) => {
-      setHandPeek(event.clientY > window.innerHeight - HAND_PEEK_ZONE);
+      // Read live so the band survives a window resize; phones cap it against
+      // the viewport (a short landscape phone would otherwise peek constantly),
+      // desktop keeps the fixed band it always had.
+      const zone = mobile ? Math.min(HAND_PEEK_ZONE, window.innerHeight * 0.28) : HAND_PEEK_ZONE;
+      setHandPeek(event.clientY > window.innerHeight - zone);
     };
     window.addEventListener('pointermove', onMove);
     return () => window.removeEventListener('pointermove', onMove);
-  }, [hideField]);
+  }, [hideField, coarse, mobile]);
 
   // Release a held drop position once the server's echo has caught up (or the
   // card left the battlefield), so the local override never lingers.
@@ -343,6 +464,9 @@ export function MyBoard({
   // hand/deck band. Kept above 0.55 so tiny boards keep a play area.
   const maxDropY = (rect: DOMRect) => {
     if (rect.height <= 0) return 0.92;
+    // The band is reserved *for the hand*. Tucked away, it is just playmat, so
+    // the whole mat opens up - which is the point of hiding the hand.
+    if (handHidden) return 0.97;
     const reserved = Math.min(rect.height / 4, RESERVED_BOTTOM_PX);
     return Math.max(0.55, (rect.height - reserved) / rect.height);
   };
@@ -422,18 +546,81 @@ export function MyBoard({
       tilt: 0,
       grabX,
       grabY,
+      shift: event.shiftKey,
     });
   };
 
+  /** Point the scrub preview at whichever hand card sits under the finger. */
+  const updateScrub = (clientX: number, clientY: number) => {
+    const el = document.elementFromPoint(clientX, clientY)?.closest('[data-hand-iid]');
+    const iid = el?.getAttribute('data-hand-iid');
+    if (!iid) return;
+    setScrub((prev) => (prev?.iid === iid && Math.abs(prev.x - clientX) < 2 ? prev : { iid, x: clientX }));
+  };
+
+  const endScrub = () => {
+    if (!scrubbing.current) return;
+    scrubbing.current = false;
+    setScrub(null);
+    // The tap that ends the stroke must not also play the card underneath.
+    justDragged.current = true;
+    window.setTimeout(() => {
+      justDragged.current = false;
+    }, 0);
+  };
+
   const moveDrag = (event: ReactPointerEvent) => {
+    // Already scrubbing: track whichever hand card is under the finger. This
+    // MUST sit above the !drag guard (as endDrag does) - committing the scrub
+    // axis calls setDrag(null), so once that re-render lands every later move
+    // would bail below and the peek would freeze on the card it started on.
+    if (scrubbing.current) {
+      updateScrub(event.clientX, event.clientY);
+      return;
+    }
     if (!drag) return;
     const origin = dragOrigin.current;
     if (!origin.armed) {
-      if (Math.hypot(event.clientX - origin.px, event.clientY - origin.py) < 6) return;
+      // Mouse arms fast (6px); fingers jitter, so touch needs a wider slop or
+      // intended taps misfire as micro-drags (Android's own slop is 8dp).
+      const slop = event.pointerType === 'mouse' ? 6 : 12;
+      const dx = event.clientX - origin.px;
+      const dy = event.clientY - origin.py;
+      if (Math.hypot(dx, dy) < slop) return;
+      // A sideways finger stroke that began on a hand card is a scrub, not a
+      // lift: preview the cards it sweeps past and never touch the board.
+      if (event.pointerType !== 'mouse' && drag.from === 'hand' && Math.abs(dx) > Math.abs(dy)) {
+        scrubbing.current = true;
+        clearHold();
+        setDrag(null);
+        updateScrub(event.clientX, event.clientY);
+        return;
+      }
+      // The same idea for the open zone row: a stroke that starts on ANY pile
+      // and runs left is gathering the row, not pulling a card out of it. The
+      // axis decides - cards come out upward, onto the board - so the two
+      // gestures never have to be aimed, only pointed.
+      if (
+        event.pointerType !== 'mouse' &&
+        mobile &&
+        zonesOpen &&
+        PILE_ZONES.has(drag.from) &&
+        dx < 0 &&
+        Math.abs(dx) > Math.abs(dy)
+      ) {
+        clearHold();
+        setDrag(null);
+        setZonesOpen(false);
+        haptics('selection');
+        return;
+      }
       origin.armed = true;
       // A real drag has started; it is not a press-and-hold.
       clearHold();
       playSound('cardPickup');
+      // The card is now stuck to the finger - the one moment worth confirming
+      // by touch, since the finger is covering the card it just picked up.
+      haptics('selection');
     }
     const now = performance.now();
     const dt = Math.max(1, now - velocity.current.t);
@@ -446,6 +633,7 @@ export function MyBoard({
       clientX: event.clientX,
       clientY: event.clientY,
       tilt: dragTilt(velocity.current.vx),
+      shift: event.shiftKey,
     });
     // The drag stays entirely local until release: the card follows the
     // pointer here, and the final position is committed once in endDrag. We
@@ -497,6 +685,9 @@ export function MyBoard({
   // Is a release point inside the hand's cushion (the fan plus HAND_DROP_BUFFER
   // on the sides and top)? Below the hand is the screen edge, so no lower bound.
   const inHandZone = (clientX: number, clientY: number) => {
+    // A hidden hand claims no drop zone: its cushion would otherwise swallow
+    // every release along the bottom of the mat and put the card back.
+    if (handHidden) return false;
     const handRect = handRef.current?.getBoundingClientRect();
     if (!handRect) return false;
     return (
@@ -508,6 +699,10 @@ export function MyBoard({
 
   const endDrag = (event: ReactPointerEvent) => {
     clearHold();
+    if (scrubbing.current) {
+      endScrub();
+      return;
+    }
     if (!drag) return;
     const iid = drag.iid;
 
@@ -531,6 +726,10 @@ export function MyBoard({
       // Dropped straight onto a zone pile (deck/graveyard/exile/command): move
       // it there - no context menu needed. Library takes it on top.
       act({ kind: 'card.move', iid, to: pile, ...(pile === 'library' ? { index: 0 } : {}) });
+      // A card dropped on a pile vanishes under its top card, so confirm where
+      // it went - otherwise the only feedback is the card disappearing.
+      toast({ tone: 'neutral', message: `${card.name} → ${zoneLabel(room.game, pile)}` });
+      haptics('medium');
       moved = true;
     } else if (card && pile && pile === from) {
       // Released back over its own pile: a "never mind" - spring back. (With
@@ -548,9 +747,27 @@ export function MyBoard({
       // Play the card only when it clears the hand's buffer AND the reserved
       // bottom band (hand/deck strip); otherwise it springs into the fan.
       if (!overHand && !inReservedBand(event.clientY) && card) {
-        const host = boardMode === 'assist' ? hostUnderPoint(me.battlefield, rawPos, rect, iid) : null;
+        // A latch armed by dwelling wins; assist mode still attaches on a plain
+        // drop, so both routes end in the same place.
+        const host = attachHost
+          ? (me.battlefield.find((c) => c.iid === attachHost) ?? null)
+          : boardMode === 'assist'
+            ? resolveDropTarget(me.battlefield, hostUnderPoint(me.battlefield, rawPos, rect, iid), iid)
+            : null;
+        const wantPile = !!host && wantsPile(host, card, event.shiftKey);
         act({ kind: 'card.move', iid, to: 'battlefield', ...(host ? rawPos : pos) });
-        if (host) act({ kind: 'card.attach', iid, hostIid: host.iid });
+        if (host) {
+          act({ kind: 'card.attach', iid, hostIid: host.iid, ...(wantPile ? { piled: true } : {}) });
+          // Same announcement as attaching a card already on the board: an
+          // attachment tucks under its host and a pile member disappears into
+          // it, so either needs saying.
+          if (attachHost) {
+            toast({
+              tone: 'neutral',
+              message: wantPile ? `${host.name} ×${pileOf(host).length + 2}` : `${card.name} → ${host.name}`,
+            });
+          }
+        }
         bumpZ(iid);
         moved = true;
       }
@@ -560,9 +777,22 @@ export function MyBoard({
         act({ kind: 'card.move', iid, to: 'hand' });
         moved = true;
       } else {
-        const host = boardMode === 'assist' ? hostUnderPoint(me.battlefield, rawPos, rect, iid) : null;
-        if (host && host.iid !== card.attachedTo) {
-          act({ kind: 'card.attach', iid, hostIid: host.iid });
+        const host = attachHost
+          ? (me.battlefield.find((c) => c.iid === attachHost) ?? null)
+          : boardMode === 'assist'
+            ? resolveDropTarget(me.battlefield, hostUnderPoint(me.battlefield, rawPos, rect, iid), iid)
+            : null;
+        const wantPile = !!host && wantsPile(host, card, event.shiftKey);
+        // The relation changing counts as a change: dropping an aura back onto
+        // the same host to pile it must not be swallowed as a no-op.
+        if (host && (host.iid !== card.attachedTo || wantPile !== !!card.piled)) {
+          act({ kind: 'card.attach', iid, hostIid: host.iid, ...(wantPile ? { piled: true } : {}) });
+          if (attachHost) {
+            toast({
+              tone: 'neutral',
+              message: wantPile ? `${host.name} ×${pileOf(host).length + 2}` : `${card.name} → ${host.name}`,
+            });
+          }
         } else if (!host && card.attachedTo) {
           // Dragging an attached card away detaches it.
           act({ kind: 'card.attach', iid, hostIid: null });
@@ -584,7 +814,18 @@ export function MyBoard({
         act({ kind: 'card.move', iid, to: 'hand' });
         moved = true;
       } else if (!inReservedBand(event.clientY)) {
-        act({ kind: 'card.move', iid, to: 'battlefield', ...pos });
+        // Recurring an aura straight onto a creature is a normal play, so the
+        // latch is honoured here exactly as it is from hand or the board.
+        const host = attachHost ? (me.battlefield.find((c) => c.iid === attachHost) ?? null) : null;
+        const wantPile = !!host && wantsPile(host, card, event.shiftKey);
+        act({ kind: 'card.move', iid, to: 'battlefield', ...(host ? rawPos : pos) });
+        if (host) {
+          act({ kind: 'card.attach', iid, hostIid: host.iid, ...(wantPile ? { piled: true } : {}) });
+          toast({
+            tone: 'neutral',
+            message: wantPile ? `${host.name} ×${pileOf(host).length + 2}` : `${card.name} → ${host.name}`,
+          });
+        }
         bumpZ(iid);
         moved = true;
       }
@@ -598,8 +839,18 @@ export function MyBoard({
       } else if (!inReservedBand(event.clientY)) {
         // hasCommander (not the literal 'commander') so Brawl accrues tax too,
         // mirroring the server's format_has_commander gate.
-        if (formatFor(room.format).hasCommander) act({ kind: 'cmd.cast', iid, ...pos });
-        else act({ kind: 'card.move', iid, to: 'battlefield', ...pos });
+        const host = attachHost ? (me.battlefield.find((c) => c.iid === attachHost) ?? null) : null;
+        const wantPile = !!host && wantsPile(host, card, event.shiftKey);
+        const landing = host ? rawPos : pos;
+        if (formatFor(room.format).hasCommander) act({ kind: 'cmd.cast', iid, ...landing });
+        else act({ kind: 'card.move', iid, to: 'battlefield', ...landing });
+        if (host) {
+          act({ kind: 'card.attach', iid, hostIid: host.iid, ...(wantPile ? { piled: true } : {}) });
+          toast({
+            tone: 'neutral',
+            message: wantPile ? `${host.name} ×${pileOf(host).length + 2}` : `${card.name} → ${host.name}`,
+          });
+        }
         bumpZ(iid);
         moved = true;
       }
@@ -680,6 +931,17 @@ export function MyBoard({
     }, 230);
   };
 
+  /** Take the top card off `base`'s pile. The server lands it beside the base,
+   *  so this is ONE action with no follow-up card.pos. */
+  const peelTop = (base: CardInst) => {
+    const pile = pileOf(base);
+    const top = pile[pile.length - 1];
+    if (!top) return;
+    act({ kind: 'card.attach', iid: top.iid, hostIid: null });
+    haptics('selection');
+    playSound('cardPickup');
+  };
+
   const setCounterCount = (card: CardInst, counter: string, requested: number) => {
     const target = Math.trunc(Math.min(999, Math.max(0, requested)));
     const current = card.counters[counter] ?? 0;
@@ -688,7 +950,15 @@ export function MyBoard({
 
   /* ---------------- render ---------------- */
 
-  const renderFieldCard = (card: CardInst, host?: CardInst, attachIndex = 0) => {
+  const renderFieldCard = (
+    card: CardInst,
+    host?: CardInst,
+    attachIndex = 0,
+    /** Distance from the base, 1..PILE_MAX_EDGES. 0 = not a pile member. */
+    pileDepth = 0,
+    /** How many cards are stacked on THIS card. 0 = not a pile base. */
+    pileCount = 0,
+  ) => {
     const dragging = drag?.iid === card.iid && dragOrigin.current.armed && drag.from === 'battlefield';
     const hostDragging = host && drag?.iid === host.iid && drag.from === 'battlefield';
     // Held drop position (until the server echo lands) beats the stale card.x/y.
@@ -700,7 +970,12 @@ export function MyBoard({
     const hostY = hostHeld?.y ?? host?.y ?? 0;
     const baseX = dragging ? drag.x : host ? (hostDragging ? drag!.x : hostX) : restX;
     const baseY = dragging ? drag.y : host ? (hostDragging ? drag!.y : hostY) : restY;
-    const offset = host ? Math.round(18 * cardScale) * (attachIndex + 1) : 0;
+    const piled = pileDepth > 0;
+    const offset = !host
+      ? 0
+      : piled
+        ? Math.round(PILE_STEP_PX * cardScale) * pileDepth
+        : Math.round(18 * cardScale) * (attachIndex + 1);
     const z = zOrder[card.iid];
     const cardZ = z != null ? 10 + z : 5;
     const attacker = attackerEntry(card.iid);
@@ -709,7 +984,14 @@ export function MyBoard({
     // over the GameCard inside, so elementFromPoint lands on .fieldCard - which
     // lacks GameCard's data-preview-src, breaking the hover preview. Mirror the
     // preview attrs onto the wrapper so any hit on the card resolves an anchor.
-    const fieldPreview = card.faceDown ? undefined : card.imageUrl || cardImage(card.scryfallId);
+    // Double-faced: show the back art + name when this card is flipped to its
+    // alt form. Faces are fetched lazily (any viewer of a transformed card).
+    const faces = card.transformed ? getFaces(card.scryfallId) : undefined;
+    if (card.transformed && card.scryfallId && !faces) void loadFaces(card.scryfallId);
+    const backImg = card.transformed && faces?.dfc ? faces.backImage : undefined;
+    const displayImg = backImg || card.imageUrl || cardImage(card.scryfallId);
+    const displayName = (card.transformed && faces?.dfc && faces.backName) || card.name;
+    const fieldPreview = card.faceDown ? undefined : displayImg;
 
     return (
       <div
@@ -717,16 +999,28 @@ export function MyBoard({
         className="fieldCard"
         data-iid={card.iid}
         data-preview-src={fieldPreview}
-        data-preview-name={fieldPreview ? card.name : undefined}
+        data-preview-name={fieldPreview ? displayName : undefined}
         data-dragging={dragging || undefined}
         data-attacker={attacker ? '' : undefined}
-        data-attachment={host ? '' : undefined}
+        data-attachment={host ? (card.piled ? 'pile' : 'aura') : undefined}
+        data-pile={pileCount > 0 ? pileCount : undefined}
+        data-attach-target={
+          hoverHostIid === card.iid
+            ? attachHost === card.iid
+              ? hoverPiles
+                ? 'pile'
+                : 'armed'
+              : 'aiming'
+            : undefined
+        }
         data-affordance={affordance}
         data-blocking={blockerIid === card.iid || undefined}
         data-ambient={ambientCards && !dragging ? '' : undefined}
         style={{
-          left: offset ? `calc(${baseX * 100}% + ${offset}px)` : `${baseX * 100}%`,
-          top: offset ? `calc(${baseY * 100}% + ${offset * 0.8}px)` : `${baseY * 100}%`,
+          // Auras drift down-right so each stays legible; pile members shingle
+          // up-left, showing a few px of edge so the group reads as thickness.
+          left: offset ? `calc(${baseX * 100}% + ${piled ? -offset : offset}px)` : `${baseX * 100}%`,
+          top: offset ? `calc(${baseY * 100}% + ${piled ? -offset : offset * 0.8}px)` : `${baseY * 100}%`,
           // Newest-placed card floats over the rest (contained by .myField's
           // stacking context so it never covers the hand/pile strip). The card
           // being dragged is highest; attachments tuck under their host.
@@ -742,19 +1036,43 @@ export function MyBoard({
         onPointerDown={(event) => beginDrag(event, card, 'battlefield')}
         onPointerEnter={() => onHover(card)}
         onPointerLeave={() => onHover(null)}
-        onContextMenu={(event) => onMenu(event, card.iid, 'battlefield')}
+        onContextMenu={(event) => {
+          // Android fires native contextmenu (~500ms) right after our own
+          // 450ms long-press already opened the menu - don't open it twice.
+          if (heldFired.current) {
+            event.preventDefault();
+            return;
+          }
+          onMenu(event, card.iid, 'battlefield');
+        }}
         onClick={(event) => clickFieldCard(event, card)}
       >
         <div className="fieldCardShell">
           <GameCard
-            name={card.name}
-            imageUrl={card.imageUrl || cardImage(card.scryfallId)}
+            name={displayName}
+            imageUrl={displayImg}
             width={fieldCardWidth}
             tapped={card.tapped}
             faceDown={card.faceDown}
+            foil={isFoilInst(card)}
             tilt={0}
           >
             <CounterBadges card={card} onSet={(counter, value) => setCounterCount(card, counter, value)} />
+            {pileCount > 0 && (
+              <button
+                type="button"
+                className="pileTally"
+                title={`${t('gpPileTake')} (${pileCount + 1})`}
+                aria-label={`${t('gpPileTake')} (${pileCount + 1})`}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  peelTop(card);
+                }}
+              >
+                {pileCount + 1}
+              </button>
+            )}
             {attacker && (
               <AttackBadge defenderName={room.players.find((p) => p.seat === attacker.defenderSeat)?.username} />
             )}
@@ -773,6 +1091,97 @@ export function MyBoard({
     drag != null && dragOrigin.current.armed && drag.from === 'battlefield' && inHandZone(drag.clientX, drag.clientY);
   // Which pile the dragged card is currently over (drop-target highlight).
   const dropPile = drag != null && dragOrigin.current.armed ? pileUnderPoint(drag.clientX, drag.clientY) : null;
+
+  // Resting a dragged card on the gathered deck deals the rest of the zones out,
+  // so graveyard/exile/command become reachable without breaking the drag to go
+  // swipe them open first. Keyed on the boolean, not the pointer position, so
+  // the dwell timer survives the jitter of a finger holding still.
+  // Attach-by-dwell: hold a dragged card over another card and it latches on,
+  // the way an aura or an equipment reads at a real table. Independent of board
+  // mode - assist still attaches on a plain drop, this adds the deliberate,
+  // announced version that works in every mode.
+  const hoverHost =
+    drag != null &&
+    dragOrigin.current.armed &&
+    // The deck's top card is popped server-side, so its new iid is unknown here
+    // and it could never be attached - so it never offers to be.
+    drag.from !== 'library' &&
+    dropPile == null &&
+    !inHandZone(drag.clientX, drag.clientY)
+      ? resolveDropTarget(
+          me.battlefield,
+          hostUnderPoint(
+            me.battlefield,
+            { x: drag.x, y: drag.y },
+            fieldRef.current?.getBoundingClientRect() ?? null,
+            drag.iid,
+          ),
+          drag.iid,
+        )
+      : null;
+  const hoverHostIid = hoverHost?.iid ?? null;
+  const [attachHost, setAttachHost] = useState<string | null>(null);
+  useEffect(() => {
+    // Keyed on the host's identity, so the timer survives a finger holding
+    // still (which fires no pointermove) but restarts on a different card.
+    // Reset on EVERY change of target, not just on leaving the board: moving
+    // straight from a card you latched onto to a different one must start that
+    // card's clock over. Resetting only on null left the latch pointing at the
+    // card you just left, so the ring aimed at one card while a release
+    // committed to another.
+    setAttachHost(null);
+    setDwellInvert(false);
+    if (hoverHostIid == null) return;
+    const latch = setTimeout(() => {
+      setAttachHost(hoverHostIid);
+      haptics('medium');
+    }, ATTACH_DWELL_MS);
+    const flip = setTimeout(() => {
+      setDwellInvert(true);
+      haptics('heavy');
+    }, PILE_DWELL_MS);
+    return () => {
+      clearTimeout(latch);
+      clearTimeout(flip);
+    };
+  }, [hoverHostIid, haptics]);
+  // The latch belongs to the drag that armed it.
+  useEffect(() => {
+    if (drag == null) {
+      setAttachHost(null);
+      setDwellInvert(false);
+    }
+  }, [drag]);
+  // A parked drag fires no pointermove, so Shift has to be watched directly or
+  // the ring cannot answer the key until the pointer twitches.
+  const dragging = drag != null;
+  useEffect(() => {
+    if (!dragging) return;
+    const sync = (event: KeyboardEvent) => {
+      if (event.key !== 'Shift') return;
+      setDrag((d) => (d && d.shift !== event.shiftKey ? { ...d, shift: event.shiftKey } : d));
+    };
+    window.addEventListener('keydown', sync);
+    window.addEventListener('keyup', sync);
+    return () => {
+      window.removeEventListener('keydown', sync);
+      window.removeEventListener('keyup', sync);
+    };
+  }, [dragging]);
+
+  // The ring reads the tracked Shift; each commit re-reads the release event's.
+  const hoverPiles =
+    hoverHost != null && wantsPile(hoverHost, drag ? cardOf(drag.from, drag.iid) : undefined, drag?.shift ?? false);
+
+  const dwellOverDeck = mobile && dropPile === 'library';
+  useEffect(() => {
+    if (!dwellOverDeck) return;
+    const timer = setTimeout(() => {
+      setZonesOpen(true);
+      haptics('selection');
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [dwellOverDeck, haptics]);
 
   // The zone piles. In Cyberpunk they leave the bottom strip for the mat
   // quadrants (Deck/Trash right rail, Legends/Eddies bottom tray) via `mat`.
@@ -884,10 +1293,23 @@ export function MyBoard({
       data-game={room.game || 'mtg'}
       data-strip-only={hideField || undefined}
       // Card scale drives the hand overlap and lifts the board-mode toolbar
-      // clear of the (scalable) pile stacks.
-      style={{ ['--card-scale' as string]: cardScale }}
+      // clear of the (scalable) pile stacks. The hand's real height rides along
+      // so chrome that must clear the fan (the scrub preview) tracks the actual
+      // cards rather than a fixed guess that only holds at one card size.
+      style={{
+        ['--card-scale' as string]: cardScale,
+        ['--pc-hand-h' as string]: `${Math.round(handCardWidth * (680 / 488))}px`,
+      }}
       onPointerMove={moveDrag}
       onPointerUp={endDrag}
+      // Touch pointers cancel routinely (system edge swipes, notification
+      // shade): drop the drag cleanly instead of leaving a card glued to a
+      // dead pointer.
+      onPointerCancel={() => {
+        clearHold();
+        endScrub();
+        setDrag(null);
+      }}
     >
       {!hideField && (<>
       {/* combat banner */}
@@ -943,17 +1365,58 @@ export function MyBoard({
           // token/counter menu. MTG only (tokens are a Magic concept).
           if (!mtg || hideField) return;
           if ((event.target as HTMLElement).closest('.fieldCard, .boardTools')) return;
+          // Android fires contextmenu on top of our own long-press timer.
+          if (feltHeld.current) return;
           event.preventDefault();
           const pos = fieldPos(event.clientX, event.clientY);
           setBoardMenu({ x: event.clientX, y: event.clientY, bx: pos.x, by: pos.y });
         }}
+        onPointerDown={(event) => {
+          // Touch has no right-click: press and hold the bare felt to reach the
+          // same token/counter menu. Cards run their own hold in beginDrag.
+          if (!mtg || hideField || event.pointerType === 'mouse') return;
+          if ((event.target as HTMLElement).closest('.fieldCard, .boardTools')) return;
+          feltHeld.current = false;
+          clearHold();
+          const cx = event.clientX;
+          const cy = event.clientY;
+          fieldHoldFrom.current = { x: cx, y: cy };
+          holdTimer.current = setTimeout(() => {
+            holdTimer.current = null;
+            feltHeld.current = true;
+            const pos = fieldPos(cx, cy);
+            setBoardMenu({ x: cx, y: cy, bx: pos.x, by: pos.y });
+          }, 450);
+        }}
+        onPointerMove={(event) => {
+          // Any real travel means a pan/drag, not a press.
+          const from = fieldHoldFrom.current;
+          if (!from || !holdTimer.current) return;
+          if (Math.hypot(event.clientX - from.x, event.clientY - from.y) > 10) clearHold();
+        }}
+        onPointerUp={() => {
+          fieldHoldFrom.current = null;
+          clearHold();
+        }}
+        onPointerCancel={() => {
+          fieldHoldFrom.current = null;
+          clearHold();
+        }}
       >
-        {hosts.map((card) => (
-          <span key={card.iid} style={{ display: 'contents' }}>
-            {(attachments.get(card.iid) ?? []).map((att, index) => renderFieldCard(att, card, index))}
-            {renderFieldCard(card)}
-          </span>
-        ))}
+        {hosts.map((card) => {
+          // The base is the TOP of its pile: members shingle underneath, so the
+          // first-stacked (deepest) takes the largest offset and paints first.
+          const { piled, auras } = splitPile(attachments.get(card.iid) ?? []);
+          return (
+            <span key={card.iid} style={{ display: 'contents' }}>
+              {piled.map((att, index) =>
+                renderFieldCard(att, card, index, Math.min(piled.length - index, PILE_MAX_EDGES)),
+              )}
+              {auras.map((att, index) => renderFieldCard(att, card, index))}
+              {renderFieldCard(card, undefined, 0, 0, piled.length)}
+            </span>
+          );
+        })}
 
         {/* board mode toolbar, docked bottom-start of the field */}
         <div className="boardTools boardToolsStart">
@@ -991,6 +1454,15 @@ export function MyBoard({
 
         {/* dice + markers toolbar, docked bottom-end of the field */}
         <div className="boardTools boardToolsEnd">
+          {/* Phones have no header, so Leave joins the board tools rather than
+              floating alone - it leads the row and inherits its button size. */}
+          {mobile && (
+            <Tooltip content={t('tblLeave')}>
+              <IconButton size="sm" variant="soft" aria-label={t('tblLeave')} onClick={leaveTable}>
+                <LogOut size={15} />
+              </IconButton>
+            </Tooltip>
+          )}
           {mtg && !matEdit && (
             <Tooltip content={t('gpMatEdit')}>
               <IconButton size="sm" variant="soft" aria-label={t('gpMatEdit')} onClick={startMatEdit}>
@@ -1013,8 +1485,8 @@ export function MyBoard({
               size="sm"
               variant="soft"
               aria-label={t('gpCardsSmaller')}
-              disabled={cardScale <= CARD_SCALE_MIN}
-              onClick={() => useTableUi.getState().setCardScale(cardScale - CARD_SCALE_STEP, me.userId)}
+              disabled={storedScale <= scaleMin}
+              onClick={() => stepScale(-scaleStep)}
             >
               <Minus size={15} />
             </IconButton>
@@ -1024,8 +1496,8 @@ export function MyBoard({
               size="sm"
               variant="soft"
               aria-label={t('gpCardsLarger')}
-              disabled={cardScale >= CARD_SCALE_MAX}
-              onClick={() => useTableUi.getState().setCardScale(cardScale + CARD_SCALE_STEP, me.userId)}
+              disabled={storedScale >= scaleMax}
+              onClick={() => stepScale(scaleStep)}
             >
               <Plus size={15} />
             </IconButton>
@@ -1039,13 +1511,20 @@ export function MyBoard({
               </IconButton>
             }
           >
-            <MenuItem icon={<DiceIcon sides={6} size={16} />} onSelect={() => act({ kind: 'dice.roll', sides: 6 })}>
-              d6
+            {/* The same set, order and glyphs as the sidebar's dice tray - the
+                two must never offer different dice. */}
+            {DICE_SIDES.map((sides) => (
+              <MenuItem
+                key={sides}
+                icon={<DiceIcon sides={sides} size={16} />}
+                onSelect={() => act({ kind: 'dice.roll', sides })}
+              >
+                d{sides}
+              </MenuItem>
+            ))}
+            <MenuItem icon={<Coins size={16} />} onSelect={() => act({ kind: 'dice.roll', sides: 2 })}>
+              {t('tblCoin')}
             </MenuItem>
-            <MenuItem icon={<DiceIcon sides={20} size={16} />} onSelect={() => act({ kind: 'dice.roll', sides: 20 })}>
-              d20
-            </MenuItem>
-            <MenuItem onSelect={() => act({ kind: 'dice.roll', sides: 2 })}>Coin flip</MenuItem>
           </Menu>
           <Menu
             aria-label={t('gpMarkers')}
@@ -1104,9 +1583,16 @@ export function MyBoard({
           back to a CSS cube if WebGL is unavailable. */}
       {!hideField && <DiceRoll3D dice={me.gigDice} lastRoll={me.lastRoll} playerId={me.userId} />}
 
+      {/* Phones: the piles ride a left-edge drawer over the board - the deck
+          always peeks, and tapping (or swiping from the edge) slides the rest
+          out. Desktop keeps them inline in the bottom strip. */}
+      {mtg && !matActive && !hideField && mobile && (
+        <MobileZones piles={zonePilesEl} peek={fieldCardWidth} open={zonesOpen} onOpenChange={setZonesOpen} />
+      )}
+
       {/* bottom strip: zones | hand | vitals */}
       <div className="myStrip">
-        {mtg && !matActive && zonePilesEl}
+        {mtg && !matActive && (!mobile || hideField) && zonePilesEl}
 
         {/* .myHand is a non-transforming frame; only the inner .myFan slides
             (rest/peek/hidden), so the tab below can centre on the hand and stay
@@ -1139,6 +1625,7 @@ export function MyBoard({
               <HandCard
                 key={card.iid}
                 card={card}
+                dataIid={card.iid}
                 width={handCardWidth}
                 spread={index - (hand.length - 1) / 2}
                 dimmed={drag?.iid === card.iid && dragOrigin.current.armed}
@@ -1157,8 +1644,9 @@ export function MyBoard({
 
           {/* Sticky hide/show tab: centred on the hand, pinned to the bottom so
               it never moves as the fan rests, peeks or tucks. */}
-          <button
-            type="button"
+          <Button
+            size="sm"
+            variant="soft"
             className="handTab"
             onClick={() => {
               shareHandHover(null);
@@ -1168,9 +1656,39 @@ export function MyBoard({
           >
             {handHidden ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
             {handHidden ? t('gpShowHand') : t('gpHideHand')}
-          </button>
+          </Button>
         </div>
       </div>
+
+      {/* Hand scrub: the card under the sliding finger, blown up above the fan
+          so a phone can read its whole hand without playing anything. */}
+      {scrub && (() => {
+        const card = (me.hand ?? []).find((c) => c.iid === scrub.iid);
+        if (!card) return null;
+        // Clamp by the room ABOVE the fan, not just viewport width: a landscape
+        // phone is short, and a width-only cap made the preview taller than the
+        // space between the fan and the top edge, so it ran off screen.
+        const viewportH = window.visualViewport?.height ?? window.innerHeight;
+        const room = viewportH - Math.round(handCardWidth * (680 / 488)) - 24;
+        const width = Math.round(
+          Math.max(96, Math.min(190, window.innerWidth * 0.42, room * (488 / 680))),
+        );
+        return (
+          <div
+            className="handScrubPeek"
+            style={{ left: Math.max(width / 2 + 8, Math.min(window.innerWidth - width / 2 - 8, scrub.x)) }}
+            aria-hidden
+          >
+            <GameCard
+              name={card.name}
+              imageUrl={card.imageUrl || cardImage(card.scryfallId)}
+              width={width}
+              foil={isFoilInst(card)}
+              tilt={0}
+            />
+          </div>
+        );
+      })()}
 
       {/* pointer-following ghost for hand / pile drags */}
       {draggedGhostCard && drag && dragOrigin.current.armed && (
@@ -1188,6 +1706,7 @@ export function MyBoard({
             imageUrl={draggedGhostCard.faceDown ? undefined : draggedGhostCard.imageUrl || cardImage(draggedGhostCard.scryfallId)}
             faceDown={draggedGhostCard.faceDown}
             width={handCardWidth}
+            foil={isFoilInst(draggedGhostCard)}
             tilt={0}
           />
         </div>

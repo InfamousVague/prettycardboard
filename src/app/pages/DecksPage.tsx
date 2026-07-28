@@ -13,6 +13,7 @@ import { GameTag } from '../components/GameTag.tsx';
 import { DeckEditor } from './deckbuilder/DeckEditor.tsx';
 import { ImportDialog } from './deckbuilder/ImportDialog.tsx';
 import { NewDeckWizard } from './deckbuilder/NewDeckWizard.tsx';
+import { DeckInspector } from './deckbuilder/DeckInspector.tsx';
 import '../components/gamecard.css';
 import './deckbuilder/decks.css';
 
@@ -34,6 +35,8 @@ function DeckLibrary() {
   const selectDeck = useUi((state) => state.selectDeck);
   const [importOpen, setImportOpen] = useState(false);
   const [newDeckOpen, setNewDeckOpen] = useState(false);
+  // Right-click a deck to inspect its summary (stats/colors/bracket, not cards).
+  const [inspecting, setInspecting] = useState<DeckSummary | null>(null);
   // Cyberpunk is a WIP game — hide its decks entirely unless the dev toggle is on.
   const games = useVisibleGames();
   const cyberVisible = games.some((g) => g.id === 'cyberpunk');
@@ -109,18 +112,37 @@ function DeckLibrary() {
       ) : (
         <div className="deckGrid">
           {shown.map((deck, index) => (
-            <DeckTile key={deck.id} deck={deck} index={index} onOpen={() => selectDeck(deck.id)} />
+            <DeckTile
+              key={deck.id}
+              deck={deck}
+              index={index}
+              onOpen={() => selectDeck(deck.id)}
+              onInspect={() => setInspecting(deck)}
+            />
           ))}
         </div>
       )}
 
       <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
       <NewDeckWizard open={newDeckOpen} onClose={() => setNewDeckOpen(false)} />
+      {inspecting && (
+        <DeckInspector deck={inspecting} open={inspecting != null} onClose={() => setInspecting(null)} />
+      )}
     </div>
   );
 }
 
-function DeckTile({ deck, index, onOpen }: { deck: DeckSummary; index: number; onOpen: () => void }) {
+function DeckTile({
+  deck,
+  index,
+  onOpen,
+  onInspect,
+}: {
+  deck: DeckSummary;
+  index: number;
+  onOpen: () => void;
+  onInspect: () => void;
+}) {
   const t = useT();
   // MTG ships a Scryfall cover URL; Cyberpunk resolves its bundled art from the
   // cover card id.
@@ -130,6 +152,10 @@ function DeckTile({ deck, index, onOpen }: { deck: DeckSummary; index: number; o
       type="button"
       className="deckTile"
       onClick={onOpen}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onInspect();
+      }}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.24, ease: 'easeOut', delay: Math.min(index, 8) * 0.035 }}

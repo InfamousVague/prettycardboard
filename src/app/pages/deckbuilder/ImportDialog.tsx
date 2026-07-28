@@ -106,6 +106,8 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
 
   return (
     <Modal open={open} onClose={onClose} title={t('dbImportTitle')} size="md">
+      {/* Marker root: phones render this modal fullscreen (see app.css). */}
+      <div className="pcMobileFull">
       <Tabs
         value={tab}
         onValueChange={setTab}
@@ -172,6 +174,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
           },
         ]}
       />
+      </div>
     </Modal>
   );
 }

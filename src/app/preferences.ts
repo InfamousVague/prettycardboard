@@ -58,6 +58,9 @@ export interface Preferences {
   /** Show a staged opponent's board mirrored 180deg (across-the-table view,
    * cards upside down). Off shows their board upright. */
   mirrorOpponent: boolean;
+  /** The phone table layout: 'auto' follows the viewport; 'on'/'off' force it
+   * (never trust auto-detection alone on the web). */
+  mobileLayout: 'auto' | 'on' | 'off';
   /** Extra eye-candy: a very subtle continuous idle drift on battlefield cards
    * that catches the light and shows off holographic art. Off by default. */
   ambientCards: boolean;
@@ -113,6 +116,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   customPlaymat: '',
   verticalCards: false,
   mirrorOpponent: true,
+  mobileLayout: 'auto',
   ambientCards: false,
   autoUntap: false,
   autoDraw: false,

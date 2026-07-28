@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, MenuItem, SplitButton, Text, Size, TextTone, Tooltip } from '@glacier/react';
+import { Button, IconButton, Menu, MenuItem, SplitButton, Text, Size, TextTone, Tooltip, useHaptics } from '@glacier/react';
 import {
+  Check,
   ChevronDown,
   Crown,
+  Flag,
   Moon,
+  Settings,
   Shield,
   Sun,
   Sunrise,
@@ -40,12 +43,20 @@ export function PhaseRibbon({
   room,
   me,
   canAct,
+  mobile,
+  onConcede,
 }: {
   room: RoomState;
   me: TablePlayer | undefined;
   canAct: boolean;
+  /** Phone dock: combat + end turn become big thumb-corner icon buttons. */
+  mobile?: boolean;
+  /** Opens the concede confirmation (owned by TablePage). Absent when
+      conceding isn't available - spectating, already out, match over. */
+  onConcede?: () => void;
 }) {
   const t = useT();
+  const haptics = useHaptics();
   const act = useGame((state) => state.act);
   const endTurnRef = useRef<HTMLDivElement>(null);
 
@@ -81,6 +92,105 @@ export function PhaseRibbon({
   // Hide the phase strip for games with no turn phases (e.g. Cyberpunk plays
   // freeform - the turn still passes, but there is no upkeep/main/combat ribbon).
   if (room.phase == null || getGame(room.game).phases.length === 0) return null;
+
+  // Phones: no ribbon, no labels - two large icon buttons in the thumb corner,
+  // with give-turn kept on its own small menu button.
+  if (mobile) {
+    if (!canAct || !me) return null;
+    return (
+      <div className="turnActions" data-my-turn={myTurn || undefined}>
+        {/* Give-turn floats above the combat button so the two primary actions
+            keep the corner to themselves. */}
+        <div className="turnActionsAside">
+          <Menu
+            aria-label={t('gpGiveTurnTo')}
+            placement="top-end"
+            trigger={
+              <IconButton size="sm" variant="soft" aria-label={t('gpGiveTurnTo')}>
+                <ChevronDown size={16} />
+              </IconButton>
+            }
+          >
+            {room.players.map((player) => (
+              <MenuItem
+                key={player.userId}
+                disabled={player.seat === room.activeSeat}
+                onSelect={() => act({ kind: 'turn.set', seat: player.seat })}
+              >
+                {t('gpGiveTurnTo')} {player.username}
+              </MenuItem>
+            ))}
+          </Menu>
+        </div>
+        <div className="turnActionsMain">
+          {room.combat == null && myTurn && (
+            <IconButton
+              size="sm"
+              className="turnAttackBtn"
+              aria-label={t('phAttack')}
+              variant={me.battlefield.some((card) => !card.tapped && isCreature(card)) ? 'solid' : 'soft'}
+              onClick={() => act({ kind: 'combat.begin' })}
+            >
+              <Swords size={16} />
+            </IconButton>
+          )}
+          {room.combat != null && (
+            <IconButton
+              size="sm"
+              className="turnAttackBtn"
+              variant="soft"
+              aria-label={t('gpEndCombat')}
+              onClick={() => act({ kind: 'combat.end' })}
+            >
+              <Shield size={16} />
+            </IconButton>
+          )}
+          <div ref={endTurnRef} className="endTurnWrap">
+            <IconButton
+              size="lg"
+              variant={myTurn ? 'solid' : 'soft'}
+              className="endTurnBtn"
+              data-lit={myTurn || undefined}
+              aria-label={t('gpEndTurn')}
+              onClick={() => {
+                // Passing the turn is the one irreversible-feeling tap in the
+                // corner; it confirms itself.
+                haptics('success');
+                act({ kind: 'turn.pass' });
+              }}
+            >
+              <Check size={24} />
+            </IconButton>
+            {/* Satellites riding the end-turn circle's outer edge. */}
+            <span className="turnOrbit" aria-hidden={false}>
+              <IconButton
+                size="sm"
+                variant="soft"
+                className="turnOrbitBtn"
+                data-slot="settings"
+                aria-label={t('setTitle')}
+                onClick={() => window.dispatchEvent(new CustomEvent('pc:open-settings'))}
+              >
+                <Settings size={15} />
+              </IconButton>
+              {onConcede && (
+                <IconButton
+                  size="sm"
+                  variant="soft"
+                  className="turnOrbitBtn"
+                  data-slot="concede"
+                  aria-label={t('tblConcede')}
+                  onClick={onConcede}
+                >
+                  <Flag size={15} />
+                </IconButton>
+              )}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="ribbonRow" data-my-turn={myTurn || undefined}>

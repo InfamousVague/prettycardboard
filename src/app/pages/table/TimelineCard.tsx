@@ -80,7 +80,7 @@ function coalesceTimeline(timeline: TimelineEntry[]): TimelineStop[] {
  * streams that historical board; the live edge returns to now, and the host can
  * rewind the whole table to the inspected point.
  */
-export function TimelineCard() {
+export function TimelineCard({ floating }: { floating?: boolean } = {}) {
   const t = useT();
   const myId = useApp((state) => state.identity?.userId);
   const timeline = useGame((state) => state.timeline);
@@ -194,7 +194,9 @@ export function TimelineCard() {
   };
 
   return (
-    <div className="timelineCard">
+    /* Floating: just the control row, riding the board instead of sitting in a
+       card in the rail (phones put undo / timeline / redo on the mat itself). */
+    <div className={floating ? 'timelineFloat' : 'timelineCard'}>
       <div className="timelineTools">
         <Tooltip content={t('gpUndo')}>
           <IconButton
@@ -269,25 +271,30 @@ export function TimelineCard() {
                   );
                 })}
               </div>
+              {/* One control row. Every button is always present - the ones that
+                  need a running replay simply disable, so the row never
+                  reflows as you scrub in and out of the past. */}
               <div className="timelinePlayback">
-                <Tooltip content={playing ? t('gpPauseReplay') : t('gpPlayReplay')}>
-                  <IconButton
-                    size="sm"
-                    variant={playing ? 'solid' : 'soft'}
-                    aria-label={playing ? t('gpPauseReplay') : t('gpPlayReplay')}
-                    onClick={togglePlay}
-                  >
-                    {playing ? <Pause size={15} /> : <Play size={15} />}
-                  </IconButton>
-                </Tooltip>
                 <Tooltip content={t('gpRestartReplay')}>
                   <IconButton
                     size="sm"
                     variant="ghost"
                     aria-label={t('gpRestartReplay')}
+                    disabled={stops.length === 0}
                     onClick={() => startPlay(true)}
                   >
                     <SkipBack size={15} />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip content={playing ? t('gpPauseReplay') : t('gpPlayReplay')}>
+                  <IconButton
+                    size="sm"
+                    variant={playing ? 'solid' : 'soft'}
+                    aria-label={playing ? t('gpPauseReplay') : t('gpPlayReplay')}
+                    disabled={stops.length === 0}
+                    onClick={togglePlay}
+                  >
+                    {playing ? <Pause size={15} /> : <Play size={15} />}
                   </IconButton>
                 </Tooltip>
                 <button
@@ -298,13 +305,12 @@ export function TimelineCard() {
                 >
                   {speed}×
                 </button>
-              </div>
-              {replay.active && undoState.isHost && (
                 <Tooltip content={t('gpRewindHere')}>
                   <IconButton
                     size="sm"
                     variant="soft"
                     aria-label={t('gpRewindHere')}
+                    disabled={!replay.active || !undoState.isHost}
                     onClick={() => {
                       const target = replay.index;
                       replayExit();
@@ -314,18 +320,23 @@ export function TimelineCard() {
                     <RotateCcw size={15} />
                   </IconButton>
                 </Tooltip>
-              )}
-              {replay.active && (
-                <Button size="sm" onClick={replayExit}>
+                <Button size="sm" disabled={!replay.active} onClick={replayExit}>
                   {t('gpReplayLive')}
                 </Button>
-              )}
-              <Tooltip content={t('gpHideTimeline')}>
-                <IconButton size="sm" variant="ghost" aria-label={t('gpHideTimeline')} onClick={closeBar}>
-                  <X size={15} />
-                </IconButton>
-              </Tooltip>
+              </div>
             </div>
+            {/* Rides the bar's top-inline-end corner, outside the panel. */}
+            <Tooltip content={t('gpHideTimeline')}>
+              <IconButton
+                size="sm"
+                variant="soft"
+                className="timelineBarClose"
+                aria-label={t('gpHideTimeline')}
+                onClick={closeBar}
+              >
+                <X size={15} />
+              </IconButton>
+            </Tooltip>
           </div>,
           document.body,
         )}

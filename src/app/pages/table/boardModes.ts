@@ -54,9 +54,79 @@ export function loadCardScale(userId: string | undefined): number {
   return 1;
 }
 
+/* The phone board runs its own, much narrower scale ladder. A desktop-tuned
+   scale is meaningless on a 390px screen, and clamping the desktop value into
+   range left the +/- buttons looking broken (several presses with nothing on
+   screen changing). Three sizes is what actually fits: one step either side of
+   the default. */
+export const MOBILE_SCALE_MIN = 0.55;
+export const MOBILE_SCALE_MAX = 0.85;
+export const MOBILE_SCALE_STEP = 0.15;
+export const MOBILE_SCALE_DEFAULT = 0.7;
+
+export function clampMobileScale(value: number): number {
+  const stepped = Math.round(value * 100) / 100;
+  return Math.min(MOBILE_SCALE_MAX, Math.max(MOBILE_SCALE_MIN, stepped));
+}
+
+const mobileScaleKey = (userId: string | undefined) => `pc.cardscale.mobile.${userId ?? 'anon'}`;
+
+export function loadMobileScale(userId: string | undefined): number {
+  try {
+    const raw = Number.parseFloat(localStorage.getItem(mobileScaleKey(userId)) ?? '');
+    if (Number.isFinite(raw)) return clampMobileScale(raw);
+  } catch {
+    /* storage unavailable - default */
+  }
+  return MOBILE_SCALE_DEFAULT;
+}
+
+export function saveMobileScale(userId: string | undefined, scale: number): void {
+  try {
+    localStorage.setItem(mobileScaleKey(userId), String(scale));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function saveCardScale(userId: string | undefined, scale: number): void {
   try {
     localStorage.setItem(scaleKey(userId), String(scale));
+  } catch {
+    /* ignore */
+  }
+}
+
+/* The grid overview's own zoom, on top of the fit-to-cell factor the grid picks
+   from its column count. 1 means a quadrant is drawn exactly as the staged view
+   would be; below 1 the board lays out against a wider viewport, so everything
+   in it is painted smaller and the mat breathes. Default sits a notch out -
+   fit-to-cell alone reads as too tight once four boards are on screen. */
+export const GRID_ZOOM_MIN = 0.5;
+export const GRID_ZOOM_MAX = 1.2;
+export const GRID_ZOOM_STEP = 0.1;
+export const GRID_ZOOM_DEFAULT = 0.8;
+
+export function clampGridZoom(value: number): number {
+  const stepped = Math.round(value * 10) / 10;
+  return Math.min(GRID_ZOOM_MAX, Math.max(GRID_ZOOM_MIN, stepped));
+}
+
+const gridZoomKey = (userId: string | undefined) => `pc.gridzoom.${userId ?? 'anon'}`;
+
+export function loadGridZoom(userId: string | undefined): number {
+  try {
+    const raw = Number.parseFloat(localStorage.getItem(gridZoomKey(userId)) ?? '');
+    if (Number.isFinite(raw)) return clampGridZoom(raw);
+  } catch {
+    /* storage unavailable - default */
+  }
+  return GRID_ZOOM_DEFAULT;
+}
+
+export function saveGridZoom(userId: string | undefined, zoom: number): void {
+  try {
+    localStorage.setItem(gridZoomKey(userId), String(zoom));
   } catch {
     /* ignore */
   }
@@ -222,6 +292,30 @@ export function hostUnderPoint(
     }
   }
   return best;
+}
+
+/**
+ * A pile is card THICKNESS, not a fan: a few px of edge per member, capped so a
+ * twelve-land pile has the same footprint as a four-land one. Deliberately the
+ * OPPOSITE diagonal from the aura fan so the two never read alike.
+ */
+export const PILE_STEP_PX = 3;
+export const PILE_MAX_EDGES = 4;
+
+/**
+ * The card a drop point actually lands on. A pile reads as one object, so a hit
+ * on a piled member resolves to its BASE; anything else comes back unchanged,
+ * which is why a board with no piles targets exactly as it always has. Null
+ * when the resolved target turns out to be the dragged card itself.
+ */
+export function resolveDropTarget(
+  cards: CardInst[],
+  hit: CardInst | null,
+  dragIid: string,
+): CardInst | null {
+  if (!hit) return null;
+  const base = hit.piled && hit.attachedTo ? (cards.find((c) => c.iid === hit.attachedTo) ?? hit) : hit;
+  return base.iid === dragIid ? null : base;
 }
 
 /**

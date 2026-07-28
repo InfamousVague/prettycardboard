@@ -9,6 +9,10 @@ import {
 
 export type PolyhedralSides = 4 | 6 | 8 | 10 | 12 | 20;
 
+/** The dice every roller offers, largest first. Shared so the board toolbar's
+ *  menu and the sidebar tray can never drift apart. */
+export const DICE_SIDES: readonly PolyhedralSides[] = [20, 12, 10, 8, 6, 4];
+
 const PATHS: Record<PolyhedralSides, string> = {
   4: mdiDiceD4,
   6: mdiDiceD6,

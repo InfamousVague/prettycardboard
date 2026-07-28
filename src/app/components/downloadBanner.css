@@ -40,11 +40,9 @@
   opacity: 0.7;
 }
 
-@media (max-width: 40rem) {
-  .downloadBannerText {
+/* Phones don't get a "download the desktop app" pitch at all. */
+@media (max-width: 700px), (max-height: 480px) {
+  .downloadBanner {
     display: none;
-  }
-  .downloadBannerAction {
-    margin-inline-start: 0;
   }
 }

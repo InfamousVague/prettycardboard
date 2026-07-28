@@ -396,6 +396,30 @@
 .heroRing { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .heroRingLabel { text-transform: uppercase; letter-spacing: 0.08em; }
 
+/* Narrow phones: the win-rate ring wraps under the identity instead of
+   squeezing the name column. */
+@media (max-width: 30rem) {
+  .heroCard { flex-wrap: wrap; }
+  .heroRing { margin-inline: auto; }
+}
+
+/* Progress toward the next flavor rank, under the identity meta. */
+.heroRankProgress {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  margin-block-start: var(--glacier-space-1);
+  max-inline-size: 18rem;
+}
+.heroRankProgress > :first-child {
+  flex: 1;
+  min-inline-size: 0;
+}
+.heroRankProgress > span {
+  flex: none;
+  white-space: nowrap;
+}
+
 /* side panel: Continue (accent) or Start-a-table CTA, both big buttons */
 .heroSide {
   appearance: none;

@@ -22,7 +22,7 @@ export function WhatsNew({
   if (!latest) return null;
   return (
     <Modal open={open} onClose={onClose} title={t('clTitle')} size="md">
-      <div className="wnBody">
+      <div className="wnBody pcMobileFull">
         {releases.map((release) => (
           <section key={release.version} className="wnRelease">
             <Pill size="sm">v{release.version}</Pill>

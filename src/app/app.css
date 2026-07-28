@@ -22,10 +22,34 @@ body {
   background: var(--glacier-bg);
 }
 
+/* This is a game board, not a document: dragging a card must never paint a text
+   selection across half the table, and a long-press on a card has to reach our
+   own menu rather than iOS's copy/define callout. Anything genuinely textual
+   opts back in below. */
+* {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+input,
+textarea,
+select,
+[contenteditable],
+[contenteditable] * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 /* The shell owns the viewport and scrolls its own content, so the root fills
-   the height exactly and never adds a window scrollbar. */
+   the height exactly and never adds a window scrollbar. The ladder matters:
+   100vh is the floor for ancient engines, 100dvh tracks collapsing browser
+   toolbars, and --pc-vh (measured from visualViewport, see viewportHeight.ts)
+   wins where an installed PWA reports a dvh taller than the visible area. */
 #root {
   height: 100vh;
+  height: 100dvh;
+  height: var(--pc-vh, 100dvh);
 }
 
 /*
@@ -38,6 +62,8 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
+  height: var(--pc-vh, 100dvh);
   overflow: hidden;
   background: var(--glacier-bg);
   color: var(--glacier-text);
@@ -304,6 +330,8 @@ body {
 .onboarding {
   position: relative;
   height: 100vh;
+  height: 100dvh;
+  height: var(--pc-vh, 100dvh);
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -527,6 +555,18 @@ body {
   flex: 1;
 }
 
+/* Phones: friend rows and invite cards wrap their actions under the name. */
+@media (max-width: 700px), (max-height: 480px) {
+  .friendRow,
+  .inviteCard {
+    flex-wrap: wrap;
+  }
+
+  .profileWho {
+    min-width: 0;
+  }
+}
+
 /* ---- profile ---- */
 
 .profileHeader {
@@ -543,7 +583,8 @@ body {
 
 .preconGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
+  /* min(100%, …) keeps the track from under-flowing narrow phone viewports. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
   gap: var(--glacier-space-5);
 }
 
@@ -575,6 +616,19 @@ body {
   background: linear-gradient(180deg, transparent, color-mix(in oklch, var(--glacier-bg) 55%, transparent));
 }
 
+/* Narrow phones: the art card + info row runs out of width; stack them. */
+@media (max-width: 30rem) {
+  .preconBody {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .preconInfo {
+    align-items: center;
+    text-align: center;
+  }
+}
+
 .preconArtCard {
   flex: none;
 }
@@ -603,6 +657,66 @@ body {
   .onboardingFan {
     transform: scale(0.72);
     transform-origin: top center;
+  }
+}
+
+/* Phones: the gate becomes a bottom sheet. The fan shrinks into a decorative
+   arc across the top (full-size cards were cropping off both edges and reading
+   as noise), and the form docks to the bottom edge, full width and seamless -
+   floating cards waste width a phone does not have. Because the shell height
+   tracks the visual viewport (--pc-vh), the sheet rises with the keyboard. */
+@media (max-width: 700px) {
+  .onboarding {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  .onboardingFan {
+    /* In flow on phones: margin-block auto centres the arc in whatever space
+       the sheet leaves - short and tall screens both balance out. */
+    position: static;
+    margin-block: auto;
+    padding-top: max(1rem, env(safe-area-inset-top, 0px));
+    transform: scale(0.62);
+    transform-origin: center;
+  }
+
+  .onboardingPanel {
+    width: 100%;
+    margin: 0;
+    border-inline: none;
+    border-block-end: none;
+    border-radius: var(--glacier-radius-2xl, 1.4rem) var(--glacier-radius-2xl, 1.4rem) 0 0;
+    padding: var(--glacier-space-6) var(--glacier-space-5)
+      calc(var(--glacier-space-6) + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -18px 48px rgb(0 0 0 / 0.5);
+  }
+
+  .onboardingLogo {
+    width: min(15rem, 68%);
+  }
+}
+
+/* Landscape phones: no room for a fan at all - the sheet owns the screen. */
+@media (max-height: 480px) and (orientation: landscape) {
+  .onboarding {
+    display: grid;
+    place-items: center;
+  }
+
+  .onboardingFan {
+    display: none;
+  }
+
+  .onboardingPanel {
+    width: min(30rem, calc(100vw - 2rem));
+    margin: 0;
+    padding: var(--glacier-space-5);
+  }
+
+  .onboardingLogo {
+    width: min(12rem, 60%);
   }
 }
 
@@ -1039,6 +1153,16 @@ body {
   padding-block-end: env(safe-area-inset-bottom, 0);
 }
 
+/* ...except at the table, which is a full-bleed playing surface: the mat runs
+   under the home indicator on purpose. Without this the shell reserves the
+   inset here AND the table reserves it again, stacking a ~68px band under the
+   felt that nothing in table.css can reach. The floating chrome that must stay
+   clear of the gesture bar (the End-turn dock, the bottom sheet) handles its
+   own clearance. */
+.appWindow[data-in-game] {
+  padding-block-end: 0;
+}
+
 /* Sidebar footer: the player chip (who you are + presence), on every page. */
 .sbPlayer {
   appearance: none;
@@ -1090,4 +1214,285 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* Suppress residual browser zoom/gesture entry points inside the app: iOS
+   ignores user-scalable in some versions, but honors touch-action. Buttons and
+   controls get 'manipulation' (kills double-tap zoom during rapid tapping). */
+@media (pointer: coarse) {
+  button,
+  a,
+  [role='button'],
+  [role='tab'],
+  input,
+  select {
+    touch-action: manipulation;
+  }
+}
+
+/* ---- phone shell (same breakpoint as the table's mobile layout) ---------- */
+
+/* Desktop: the tab bar never renders visually. */
+.appTabBar {
+  display: none;
+}
+
+/* Phone shell. Driven by the data-phone attribute App puts on <html>, not by a
+   raw media query: the Mobile-layout preference has to be able to force this
+   either way, and a short desktop window must not trap anyone in the phone
+   shell with no way out. 'auto' resolves to the same breakpoint in JS. */
+/* The 240px sidebar + icon rail leave ~100px of content at 390px - on
+   phones navigation moves to the bottom tab bar and pages own the width. */
+:root[data-phone='on'] .appRail,
+:root[data-phone='on'] .appSidebar {
+  display: none !important;
+}
+
+:root[data-phone='on'] .appTabBar {
+  display: flex;
+  flex: none;
+  /* A floating pill detached from the screen edges, matching the desktop
+     shell's floating cards; the bottom margin also clears the home bar. */
+  margin: var(--glacier-space-2) var(--glacier-space-3)
+    calc(var(--glacier-space-2) + env(safe-area-inset-bottom, 0px));
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  border-radius: var(--glacier-radius-xl);
+  background: color-mix(in oklch, var(--glacier-surface) 88%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  box-shadow: var(--glacier-shadow-4);
+}
+
+/* Full-width, full-height surfaces on phones: the floating layout's
+   detached-card margins waste width the screen doesn't have. */
+:root[data-phone='on'] .appWindow[data-layout='floating'] .appRail,
+:root[data-phone='on'] .appWindow[data-layout='floating'] .appSidebar {
+  margin: 0;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* The notch / Dynamic Island: viewport-fit=cover extends the app under it,
+   so the shell must pad the top (and the sides in landscape). */
+:root[data-phone='on'] .appWindow {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Pages keep a slimmer gutter on phones. */
+:root[data-phone='on'] .page {
+  padding-inline: var(--glacier-space-3);
+}
+
+/* Backstop: no page may pan the whole app sideways because one grid track
+   under-flowed (browse/precon fixes address the real culprits). */
+:root[data-phone='on'] .appContent {
+  overflow-x: hidden;
+}
+
+/* ---- fullscreen modals ----
+   Any modal whose content root carries .pcMobileFull takes the whole screen
+   on phones. Targeted through the kit's stable ARIA contract (the panel is
+   role="dialog" portalled inside a fixed overlay div on body) because the
+   kit's class names are hashed. */
+:root[data-phone='on'] body > div:has(> [role='dialog'] .pcMobileFull) {
+  padding: 0;
+}
+
+:root[data-phone='on'] [role='dialog']:has(.pcMobileFull) {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0;
+  padding-top: calc(var(--glacier-space-4) + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(var(--glacier-space-4) + env(safe-area-inset-bottom, 0px));
+  padding-inline: var(--glacier-space-4);
+}
+
+/* The stamped content root flex-fills the panel and scrolls inside. */
+:root[data-phone='on'] [role='dialog'] > .pcMobileFull {
+  flex: 1;
+  min-height: 0;
+}
+
+/* TabbedModal panes cap at 28rem on desktop; fullscreen lifts the cap. */
+:root[data-phone='on'] [role='dialog']:has(.pcMobileFull) [role='tabpanel'] {
+  max-height: none;
+}
+
+/* ---- Settings master-detail ----
+   The TabbedModal's rail+pane become two stacked screens: the section list
+   (pcPaneList) or the picked section with a back row (pcPaneSection). */
+:root[data-phone='on'] .pcSettings {
+  display: flex;
+  flex-direction: column;
+}
+
+:root[data-phone='on'] .pcSettings.pcPaneList [role='tablist'] {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  overflow: visible;
+}
+
+/* Section rows sized for thumbs. */
+:root[data-phone='on'] .pcSettings.pcPaneList [role='tablist'] [role='tab'] {
+  width: 100%;
+  justify-content: flex-start;
+  padding-block: var(--glacier-space-3);
+}
+
+:root[data-phone='on'] .pcSettings.pcPaneList [role='tabpanel'] {
+  display: none;
+}
+
+:root[data-phone='on'] .pcSettings.pcPaneSection [role='tablist'] {
+  display: none;
+}
+
+:root[data-phone='on'] .pcSettings.pcPaneSection [role='tabpanel'] {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+:root[data-phone='on'] .setMobileSection {
+  display: grid;
+  gap: var(--glacier-space-4);
+  align-content: start;
+}
+
+/* The back row leads the section content, reading as "‹ Section name". */
+:root[data-phone='on'] .setMobileBack {
+  justify-self: start;
+}
+
+/* "Back" points the other way under RTL; the kit's icons don't self-mirror. */
+:root[data-phone='on'] [dir='rtl'] .setMobileBack svg {
+  transform: scaleX(-1);
+}
+
+/* A fixed-viewport game on phones: never let the browser hijack the edges
+   with pull-to-refresh or rubber-band scrolling mid-drag. Desktop keeps its
+   native elastic overscroll and two-finger back/forward navigation. */
+:root[data-phone='on'],
+:root[data-phone='on'] body {
+  overscroll-behavior: none;
+}
+
+/* Customize-tab theme filters can overflow sideways instead of wrapping. */
+:root[data-phone='on'] .pickerFilter {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+
+/* ---- rotate-to-orientation cover (phones) --------------------------------
+   Mounted both by the table (asking for landscape) and by the shell (asking
+   for portrait), so it lives here rather than in table.css - the shell never
+   loads the table's stylesheet. */
+
+.rotateOverlay {
+  position: fixed;
+  inset: 0;
+  /* Above the board and chips, BELOW the dock (z-70): the sheet - and its
+     Leave button - must stay usable while the ask is up. */
+  z-index: 65;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--glacier-space-3);
+  text-align: center;
+  padding: var(--glacier-space-6);
+  background: color-mix(in oklch, var(--glacier-bg) 94%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.rotatePhone {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 9.5rem;
+  height: 9.5rem;
+  margin-bottom: var(--glacier-space-2);
+}
+
+.rotatePhoneBody {
+  width: 3rem;
+  height: 5.25rem;
+  border: 3px solid var(--glacier-accent-solid);
+  border-radius: 0.7rem;
+  display: grid;
+  justify-items: center;
+  padding-top: 0.3rem;
+  animation: pcRotatePhone 2.6s ease-in-out infinite;
+}
+
+.rotatePhoneNotch {
+  width: 1rem;
+  height: 0.22rem;
+  border-radius: var(--glacier-radius-full);
+  background: var(--glacier-accent-solid);
+}
+
+/* Static, and sharing the phone body's centre of rotation, so it reads as a
+   glyph printed on the screen while the handset turns around it. */
+.rotateArrow {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  color: var(--glacier-accent-solid);
+}
+
+@keyframes pcRotatePhone {
+  0%,
+  18% {
+    rotate: 0deg;
+  }
+  45%,
+  78% {
+    rotate: -90deg;
+  }
+  100% {
+    rotate: 0deg;
+  }
+}
+
+/* Asking for portrait: the glyph starts sideways and turns upright, mirroring
+   the motion the player should make. */
+.rotateOverlay[data-to='portrait'] .rotatePhoneBody {
+  animation-name: pcRotatePhoneBack;
+}
+
+@keyframes pcRotatePhoneBack {
+  0%,
+  18% {
+    rotate: -90deg;
+  }
+  45%,
+  78% {
+    rotate: 0deg;
+  }
+  100% {
+    rotate: -90deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rotatePhoneBody {
+    animation: none;
+    rotate: -90deg;
+  }
+
+  .rotateOverlay[data-to='portrait'] .rotatePhoneBody {
+    rotate: 0deg;
+  }
+
 }

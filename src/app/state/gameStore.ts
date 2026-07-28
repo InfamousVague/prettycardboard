@@ -150,6 +150,8 @@ function applyEvent(room: RoomState, actor: string, action: (GameAction | GameAc
         return patchCard(player, action.iid, (card) => ({ ...card, x: action.x, y: action.y }));
       case 'card.tap':
         return patchCard(player, action.iid, (card) => ({ ...card, tapped: action.tapped }));
+      case 'card.transform':
+        return patchCard(player, action.iid, (card) => ({ ...card, transformed: action.transformed }));
       case 'card.face':
         // Turning a card face up reveals its identity: the server attaches the
         // full revealed card (`action.card`) to the event. For a hidden card the
@@ -392,7 +394,12 @@ export const useGame = create<GameState>((set, get) => {
     act: (action) => {
       if (get().replay.active) return;
       if (action.kind === 'shuffle') playSound('deckShuffle');
-      else if (action.kind === 'card.tap' || action.kind === 'card.face' || action.kind === 'untap.all') {
+      else if (
+        action.kind === 'card.tap' ||
+        action.kind === 'card.face' ||
+        action.kind === 'card.transform' ||
+        action.kind === 'untap.all'
+      ) {
         playSound('cardTap');
       }
       ws.sendAction(action);

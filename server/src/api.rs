@@ -709,6 +709,21 @@ pub async fn user_stats(State(app): State<Arc<App>>, Path(user_id): Path<String>
     .into_response()
 }
 
+/// GET /api/decks/{id}/stats: a deck's all-time record + saltiness (how salty
+/// opponents rated it, a 1-5 average; 0 when unrated). Public read.
+pub async fn deck_stats(State(app): State<Arc<App>>, Path(deck_id): Path<String>) -> Response {
+    let conn = app.db.lock().unwrap();
+    let (wins, losses) = db::deck_match_counts(&conn, &deck_id);
+    let (salt_x100, salt_count) = db::deck_salt(&conn, &deck_id);
+    Json(json!({
+        "wins": wins,
+        "losses": losses,
+        "salt": salt_x100 as f64 / 100.0,
+        "saltCount": salt_count,
+    }))
+    .into_response()
+}
+
 /// DELETE /api/rooms/{id}: host only. Ends the table for everyone; seated
 /// users' sockets get {type:"room.closed", roomId}.
 pub async fn room_delete(
@@ -957,6 +972,255 @@ pub async fn playmat_upload(
         return err(StatusCode::INTERNAL_SERVER_ERROR, "write_failed", "could not store the image");
     }
     Json(json!({ "id": format!("custom-{file}"), "url": format!("/api/mats/{file}") })).into_response()
+}
+
+/// How long a "this set has no art" marker is trusted before we look again.
+/// Not permanent: the miss may have been a transient Scryfall outage, and a
+/// preview set gains art crops as spoilers land.
+const ART_MISS_TTL: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+
+/// Whether a negative-cache marker is still fresh. An unreadable or expired
+/// marker falls through to a re-fetch, which rewrites it on a genuine miss.
+fn miss_fresh(miss: &std::path::Path) -> bool {
+    std::fs::metadata(miss)
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|at| at.elapsed().ok())
+        .map(|age| age < ART_MISS_TTL)
+        .unwrap_or(false)
+}
+
+/// GET /api/boosters/art/{code} — the marquee art crop for a set, fetched from
+/// Scryfall once and cached on disk forever after. Public for the same reason
+/// as mats: it is painted from <img>/url(), which cannot attach auth headers.
+///
+/// The booster grid shows a simulated pack per set; ~150 tiles each wanting an
+/// art crop would blow straight through Scryfall's rate limit from every
+/// visitor's browser, so the server takes the hit exactly once per set.
+pub async fn booster_art(State(app): State<Arc<App>>, Path(code): Path<String>) -> Response {
+    // Scryfall set codes: short lowercase alphanumerics ("trk", "2xm", "m20").
+    if code.is_empty() || code.len() > 8 || !code.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()) {
+        return err(StatusCode::BAD_REQUEST, "bad_code", "not a set code");
+    }
+    let hit = app.booster_art_dir.join(format!("{code}.jpg"));
+    let miss = app.booster_art_dir.join(format!("{code}.none"));
+
+    let serve = |bytes: Vec<u8>| {
+        (
+            [
+                (header::CONTENT_TYPE, "image/jpeg"),
+                // A set's poster art never changes once cached.
+                (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+            ],
+            bytes,
+        )
+            .into_response()
+    };
+
+    if let Ok(bytes) = std::fs::read(&hit) {
+        return serve(bytes);
+    }
+    if miss_fresh(&miss) {
+        // Negative cache, but time-limited: a transient Scryfall failure (or a
+        // preview set whose spoilers had no art yet) must not brick the set.
+        return err(StatusCode::NOT_FOUND, "no_art", "no art for this set");
+    }
+
+    // One fetch at a time; re-check the disk once inside, because every tile
+    // for the same set queues here on a cold cache.
+    let _guard = app.booster_art_lock.lock().await;
+    if let Ok(bytes) = std::fs::read(&hit) {
+        return serve(bytes);
+    }
+    if miss_fresh(&miss) {
+        return err(StatusCode::NOT_FOUND, "no_art", "no art for this set");
+    }
+
+    // Only a *definitive* miss (Scryfall answered, nothing usable) is cached;
+    // an unreachable Scryfall leaves no marker so the next request retries.
+    let reached = warm_booster_set(&app.booster_art_dir, &code).await;
+    match std::fs::read(&hit) {
+        Ok(bytes) => serve(bytes),
+        Err(_) => {
+            if reached {
+                let _ = std::fs::write(&miss, b"");
+            }
+            err(StatusCode::NOT_FOUND, "no_art", "no art for this set")
+        }
+    }
+}
+
+/// GET /api/boosters/card/{code}/{index} — one of the set's three showcase
+/// cards (its rarest faces), cached by the same warm pass as the poster art.
+pub async fn booster_card(
+    State(app): State<Arc<App>>,
+    Path((code, index)): Path<(String, u8)>,
+) -> Response {
+    if code.is_empty() || code.len() > 8 || !code.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()) {
+        return err(StatusCode::BAD_REQUEST, "bad_code", "not a set code");
+    }
+    if index > 2 {
+        return err(StatusCode::BAD_REQUEST, "bad_index", "0..=2");
+    }
+    let hit = app.booster_art_dir.join(format!("{code}.card{index}.jpg"));
+    let miss = app.booster_art_dir.join(format!("{code}.card{index}.none"));
+
+    let serve = |bytes: Vec<u8>| {
+        (
+            [
+                (header::CONTENT_TYPE, "image/jpeg"),
+                (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+            ],
+            bytes,
+        )
+            .into_response()
+    };
+
+    if let Ok(bytes) = std::fs::read(&hit) {
+        return serve(bytes);
+    }
+    if miss_fresh(&miss) {
+        return err(StatusCode::NOT_FOUND, "no_card", "no such showcase card");
+    }
+
+    let _guard = app.booster_art_lock.lock().await;
+    if let Ok(bytes) = std::fs::read(&hit) {
+        return serve(bytes);
+    }
+    if miss_fresh(&miss) {
+        return err(StatusCode::NOT_FOUND, "no_card", "no such showcase card");
+    }
+
+    let reached = warm_booster_set(&app.booster_art_dir, &code).await;
+    match std::fs::read(&hit) {
+        Ok(bytes) => serve(bytes),
+        Err(_) => {
+            if reached {
+                let _ = std::fs::write(&miss, b"");
+            }
+            err(StatusCode::NOT_FOUND, "no_card", "no such showcase card")
+        }
+    }
+}
+
+/// Warm the whole cache for a set in one pass: the poster art crop plus the
+/// top three rare/mythic card faces. The poster is the most talked-about rare
+/// or mythic (EDHREC ordering is stable and exists even before a set has
+/// prices); sets without rares fall back to any card. One search, then at most
+/// four image downloads, all behind the caller's art lock.
+/// Returns true when Scryfall actually answered (so an empty result is a real
+/// "no art" rather than an outage), false when every request failed.
+async fn warm_booster_set(dir: &std::path::Path, code: &str) -> bool {
+    let queries = [
+        format!("set:{code} (rarity:mythic or rarity:rare)"),
+        format!("set:{code}"),
+    ];
+    let mut reached = false;
+    for query in &queries {
+        let url = format!(
+            "https://api.scryfall.com/cards/search?q={}&unique=cards&order=edhrec",
+            urlencode(query)
+        );
+        let Some(body) = curl_text(&url).await else { continue };
+        let Ok(payload) = serde_json::from_str::<Value>(&body) else { continue };
+        // Scryfall answered with JSON. Even an empty/errored payload counts as
+        // reached: it is an answer about the set, not a network failure.
+        reached = true;
+        let cards = payload.get("data").and_then(Value::as_array);
+        let Some(cards) = cards else { continue };
+        // Scryfall politeness: the search above counts against /cards/*.
+        tokio::time::sleep(std::time::Duration::from_millis(550)).await;
+
+        // The poster: the first card with a usable art crop.
+        let art_path = dir.join(format!("{code}.jpg"));
+        if !art_path.exists() {
+            for card in cards.iter().take(5) {
+                let art = card
+                    .pointer("/image_uris/art_crop")
+                    .or_else(|| card.pointer("/card_faces/0/image_uris/art_crop"))
+                    .and_then(Value::as_str);
+                let Some(art) = art else { continue };
+                if let Some(bytes) = curl_jpeg(art).await {
+                    let _ = std::fs::write(&art_path, &bytes);
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(550)).await;
+            }
+        }
+
+        // The showcase fan: the three rarest faces, by the same ordering.
+        for (index, card) in cards.iter().take(3).enumerate() {
+            let card_path = dir.join(format!("{code}.card{index}.jpg"));
+            if card_path.exists() {
+                continue;
+            }
+            let face = card
+                .pointer("/image_uris/normal")
+                .or_else(|| card.pointer("/card_faces/0/image_uris/normal"))
+                .and_then(Value::as_str);
+            let Some(face) = face else { continue };
+            if let Some(bytes) = curl_jpeg(face).await {
+                let _ = std::fs::write(&card_path, &bytes);
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(550)).await;
+        }
+        return reached;
+    }
+    reached
+}
+
+/// Download a URL and hand it back only if it is a real JPEG: magic bytes and
+/// a size floor keep any error page (whatever its status) out of the cache.
+async fn curl_jpeg(url: &str) -> Option<Vec<u8>> {
+    let bytes = curl_bytes(url).await?;
+    if bytes.len() > 1024 && bytes.starts_with(&[0xFF, 0xD8]) {
+        Some(bytes)
+    } else {
+        None
+    }
+}
+
+fn urlencode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() * 3);
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+/// GET a URL through the system curl (see import_moxfield for why curl).
+async fn curl_out(url: &str) -> Option<Vec<u8>> {
+    let output = tokio::process::Command::new("curl")
+        .arg("-s")
+        // Fail on HTTP >= 400: without this curl exits 0 for a 404 and the
+        // error body would flow onward as if it were the payload.
+        .arg("-f")
+        .arg("-L")
+        .arg("-m")
+        .arg("20")
+        .arg("-H")
+        .arg("user-agent: PrettyCardboard/1.0 (booster art cache)")
+        .arg("-H")
+        .arg("accept: */*")
+        .arg(url)
+        .output()
+        .await
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(output.stdout)
+}
+
+async fn curl_text(url: &str) -> Option<String> {
+    String::from_utf8(curl_out(url).await?).ok()
+}
+
+async fn curl_bytes(url: &str) -> Option<Vec<u8>> {
+    curl_out(url).await
 }
 
 /// GET /api/mats/{file} — serves stored custom mats. Public: mats are painted

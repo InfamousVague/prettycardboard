@@ -10,7 +10,9 @@ import {
   LayoutGrid,
   Palette,
   RotateCw,
+  Rows3,
   ScrollText,
+  Smartphone,
   Swords,
   Users,
 } from '@glacier/icons';
@@ -36,6 +38,21 @@ export interface ChangelogRelease {
 
 /** Newest release first. */
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.5.0',
+    entries: [
+      { icon: Rows3, title: 'clPiles', desc: 'clPilesDesc' },
+      { icon: LayoutGrid, title: 'clGrid050', desc: 'clGrid050Desc' },
+    ],
+  },
+  {
+    version: '0.4.0',
+    entries: [
+      { icon: Smartphone, title: 'clMobile', desc: 'clMobileDesc' },
+      { icon: Hand, title: 'clMobileTable', desc: 'clMobileTableDesc' },
+      { icon: LayoutGrid, title: 'clMobileShell', desc: 'clMobileShellDesc' },
+    ],
+  },
   {
     version: '0.3.0',
     entries: [

@@ -94,7 +94,7 @@ export function TokenPicker({
 
   return (
     <Modal open onClose={onClose} title={t('tkTitle')} size="xl">
-      <div className="tokenPicker">
+      <div className="tokenPicker pcMobileFull">
         <SearchField value={query} onValueChange={setQuery} placeholder={t('tkSearch')} aria-label={t('tkSearch')} />
 
         {query.trim() ? (

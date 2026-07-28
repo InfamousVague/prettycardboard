@@ -18,7 +18,7 @@ import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { getGame } from '../../data/games.ts';
 import { EMPTY_MANA, MANA_ORDER, ManaSymbol } from '../../components/Mana.tsx';
-import { DiceIcon, type PolyhedralSides } from '../../components/DiceIcon.tsx';
+import { DICE_SIDES, DiceIcon } from '../../components/DiceIcon.tsx';
 import { juicePulse } from './juice.ts';
 import { useTableUi } from './tableUi.ts';
 import { formatFor } from '../../data/formats.ts';
@@ -166,7 +166,7 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
             <Dices size={12} /> {t('tblDice')}
           </span>
           <div className="diceTrayDice">
-            {([20, 12, 10, 8, 6, 4] as const).map((sides) => (
+            {DICE_SIDES.map((sides) => (
               <Tooltip key={sides} content={`${t('tblRollDice')} d${sides}`}>
                 <button
                   type="button"
@@ -174,7 +174,7 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
                   aria-label={`${t('tblRollDice')} d${sides}`}
                   onClick={() => act({ kind: 'dice.roll', sides })}
                 >
-                  <DiceIcon sides={sides as PolyhedralSides} size={24} />
+                  <DiceIcon sides={sides} size={24} />
                 </button>
               </Tooltip>
             ))}
@@ -307,7 +307,14 @@ function ManaBar({ room, mana = EMPTY_MANA }: { room: RoomState; mana?: ManaPool
             data-color={c}
             data-has={mana[c] > 0 || undefined}
             aria-label={`${c}: ${mana[c]} — tap to add, hold or right-click to spend`}
-            onPointerDown={() => startHold(c)}
+            onPointerDown={(e) => {
+              // Primary button only: a mouse right-press must not arm the hold,
+              // or the contextmenu guard below swallows the spend on platforms
+              // that fire contextmenu before pointerup (macOS/Linux). Touch and
+              // pen report button 0, so the Android double-fire guard still sees
+              // the armed timer.
+              if (e.button === 0) startHold(c);
+            }}
             onPointerUp={endHold}
             onPointerLeave={endHold}
             onPointerCancel={endHold}
@@ -321,6 +328,9 @@ function ManaBar({ room, mana = EMPTY_MANA }: { room: RoomState; mana?: ManaPool
             }}
             onContextMenu={(e) => {
               e.preventDefault();
+              // Android touch long-press fires BOTH our 380ms hold-to-spend
+              // AND native contextmenu (~500ms) - don't double-decrement.
+              if (holdRef.current !== null || heldRef.current) return;
               bump(c, -1);
             }}
             onKeyDown={(e) => {

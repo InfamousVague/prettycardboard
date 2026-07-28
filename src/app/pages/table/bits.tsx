@@ -4,12 +4,14 @@ import { Ban, Crown, Plus, Skull, SlidersHorizontal, Swords, Trash2 } from '@gla
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
+import { isFoilInst } from '../../data/foil.ts';
 import { zoneLabel } from '../../data/games.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import type { CardInst, CombatState, MatPos, MatZone, RoomState, TablePlayer, Zone } from '../../net/types.ts';
-import { useTableUi } from './tableUi.ts';
+import { selectCardScale, useTableUi } from './tableUi.ts';
 import { useLongPress, menuEventFrom } from '../../hooks/useLongPress.ts';
+import { useMobileLayout } from '../../hooks/useIsPhone.ts';
 import { flyFromAnchor, flightAnchor, setFlightAnchor } from './juice.ts';
 import { formatPtCounter, parsePtCounter, ptCounterModifier } from './boardModes.ts';
 
@@ -35,6 +37,20 @@ export function groupAttachments(cards: CardInst[]): {
     }
   }
   return { hosts, attachments };
+}
+
+/**
+ * Split a host's attachments into its PILE (squared up under it - board order
+ * is pile order, so the LAST entry is the top of the pile, the one directly
+ * under the base) and its AURAS (fanned down-right). Piles and auras share one
+ * attachment list, so they have to be indexed separately or their offsets
+ * interleave and the pile stops reading as one object.
+ */
+export function splitPile(list: CardInst[]): { piled: CardInst[]; auras: CardInst[] } {
+  const piled: CardInst[] = [];
+  const auras: CardInst[] = [];
+  for (const card of list) (card.piled ? piled : auras).push(card);
+  return { piled, auras };
 }
 
 /**
@@ -409,12 +425,13 @@ export function ZonePiles({
   const popup = useCardPopup();
   const setPileView = useTableUi((state) => state.setPileView);
   const setLibIntent = useTableUi((state) => state.setLibIntent);
-  const cardScale = useTableUi((state) => state.cardScale);
+  const cardScale = useTableUi(selectCardScale);
   const [confirmShuffle, setConfirmShuffle] = useState(false);
   const [libMenuOpen, setLibMenuOpen] = useState(false);
   // Zone rail labels are game-driven: MTG keeps its localized strings, Cyberpunk
   // relabels the physical slots (Deck / Trash / Eddies / Legend) from the registry.
   const gameId = useGame((state) => state.room?.game);
+  const mobile = useMobileLayout();
   const cyber = gameId === 'cyberpunk';
   const libLabel = cyber ? zoneLabel(gameId, 'library') : t('tblLibrary');
   const graveLabel = cyber ? zoneLabel(gameId, 'graveyard') : t('tblGraveyard');
@@ -424,14 +441,23 @@ export function ZonePiles({
   const graveTop = player.graveyard[player.graveyard.length - 1];
   const exileTop = player.exile[player.exile.length - 1];
   // My own piles (and a staged opponent's mirror) ride the card-scale
-  // preference; compact everywhere else.
-  const width = mine || big ? Math.round(96 * cardScale) : 44;
-  const emptyIcon = Math.max(16, Math.round(width * 0.34));
+  // preference; compact everywhere else. On phones they match the battlefield's
+  // card width exactly (the same 120 base MyBoard uses) so the deck reads as
+  // one of the cards in play rather than a smaller token of one.
+  const width = mine || big ? Math.round((mobile ? 120 : 96) * cardScale) : 44;
+  // The zone icon IS the label on a phone (the captions are hidden there), so
+  // it has to be readable at arm's length rather than a hint in the corner.
+  const emptyIcon = Math.max(16, Math.round(width * (mobile ? 0.56 : 0.34)));
   const interactive = mine && canAct;
 
   // Touch has no right-click, so press-and-hold opens the zone card's menu.
   const graveLongPress = useLongPress((info) => {
     if (interactive && onMenu && graveTop) onMenu(menuEventFrom(info), graveTop.iid, 'graveyard');
+  });
+  // iOS never fires contextmenu from touch - the exile menu needs the same
+  // press-and-hold path the other piles have.
+  const exileLongPress = useLongPress((info) => {
+    if (interactive && onMenu && exileTop) onMenu(menuEventFrom(info), exileTop.iid, 'exile');
   });
   // Library: left-click draws; right-click (or hold on touch) opens the menu.
   const libLongPress = useLongPress(() => setLibMenuOpen(true));
@@ -605,7 +631,7 @@ export function ZonePiles({
       >
         <div ref={(el) => setFlightAnchor(`grave:${player.userId}`, el)}>
           {graveTop ? (
-            <GameCard name={graveTop.name} imageUrl={graveTop.imageUrl || cardImage(graveTop.scryfallId)} width={width} tilt={0} />
+            <GameCard name={graveTop.name} imageUrl={graveTop.imageUrl || cardImage(graveTop.scryfallId)} width={width} foil={isFoilInst(graveTop)} tilt={0} />
           ) : (
             <div className="pileEmpty pileEmptyIcon" style={{ width }}>
               <Skull size={emptyIcon} />
@@ -631,13 +657,26 @@ export function ZonePiles({
           if (player.exile.length > 0) setPileView({ userId: player.userId, zone: 'exile' });
         }}
         onContextMenu={interactive && onMenu && exileTop ? (event) => onMenu(event, exileTop.iid, 'exile') : undefined}
-        onPointerDown={interactive && exileTop && onDragOut ? (event) => onDragOut(event, exileTop, 'exile') : undefined}
+        onPointerDown={
+          interactive && exileTop
+            ? (event) => {
+                exileLongPress.onPointerDown(event);
+                onDragOut?.(event, exileTop, 'exile');
+              }
+            : undefined
+        }
+        onPointerMove={interactive ? exileLongPress.onPointerMove : undefined}
+        onPointerUp={interactive ? exileLongPress.onPointerUp : undefined}
+        onClickCapture={exileLongPress.onClickCapture}
         onPointerEnter={() => exileTop && onHover?.(exileTop)}
-        onPointerLeave={() => onHover?.(null)}
+        onPointerLeave={(event) => {
+          onHover?.(null);
+          exileLongPress.onPointerLeave(event);
+        }}
       >
         <div ref={(el) => setFlightAnchor(`exile:${player.userId}`, el)}>
           {exileTop ? (
-            <GameCard name={exileTop.name} imageUrl={exileTop.imageUrl || cardImage(exileTop.scryfallId)} width={width} tilt={0} />
+            <GameCard name={exileTop.name} imageUrl={exileTop.imageUrl || cardImage(exileTop.scryfallId)} width={width} foil={isFoilInst(exileTop)} tilt={0} />
           ) : (
             <div className="pileEmpty pileEmptyIcon" style={{ width }}>
               <Ban size={emptyIcon} />
@@ -762,7 +801,14 @@ function CmdCard({
       preview();
       return;
     }
-    if (clickTimer.current) return; // second click of a double — dblclick handles it
+    if (clickTimer.current) {
+      // Second click/tap of a double: cast. Handled manually (not native
+      // dblclick) because iOS Safari doesn't reliably synthesize dblclick
+      // from double-taps - this timer path works for mouse AND touch.
+      clearClick();
+      cast();
+      return;
+    }
     clickTimer.current = setTimeout(() => {
       clickTimer.current = null;
       preview();
@@ -790,19 +836,13 @@ function CmdCard({
         longPress.onPointerLeave(event);
       }}
       onClickCapture={longPress.onClickCapture}
-      onDoubleClick={
-        interactive && !card.faceDown
-          ? () => {
-              clearClick();
-              cast();
-            }
-          : undefined
-      }
       onContextMenu={interactive && onMenu ? (event) => onMenu(event, card.iid, 'command') : undefined}
     >
       {/* No name tooltip — the hover preview (HoverCardLayer) shows a face-up
           card on rest; a face-down Legend wears the card back (hidden info until
-          Called). Commander tax rides under the pile's Command label. */}
+          Called). Commander tax rides under the pile's Command label.
+          Foil is unconditional here: sitting in the command zone IS the
+          marking, and not every card in it carries isCommander. */}
       <GameCard
         name={card.name}
         imageUrl={card.imageUrl || cardImage(card.scryfallId)}

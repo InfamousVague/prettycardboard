@@ -101,6 +101,18 @@
   flex: none;
 }
 
+/* Phones: saved-table rows wrap so the action buttons drop under the info
+   instead of crushing the table name. */
+@media (max-width: 700px), (max-height: 480px) {
+  .playPage .myTableRow {
+    flex-wrap: wrap;
+  }
+
+  .playPage .myTableActions {
+    margin-inline-start: auto;
+  }
+}
+
 /* The lobby switch and its hint read as one field in the create card. */
 .myPersistentHint {
   max-inline-size: 30rem;

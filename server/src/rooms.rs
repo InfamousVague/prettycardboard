@@ -29,12 +29,24 @@ pub struct Card {
     /// iid of the battlefield card this one is attached to (auras/equipment).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attached_to: Option<String>,
+    /// This attachment is a PILE member, not an aura: it squares up UNDER its
+    /// base and the group reads as one object with a count, the way stacked
+    /// lands do on a real table. Only ever meaningful alongside `attached_to` -
+    /// `card_view` hides a stale bit and the attach arm always reassigns it, so
+    /// this is a qualifier on that pointer, never independent state.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub piled: bool,
     /// Flagged from the deck's commander board at load (commander format only).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_commander: bool,
     /// Temporarily public while on the stack from a hidden zone.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub revealed: bool,
+    /// A double-faced card flipped to its back face (transform / modal DFC). The
+    /// client resolves the back art from the card's Scryfall faces; the server
+    /// just tracks which face is up so every seat sees the same side.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub transformed: bool,
 }
 
 /// London-mulligan progress for one seat.
@@ -738,6 +750,15 @@ fn card_view(card: &Card, owner_is_viewer: bool, hide_from_owner: bool) -> Value
         o.remove("power");
         o.remove("toughness");
         o.remove("isCommander"); // identity leak
+        // `attachedTo`/`piled` deliberately survive the mask: the RELATION is
+        // public even when the identity is not, so a pile of face-down cards
+        // still reads as one object to opponents and spectators.
+    }
+    // A pile member that lost its base is just a loose card. Rather than null
+    // this bit at every site that nulls attached_to, `piled` is only ever a
+    // qualifier on that pointer - so hide it whenever the pointer is gone.
+    if card.attached_to.is_none() && card.piled {
+        v.as_object_mut().unwrap().remove("piled");
     }
     v
 }
@@ -914,8 +935,10 @@ pub fn build_zones(cards: &[DeckCard], flag_commanders: bool, game: &str) -> (Ve
                 power: None,
                 toughness: None,
                 attached_to: None,
+                piled: false,
                 is_commander: is_cmd && flag_commanders,
                 revealed: false,
+                transformed: false,
             };
             if is_cmd {
                 command.push(card);

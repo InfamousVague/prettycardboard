@@ -1,0 +1,589 @@
+/* Boosters: the set browser and the pack-opening table. Set tiles echo the
+   Browse catalog's tile rhythm; the opened pack is a fanned row of cards that
+   flip face-up one at a time, so the reveal reads like a real pack. */
+
+.boHead {
+  display: grid;
+  gap: var(--glacier-space-2);
+}
+
+.boToolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-3) var(--glacier-space-4);
+}
+
+.boSearch {
+  flex: 1 1 auto;
+  min-width: 14rem;
+}
+
+.boNotice {
+  display: grid;
+  justify-items: center;
+  gap: var(--glacier-space-3);
+  padding-block: var(--glacier-space-8);
+}
+
+/* ---- set grid ---- */
+
+.boGrid {
+  display: grid;
+  /* min(100%, …) so a narrow phone never widens the page. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 13.5rem), 1fr));
+  gap: var(--glacier-space-3);
+}
+
+.boSetTile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--glacier-space-3);
+  width: 100%;
+  padding: var(--glacier-space-4) var(--glacier-space-4) var(--glacier-space-3);
+  border-radius: var(--glacier-radius-xl);
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  background: var(--glacier-surface);
+  color: var(--glacier-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    box-shadow var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+@media (hover: hover) {
+  .boSetTile:hover {
+    border-color: var(--glacier-border-strong);
+    box-shadow: var(--glacier-shadow-3);
+  }
+
+  /* The showcase fan spreads a touch wider on hover, like being picked up. */
+  .boSetTile:hover .boTileFanCard:first-child {
+    rotate: -18deg;
+    translate: -78% 4%;
+  }
+
+  .boSetTile:hover .boTileFanCard:last-child {
+    rotate: 16deg;
+    translate: 34% 2%;
+  }
+}
+
+/* ---- the product shot: display box behind, booster pack in front ---- */
+
+.boShot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 10.5rem;
+  perspective: 720px;
+  /* The box corner and the pack's hover lift both poke past the row. */
+  overflow: visible;
+}
+
+/* The display box: a cuboid corner view, art on the front, dark side panel. */
+.boBox {
+  position: absolute;
+  inset-block-end: 0.9rem;
+  inset-inline-start: 50%;
+  width: 8.6rem;
+  height: 7.6rem;
+  translate: -62% 0;
+  transform-style: preserve-3d;
+  transform: rotateY(-24deg);
+}
+
+.boBoxFront {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  background-color: color-mix(in oklch, var(--glacier-accent-solid) 18%, var(--glacier-surface-sunken, #101114));
+  background-size: cover;
+  background-position: center 30%;
+  /* Product print: the art darkens toward the base where the logo band sits. */
+  box-shadow:
+    inset 0 -2.6rem 2.2rem -1.6rem rgb(0 0 0 / 0.75),
+    0 14px 26px rgb(0 0 0 / 0.45);
+  display: grid;
+  justify-items: center;
+  align-content: end;
+  padding-block-end: 0.5rem;
+}
+
+.boBoxIcon {
+  width: 1.3rem;
+  height: 1.3rem;
+  filter: invert(1) brightness(1.7) drop-shadow(0 1px 3px rgb(0 0 0 / 0.7));
+  opacity: 0.95;
+}
+
+.boBoxName {
+  max-width: 90%;
+  margin-top: 0.2rem;
+  text-align: center;
+  font-size: 0.52rem;
+  font-weight: var(--glacier-font-weight-bold);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  line-height: 1.15;
+  color: rgb(255 255 255 / 0.92);
+  text-shadow: 0 1px 4px rgb(0 0 0 / 0.85);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* The three rarest cards, fanned out of the box's bottom-right corner. */
+.boTileFan {
+  position: absolute;
+  inset-block-end: 0.2rem;
+  inset-inline-start: 50%;
+  translate: 8% 0;
+  width: 3.9rem;
+  height: 5.45rem;
+}
+
+.boTileFanCard {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  border-radius: 4.75% / 3.41%;
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.55);
+  transform-origin: 50% 88%;
+  transition:
+    rotate var(--glacier-duration-fast) var(--glacier-ease-out),
+    translate var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.boTileFanCard:first-child {
+  rotate: -14deg;
+  translate: -62% 3%;
+}
+
+.boTileFanCard:nth-child(2) {
+  rotate: 1deg;
+  translate: -28% 0;
+  z-index: 1;
+}
+
+.boTileFanCard:last-child {
+  rotate: 13deg;
+  translate: 8% 2%;
+  z-index: 2;
+}
+
+/* Same cuboid recipe as .boBox3dFace[data-face='side']: centred on the pivot,
+   pushed to the front face's right edge, then turned. */
+.boBoxSide {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 50%;
+  width: 2.6rem;
+  margin-inline-start: -1.3rem;
+  transform: translateX(4.3rem) rotateY(90deg);
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklch, var(--glacier-bg) 55%, black),
+    color-mix(in oklch, var(--glacier-bg) 78%, black)
+  );
+}
+
+/* The crimped foil seals. The zigzag edge is a clipped strip, the crinkle a
+   repeating gradient - reads as machine-pressed foil at this size. */
+/* No cached art yet: the box stays, wearing the accent-gradient blank - the
+   icon and name band still identify the set while the cache warms. */
+.boShot[data-noart] .boBoxFront {
+  background-image: linear-gradient(
+    155deg,
+    color-mix(in oklch, var(--glacier-accent-solid) 28%, var(--glacier-surface-raised, #1a1c20)),
+    color-mix(in oklch, var(--glacier-accent-solid) 6%, var(--glacier-surface-sunken, #101114)) 70%
+  );
+}
+
+.boSetPills {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  flex-wrap: wrap;
+}
+
+.boSetTile:focus-visible {
+  outline: 2px solid var(--glacier-accent-solid);
+  outline-offset: 2px;
+}
+
+/* Set symbols ship as SVG on a transparent background - they are dark on dark,
+   so a brightness filter lifts them onto the surface. */
+.boSetIcon {
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: none;
+  filter: invert(1) brightness(1.6);
+  opacity: 0.85;
+}
+
+.boSetBody {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.boSetName {
+  font-weight: var(--glacier-font-weight-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.boSetSpec {
+  flex: none;
+}
+
+/* ---- opener ---- */
+
+/* The expansion's art fills the opener page, dimmed to ambience (same recipe
+   as the Browse tiles): the page must stay readable over any painting. */
+.boOpenerPage {
+  position: relative;
+  isolation: isolate;
+}
+
+.boSetBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-size: cover;
+  background-position: center 30%;
+  filter: blur(34px) saturate(1.15) brightness(0.42);
+  transform: scale(1.15);
+  /* The art arrives after paint; never pop it in. */
+  animation: boBackdropIn 600ms var(--glacier-ease-out);
+}
+
+@keyframes boBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---- the physical display box ---- */
+
+/* The opener's product row: the 3D box on the shelf, stats and the deal
+   button beside it. Phones stack them. */
+.boProductRow {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-6);
+}
+
+.boProductInfo {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: var(--glacier-space-4);
+  justify-items: start;
+}
+
+@media (max-width: 700px), (max-height: 480px) {
+  .boProductRow {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .boProductInfo {
+    justify-items: center;
+    width: 100%;
+  }
+}
+
+/* A real cuboid: three visible faces around one preserve-3d pivot, swaying
+   slowly on the shelf. Dimensions ride custom properties so every face and
+   its translateZ agree. */
+.boBox3dWrap {
+  --bw: 11rem; /* front width */
+  --bh: 8.25rem; /* height */
+  --bd: 6.5rem; /* depth */
+  position: relative;
+  flex: none;
+  width: calc(var(--bw) + var(--bd) * 0.7);
+  height: calc(var(--bh) + var(--bd) * 0.55);
+  perspective: 1100px;
+  display: grid;
+  place-items: center;
+}
+
+.boBox3d {
+  position: relative;
+  width: var(--bw);
+  height: var(--bh);
+  transform-style: preserve-3d;
+  transform: rotateX(-12deg) rotateY(-28deg);
+  animation: boBoxSway 7s ease-in-out infinite;
+}
+
+@keyframes boBoxSway {
+  0%,
+  100% {
+    transform: rotateX(-12deg) rotateY(-28deg);
+  }
+  50% {
+    transform: rotateX(-9deg) rotateY(-19deg);
+  }
+}
+
+.boBox3dFace {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+}
+
+.boBox3dFace[data-face='front'] {
+  transform: translateZ(calc(var(--bd) / 2));
+  border-radius: 3px;
+  background-color: color-mix(in oklch, var(--glacier-accent-solid) 16%, var(--glacier-surface-sunken, #101114));
+  background-size: cover;
+  background-position: center 30%;
+  /* Print finish: art darkens to the logo band along the base. */
+  box-shadow: inset 0 -3rem 2.4rem -1.6rem rgb(0 0 0 / 0.8);
+  display: grid;
+  justify-items: center;
+  align-content: end;
+  gap: 0.25rem;
+  padding-block-end: 0.6rem;
+}
+
+.boBox3dIcon {
+  width: 1.6rem;
+  height: 1.6rem;
+  filter: invert(1) brightness(1.8) drop-shadow(0 1px 4px rgb(0 0 0 / 0.8));
+}
+
+.boBox3dName {
+  max-width: 88%;
+  text-align: center;
+  font-size: 0.6rem;
+  font-weight: var(--glacier-font-weight-bold);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  line-height: 1.15;
+  color: rgb(255 255 255 / 0.94);
+  text-shadow: 0 1px 4px rgb(0 0 0 / 0.9);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Canonical cuboid faces: each is centred on the pivot, sized for its plane,
+   then pushed to its edge and turned. The -28deg yaw exposes the RIGHT side. */
+.boBox3dFace[data-face='side'] {
+  inset: auto;
+  width: var(--bd);
+  height: var(--bh);
+  left: 50%;
+  top: 0;
+  margin-left: calc(var(--bd) / -2);
+  transform: translateX(calc(var(--bw) / 2)) rotateY(90deg);
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklch, var(--glacier-bg) 72%, black),
+    color-mix(in oklch, var(--glacier-bg) 45%, black)
+  );
+}
+
+.boBox3dFace[data-face='top'] {
+  inset: auto;
+  width: var(--bw);
+  height: var(--bd);
+  left: 0;
+  top: 50%;
+  margin-top: calc(var(--bd) / -2);
+  transform: translateY(calc(var(--bh) / -2)) rotateX(90deg);
+  border-radius: 3px;
+  background-color: color-mix(in oklch, var(--glacier-accent-solid) 10%, var(--glacier-surface-sunken, #101114));
+  background-size: cover;
+  background-position: center 20%;
+  /* The lid catches less light than the front. */
+  filter: brightness(0.6);
+}
+
+.boBox3d[data-noart] .boBox3dFace[data-face='front'],
+.boBox3d[data-noart] .boBox3dFace[data-face='top'] {
+  background-image: linear-gradient(
+    155deg,
+    color-mix(in oklch, var(--glacier-accent-solid) 30%, var(--glacier-surface-raised, #1a1c20)),
+    color-mix(in oklch, var(--glacier-accent-solid) 6%, var(--glacier-surface-sunken, #101114)) 70%
+  );
+}
+
+/* Grounds the box: without a contact shadow it floats. */
+.boBox3dShadow {
+  position: absolute;
+  inset-block-end: -0.4rem;
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  width: 78%;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: radial-gradient(50% 50% at 50% 50%, rgb(0 0 0 / 0.55), transparent 70%);
+  filter: blur(6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boBox3d {
+    animation: none;
+  }
+}
+
+.boMore {
+  display: grid;
+  justify-items: center;
+  padding-block: var(--glacier-space-2) var(--glacier-space-4);
+}
+
+.boOpenerHead {
+  display: grid;
+  gap: var(--glacier-space-2);
+  justify-items: start;
+}
+
+.boBack {
+  margin-inline-start: calc(var(--glacier-space-2) * -1);
+}
+
+.boOpenerTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  flex-wrap: wrap;
+}
+
+.boStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-3) var(--glacier-space-6);
+  padding: var(--glacier-space-4);
+  border-radius: var(--glacier-radius-xl);
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  background: color-mix(in oklch, var(--glacier-surface) 70%, transparent);
+}
+
+.boStat {
+  display: grid;
+  gap: 2px;
+}
+
+.boStatValue {
+  font-size: var(--glacier-font-size-xl);
+  font-weight: var(--glacier-font-weight-semibold);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.boActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-3);
+}
+
+.boActions button svg {
+  margin-inline-end: var(--glacier-space-1);
+}
+
+/* ---- the opened pack ---- */
+
+.boPack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-4) var(--glacier-space-3);
+  padding-block: var(--glacier-space-2);
+}
+
+.boSlot {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: var(--glacier-space-2);
+  /* Perspective belongs on the PARENT of the rotating element, or the flip
+     reads as a flat mirror instead of a card turning over. */
+  perspective: 900px;
+}
+
+.boFlip {
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+.boFace {
+  backface-visibility: hidden;
+}
+
+/* The card's reverse. Deliberately NOT named .boBack - that class is the
+   "All sets" button, and sharing it turned the button upside down. */
+.boCardBack {
+  position: absolute;
+  inset: 0;
+  transform: rotateY(180deg);
+  border-radius: var(--glacier-radius-lg);
+  background-size: cover;
+  background-position: center;
+  box-shadow: var(--glacier-shadow-3);
+}
+
+.boSlotTag {
+  font-size: var(--glacier-font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--glacier-text-subtle);
+}
+
+.boSlotTag[data-rarity='rare'] {
+  color: var(--glacier-warning-text, #d9a441);
+}
+
+.boSlotTag[data-rarity='mythic'] {
+  color: var(--glacier-danger-text, #d2622f);
+  font-weight: var(--glacier-font-weight-bold);
+}
+
+/* A mythic earns a halo so it reads across the table at a glance. */
+.boSlot[data-rarity='mythic'] .boFront {
+  filter: drop-shadow(0 0 14px color-mix(in oklch, var(--glacier-danger-solid, #d2622f) 55%, transparent));
+}
+
+.boSlot[data-rarity='rare'] .boFront {
+  filter: drop-shadow(0 0 10px color-mix(in oklch, var(--glacier-warning-solid, #d9a441) 40%, transparent));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boFlip {
+    transition: none;
+  }
+}
+
+/* Phones: tighter gaps, and the stat strip scrolls rather than wrapping tall. */
+@media (max-width: 700px), (max-height: 480px) {
+  .boPack {
+    gap: var(--glacier-space-3) var(--glacier-space-2);
+    justify-content: center;
+  }
+
+  .boStats {
+    gap: var(--glacier-space-3) var(--glacier-space-4);
+    padding: var(--glacier-space-3);
+  }
+
+  .boStatValue {
+    font-size: var(--glacier-font-size-lg);
+  }
+}

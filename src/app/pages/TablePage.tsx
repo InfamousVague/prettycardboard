@@ -1,5 +1,12 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { AlertDialog, Avatar, Button, IconButton, Input, Kbd, Menu, MenuItem, Pill, Text, Size, StatusDot, TextTone, Tooltip, useToast } from '@glacier/react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react';
+import { AlertDialog, Avatar, Button, Drawer, IconButton, Input, Kbd, Menu, MenuItem, Pill, Text, Size, StatusDot, TextTone, Tooltip, useToast } from '@glacier/react';
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -17,12 +24,15 @@ import {
   Hand,
   Heart,
   Layers,
+  LayoutGrid,
   Link2,
   LogOut,
   Paperclip,
   Play,
   Plus,
+  Repeat,
   RotateCw,
+  Rows3,
   ScrollText,
   Send,
   Settings,
@@ -30,17 +40,23 @@ import {
   Swords,
   Unlink,
   UserPlus,
+  Users,
   X,
   Zap,
+  ZoomIn,
+  ZoomOut,
 } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
 import { cardImage } from '../data/cards.ts';
+import { useFaces } from '../data/faces.ts';
 import { cardBackUrl, effectiveCardBack } from '../data/cardBacks.ts';
 import { useEdgeColor } from '../data/edgeColor.ts';
 import { tableShareUrl } from '../data/pendingJoin.ts';
 import { usePreference } from '../hooks/usePreference.ts';
+import { useMobileLayout, usePortrait } from '../hooks/useIsPhone.ts';
+import { RotateOverlay } from './table/RotateOverlay.tsx';
 import { resolveKeybinds, KEYBIND_DEF, type ActionId } from '../data/keybinds.ts';
 import { getDeck } from '../net/api.ts';
 import { computeDeckMeta } from '../data/deckMeta.ts';
@@ -48,8 +64,19 @@ import type { GameId } from '../data/games.ts';
 import { GameCard } from '../components/GameCard.tsx';
 import { ManaPoolReadout } from '../components/Mana.tsx';
 import type { CardInst, GameAction, GameActionV2, RoomState, TablePlayer, Zone } from '../net/types.ts';
-import { useTableUi } from './table/tableUi.ts';
-import { CARD_SCALE_MAX, CARD_SCALE_MIN, CARD_SCALE_STEP } from './table/boardModes.ts';
+import { selectCardScale, useTableUi } from './table/tableUi.ts';
+import {
+  CARD_SCALE_MAX,
+  CARD_SCALE_MIN,
+  CARD_SCALE_STEP,
+  GRID_ZOOM_MAX,
+  GRID_ZOOM_MIN,
+  GRID_ZOOM_STEP,
+  MOBILE_SCALE_DEFAULT,
+  MOBILE_SCALE_MAX,
+  MOBILE_SCALE_MIN,
+  MOBILE_SCALE_STEP,
+} from './table/boardModes.ts';
 import { MyBoard } from './table/MyBoard.tsx';
 import { Vitals } from './table/Vitals.tsx';
 import { SeatFrame } from './table/SeatFrame.tsx';
@@ -117,18 +144,58 @@ export function TablePage() {
   const mirrorOpponent = usePreference('mirrorOpponent');
   // Card size for the staged board - adjustable from the spectate cue, since
   // spectators (and seated players watching another mat) have no board tools.
-  const cardScale = useTableUi((state) => state.cardScale);
+  const cardScale = useTableUi(selectCardScale);
+  // Steppers act on whichever ladder is live - the phone's own three sizes or
+  // the desktop preference - so a phone can never overwrite a desktop scale.
+  const storedScale = useTableUi((state) => (state.scaleCap != null ? state.mobileScale : state.cardScale));
+  const stepScale = (direction: number) => {
+    const state = useTableUi.getState();
+    if (state.scaleCap != null) state.setMobileScale(state.mobileScale + direction * MOBILE_SCALE_STEP, identity?.userId);
+    else state.setCardScale(state.cardScale + direction * CARD_SCALE_STEP, identity?.userId);
+  };
   const keybinds = usePreference('keybinds');
+  // The phone layout: full-bleed board, seat chips as the camera, the side
+  // rail folded into a bottom sheet, End turn in the thumb corner.
+  const mobile = useMobileLayout();
+  const portrait = usePortrait();
+  useEffect(() => {
+    // Marks the phone board so card sizing switches to its own scale ladder
+    // (see selectCardScale); a desktop-tuned 1.6x means nothing on 390px.
+    useTableUi.getState().setScaleCap(mobile ? MOBILE_SCALE_DEFAULT : null);
+    return () => useTableUi.getState().setScaleCap(null);
+  }, [mobile]);
   const cardBackSrc = cardBackUrl(effectiveCardBack(cardBackPref, room?.game));
   const tableCardBack = `url("${cardBackSrc}")`;
   // The 3D library pile's cut edge wears the top card's own border colour,
   // sampled from that back, so a deck's stack no longer reads as generic brown.
   const cardBackEdge = useEdgeColor(cardBackSrc);
+  // Portalled surfaces (the kit's Drawer/Modal render into <body>) sit outside
+  // the .table element, so the table's card-back variables never reach them.
+  // Mirroring them on the root keeps face-down art correct everywhere.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--pc-card-back', tableCardBack);
+    root.style.setProperty('--pc-card-back-edge', cardBackEdge);
+    return () => {
+      root.style.removeProperty('--pc-card-back');
+      root.style.removeProperty('--pc-card-back-edge');
+    };
+  }, [tableCardBack, cardBackEdge]);
   const friends = useApp((state) => state.friends.friends);
 
   const [menu, setMenu] = useState<Menu | null>(null);
   const [pinnedSeat, setPinnedSeat] = useState<number | null>(null);
   const [confirmConcede, setConfirmConcede] = useState(false);
+  // Phones hide the roster behind a top-left players icon rather than a chip row
+  // across the board's top edge.
+  const [playersOpen, setPlayersOpen] = useState(false);
+  // Desktop overview: every seat's playmat at once instead of one staged board.
+  const gridView = useTableUi((state) => state.gridView);
+  const setGridView = useTableUi((state) => state.setGridView);
+  const gridZoom = useTableUi((state) => state.gridZoom);
+  const setGridZoom = useTableUi((state) => state.setGridZoom);
+  // The grid needs the room's width; phones stage one board at a time.
+  const gridActive = gridView && !mobile && room != null && room.started;
   // The matchup splash: only for the false->true start transition witnessed
   // live (a reload into a running game skips straight to the table).
   const [preMatch, setPreMatch] = useState(false);
@@ -161,6 +228,8 @@ export function TablePage() {
   useEffect(() => {
     useTableUi.getState().hydrateBoardMode(identity?.userId);
     useTableUi.getState().hydrateCardScale(identity?.userId);
+    useTableUi.getState().hydrateMobileScale(identity?.userId);
+    useTableUi.getState().hydrateGridZoom(identity?.userId);
   }, [identity?.userId]);
 
   // Combat selections cannot outlive combat.
@@ -382,6 +451,18 @@ export function TablePage() {
         case 'flipHovered':
           state.act({ kind: 'card.face', iid: mine!.iid, faceDown: !mine!.faceDown });
           break;
+        case 'peelPile': {
+          // Works whether the hovered card is the pile's base or one of its
+          // members - either way it lifts the top card off that pile.
+          const base = mine!.piled && mine!.attachedTo
+            ? seatMe!.battlefield.find((card) => card.iid === mine!.attachedTo)
+            : mine!;
+          const top = base
+            ? seatMe!.battlefield.filter((card) => card.attachedTo === base.iid && card.piled).at(-1)
+            : undefined;
+          if (top) state.act({ kind: 'card.attach', iid: top.iid, hostIid: null });
+          break;
+        }
         case 'cloneHovered':
           state.act({ kind: 'token.clone', iid: mine!.iid, x: Math.min(0.95, mine!.x + 0.06), y: mine!.y });
           break;
@@ -498,6 +579,7 @@ export function TablePage() {
     <div
       className="table"
       data-replay={replay.active || undefined}
+      data-mobile={mobile || undefined}
       style={{
         ['--pc-card-back' as string]: tableCardBack,
         ['--pc-card-back-edge' as string]: cardBackEdge,
@@ -506,10 +588,19 @@ export function TablePage() {
     >
       <div className="tableFelt" aria-hidden />
 
+      {/* The live board is landscape-shaped: a phone held portrait gets the
+          animated rotate ask instead of a cramped board. The lobby and the
+          post-match screen stay portrait-friendly. */}
+      {mobile && portrait && room.started && !room.matchResult && <RotateOverlay />}
+
       {/* ---- your-turn cue: edge glow + dismissable pill ---- */}
       {me && !spectating && <TurnCue room={room} meSeat={me.seat} />}
 
-      {/* ---- top strip: room identity + controls ---- */}
+      {/* ---- top strip: room identity + controls ----
+          Phones drop it once the match starts: the board owns every pixel, and
+          its actions live in the dock sheet (Concede included). The lobby keeps
+          it - that's where the room code gets shared around. */}
+      {!(mobile && room.started) && (
       <header className="tableTop">
         <div className="tableMeta">
           <Text as="span" weight="semibold">
@@ -531,7 +622,7 @@ export function TablePage() {
             </Pill>
           )}
         </div>
-        {room.started && <PhaseRibbon room={room} me={me} canAct={canAct} />}
+        {room.started && !mobile && <PhaseRibbon room={room} me={me} canAct={canAct} />}
         <div className="tableTopActions">
           {!spectating && onlineFriends.length > 0 && (
             <Menu
@@ -555,6 +646,46 @@ export function TablePage() {
               ))}
             </Menu>
           )}
+          {room.started && !mobile && (
+            <Tooltip content={gridView ? t('tblGridOff') : t('tblGridOn')}>
+              <Button
+                size="sm"
+                variant={gridView ? 'solid' : 'soft'}
+                aria-pressed={gridView}
+                onClick={() => setGridView(!gridView)}
+              >
+                <LayoutGrid size={15} /> <span className="ttActionLabel">{t('tblGrid')}</span>
+              </Button>
+            </Tooltip>
+          )}
+          {/* Fit-to-cell is only a starting point: how much board a quadrant
+              should show is taste, so the grid carries its own zoom. */}
+          {gridActive && (
+            <div className="gridZoomer">
+              <Tooltip content={t('tblGridOut')}>
+                <IconButton
+                  size="sm"
+                  variant="soft"
+                  aria-label={t('tblGridOut')}
+                  disabled={gridZoom <= GRID_ZOOM_MIN}
+                  onClick={() => setGridZoom(gridZoom - GRID_ZOOM_STEP, identity?.userId)}
+                >
+                  <ZoomOut size={15} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip content={t('tblGridIn')}>
+                <IconButton
+                  size="sm"
+                  variant="soft"
+                  aria-label={t('tblGridIn')}
+                  disabled={gridZoom >= GRID_ZOOM_MAX}
+                  onClick={() => setGridZoom(gridZoom + GRID_ZOOM_STEP, identity?.userId)}
+                >
+                  <ZoomIn size={15} />
+                </IconButton>
+              </Tooltip>
+            </div>
+          )}
           {room.started && me && !spectating && !me.conceded && !room.matchResult && (
             <Tooltip content={t('tblConcede')}>
               <Button size="sm" variant="ghost" onClick={() => setConfirmConcede(true)}>
@@ -564,6 +695,7 @@ export function TablePage() {
           )}
         </div>
       </header>
+      )}
 
       {/* ---- concede confirm ---- */}
       {confirmConcede && (
@@ -587,8 +719,64 @@ export function TablePage() {
           <PregameLobby room={room} me={me} spectating={spectating} isHost={isHost} onShare={shareInvite} />
         )}
 
+        {/* ---- grid overview: every seat's playmat at once (desktop only).
+             Clicking one stages that board and leaves the grid. ---- */}
+        {gridActive && (
+          <div
+            className="playerGrid"
+            data-seats={room.players.length}
+            style={{ '--pc-grid-user-zoom': gridZoom } as CSSProperties}
+          >
+            {[...room.players]
+              .sort((a, b) => a.seat - b.seat)
+              .map((player) => (
+                <div
+                  key={player.userId}
+                  className="playerGridCell"
+                  data-mine={player.userId === identity?.userId || undefined}
+                  data-turn={room.activeSeat === player.seat || undefined}
+                >
+                  {/* My own cell is the live board, not a picture of one: it
+                      renders MyBoard so cards can be dragged and played right
+                      here. SeatFrame is a read-only mat renderer with no move
+                      actions at all, so a "just make the preview clickable"
+                      version of this could never move a card.
+
+                      It is also the only cell with no staging hit area. Clicking
+                      my own board used to stage it and drop out of the grid,
+                      which is exactly what makes the board "go back to full
+                      screen" the moment you touch it. */}
+                  {player.userId === identity?.userId && me && !spectating && room.started ? (
+                    <div className="playerGridPreview" data-live="">
+                      <MyBoard me={me} room={room} onMenu={openMenu} onHover={handleHover} />
+                    </div>
+                  ) : (
+                    <>
+                      {/* Inert: SeatFrame renders real buttons (pile triggers, take
+                          damage, defender chips). Nesting those inside the cell's
+                          own button was invalid DOM and let a pile click both open
+                          the viewer AND stage the seat. */}
+                      <div className="playerGridPreview" inert>
+                        <SeatFrame room={room} player={player} me={me} canAct={false} onHover={handleHover} stage />
+                      </div>
+                      <button
+                        type="button"
+                        className="playerGridHit"
+                        aria-label={player.username}
+                        onClick={() => {
+                          setPinnedSeat(player.seat);
+                          setGridView(false);
+                        }}
+                      />
+                    </>
+                  )}
+                </div>
+              ))}
+          </div>
+        )}
+
         {/* ---- started: the active (or pinned) board owns the stage ---- */}
-        {room.started && stagedPlayer && !stagedIsMe && (
+        {!gridActive && room.started && stagedPlayer && !stagedIsMe && (
           <div className="stageArea">
             <SeatFrame
               key={stagedPlayer.userId}
@@ -602,14 +790,14 @@ export function TablePage() {
           </div>
         )}
         {/* The staged opponent's hand renders at the screen bottom (like mine). */}
-        {room.started && stagedPlayer && !stagedIsMe && !spectating && (
+        {!gridActive && room.started && stagedPlayer && !stagedIsMe && !spectating && (
           <OpponentHand key={`hand-${stagedPlayer.userId}`} player={stagedPlayer} />
         )}
 
         {/* Watching another player's board (their turn, your click, or as a pure
             spectator): a floating cue with a card-size control - spectators have
             no board tools of their own - and, for seated players, a jump home. */}
-        {room.started && stagedPlayer && !stagedIsMe && (
+        {!gridActive && room.started && stagedPlayer && !stagedIsMe && (
           <div className="spectateCue" role="status" data-mirror={mirrorOpponent || undefined}>
             <Eye size={15} aria-hidden />
             <span className="spectateCueText">
@@ -620,8 +808,8 @@ export function TablePage() {
                 size="sm"
                 variant="soft"
                 aria-label={t('gpCardsSmaller')}
-                disabled={cardScale <= CARD_SCALE_MIN}
-                onClick={() => useTableUi.getState().setCardScale(cardScale - CARD_SCALE_STEP, identity?.userId)}
+                disabled={storedScale <= (mobile ? MOBILE_SCALE_MIN : CARD_SCALE_MIN)}
+                onClick={() => stepScale(-1)}
               >
                 <CircleMinus size={15} />
               </IconButton>
@@ -631,8 +819,8 @@ export function TablePage() {
                 size="sm"
                 variant="soft"
                 aria-label={t('gpCardsLarger')}
-                disabled={cardScale >= CARD_SCALE_MAX}
-                onClick={() => useTableUi.getState().setCardScale(cardScale + CARD_SCALE_STEP, identity?.userId)}
+                disabled={storedScale >= (mobile ? MOBILE_SCALE_MAX : CARD_SCALE_MAX)}
+                onClick={() => stepScale(1)}
               >
                 <CirclePlus size={15} />
               </IconButton>
@@ -647,7 +835,7 @@ export function TablePage() {
 
         {/* ---- my board: only while it owns the stage. Looking at someone
              else's playmat hides my hand/deck/piles entirely. ---- */}
-        {me && !spectating && room.started && stagedIsMe && (
+        {!gridActive && me && !spectating && room.started && stagedIsMe && (
           <MyBoard me={me} room={room} onMenu={openMenu} onHover={handleHover} />
         )}
         {spectating && me == null && !stagedPlayer && <div className="tableSpectatorSpace" />}
@@ -668,7 +856,94 @@ export function TablePage() {
         pingCooling={pingCooling}
         onShare={shareInvite}
         onLeave={leave}
+        onConcede={
+          room.started && me && !spectating && !me.conceded && !room.matchResult
+            ? () => setConfirmConcede(true)
+            : undefined
+        }
+        inviteTargets={spectating ? [] : onlineFriends}
+        onInviteFriend={(friend) => {
+          send({ type: 'invite.send', toUserId: friend.userId, roomId: room.roomId });
+          toast({ tone: 'success', message: `${t('frInvite')} → ${friend.username}` });
+        }}
+        mobile={mobile}
       />
+
+      {/* ---- phone chrome: the players drawer is the camera; End turn rides the
+           thumb corner (the header ribbon is hidden on mobile) ---- */}
+      {mobile && room.started && (
+        <button
+          type="button"
+          className="seatChipsTrigger"
+          aria-label={t('tblPlayers')}
+          aria-expanded={playersOpen}
+          onClick={() => setPlayersOpen(true)}
+        >
+          <Users size={18} />
+          <span className="seatChipsCount">{room.players.length}</span>
+        </button>
+      )}
+      {mobile && room.started && (
+        <Drawer
+          open={playersOpen}
+          onClose={() => setPlayersOpen(false)}
+          side="left"
+          size="sm"
+          floating={false}
+          title={t('tblPlayers')}
+          className="seatChipsDrawer"
+          dismissible
+        >
+        <div className="seatChips" role="tablist" aria-label={t('tblPlayers')}>
+          {[...room.players]
+            .sort((a, b) => a.seat - b.seat)
+            .map((player) => (
+              <button
+                key={player.userId}
+                type="button"
+                role="tab"
+                className="seatChip"
+                aria-selected={stagedPlayer?.userId === player.userId}
+                data-staged={stagedPlayer?.userId === player.userId || undefined}
+                data-turn={room.activeSeat === player.seat || undefined}
+                data-conceded={player.conceded || undefined}
+                onClick={() => {
+                  setPinnedSeat(player.seat);
+                  setPlayersOpen(false);
+                }}
+              >
+                <span className="seatChipAvatar">
+                  <Avatar name={player.username} size="sm" />
+                  {room.activeSeat === player.seat && <span className="seatChipDot" aria-hidden />}
+                </span>
+                <span className="seatChipName">{player.username}</span>
+                <span className="seatChipLife">
+                  <Heart size={10} /> {player.life}
+                </span>
+              </button>
+            ))}
+        </div>
+        </Drawer>
+      )}
+      {/* History controls ride the top centre of the mat: undo, timeline, redo. */}
+      {mobile && room.started && !spectating && (
+        <div className="mobileHistory">
+          <TimelineCard floating />
+        </div>
+      )}
+      {mobile && room.started && (
+        <div className="mobileTurnDock">
+          <PhaseRibbon
+            room={room}
+            me={me}
+            canAct={canAct}
+            mobile
+            onConcede={
+              me && !spectating && !me.conceded && !room.matchResult ? () => setConfirmConcede(true) : undefined
+            }
+          />
+        </div>
+      )}
 
       {/* ---- context menu ---- */}
       {menu && me && !spectating && (
@@ -734,7 +1009,8 @@ function CardMenu({
   onClose: () => void;
 }) {
   const t = useT();
-  const [sub, setSub] = useState<'counter' | 'attach' | 'move' | 'give' | null>(null);
+  const { toast } = useToast();
+  const [sub, setSub] = useState<'counter' | 'attach' | 'move' | 'give' | 'pile' | 'pileOnto' | null>(null);
   const [customCounter, setCustomCounter] = useState('');
 
   const card =
@@ -745,6 +1021,12 @@ function CardMenu({
     me.command.find((c) => c.iid === menu.iid);
 
   const hosts = me.battlefield.filter((c) => c.iid !== menu.iid && !c.attachedTo);
+  // Cards physically stacked on the card this menu belongs to. Board order is
+  // pile order, so the last one is the top of the pile.
+  const pile = me.battlefield.filter((c) => c.attachedTo === menu.iid && c.piled);
+  const pileTop = pile.at(-1);
+  // Learn a card's faces so double-faced cards (Clive, etc.) offer Transform.
+  const faces = useFaces(card?.scryfallId);
   const cardArt = card && !card.faceDown ? card.imageUrl || cardImage(card.scryfallId) : undefined;
   const zoneName =
     menu.zone === 'hand'
@@ -757,8 +1039,15 @@ function CardMenu({
             ? t('tblCommand')
             : 'Battlefield';
 
-  /** Fire the action, arcing a clone from the card toward its destination pile. */
-  const moveWithArc = (action: AnyAction, anchorKey: string | null) => {
+  /** Zones a card disappears into: worth confirming, because the card is gone
+   *  from view the moment it lands. Battlefield and hand stay visible, so they
+   *  would only be noise. */
+  const HIDDEN_ZONES = new Set(['graveyard', 'exile', 'library', 'command']);
+
+  /** Fire the action, arcing a clone from the card toward its destination pile.
+   *  `label` is the menu item's own text, so the confirmation echoes exactly
+   *  what was clicked rather than re-deriving a name that could disagree. */
+  const moveWithArc = (action: AnyAction, anchorKey: string | null, label?: string) => {
     if (menu.rect && card) {
       const target =
         (anchorKey ? flightAnchor(anchorKey) : null) ??
@@ -767,6 +1056,10 @@ function CardMenu({
         imageUrl: card.faceDown ? undefined : card.imageUrl || cardImage(card.scryfallId),
         faceDown: card.faceDown,
       });
+    }
+    const dest = 'to' in action ? String(action.to) : '';
+    if (card && label && HIDDEN_ZONES.has(dest)) {
+      toast({ tone: 'neutral', message: `${card.name} → ${label}` });
     }
     onAction(action);
   };
@@ -777,7 +1070,7 @@ function CardMenu({
       className="menuItem"
       role="menuitem"
       onPointerDown={(event) => event.stopPropagation()}
-      onClick={() => (anchorKey !== undefined ? moveWithArc(action, anchorKey) : onAction(action))}
+      onClick={() => (anchorKey !== undefined ? moveWithArc(action, anchorKey, label) : onAction(action))}
     >
       <span className="menuItemIcon" aria-hidden>{icon}</span>
       <span>{label}</span>
@@ -791,14 +1084,18 @@ function CardMenu({
       role="menuitem"
       title={label}
       onPointerDown={(event) => event.stopPropagation()}
-      onClick={() => (anchorKey !== undefined ? moveWithArc(action, anchorKey) : onAction(action))}
+      onClick={() => (anchorKey !== undefined ? moveWithArc(action, anchorKey, label) : onAction(action))}
     >
       {icon}
       <span>{label}</span>
     </button>
   );
 
-  const expander = (label: string, icon: ReactNode, key: 'counter' | 'attach' | 'move' | 'give') => (
+  const expander = (
+    label: string,
+    icon: ReactNode,
+    key: 'counter' | 'attach' | 'move' | 'give' | 'pile' | 'pileOnto',
+  ) => (
     <button
       type="button"
       className="menuItem menuExpander"
@@ -857,6 +1154,12 @@ function CardMenu({
               <Copy size={16} />,
               { kind: 'token.clone', iid: menu.iid, x: Math.min(0.95, card.x + 0.06), y: card.y },
             )}
+            {faces?.dfc &&
+              quick(
+                card.transformed ? 'Front face' : 'Transform',
+                <Repeat size={16} />,
+                { kind: 'card.transform', iid: menu.iid, transformed: !card.transformed },
+              )}
           </div>
           {expander('Counters', <CirclePlus size={15} />, 'counter')}
           {sub === 'counter' && (
@@ -906,7 +1209,12 @@ function CardMenu({
                   className="menuItem"
                   role="menuitem"
                   onPointerDown={(event) => event.stopPropagation()}
-                  onClick={() => onAction({ kind: 'card.attach', iid: menu.iid, hostIid: host.iid })}
+                  onClick={() => {
+                    // Matches the drag-and-dwell route: attaching hides the
+                    // card under its host, so every way of doing it says so.
+                    if (card) toast({ tone: 'neutral', message: `${card.name} → ${host.name}` });
+                    onAction({ kind: 'card.attach', iid: menu.iid, hostIid: host.iid });
+                  }}
                 >
                   <span className="menuItemIcon" aria-hidden><Paperclip size={14} /></span>
                   <span>{host.name}</span>
@@ -914,7 +1222,58 @@ function CardMenu({
               ))}
             </div>
           )}
-          {card.attachedTo && item('Detach', <Unlink size={15} />, { kind: 'card.attach', iid: menu.iid, hostIid: null })}
+          {card.attachedTo && !card.piled &&
+            item('Detach', <Unlink size={15} />, { kind: 'card.attach', iid: menu.iid, hostIid: null })}
+          {hosts.length > 0 && expander(t('gpPileOnto'), <Rows3 size={15} />, 'pileOnto')}
+          {sub === 'pileOnto' && (
+            <div className="menuInset menuScroll">
+              {hosts.map((host) => (
+                <button
+                  key={host.iid}
+                  type="button"
+                  className="menuItem"
+                  role="menuitem"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => {
+                    // Piling hides the card under its base, so say where it went.
+                    const depth = me.battlefield.filter((c) => c.attachedTo === host.iid && c.piled).length;
+                    toast({ tone: 'neutral', message: `${host.name} ×${depth + 2}` });
+                    onAction({ kind: 'card.attach', iid: menu.iid, hostIid: host.iid, piled: true });
+                  }}
+                >
+                  <span className="menuItemIcon" aria-hidden><Rows3 size={14} /></span>
+                  <span>{host.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {pileTop &&
+            item(t('gpPileTake'), <Rows3 size={15} />, {
+              kind: 'card.attach',
+              iid: pileTop.iid,
+              hostIid: null,
+            })}
+          {pile.length > 0 && expander(`${t('gpPile')} (${pile.length + 1})`, <Rows3 size={15} />, 'pile')}
+          {sub === 'pile' && (
+            <div className="menuInset menuScroll">
+              {/* Top of the pile first - that is the order you would lift them. */}
+              {[...pile].reverse().map((member) => (
+                <button
+                  key={member.iid}
+                  type="button"
+                  className="menuItem"
+                  role="menuitem"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => onAction({ kind: 'card.attach', iid: member.iid, hostIid: null })}
+                >
+                  <span className="menuItemIcon" aria-hidden><Rows3 size={14} /></span>
+                  <span>{member.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {card.piled &&
+            item(t('gpPileLeave'), <Unlink size={15} />, { kind: 'card.attach', iid: menu.iid, hostIid: null })}
           {item(t('gpStack'), <Layers size={15} />, { kind: 'stack.push', iid: menu.iid }, 'stack')}
           {expander('Move to', <ArrowRight size={15} />, 'move')}
           {sub === 'move' && (
@@ -1013,6 +1372,10 @@ function SidePanel({
   pingCooling,
   onShare,
   onLeave,
+  onConcede,
+  inviteTargets,
+  onInviteFriend,
+  mobile,
 }: {
   room: RoomState;
   me?: TablePlayer;
@@ -1024,112 +1387,234 @@ function SidePanel({
   pingCooling?: boolean;
   onShare: () => void;
   onLeave: () => void;
+  /** Present while conceding is possible; the phone sheet nav surfaces it
+      because the header (and its Concede button) is hidden mid-match there. */
+  onConcede?: () => void;
+  /** Online friends who can be invited - the header's invite menu has no phone
+      twin once the header hides mid-match, so the sheet nav carries it. */
+  inviteTargets?: TablePlayer[] | { userId: string; username: string }[];
+  onInviteFriend?: (friend: { userId: string; username: string }) => void;
+  /** Phone layout: the rail's content folds into a bottom sheet instead. */
+  mobile?: boolean;
 }) {
   const t = useT();
   const log = useGame((state) => state.log);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // The phone sheet: which tab is open (null = collapsed to the handle chip).
+  const [sheet, setSheet] = useState<'vitals' | 'players' | 'log' | null>(null);
+  const seated = me != null && !spectating;
 
   // Keep the log pinned to the newest entry.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [log.length]);
+  }, [log.length, sheet]);
+
+  // The rail's building blocks - shared verbatim between the desktop rail and
+  // the phone bottom sheet, so the two layouts can never drift.
+  const vitalsEl = seated && (
+    <>
+      <Vitals me={me} room={room} />
+      {room.game === 'cyberpunk' && (
+        <CyberpunkDicePanel me={me} others={room.players.filter((p) => p.userId !== me.userId)} />
+      )}
+      {/* Phones fly undo / timeline / redo on the mat instead (see the board's
+          .mobileHistory); a second card here would own a rival timeline bar. */}
+      {!mobile && <TimelineCard />}
+    </>
+  );
+  const playersEl = (
+    <PlayersCard
+      room={room}
+      meId={meId}
+      onFocusSeat={onFocusSeat}
+      onPingPlayer={onPingPlayer}
+      pingCooling={pingCooling}
+    />
+  );
+  const logEl = (
+    <div className="sideLogCard">
+      <div className="sideHead">
+        <span className="sideHeadTitle">
+          <ScrollText size={13} />
+          {t('tblLog')}
+        </span>
+      </div>
+      <div ref={scrollRef} className="sideScroll">
+        {log.length === 0 ? (
+          <p className="sideEmpty">{t('tblLogEmpty')}</p>
+        ) : (
+          log.map((line, index) => (
+            <p key={`${line.seq}-${index}`} className="sideLine">
+              {line.text}
+            </p>
+          ))
+        )}
+      </div>
+      {room.spectators.length > 0 && (
+        <div className="sideSpectators">
+          <span className="sideHeadTitle">
+            <Eye size={13} />
+            {t('tblSpectators')}
+          </span>
+          {room.spectators.map((spectator) => (
+            <span key={spectator.userId} className="spectatorName">
+              {spectator.username}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+  const navEl = (
+    <nav className="tableSideNav" aria-label={t('tblTableNav')}>
+      <Tooltip content={t('tblPingHint')}>
+        <Menu
+          aria-label={t('tblPing')}
+          placement="top-end"
+          trigger={
+            <IconButton
+              size="sm"
+              variant="ghost"
+              disabled={pingCooling || pingTargets.length === 0}
+              aria-label={t('tblPing')}
+            >
+              <BellRing size={16} />
+            </IconButton>
+          }
+        >
+          {pingTargets.map((player) => (
+            <MenuItem key={player.userId} onSelect={() => onPingPlayer?.(player)}>
+              <BellRing size={14} /> {player.username}
+            </MenuItem>
+          ))}
+        </Menu>
+      </Tooltip>
+      <Tooltip content={t('tblShareHint')}>
+        <IconButton size="sm" variant="ghost" aria-label={t('tblShare')} onClick={onShare}>
+          <Link2 size={16} />
+        </IconButton>
+      </Tooltip>
+      <Tooltip content={t('setTitle')}>
+        <IconButton
+          size="sm"
+          variant="ghost"
+          aria-label={t('setTitle')}
+          onClick={() => window.dispatchEvent(new CustomEvent('pc:open-settings'))}
+        >
+          <Settings size={16} />
+        </IconButton>
+      </Tooltip>
+      {mobile && onInviteFriend && (inviteTargets?.length ?? 0) > 0 && (
+        <Tooltip content={t('tblInviteFriends')}>
+          <Menu
+            aria-label={t('tblInviteFriends')}
+            placement="top-end"
+            trigger={
+              <IconButton size="sm" variant="ghost" aria-label={t('tblInviteFriends')}>
+                <UserPlus size={16} />
+              </IconButton>
+            }
+          >
+            {(inviteTargets ?? []).map((friend) => (
+              <MenuItem key={friend.userId} onSelect={() => onInviteFriend(friend)}>
+                <StatusDot tone="success" size="sm" /> {friend.username}
+              </MenuItem>
+            ))}
+          </Menu>
+        </Tooltip>
+      )}
+      {mobile && onConcede && (
+        <Tooltip content={t('tblConcede')}>
+          <IconButton size="sm" variant="ghost" aria-label={t('tblConcede')} onClick={onConcede}>
+            <Flag size={16} />
+          </IconButton>
+        </Tooltip>
+      )}
+      <Tooltip content={t('tblLeave')}>
+        <IconButton size="sm" variant="ghost" aria-label={t('tblLeave')} onClick={onLeave}>
+          <LogOut size={16} />
+        </IconButton>
+      </Tooltip>
+    </nav>
+  );
+
+  if (mobile) {
+    // Pregame mirrors the desktop rail: nav only. Vitals/players/log describe a
+    // match in progress, and the lobby already lists the seats itself.
+    if (!room.started) {
+      return (
+        <div className="mobileDock" data-nav-only>
+          {navEl}
+        </div>
+      );
+    }
+    const openDefault = seated ? 'vitals' : 'players';
+    const tabs = [
+      ...(seated ? [{ value: 'vitals', label: t('tblLife') }] : []),
+      { value: 'players', label: t('tblPlayers') },
+      { value: 'log', label: t('tblLog') },
+    ];
+    return (
+      <div className="mobileDock" data-open={sheet != null || undefined}>
+        <button
+          type="button"
+          className="mobileDockHandle"
+          aria-expanded={sheet != null}
+          onClick={() => setSheet((current) => (current ? null : openDefault))}
+        >
+          {seated ? (
+            <>
+              <Heart size={13} /> {me.life}
+            </>
+          ) : (
+            <Eye size={13} />
+          )}
+          <ChevronRight size={13} className="mobileDockChevron" />
+        </button>
+        {sheet != null && (
+          <div className="mobileSheet" role="dialog" aria-label={t('tblTableNav')}>
+            <div className="mobileSheetHead">
+              <div className="mobileSheetTabs" role="tablist">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={sheet === tab.value}
+                    data-active={sheet === tab.value || undefined}
+                    className="mobileSheetTab"
+                    onClick={() => setSheet(tab.value as 'vitals' | 'players' | 'log')}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              {navEl}
+              <IconButton size="sm" variant="ghost" aria-label={t('cpClose')} onClick={() => setSheet(null)}>
+                <X size={16} />
+              </IconButton>
+            </div>
+            <div className="mobileSheetBody">
+              {sheet === 'vitals' && vitalsEl}
+              {sheet === 'players' && playersEl}
+              {sheet === 'log' && logEl}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <aside className="tableSide" data-nav-only={!room.started || undefined}>
       {room.started && (
         <div className="tableSideScroll">
-          {me && !spectating && <Vitals me={me} room={room} />}
-          {me && !spectating && room.game === 'cyberpunk' && (
-            <CyberpunkDicePanel me={me} others={room.players.filter((p) => p.userId !== me.userId)} />
-          )}
-          {me && !spectating && <TimelineCard />}
-          <PlayersCard
-            room={room}
-            meId={meId}
-            onFocusSeat={onFocusSeat}
-            onPingPlayer={onPingPlayer}
-            pingCooling={pingCooling}
-          />
-
-          <div className="sideLogCard">
-            <div className="sideHead">
-              <span className="sideHeadTitle">
-                <ScrollText size={13} />
-                {t('tblLog')}
-              </span>
-            </div>
-            <div ref={scrollRef} className="sideScroll">
-              {log.length === 0 ? (
-                <p className="sideEmpty">{t('tblLogEmpty')}</p>
-              ) : (
-                log.map((line, index) => (
-                  <p key={`${line.seq}-${index}`} className="sideLine">
-                    {line.text}
-                  </p>
-                ))
-              )}
-            </div>
-            {room.spectators.length > 0 && (
-              <div className="sideSpectators">
-                <span className="sideHeadTitle">
-                  <Eye size={13} />
-                  {t('tblSpectators')}
-                </span>
-                {room.spectators.map((spectator) => (
-                  <span key={spectator.userId} className="spectatorName">
-                    {spectator.username}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+          {vitalsEl}
+          {playersEl}
+          {logEl}
         </div>
       )}
-
-      <nav className="tableSideNav" aria-label={t('tblTableNav')}>
-        <Tooltip content={t('tblPingHint')}>
-          <Menu
-            aria-label={t('tblPing')}
-            placement="top-end"
-            trigger={
-              <IconButton
-                size="sm"
-                variant="ghost"
-                disabled={pingCooling || pingTargets.length === 0}
-                aria-label={t('tblPing')}
-              >
-                <BellRing size={16} />
-              </IconButton>
-            }
-          >
-            {pingTargets.map((player) => (
-              <MenuItem key={player.userId} onSelect={() => onPingPlayer?.(player)}>
-                <BellRing size={14} /> {player.username}
-              </MenuItem>
-            ))}
-          </Menu>
-        </Tooltip>
-        <Tooltip content={t('tblShareHint')}>
-          <IconButton size="sm" variant="ghost" aria-label={t('tblShare')} onClick={onShare}>
-            <Link2 size={16} />
-          </IconButton>
-        </Tooltip>
-        <Tooltip content={t('setTitle')}>
-          <IconButton
-            size="sm"
-            variant="ghost"
-            aria-label={t('setTitle')}
-            onClick={() => window.dispatchEvent(new CustomEvent('pc:open-settings'))}
-          >
-            <Settings size={16} />
-          </IconButton>
-        </Tooltip>
-        <Tooltip content={t('tblLeave')}>
-          <IconButton size="sm" variant="ghost" aria-label={t('tblLeave')} onClick={onLeave}>
-            <LogOut size={16} />
-          </IconButton>
-        </Tooltip>
-      </nav>
+      {navEl}
     </aside>
   );
 }

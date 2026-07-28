@@ -44,7 +44,9 @@
 
 .browseGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(25rem, 1fr));
+  /* min(100%, …) keeps the track from under-flowing viewports narrower than
+     the ideal tile - without it phones pan the whole page sideways. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 25rem), 1fr));
   gap: var(--glacier-space-4);
 }
 
@@ -183,6 +185,53 @@
 /* Game switcher (MTG | Cyberpunk) under the Browse header. */
 .browseGameSwitch {
   margin-top: 0.85rem;
+}
+
+/* Year/set jump row - phones only. Desktop already has the sidebar nav for
+   this; on phones the sidebar is gone, so a swipeable chip row replaces it. */
+.browseJump {
+  display: none;
+}
+
+@media (max-width: 700px), (max-height: 480px) {
+  .browseJump {
+    display: flex;
+    gap: var(--glacier-space-2);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-block: var(--glacier-space-1);
+  }
+
+  .browseJump::-webkit-scrollbar {
+    display: none;
+  }
+
+  .browseJump > button {
+    flex: none;
+  }
+}
+
+/* Below ~480px the side-by-side tile leaves the text column too narrow:
+   stack the card art above the deck chrome instead. */
+@media (max-width: 30rem) {
+  .browseTile {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .browseTileBody {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .browseTileText {
+    text-align: center;
+  }
+
+  .browseTileTop {
+    justify-content: center;
+  }
 }
 
 /* Faction color swatch used as the Cyberpunk identity chip (mirrors MTG's mana pips). */

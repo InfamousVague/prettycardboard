@@ -1,0 +1,145 @@
+/* Basic lobby chat, built from Glacier primitives. A titled card with a
+   scrolling message list and a composer row; consecutive same-author lines tuck
+   under the first line's avatar. Every value is a Glacier token. */
+.lobbyChat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-4);
+  background: var(--glacier-surface);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  border-radius: var(--glacier-radius-xl);
+  min-height: 0;
+}
+
+.lobbyChatHead {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  color: var(--glacier-text-muted);
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-semibold);
+}
+
+.lobbyChatScroll {
+  border-radius: var(--glacier-radius-lg);
+}
+
+.lobbyChatEmpty {
+  display: grid;
+  place-items: center;
+  min-height: 4.5rem;
+  padding: var(--glacier-space-4);
+  text-align: center;
+}
+
+.lobbyChatList {
+  list-style: none;
+  margin: 0;
+  padding: var(--glacier-space-1) var(--glacier-space-1) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+}
+
+.lobbyChatMsg {
+  display: grid;
+  grid-template-columns: 1.75rem 1fr;
+  gap: var(--glacier-space-2);
+  align-items: start;
+}
+
+/* Grouped lines drop the avatar/heading and snug up under the previous one. */
+.lobbyChatMsg[data-grouped] {
+  margin-block-start: calc(-1 * var(--glacier-space-1));
+}
+
+.lobbyChatAvatar {
+  grid-column: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.lobbyChatBody {
+  grid-column: 2;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.lobbyChatMeta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--glacier-space-2);
+}
+
+.lobbyChatFrom {
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-text);
+}
+
+.lobbyChatMsg[data-mine] .lobbyChatFrom {
+  color: var(--glacier-accent-text, var(--glacier-accent-solid));
+}
+
+.lobbyChatTime {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle);
+}
+
+.lobbyChatText {
+  font-size: var(--glacier-font-size-sm);
+  color: var(--glacier-text);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.lobbyChatForm {
+  display: flex;
+  gap: var(--glacier-space-2);
+  align-items: center;
+}
+
+.lobbyChatForm > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Per-player rating strip on each pregame seat card (rank + level, all-time
+   record, endorsements). Co-located here because the lobby chat mounts in the
+   same view, so this stylesheet is always present when a seat card renders. */
+.pregameStats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem var(--glacier-space-2);
+}
+
+.pregameStat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+
+.pregameRank {
+  color: var(--glacier-text);
+  font-weight: var(--glacier-font-weight-medium);
+}
+
+.pregameRank svg {
+  color: var(--glacier-accent-solid);
+}
+
+.pregameRecord {
+  font-variant-numeric: tabular-nums;
+}
+
+.pregameEndorse {
+  color: var(--glacier-success-text, var(--glacier-text-muted));
+}
+

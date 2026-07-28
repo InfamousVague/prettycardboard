@@ -97,6 +97,8 @@ pub enum Action {
     CardTap { iid: String, tapped: bool },
     #[serde(rename = "card.face", rename_all = "camelCase")]
     CardFace { iid: String, face_down: bool },
+    #[serde(rename = "card.transform", rename_all = "camelCase")]
+    CardTransform { iid: String, transformed: bool },
     #[serde(rename = "card.counter", rename_all = "camelCase")]
     CardCounter { iid: String, counter: String, delta: i64 },
     #[serde(rename = "card.attach", rename_all = "camelCase")]
@@ -104,6 +106,12 @@ pub enum Action {
         iid: String,
         #[serde(default)]
         host_iid: Option<String>,
+        /// Join the host's PILE rather than hang off it as an aura. Ignored
+        /// when `host_iid` is null - detach and unpile are one operation.
+        /// Absent = false = the aura attach this action has always been, so an
+        /// older client keeps working byte-for-byte.
+        #[serde(default)]
+        piled: bool,
     },
     /// Give a card to another seated player: it leaves the giver's zone and
     /// lands in the recipient's hand (ownership transfers with it).
@@ -291,6 +299,7 @@ pub enum UndoKind {
     Pos { iid: String, x: f64, y: f64 },
     Tap { iid: String, tapped: bool },
     Face { iid: String, face_down: bool },
+    Transform { iid: String, transformed: bool },
     Counter { iid: String, counter: String, prev: i64 },
     Token { iid: String },
     Attach { iid: String, prev_host: Option<String>, x: f64, y: f64 },
@@ -394,18 +403,67 @@ fn clear_followers(room: &mut Room, host_iid: &str) {
 /// moved cards' (iid, x, y) for the rebroadcast payload.
 fn glue_followers(room: &mut Room, host_iid: &str, hx: f64, hy: f64) -> Vec<(String, f64, f64)> {
     let mut moved = Vec::new();
-    let mut i = 0usize;
+    // Auras fan wide and read as separate cards; pile members square up almost
+    // on top of the base. Two counters, so an aura's offset never depends on
+    // how many pile members happen to precede it - with no pile members this is
+    // arithmetically identical to the single-counter version it replaced.
+    let mut auras = 0usize;
+    let mut piled = 0usize;
     for p in room.players.iter_mut() {
         for c in p.battlefield.iter_mut() {
             if c.attached_to.as_deref() == Some(host_iid) {
-                i += 1;
-                c.x = (hx + 0.018 * i as f64).clamp(0.0, 1.0);
-                c.y = (hy + 0.018 * i as f64).clamp(0.0, 1.0);
+                let step = if c.piled {
+                    piled += 1;
+                    0.004 * piled as f64
+                } else {
+                    auras += 1;
+                    0.018 * auras as f64
+                };
+                c.x = (hx + step).clamp(0.0, 1.0);
+                c.y = (hy + step).clamp(0.0, 1.0);
                 moved.push((c.iid.clone(), c.x, c.y));
             }
         }
     }
     moved
+}
+
+/// A card is LEAVING the battlefield: hand its pile to the next card down
+/// instead of scattering it. The TOP remaining member (last in board order,
+/// which IS pile order) becomes the new base at the leaver's position; the rest
+/// re-point to it and stay piled. AURAS ARE NOT TOUCHED - `clear_followers`
+/// still handles those, unchanged, and must be called right after this.
+/// Single hop, non-recursive, matching clear_followers / glue_followers.
+/// Returns true when a pile actually changed hands - the caller must then force
+/// a resync, because it just rewrote `attachedTo` on cards the move's own
+/// payload says nothing about and no client can derive the promotion locally.
+fn promote_pile(room: &mut Room, host_iid: &str, bx: f64, by: f64) -> bool {
+    let Some(promoted) = room
+        .players
+        .iter()
+        .flat_map(|p| p.battlefield.iter())
+        .filter(|c| c.attached_to.as_deref() == Some(host_iid) && c.piled)
+        .map(|c| c.iid.clone())
+        .next_back()
+    else {
+        return false;
+    };
+    for p in room.players.iter_mut() {
+        for c in p.battlefield.iter_mut() {
+            if c.attached_to.as_deref() != Some(host_iid) || !c.piled {
+                continue;
+            }
+            if c.iid == promoted {
+                c.attached_to = None;
+                c.piled = false;
+                c.x = bx.clamp(0.0, 1.0);
+                c.y = by.clamp(0.0, 1.0);
+            } else {
+                c.attached_to = Some(promoted.clone());
+            }
+        }
+    }
+    true
 }
 
 fn seat_username(room: &Room, seat: usize) -> String {
@@ -422,7 +480,9 @@ fn place_card(p: &mut Player, mut card: Card, to: Zone, x: Option<f64>, y: Optio
     card.tapped = false;
     card.face_down = false;
     card.revealed = false;
+    card.transformed = false;
     card.attached_to = None;
+    card.piled = false;
     if to == Zone::Battlefield {
         card.x = x.unwrap_or(0.5);
         card.y = y.unwrap_or(0.5);
@@ -464,6 +524,7 @@ pub fn action_card_iid(action: &Action) -> Option<&str> {
         | Action::CardPos { iid, .. }
         | Action::CardTap { iid, .. }
         | Action::CardFace { iid, .. }
+        | Action::CardTransform { iid, .. }
         | Action::CardCounter { iid, .. }
         | Action::CardAttach { iid, .. }
         | Action::CardGive { iid, .. }
@@ -627,6 +688,14 @@ fn apply_undo(room: &mut Room, pi: usize, kind: UndoKind) -> Result<(), ActionEr
             c.face_down = face_down;
             Ok(())
         }
+        UndoKind::Transform { iid, transformed } => {
+            let p = &mut room.players[pi];
+            let Some((_, c)) = find_card_mut(p, &iid) else {
+                return Err(stale());
+            };
+            c.transformed = transformed;
+            Ok(())
+        }
         UndoKind::Counter { iid, counter, prev } => {
             let p = &mut room.players[pi];
             let Some((_, c)) = find_card_mut(p, &iid) else {
@@ -651,6 +720,9 @@ fn apply_undo(room: &mut Room, pi: usize, kind: UndoKind) -> Result<(), ActionEr
             clear_followers(room, &iid);
             Ok(())
         }
+        // Note: `piled` is deliberately not restored here. This whole function
+        // is dead (see the #[allow(dead_code)] above); real undo replays a full
+        // Room snapshot, which carries every field including `piled`.
         UndoKind::Attach { iid, prev_host, x, y } => {
             let p = &mut room.players[pi];
             let Some(c) = p.battlefield.iter_mut().find(|c| c.iid == iid) else {
@@ -709,9 +781,15 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             }
             let snapshot = card.clone();
             let was_hidden = from.hidden();
+            let mut promoted = false;
             if from == Zone::Battlefield {
+                // Hand the pile down before the aura sweep: after this nothing
+                // points at the leaver with `piled`, so clear_followers is
+                // provably the same aura-only sweep it has always been.
+                promoted = promote_pile(room, iid, card.x, card.y);
                 clear_followers(room, iid);
                 card.attached_to = None;
+                card.piled = false;
             }
             if to == Zone::Library {
                 // An insert can displace the whole peek window.
@@ -762,7 +840,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                     snapshot,
                     ceased: true,
                 });
-                resync = was_hidden;
+                resync = was_hidden || promoted;
             } else {
                 let to_hidden = to.hidden();
                 card.tapped = false;
@@ -819,7 +897,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                     snapshot,
                     ceased: false,
                 });
-                resync = was_hidden || to_hidden;
+                resync = was_hidden || to_hidden || promoted;
             }
         }
 
@@ -877,6 +955,16 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             undo = Some(UndoKind::Face { iid: iid.clone(), face_down: prev });
         }
 
+        Action::CardTransform { ref iid, transformed } => {
+            let p = &mut room.players[pi];
+            let (_, card) = find_card_mut(p, iid).ok_or_else(|| not_found(iid))?;
+            let prev = card.transformed;
+            card.transformed = transformed;
+            let verb = if transformed { "transforms" } else { "unflips" };
+            log = format!("{username} {verb} {}", visible_name(card));
+            undo = Some(UndoKind::Transform { iid: iid.clone(), transformed: prev });
+        }
+
         Action::CardCounter { ref iid, ref counter, delta } => {
             let p = &mut room.players[pi];
             let (_, card) = find_card_mut(p, iid).ok_or_else(|| not_found(iid))?;
@@ -906,6 +994,8 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                 take_card(&mut room.players[pi], iid).ok_or_else(|| not_found(iid))?;
             let was_hidden = from.hidden();
             if from == Zone::Battlefield {
+                // resync is already forced below (both hands changed).
+                let _ = promote_pile(room, iid, card.x, card.y);
                 clear_followers(room, iid);
             }
             if from == Zone::Library {
@@ -917,6 +1007,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             card.face_down = false;
             card.revealed = false;
             card.attached_to = None;
+            card.piled = false;
             card.is_commander = false;
             card.counters.clear();
             let name = card.name.clone();
@@ -927,43 +1018,92 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             resync = true; // both hands (hidden) changed; everyone re-filters
         }
 
-        Action::CardAttach { ref iid, ref host_iid } => {
+        Action::CardAttach { ref iid, ref host_iid, piled } => {
             match host_iid {
-                Some(h) => {
-                    if h == iid {
+                Some(h0) => {
+                    // A pile reads as ONE object, so a piled card is never a
+                    // host: a drop aimed at a member resolves to its base.
+                    // Unconditional (an aura dropped on a pile lands on the
+                    // base too), and one hop only - piles never nest.
+                    let h: String = room
+                        .players
+                        .iter()
+                        .flat_map(|p| p.battlefield.iter())
+                        .find(|c| c.iid == *h0)
+                        .and_then(|c| if c.piled { c.attached_to.clone() } else { None })
+                        .unwrap_or_else(|| h0.clone());
+                    if h == *iid {
                         return Err(("bad_attach", "cannot attach a card to itself".to_string()));
                     }
                     // The host may be on ANY battlefield (auras on opposing
                     // creatures); the attached card must be the actor's.
                     let mut host: Option<(f64, f64, String)> = None;
-                    let mut followers = 0usize;
-                    for pl in room.players.iter() {
+                    let mut host_is_mine = false;
+                    let mut auras = 0usize;
+                    let mut piled_n = 0usize;
+                    for (idx, pl) in room.players.iter().enumerate() {
                         for c in pl.battlefield.iter() {
-                            if c.iid == *h {
+                            if c.iid == h {
                                 host = Some((c.x, c.y, c.name.clone()));
+                                host_is_mine = idx == pi;
                             }
                             if c.attached_to.as_deref() == Some(h.as_str()) && c.iid != *iid {
-                                followers += 1;
+                                if c.piled {
+                                    piled_n += 1;
+                                } else {
+                                    auras += 1;
+                                }
                             }
                         }
                     }
                     let Some((hx, hy, host_name)) = host else {
                         return Err(("card_not_found", format!("No card {h} on the battlefield")));
                     };
+                    // Unlike an aura - which may legally sit on an OPPONENT's
+                    // creature - a pile is your own cards on your own board.
+                    // leave_room does no follower cleanup, so a cross-seat pile
+                    // would dangle when that seat walks.
+                    if piled && !host_is_mine {
+                        return Err(("bad_pile", "a pile is your own cards on your own board".to_string()));
+                    }
                     let p = &mut room.players[pi];
                     let Some(card) = p.battlefield.iter_mut().find(|c| c.iid == *iid) else {
                         return Err(("card_not_found", format!("No card {iid} on your battlefield")));
                     };
                     let prev = (card.attached_to.clone(), card.x, card.y);
                     card.attached_to = Some(h.clone());
-                    card.x = (hx + 0.018 * (followers as f64 + 1.0)).clamp(0.0, 1.0);
-                    card.y = (hy + 0.018 * (followers as f64 + 1.0)).clamp(0.0, 1.0);
+                    // Always assigned, never merely set: re-attaching a former
+                    // pile member as an aura must clear the bit, and vice versa.
+                    card.piled = piled;
+                    let step = if piled {
+                        0.004 * (piled_n as f64 + 1.0)
+                    } else {
+                        0.018 * (auras as f64 + 1.0)
+                    };
+                    card.x = (hx + step).clamp(0.0, 1.0);
+                    card.y = (hy + step).clamp(0.0, 1.0);
                     let (nx, ny, name) = (card.x, card.y, card.name.clone());
+                    if piled {
+                        // Board order IS pile order: a joining card goes on top,
+                        // so it moves to the end of its owner's battlefield.
+                        // Every zone but the library is unordered and every
+                        // other consumer is iid-keyed, so this is invisible
+                        // outside the pile - promote_pile and the client's
+                        // splitPile both read it.
+                        if let Some(pos) = p.battlefield.iter().position(|c| c.iid == *iid) {
+                            let c = p.battlefield.remove(pos);
+                            p.battlefield.push(c);
+                        }
+                    }
                     for v in [&mut for_actor, &mut for_others] {
                         v["x"] = json!(nx);
                         v["y"] = json!(ny);
                     }
-                    log = format!("{username} attaches {name} to {host_name}");
+                    log = if piled {
+                        format!("{username} piles {name} onto {host_name}")
+                    } else {
+                        format!("{username} attaches {name} to {host_name}")
+                    };
                     undo = Some(UndoKind::Attach {
                         iid: iid.clone(),
                         prev_host: prev.0,
@@ -973,13 +1113,64 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                     resync = true; // attachedTo lives in RoomState
                 }
                 None => {
+                    // Read what we need before taking the mutable borrow.
+                    let (was_piled, base_iid) = {
+                        let p = &room.players[pi];
+                        let Some(card) = p.battlefield.iter().find(|c| c.iid == *iid) else {
+                            return Err(("card_not_found", format!("No card {iid} on your battlefield")));
+                        };
+                        (card.piled && card.attached_to.is_some(), card.attached_to.clone())
+                    };
+                    // Piles are single-seat, so the base is on my own board.
+                    // Land beside it, then step right past anything already
+                    // parked there - peeling four lands off a pile one at a
+                    // time must not drop all four on the same square.
+                    let base_pos = if was_piled {
+                        base_iid
+                            .as_deref()
+                            .and_then(|b| {
+                                room.players[pi].battlefield.iter().find(|c| c.iid == b).map(|c| (c.x, c.y))
+                            })
+                            .map(|(bx, by)| {
+                                let mut nx = bx + 0.055;
+                                while nx < 1.0
+                                    && room.players[pi].battlefield.iter().any(|c| {
+                                        c.iid != *iid
+                                            && c.attached_to.is_none()
+                                            && (c.x - nx).abs() < 0.03
+                                            && (c.y - by).abs() < 0.03
+                                    })
+                                {
+                                    nx += 0.045;
+                                }
+                                (nx, by)
+                            })
+                    } else {
+                        None
+                    };
                     let p = &mut room.players[pi];
                     let Some(card) = p.battlefield.iter_mut().find(|c| c.iid == *iid) else {
                         return Err(("card_not_found", format!("No card {iid} on your battlefield")));
                     };
                     let prev = (card.attached_to.clone(), card.x, card.y);
                     card.attached_to = None;
-                    log = format!("{username} unattaches {}", card.name);
+                    card.piled = false;
+                    if let Some((bx, by)) = base_pos {
+                        // A card taken off a pile lands NEXT to it, not under
+                        // it, so it is visible the instant it is peeled.
+                        card.x = (bx + 0.055).clamp(0.0, 1.0);
+                        card.y = by.clamp(0.0, 1.0);
+                    }
+                    let (nx, ny) = (card.x, card.y);
+                    log = if was_piled {
+                        format!("{username} takes {} off the pile", card.name)
+                    } else {
+                        format!("{username} unattaches {}", card.name)
+                    };
+                    for v in [&mut for_actor, &mut for_others] {
+                        v["x"] = json!(nx);
+                        v["y"] = json!(ny);
+                    }
                     undo = Some(UndoKind::Attach {
                         iid: iid.clone(),
                         prev_host: prev.0,
@@ -1007,8 +1198,10 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                 power: power.clone(),
                 toughness: toughness.clone(),
                 attached_to: None,
+                piled: false,
                 is_commander: false,
                 revealed: false,
+                transformed: false,
             };
             let cv = serde_json::to_value(&token).unwrap();
             for_actor["card"] = cv.clone();
@@ -1030,6 +1223,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             copy.is_token = true;
             copy.tapped = false;
             copy.attached_to = None;
+            copy.piled = false;
             copy.is_commander = false;
             copy.revealed = false;
             copy.x = x;
@@ -1065,6 +1259,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             card.face_down = false;
             card.tapped = false;
             card.attached_to = None;
+            card.piled = false;
             p.peeked.clear();
             let name = card.name.clone();
             p.battlefield.push(card);
@@ -1384,9 +1579,12 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                 room.players[pi].peeked.clear();
             }
             if from == Zone::Battlefield {
+                // StackPush forces a resync of its own further down.
+                let _ = promote_pile(room, iid, card.x, card.y);
                 clear_followers(room, iid);
             }
             card.attached_to = None;
+            card.piled = false;
             card.tapped = false;
             card.face_down = false;
             if from.hidden() {
@@ -1598,6 +1796,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                 card.face_down = false;
                 card.revealed = false;
                 card.attached_to = None;
+                card.piled = false;
                 card.counters.clear();
                 let name = card.name.clone();
                 room.players[pi].command.push(card);

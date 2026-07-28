@@ -2,7 +2,13 @@
 <html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- user-scalable=no + maximum-scale: native pinch/double-tap zoom fights
+         the game's own card drags and breaks the fixed-viewport layout; the
+         app provides its own card-scale and tap-to-inspect zoom instead. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <title>PrettyCardboard</title>
     <style>
       /* Pre-tokens paint so the first frame is never a white flash. */

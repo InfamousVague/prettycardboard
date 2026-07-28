@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { IconButton } from '@glacier/react';
 import { X } from '@glacier/icons';
 import { GameCard } from './GameCard.tsx';
+import { ManaCost, parseCost } from './Mana.tsx';
+import { useCardDetails } from './cardDetails.tsx';
 import { useT } from '../i18n.ts';
 import './hovercard.css';
 
@@ -49,6 +51,9 @@ interface HoverState {
   /** Viewport Y of the preview box's top edge, already clamped to stay on screen. */
   top: number;
   placement: PreviewPlacement;
+  /** The hovered card's own box, so the mana cost can pin above it. */
+  anchorX: number;
+  anchorTop: number;
 }
 
 function overlapRatio(
@@ -210,7 +215,17 @@ export function HoverCardLayer() {
       const top = best.top;
       const id = idFromSrc(src);
       shownEl.current = el;
-      setHover({ key, name, image: src, id, x, top, placement: best.placement });
+      setHover({
+        key,
+        name,
+        image: src,
+        id,
+        x,
+        top,
+        placement: best.placement,
+        anchorX: rect.left + rect.width / 2,
+        anchorTop: rect.top,
+      });
     };
 
     // Begin (or leave running) the rest countdown. It reveals whatever card is
@@ -317,7 +332,10 @@ export function HoverCardLayer() {
   }, [hide, cancelHide, scheduleHide, clearReveal, isDismissed]);
 
   if (!hover) return null;
-  return createPortal(
+  return (
+    <>
+      <HoverManaCost id={hover.id} x={hover.anchorX} top={hover.anchorTop} />
+      {createPortal(
     <div
       className="hoverCard"
       data-placement={hover.placement}
@@ -336,6 +354,23 @@ export function HoverCardLayer() {
         <X size={16} />
       </IconButton>
       <GameCard name={hover.name} imageUrl={hover.image} width={PREVIEW_W} tilt={0} foil={false} />
+    </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
+/** The hovered card's mana cost, pinned just above the card itself. Rendered as
+ *  its own portal so it tracks the card rather than the zoom preview, which
+ *  flips to whichever side has room. */
+function HoverManaCost({ id, x, top }: { id: string | undefined; x: number; top: number }) {
+  const details = useCardDetails(id);
+  const symbols = parseCost(details?.manaCost);
+  if (symbols.length === 0) return null;
+  return createPortal(
+    <div className="hoverManaCost" style={{ left: x, top }} aria-hidden>
+      <ManaCost cost={details?.manaCost} size="1rem" />
     </div>,
     document.body,
   );

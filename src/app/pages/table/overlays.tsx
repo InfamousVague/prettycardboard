@@ -124,7 +124,7 @@ export function LibraryViewer() {
       description={`${t('tblLibrary')} · ${order.length}`}
     >
       {mode === 'peek' ? (
-        <div className="libPeek">
+        <div className="libPeek pcMobileFull">
           <Reorder.Group
             axis="x"
             values={order}
@@ -187,7 +187,7 @@ export function LibraryViewer() {
           </div>
         </div>
       ) : (
-        <div className="libSearch">
+        <div className="libSearch pcMobileFull">
           <SearchField
             size="sm"
             value={filter}
@@ -274,7 +274,7 @@ export function RevealTray({ room, canAct, meId }: { room: RoomState; canAct: bo
       title={`${actor?.username ?? '?'} ${t('gpReveals')}`}
       description={`${t('tblLibrary')} · ${tray.cards.length}`}
     >
-      <div className="libPeek">
+      <div className="libPeek pcMobileFull">
         <div className="libPeekRow">
           {tray.cards.map((card, index) => (
             <div key={card.iid} className="libPeekCard">
@@ -345,7 +345,7 @@ export function PileViewer({ room, me, canAct }: { room: RoomState; me: TablePla
       title={`${player.username} · ${t(zoneKey)}`}
       description={`${cards.length}`}
     >
-      <ScrollArea className="pileScroll">
+      <ScrollArea className="pileScroll pcMobileFull">
         <div className="pileGrid">
           {[...cards].reverse().map((card) => (
             <div key={card.iid} className="pileCard">
@@ -431,7 +431,10 @@ export function MulliganOverlay({ room, me }: { room: RoomState; me: TablePlayer
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
-  const cardW = Math.round(Math.min(260, Math.max(132, (vw * 0.95 - 32) / Math.max(hand.length, 1) + 32)));
+  // The 132px comfort floor defeats the auto-fit on phones (7 cards need
+  // ~732px); below ~600px let the solve win down to a 72px sliver minimum.
+  const cardFloor = vw < 600 ? 72 : 132;
+  const cardW = Math.round(Math.min(260, Math.max(cardFloor, (vw * 0.95 - 32) / Math.max(hand.length, 1) + 32)));
 
   useEffect(() => {
     // Fresh hand or fresh decision - reset local picks.

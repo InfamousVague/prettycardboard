@@ -3,6 +3,10 @@
 .wnBody {
   display: grid;
   gap: var(--glacier-space-4);
+  align-content: start;
+  /* Fullscreen on phones (.pcMobileFull): the release list scrolls inside the
+     panel instead of running off the bottom of a short landscape screen. */
+  overflow-y: auto;
 }
 
 .wnRelease {

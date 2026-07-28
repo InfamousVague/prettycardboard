@@ -1,14 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Avatar, Button, Input, Kbd, Pill, SegmentedControl, Select, Size, StatusDot, Text, TextTone } from '@glacier/react';
-import { Check, Circle, Crown, Eye, Layers, Link2, Play, Settings2, UserPlus, WifiOff } from '@glacier/icons';
+import { Check, Circle, Crown, Eye, Layers, Link2, Play, Settings2, ThumbsUp, Trophy, UserPlus, WifiOff } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import { useApp } from '../../state/appStore.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { send } from '../../net/ws.ts';
+import { userStats } from '../../net/api.ts';
 import { deckSummaryArt } from '../../data/deckCover.ts';
+import { rankFor, winRate } from '../../data/ranks.ts';
 import { GameTag } from '../../components/GameTag.tsx';
 import { formatFor } from '../../data/formats.ts';
-import type { GameSettings, RoomState, TablePlayer } from '../../net/types.ts';
+import { LobbyChat } from './LobbyChat.tsx';
+import type { GameSettings, RoomState, TablePlayer, UserStats } from '../../net/types.ts';
 
 const DEFAULT_SETTINGS: GameSettings = {
   startingLife: null,
@@ -42,6 +45,30 @@ export function PregameLobby({
   const selectedArt = selectedDeck ? deckSummaryArt(selectedDeck) : '';
   const playersBySeat = new Map(room.players.map((player) => [player.seat, player]));
   const seats = Array.from({ length: room.seats }, (_, seat) => playersBySeat.get(seat));
+
+  // Every seated player's all-time record, so the roster reads as a scouting
+  // board. Refetched when the seat set changes; failures just leave a card
+  // statless rather than blocking the lobby.
+  const [records, setRecords] = useState<Record<string, UserStats>>({});
+  const rosterKey = room.players.map((player) => player.userId).sort().join(',');
+  useEffect(() => {
+    let alive = true;
+    void Promise.all(
+      room.players.map(async (player) => {
+        try {
+          return [player.userId, await userStats(player.userId)] as const;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((entries) => {
+      if (alive) setRecords(Object.fromEntries(entries.filter((e): e is [string, UserStats] => e !== null)));
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rosterKey]);
 
   // Pre-game rule settings (host-editable in the lobby; read-only for others).
   const cyber = game === 'cyberpunk';
@@ -148,6 +175,28 @@ export function PregameLobby({
                 </div>
                 <StatusDot size="sm" tone={player.online === false ? 'neutral' : 'success'} />
               </div>
+              {(() => {
+                const stats = records[player.userId];
+                const rank = rankFor(stats?.played ?? 0);
+                const rate = stats ? winRate(stats) : null;
+                return (
+                  <div className="pregameStats">
+                    <span className="pregameStat pregameRank" title={`${t('hmLevel')} ${rank.level}`}>
+                      <Trophy size={11} /> {rank.title} · {rank.level}
+                    </span>
+                    <span className="pregameStat pregameRecord">
+                      {stats && stats.played > 0
+                        ? `${stats.wins}W · ${stats.losses}L${rate != null ? ` · ${rate}%` : ''}`
+                        : t('preNoGames')}
+                    </span>
+                    {stats != null && stats.endorsements > 0 && (
+                      <span className="pregameStat pregameEndorse" title={t('preEndorsements')}>
+                        <ThumbsUp size={11} /> {stats.endorsements}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
               <span className="pregameDeck" data-empty={!player.deckName || undefined}>
                 <Layers size={14} /> {player.deckName || t('preNoDeck')}
               </span>
@@ -346,6 +395,8 @@ export function PregameLobby({
           )}
         </div>
       </div>
+
+      <LobbyChat />
 
       {room.spectators.length > 0 && (
         <div className="pregameSpectators">

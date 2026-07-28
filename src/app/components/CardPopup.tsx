@@ -12,6 +12,7 @@ import { IconButton } from '@glacier/react';
 import { X } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { cardImage } from '../data/cards.ts';
+import { isFoil } from '../data/foil.ts';
 import { cyberpunkCard, cyberpunkImage } from '../data/cyberpunk.ts';
 import { GameCard } from './GameCard.tsx';
 import { CardDetailsBody } from './cardDetails.tsx';
@@ -63,8 +64,70 @@ export function CardPopupProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/** Print aspect: a card this wide is this tall. */
+const CARD_RATIO = 680 / 488;
+/** The stage stacks the details under the card below this width (cardpopup.css). */
+const STACK_PX = 736;
+
+/** Landscape phone: the stage splits into a card third and a details two-thirds
+ *  (cardpopup.css mirrors this test in a media query). */
+function isSplit(vw: number, vh: number): boolean {
+  return vh <= 480 && vw > vh;
+}
+
+/**
+ * The lightbox card size, solved against the live viewport. A fixed 425px card
+ * is 592px tall - taller than a landscape phone - so it ran off the bottom
+ * edge; this keeps the whole card on screen at any orientation and never grows
+ * past the original 425px on roomy screens.
+ */
+function useViewport(): { vw: number; vh: number } {
+  const read = () =>
+    typeof window === 'undefined'
+      ? { vw: 1280, vh: 800 }
+      : { vw: window.innerWidth, vh: window.innerHeight };
+  const [size, setSize] = useState(read);
+  useEffect(() => {
+    // Bail when the dimensions are unchanged: a resize burst would otherwise
+    // hand back a fresh object each tick and re-render the whole lightbox.
+    const onResize = () =>
+      setSize((prev) => {
+        const next = read();
+        return prev.vw === next.vw && prev.vh === next.vh ? prev : next;
+      });
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+    };
+  }, []);
+  return size;
+}
+
+function popupCardWidth(vw: number, vh: number): number {
+  if (isSplit(vw, vh)) {
+    // The card owns the leading third of the screen, centered in it.
+    return Math.round(Math.max(120, Math.min(425, vw / 3 - 32, (vh - 32) / CARD_RATIO)));
+  }
+  const stacked = vw < STACK_PX;
+  // Side by side, the details column (24rem) and the stage gap take their cut.
+  const availWidth = stacked ? vw - 48 : vw - 48 - 384 - 64;
+  // Stacked, the card shares the column with the details block below it.
+  const availHeight = (stacked ? vh * 0.62 : vh) - 96;
+  return Math.round(Math.max(150, Math.min(425, availWidth, availHeight / CARD_RATIO)));
+}
+
 function Popup({ card, onClose }: { card: PopupCard; onClose: () => void }) {
   const t = useT();
+  const { vw, vh } = useViewport();
+  const split = isSplit(vw, vh);
+  const cardWidth = popupCardWidth(vw, vh);
+  // The card pans inside its own pane on touch. Constraining to the pane keeps
+  // it from being flung behind the details panel and lost.
+  const panePad = 24;
+  const panX = Math.max(0, (vw / 3 - cardWidth) / 2 + panePad);
+  const panY = Math.max(0, (vh - cardWidth * CARD_RATIO) / 2 + panePad);
   // A Cyberpunk card is recognized by its id living in the bundled catalog; its
   // full art ships with the app, so we never hit Scryfall for it.
   const cyber = card.scryfallId ? cyberpunkCard(card.scryfallId) : undefined;
@@ -82,7 +145,7 @@ function Popup({ card, onClose }: { card: PopupCard; onClose: () => void }) {
       aria-modal="true"
       aria-label={card.name}
     >
-      <div className="cpStage" onClick={(event) => event.stopPropagation()}>
+      <div className="cpStage" data-split={split || undefined} onClick={(event) => event.stopPropagation()}>
         {/* flip-in: real card back on the reverse, rotating to the front */}
         <motion.div
           className="cpFlip"
@@ -90,9 +153,22 @@ function Popup({ card, onClose }: { card: PopupCard; onClose: () => void }) {
           animate={{ rotateY: 0, scale: 1, y: 0 }}
           exit={{ rotateY: 120, scale: 0.86, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 160, damping: 20 }}
+          drag={split}
+          dragMomentum={false}
+          dragElastic={0.08}
+          dragConstraints={{ left: -panX, right: panX, top: -panY, bottom: panY }}
+          whileDrag={{ cursor: 'grabbing' }}
         >
           <div className="cpFront">
-            <GameCard name={card.name} imageUrl={image} width={425} tilt={13} foil={card.foil ?? true} glow />
+            {/* The pointer tilt fights a drag gesture, so the pannable card is flat. */}
+            <GameCard
+              name={card.name}
+              imageUrl={image}
+              width={cardWidth}
+              tilt={split ? 0 : 13}
+              foil={isFoil(card)}
+              glow
+            />
           </div>
           <div className="cpBack" aria-hidden />
         </motion.div>

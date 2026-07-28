@@ -1,0 +1,101 @@
+/* The deck inspector: a compact profile of a deck (identity + a stat list),
+   shown from a right-click. Every value is a Glacier token. */
+.deckInspector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-5);
+}
+
+.diHead {
+  display: flex;
+  gap: var(--glacier-space-4);
+  align-items: flex-start;
+}
+
+.diCover {
+  flex: none;
+}
+
+.diIdentity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+  min-width: 0;
+  padding-block-start: var(--glacier-space-1);
+}
+
+.diName {
+  font-size: var(--glacier-font-size-lg);
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-text);
+  overflow-wrap: anywhere;
+}
+
+.diTags {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  flex-wrap: wrap;
+}
+
+.diStats {
+  display: flex;
+  flex-direction: column;
+}
+
+.diRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-4);
+  min-height: 2.25rem;
+  padding-block: var(--glacier-space-2);
+  border-block-end: var(--glacier-hairline) solid var(--glacier-border-subtle, var(--glacier-glass-border));
+}
+
+.diRow:last-child {
+  border-block-end: none;
+}
+
+.diRowLabel {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex: none;
+}
+
+.diRowValue {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--glacier-font-size-sm);
+  color: var(--glacier-text);
+  text-align: end;
+}
+
+.diNumeric {
+  font-variant-numeric: tabular-nums;
+}
+
+.diSalt {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.diBracket {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.diBracketNum {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.4rem;
+  block-size: 1.4rem;
+  border-radius: var(--glacier-radius-full, 999px);
+  background: var(--glacier-accent-soft, var(--glacier-surface-raised));
+  color: var(--glacier-accent-text, var(--glacier-accent-solid));
+  font-weight: var(--glacier-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+}

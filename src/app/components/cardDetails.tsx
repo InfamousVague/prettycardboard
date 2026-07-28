@@ -289,6 +289,33 @@ export function CardDetailsBody({
   );
 }
 
+/**
+ * Card details for an id: the cached copy immediately when we have one, else a
+ * fetch that fills in. Shared so anything wanting a card's cost or type line
+ * (the details body, the hover mana cost) reads the same cache rather than
+ * re-implementing the fetch-or-cache dance.
+ */
+export function useCardDetails(scryfallId: string | undefined): CardDetails | null {
+  const cyber = scryfallId ? cyberpunkCard(scryfallId) : undefined;
+  const [details, setDetails] = useState<CardDetails | null>(
+    scryfallId ? (DETAILS.get(scryfallId) ?? null) : null,
+  );
+  useEffect(() => {
+    setDetails(scryfallId ? (DETAILS.get(scryfallId) ?? null) : null);
+    if (!scryfallId || cyber || DETAILS.get(scryfallId)) return;
+    let cancelled = false;
+    fetchDetails(scryfallId)
+      .then((loaded) => {
+        if (!cancelled) setDetails(loaded);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [scryfallId, cyber]);
+  return details;
+}
+
 /** True when this id has details we can render instantly (no network) — a
  *  bundled Cyberpunk card or an already-cached MTG lookup. */
 export function hasInstantDetails(id: string | undefined): boolean {

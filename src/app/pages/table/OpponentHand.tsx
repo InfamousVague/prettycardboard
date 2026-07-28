@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMotionValue } from 'motion/react';
+import { Button } from '@glacier/react';
 import { ChevronDown, ChevronUp } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
-import { useTableUi } from './tableUi.ts';
+import { selectCardScale, useTableUi } from './tableUi.ts';
 import { usePreference } from '../../hooks/usePreference.ts';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import { cardBackUrl, effectiveCardBack } from '../../data/cardBacks.ts';
@@ -36,7 +37,7 @@ const HAND_BACK: CardInst = {
 export function OpponentHand({ player }: { player: TablePlayer }) {
   const t = useT();
   const popup = useCardPopup();
-  const cardScale = useTableUi((state) => state.cardScale);
+  const cardScale = useTableUi(selectCardScale);
   const mirror = usePreference('mirrorOpponent');
   // This hand fans at screen level (outside the seat frame), so it must carry
   // its own owner's card back rather than inheriting the viewer's.
@@ -144,15 +145,19 @@ export function OpponentHand({ player }: { player: TablePlayer }) {
             />
           ))}
         </div>
-        <button
-          type="button"
+        {/* Same control as the one on my own board (MyBoard's .handTab): the kit
+            Button, same size/variant - a bare <button> here rendered as a
+            different-looking pill while spectating. */}
+        <Button
+          size="sm"
+          variant="soft"
           className="handTab"
           onClick={() => setHidden((value) => !value)}
           title={hidden ? t('gpShowHand') : t('gpHideHand')}
         >
           {hidden ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
           {hidden ? t('gpShowHand') : t('gpHideHand')}
-        </button>
+        </Button>
       </div>
     </div>
   );

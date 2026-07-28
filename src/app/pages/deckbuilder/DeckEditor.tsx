@@ -1076,12 +1076,16 @@ function CardCell({
 }) {
   const t = useT();
   const popup = useCardPopup();
-  // Long-press opens the artwork picker on touch; mouse uses onContextMenu.
-  const longPress = useLongPress(() => onArt(card));
   // Right-click context menu (set as commander / change art).
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const canPromote = Boolean(canCommander && onSetCommander && card.board !== 'commander');
+  // Long-press mirrors right-click on touch: the menu when there is one,
+  // otherwise straight to the artwork picker.
+  const longPress = useLongPress((info) => {
+    if (canPromote) setMenu({ x: info.clientX, y: info.clientY });
+    else onArt(card);
+  });
   useEffect(() => {
     if (!menu) return;
     const close = (event: Event) => {
