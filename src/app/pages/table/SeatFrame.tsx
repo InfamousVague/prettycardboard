@@ -11,11 +11,13 @@ import type { CardInst, RoomState, TablePlayer } from '../../net/types.ts';
 import { selectCardScale, useTableUi } from './tableUi.ts';
 import { AttackBadge, BlockCluster, CounterBadges, DEFAULT_MAT_LAYOUT, ZonePiles, groupAttachments, splitPile } from './bits.tsx';
 import { ambientDelay, restTilt } from './juice.ts';
-import { PILE_MAX_EDGES, PILE_STEP_PX, effectivePT, isCreature } from './boardModes.ts';
+import { PILE_MAX_EDGES, PILE_STEP_PX, effectivePT, isCreature, ptTotalLabel } from './boardModes.ts';
 import { playmatBackground } from '../../data/playmats.ts';
 import { cardBackUrl, effectiveCardBack } from '../../data/cardBacks.ts';
 import { useEdgeColor } from '../../data/edgeColor.ts';
 import { usePreference } from '../../hooks/usePreference.ts';
+import { primePrintedPT, usePrintedPtVersion } from '../../data/printedPt.ts';
+import { useFacesVersion } from '../../data/faces.ts';
 import { getGame, zoneLabel } from '../../data/games.ts';
 import { ManaPoolReadout } from '../../components/Mana.tsx';
 
@@ -50,6 +52,12 @@ export function SeatFrame({
   // The viewer's battlefield-size preference applies to the staged board too.
   const cardScale = useTableUi(selectCardScale);
   const verticalCards = usePreference('verticalCards');
+  const cardTotals = usePreference('cardTotals');
+  // A seat's cards resolve their printed P/T lazily like mine do; a flipped
+  // card resolves through the faces cache, so watch that too.
+  usePrintedPtVersion();
+  useFacesVersion();
+  const mtg = room.game !== 'cyberpunk';
   const mirrorOpponent = usePreference('mirrorOpponent');
   const ambientCards = usePreference('ambientCards');
 
@@ -134,6 +142,8 @@ export function SeatFrame({
     pileCount = 0,
   ) => {
     const attacker = attackerEntry(card.iid);
+    if (cardTotals && mtg) primePrintedPT(card);
+    const ptTotal = cardTotals ? ptTotalLabel(card, mtg) : '';
     const baseX = host ? host.x : card.x;
     const baseY = host ? host.y : card.y;
     const scale = stage ? cardScale : 0.6;
@@ -185,6 +195,11 @@ export function SeatFrame({
           tilt={0}
         >
           <CounterBadges card={card} />
+          {ptTotal && (
+            <span className="ptTotal" title={t('gpPtTotal')}>
+              {ptTotal}
+            </span>
+          )}
           {/* A span, not a button: only the pile's owner can peel it. */}
           {pileCount > 0 && <span className="pileTally">{pileCount + 1}</span>}
           {attacker && (

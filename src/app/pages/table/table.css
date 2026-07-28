@@ -1311,6 +1311,36 @@
   filter: none;
 }
 
+/* The card's CURRENT power/toughness - printed base plus every P/T counter,
+   already added up. Bottom-inline-end is the last free corner (counters own
+   top/end, the attack badge top/start, the pile tally bottom/start). Read-only
+   and click-through: it must never swallow a drag off the card. Deliberately a
+   flat dark plate rather than the accent .counterPill sitting opposite it, so
+   the TOTAL and the +2/+2 DELTA can never be mistaken for one another. */
+.ptTotal {
+  position: absolute;
+  inset-block-end: 5%;
+  inset-inline-end: 5%;
+  z-index: 3;
+  padding: 0.05em 0.4em;
+  border-radius: var(--glacier-radius-md);
+  background: rgb(0 0 0 / 0.72);
+  color: #fff;
+  font-family: var(--glacier-font-mono, ui-monospace, monospace);
+  font-weight: var(--glacier-font-weight-bold);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+/* `.gcOverlay > *` turns pointer events back on for badges that are buttons;
+   this one is a read-out, and swallowing a drag off the card would be a bug.
+   Needs the child selector to outrank that rule. */
+.gcOverlay > .ptTotal {
+  pointer-events: none;
+}
+
 /* The pile's card count, doubling as its peel-one-off button on my own board.
    Deliberately a neutral surface chip rather than the accent .counterBadge, so
    it never reads as a +1/+1 counter sitting on the card. Bottom-inline-start is
@@ -2135,6 +2165,11 @@
   top: 4%;
   inset-inline-end: 4%;
   display: flex;
+  /* Named counters carry their whole name now, so a card with three of them
+     stacks them down the corner instead of running off the edge. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 88%;
   gap: 2px;
   z-index: 2;
 }
@@ -2149,11 +2184,17 @@
   opacity: 1;
 }
 
+/* On my own board every badge sits inside this trigger, so it needs the same
+   wrapping the read-only container got - otherwise named counters run off the
+   card edge on my board and only wrap on everyone else's. */
 .counterManagerTrigger {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 2px;
-  min-width: 1.35rem;
+  max-width: 100%;
+  min-width: 0;
   min-height: 1.35rem;
   padding: 0;
   border: 0;
@@ -2186,11 +2227,13 @@
 }
 
 .counterBadge {
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  max-width: 100%;
   min-width: 1.15rem;
   height: 1.15rem;
-  padding-inline: 0.25rem;
+  padding-inline: 0.35rem;
   border-radius: var(--glacier-radius-full);
   background: var(--glacier-accent-solid);
   color: var(--glacier-accent-contrast, white);
@@ -2198,6 +2241,22 @@
   font-weight: var(--glacier-font-weight-bold);
   font-family: var(--glacier-font-mono);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* The counter's own name. Capitalized rather than shouted, and ellipsized on a
+   card too small to hold it - the badge's title carries the full text. */
+.counterBadgeName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: capitalize;
+  font-family: var(--glacier-font-sans, inherit);
+  letter-spacing: -0.01em;
+}
+
+.counterBadgeCount {
+  flex: none;
+  opacity: 0.85;
 }
 
 /* The +1/+1 (or -1/-1) counter pill: a two-sided P/T read-out — "+2 / +2",
@@ -2234,6 +2293,11 @@
 .counterPopover {
   width: max-content;
   max-width: min(26rem, calc(100vw - 1.5rem));
+  /* The preset grid grew to twelve chips; on a landscape phone the panel would
+     otherwise run off the viewport with nothing to scroll. */
+  max-height: min(30rem, calc(100dvh - 2rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .counterManager {
@@ -2273,8 +2337,16 @@
 
 .counterQuickAdds {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.4rem;
+  /* Twelve presets, so they flow into as many columns as the popover can hold
+     rather than a fixed pair. */
+  grid-template-columns: repeat(auto-fill, minmax(4.4rem, 1fr));
+  gap: 0.35rem;
+}
+
+/* Already on this card: the chip still adds another, but says it is in play. */
+.counterQuickAdds button[data-active] {
+  outline: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-accent-solid) 65%, transparent);
+  outline-offset: -1px;
 }
 
 .counterManagerList {

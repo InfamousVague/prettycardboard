@@ -105,12 +105,37 @@ export function findFieldCard(room: RoomState, iid: string): CardInst | undefine
   return undefined;
 }
 
+/**
+ * The counters worth one tap. P/T first (by far the most used), then the
+ * counters that actually track a rule the app cannot track for you:
+ *   loyalty  - planeswalkers
+ *   defense  - battles
+ *   lore     - sagas
+ *   charge   - artifacts (Chalice, Everflowing Chalice, Coalition Relic)
+ *   stun     - skips the next untap
+ *   shield   - absorbs the next damage or destruction
+ *   oil      - Phyrexian permanents
+ *   time     - suspend / vanishing / fading
+ *   level    - Level Up creatures
+ *   quest    - quest enchantments
+ * Anything else (keyword counters, ki, page, spore, a house rule) still goes in
+ * by name in the field underneath, and now renders with that name in full.
+ *
+ * The keys are the wire value stored on the card, so they stay English in every
+ * locale - exactly like the `+1/+1` chips that shipped before them.
+ */
+const COUNTER_PRESETS = ['+1/+1', '-1/-1', 'loyalty', 'defense', 'lore', 'charge', 'stun', 'shield', 'oil', 'time', 'level', 'quest'];
+
 /** A card's counter editor, portalled by Glacier Popover: a labelled list of
  * active counters with steppers plus a compact add row. Counter keys that parse
  * as P/T modifiers (`+1/+1`, `+1/+6`) are summed independently for combat. */
 function CounterManager({ card, onSet }: { card: CardInst; onSet: (counter: string, value: number) => void }) {
   const t = useT();
   const [name, setName] = useState('');
+  // Cyberpunk has none of Magic's counter vocabulary, so it gets the P/T pair
+  // and the free-text field only.
+  const mtg = useGame((state) => state.room?.game) !== 'cyberpunk';
+  const presets = mtg ? COUNTER_PRESETS : COUNTER_PRESETS.slice(0, 2);
   const entries = Object.entries(card.counters)
     .filter(([, count]) => count > 0)
     .sort(([left], [right]) => Number(parsePtCounter(right) != null) - Number(parsePtCounter(left) != null) || left.localeCompare(right));
@@ -208,8 +233,14 @@ function CounterManager({ card, onSet }: { card: CardInst; onSet: (counter: stri
       <div className="counterManagerSection">
         <span className="counterManagerLabel">{t('gpAddCounter')}</span>
         <div className="counterQuickAdds">
-          {['+1/+1', '-1/-1'].map((kind) => (
-            <Button key={kind} size="sm" variant="soft" onClick={() => add(kind)}>
+          {presets.map((kind) => (
+            <Button
+              key={kind}
+              size="sm"
+              variant="soft"
+              data-active={(card.counters[kind] ?? 0) > 0 || undefined}
+              onClick={() => add(kind)}
+            >
               {kind}
             </Button>
           ))}
@@ -263,9 +294,13 @@ export function CounterBadges({
           {sign(pt.power)} <span className="counterPillSlash">/</span> {sign(pt.toughness)}
         </span>
       )}
+      {/* The whole counter name, not an initial: "C3" could be charge, coin or
+          corpse, and the player who typed the name is the one who needs to read
+          it back. Long names ellipsize; the title always has the full text. */}
       {others.map(([kind, count]) => (
         <span key={kind} className="counterBadge" title={`${kind}: ${count}`}>
-          {`${kind.charAt(0).toUpperCase()}${count}`}
+          <span className="counterBadgeName">{kind}</span>
+          <span className="counterBadgeCount">{count}</span>
         </span>
       ))}
       {!hasPt && others.length === 0 && <Plus className="counterEmptyPlus" size={13} aria-hidden />}

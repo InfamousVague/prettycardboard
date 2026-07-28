@@ -9,6 +9,7 @@ import { uploadPlaymat } from '../net/api.ts';
 import { DICE_SKINS } from '../data/diceSkins.ts';
 import { presentThemes, THEME_LABEL_KEY, type AssetTheme } from '../data/themes.ts';
 import { GameCard } from '../components/GameCard.tsx';
+import { PlaymatSwatchMedia, ThemedPicker } from '../components/PlaymatPicker.tsx';
 import { cardImage } from '../data/cards.ts';
 import { cyberpunkImage } from '../data/cyberpunk.ts';
 
@@ -50,70 +51,6 @@ function CardPreview({ back }: { back: string }) {
         <figcaption>{t('custPreviewSplit')}</figcaption>
       </figure>
     </div>
-  );
-}
-
-/**
- * A picker grid that filters by asset theme. The catalog spans Magic, the
- * Cyberpunk TCG, solid color-token swatches, and game-agnostic art, so a chip
- * row narrows the grid to one theme. Chips are derived from the items present,
- * so a new themed asset surfaces its category with no code change.
- */
-function ThemedPicker<T extends { id: string; name: string; theme: AssetTheme }>({
-  items,
-  selectedId,
-  onSelect,
-  ariaLabel,
-  gridClass,
-  swatchClass,
-  renderMedia,
-}: {
-  items: readonly T[];
-  selectedId: string;
-  onSelect: (id: string) => void;
-  ariaLabel: string;
-  gridClass: string;
-  swatchClass: string;
-  renderMedia: (item: T) => ReactNode;
-}) {
-  const t = useT();
-  const [filter, setFilter] = useState<Filter>('all');
-  const themes = presentThemes(items);
-  const shown = filter === 'all' ? items : items.filter((item) => item.theme === filter);
-
-  return (
-    <>
-      {themes.length > 1 && (
-        <div className="pickerFilter">
-          <SegmentedControl
-            aria-label={ariaLabel}
-            fullWidth
-            value={filter}
-            onValueChange={(value) => setFilter(value as Filter)}
-            options={[
-              { value: 'all', label: t('custThemeAll') },
-              ...themes.map((theme) => ({ value: theme, label: t(THEME_LABEL_KEY[theme]) })),
-            ]}
-          />
-        </div>
-      )}
-      <div className={gridClass} role="radiogroup" aria-label={ariaLabel}>
-        {shown.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="radio"
-            aria-checked={selectedId === item.id}
-            className={swatchClass}
-            data-selected={selectedId === item.id || undefined}
-            title={item.name}
-            onClick={() => onSelect(item.id)}
-          >
-            {renderMedia(item)}
-          </button>
-        ))}
-      </div>
-    </>
   );
 }
 
@@ -229,20 +166,7 @@ export function CustomizeTab({
             ariaLabel={t('custPlaymat')}
             gridClass="matPicker"
             swatchClass="matSwatch"
-            renderMedia={(mat) => (
-              <>
-                {mat.token ? (
-                  <span
-                    className="matColorFill"
-                    aria-hidden
-                    style={{ backgroundImage: playmatBackground(mat.id) }}
-                  />
-                ) : (
-                  <img src={playmatUrl(mat.id)} alt={mat.name} loading="lazy" draggable={false} />
-                )}
-                <span className="matSwatchName">{mat.name}</span>
-              </>
-            )}
+            renderMedia={(mat) => <PlaymatSwatchMedia id={mat.id} name={mat.name} />}
           />
         </FormSection>
       )}

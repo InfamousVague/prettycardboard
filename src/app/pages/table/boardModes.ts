@@ -1,4 +1,5 @@
 import { PRECONS } from '../../data/precons.ts';
+import { printedPT } from '../../data/printedPt.ts';
 import type { CardInst } from '../../net/types.ts';
 
 /**
@@ -190,6 +191,26 @@ export function ptCounterModifier(counters: Record<string, number>): { power: nu
   return { power, toughness };
 }
 
+/** A face-down creature is a 2/2 in paper Magic, for both sides of the table. */
+export const FACE_DOWN_PT = { power: '2', toughness: '2' };
+
+/**
+ * The card's printed P/T, whatever the source: a token carries its own, a
+ * face-down card is a 2/2, everything else is looked up (bundled precons
+ * synchronously, Scryfall lazily). `undefined` = not resolved yet, `null` =
+ * this card has no P/T at all.
+ *
+ * `mtg` is false in Cyberpunk, which has Power but no toughness and no P/T
+ * anywhere in its card frame.
+ */
+export function basePT(card: CardInst, mtg = true): { power: string; toughness: string } | null | undefined {
+  if (!mtg) return null;
+  // Tokens included: a face-down card is a 2/2 to every seat, and reading a
+  // token's authored P/T here would show the owner a number nobody else has.
+  if (card.faceDown) return FACE_DOWN_PT;
+  return printedPT(card);
+}
+
 /**
  * Effective power/toughness for combat declarations: printed base plus every
  * P/T-shaped counter (`+1/+1`, `+1/+6`, `-2/+0`, etc.). Non-numeric bases (`*`)
@@ -197,22 +218,38 @@ export function ptCounterModifier(counters: Record<string, number>): { power: nu
  * needs a number.
  */
 export function effectivePT(card: CardInst): { power: string; toughness: string } {
+  const printed = basePT(card) ?? undefined;
   const base = (value: string | undefined) => {
     const parsed = parseInt((value ?? '').trim(), 10);
     return Number.isFinite(parsed) ? parsed : 0;
   };
   const modifier = ptCounterModifier(card.counters);
   return {
-    power: String(base(card.power) + modifier.power),
-    toughness: String(base(card.toughness) + modifier.toughness),
+    power: String(base(printed?.power) + modifier.power),
+    toughness: String(base(printed?.toughness) + modifier.toughness),
   };
 }
 
-/** "3/3" chip text for combat UI; empty string when the card has no P/T at all. */
-export function ptLabel(card: CardInst): string {
-  if (card.power == null && card.toughness == null) return '';
-  const { power, toughness } = effectivePT(card);
-  return `${power}/${toughness}`;
+/* One half of a printed P/T plus its counters. A plain number adds up; a
+   printed `*` or `1+*` cannot, and must not be quietly rounded to zero - it
+   carries its modifier alongside instead, the way a player would read it. */
+function ptPart(base: string, delta: number): string {
+  const trimmed = base.trim();
+  if (/^[+-]?\d+$/.test(trimmed)) return String(Number.parseInt(trimmed, 10) + delta);
+  if (delta === 0) return trimmed;
+  return `${trimmed}${delta > 0 ? '+' : ''}${delta}`;
+}
+
+/**
+ * "4/4" chip text: everything the card is worth right now, printed base and
+ * counters together, so nobody has to add it up. Empty when the printed base
+ * is unknown - a wrong total is worse than none.
+ */
+export function ptTotalLabel(card: CardInst, mtg = true): string {
+  const printed = basePT(card, mtg);
+  if (!printed) return '';
+  const modifier = ptCounterModifier(card.counters);
+  return `${ptPart(printed.power, modifier.power)}/${ptPart(printed.toughness, modifier.toughness)}`;
 }
 
 /* ------------------------------------------------------------------------ */

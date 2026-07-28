@@ -241,10 +241,20 @@ export function TablePage() {
     }
   }, [combatActive]);
 
-  // Mirror my playmat choice and turn-automation settings into the room (the
-  // felt wears the active player's mat; the server honors my auto untap/draw at
-  // my turn), on join and whenever preferences change.
+  // Mirror my playmat choice and turn-automation settings into the room (each
+  // seat's felt wears its own mat; the server honors my auto untap/draw at my
+  // turn), on join and whenever preferences change.
   const roomId = room?.roomId;
+  // The mat my seated deck brings, if any - the server already applied it, so
+  // this is only here to stop the global preference overwriting it.
+  // Read off the LIVE room, never the replay frame: scrubbing back through a
+  // match must not rewrite what mat the seat is wearing.
+  const myDeck = useApp((state) =>
+    state.decks.find(
+      (deck) => deck.id === liveRoom?.players.find((p) => p.userId === state.identity?.userId)?.deckId,
+    ),
+  );
+  const deckMat = myDeck?.playmat ?? null;
   useEffect(() => {
     const prime = () => primeSounds();
     window.addEventListener('pointerdown', prime, { once: true });
@@ -304,7 +314,11 @@ export function TablePage() {
     if (!roomId || spectating) return;
     const share = () => {
       const prefs = loadPreferences();
-      send({ type: 'playmat.set', id: prefs.playmat });
+      // A deck that brings its own mat owns the seat. Stated positively rather
+      // than by staying quiet: the server also applies it when the deck is
+      // chosen, but a rejoin that revives an existing seat skips that, and a
+      // mat added to the deck mid-session would never arrive.
+      send({ type: 'playmat.set', id: deckMat ?? prefs.playmat });
       send({ type: 'cardback.set', id: prefs.cardBack });
       send({ type: 'auto.set', untap: prefs.autoUntap, draw: prefs.autoDraw });
     };
@@ -318,7 +332,9 @@ export function TablePage() {
       window.removeEventListener('pc:preferences', share);
       offStatus();
     };
-  }, [roomId, spectating]);
+    // Re-runs on a deck change too: switching to a deck with no mat of its own
+    // must hand the seat back to the global preference.
+  }, [roomId, spectating, deckMat]);
 
   // Share my deck's public metrics (colors/curve/counts) for the matchup
   // splash whenever my seat has a deck but no metrics yet - the server clears

@@ -42,6 +42,8 @@ export const CHANGELOG: ChangelogRelease[] = [
     version: '0.5.0',
     entries: [
       { icon: Rows3, title: 'clPiles', desc: 'clPilesDesc' },
+      { icon: Swords, title: 'clTotals', desc: 'clTotalsDesc' },
+      { icon: Image, title: 'clDeckMat', desc: 'clDeckMatDesc' },
       { icon: LayoutGrid, title: 'clGrid050', desc: 'clGrid050Desc' },
     ],
   },

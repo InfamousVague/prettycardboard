@@ -452,6 +452,15 @@ cosmetic-setting pattern (not a game action: no undo/timeline churn).
   accepts `custom-<file>` ids that name an existing stored mat.
 - `GET /api/mats/{file}` — public (CSS url() can't send auth); serves the
   stored image with immutable caching. Filenames are per-upload unique.
+- A DECK may carry its own mat: `POST /api/decks` / `PUT /api/decks/{id}` body
+  gains `playmat?: string | null` and `GET /api/decks` items + `GET
+  /api/decks/{id}` gain `playmat`. When a seat takes that deck (at `room.join`,
+  and again on `room.deck.set`) the server copies it onto `Player.playmat`,
+  validated exactly like `playmat.set` (bundled id, or a `custom-` file the
+  actor owns). A deck without one leaves the seat alone, so the player's global
+  preference lands on it as before - and the client suppresses its own
+  `playmat.set` while the seated deck has a mat, or every unrelated preference
+  change would overwrite it.
 - `GET /api/users/{id}/stats` (Bearer) — any player's all-time aggregates,
   same shape as `/api/me/stats`; unknown ids return zeros.
 - Client -> server `{type: "deckmeta.set", meta}` — seated players push a

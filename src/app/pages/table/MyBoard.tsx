@@ -26,6 +26,7 @@ import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
 import { isFoilInst } from '../../data/foil.ts';
 import { getFaces, loadFaces, useFacesVersion } from '../../data/faces.ts';
+import { primePrintedPT, usePrintedPtVersion } from '../../data/printedPt.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import type { CardInst, MatPos, MatZone, RoomState, TablePlayer, Zone } from '../../net/types.ts';
@@ -41,6 +42,7 @@ import {
   PILE_MAX_EDGES,
   PILE_STEP_PX,
   effectivePT,
+  ptTotalLabel,
   hostUnderPoint,
   isCreature,
   resolveDropTarget,
@@ -149,6 +151,9 @@ export function MyBoard({
   // Re-render when a double-faced card's back art finishes loading, so a flipped
   // Clive (etc.) swaps to its alt form for every viewer.
   useFacesVersion();
+  // Printed P/T resolves lazily (bundled precons are instant, anything else is
+  // one Scryfall lookup); re-render when one lands so the total fills in.
+  usePrintedPtVersion();
   const boardMode = useTableUi((state) => state.boardMode);
   const cardScale = useTableUi(selectCardScale);
   // Phones dock the zone piles into a swipe-out drawer instead of the strip.
@@ -188,6 +193,8 @@ export function MyBoard({
   // Subtle continuous idle drift on battlefield cards (Settings -> Table ->
   // Ambient card motion). Off by default; suppressed while dragging.
   const ambientCards = usePreference('ambientCards');
+  // The running P/T total on each creature, so nobody adds counters by hand.
+  const cardTotals = usePreference('cardTotals');
 
   const fieldRef = useRef<HTMLDivElement>(null);
   const handRef = useRef<HTMLDivElement | null>(null);
@@ -986,6 +993,11 @@ export function MyBoard({
     // preview attrs onto the wrapper so any hit on the card resolves an anchor.
     // Double-faced: show the back art + name when this card is flipped to its
     // alt form. Faces are fetched lazily (any viewer of a transformed card).
+    // The running total: printed base plus every P/T counter. Ask for the
+    // printed half if we have not seen this card yet - the lookup is deduped
+    // and throttled, and the badge simply stays empty until it lands.
+    if (cardTotals && mtg) primePrintedPT(card);
+    const ptTotal = cardTotals ? ptTotalLabel(card, mtg) : '';
     const faces = card.transformed ? getFaces(card.scryfallId) : undefined;
     if (card.transformed && card.scryfallId && !faces) void loadFaces(card.scryfallId);
     const backImg = card.transformed && faces?.dfc ? faces.backImage : undefined;
@@ -1058,6 +1070,11 @@ export function MyBoard({
             tilt={0}
           >
             <CounterBadges card={card} onSet={(counter, value) => setCounterCount(card, counter, value)} />
+            {ptTotal && (
+              <span className="ptTotal" title={t('gpPtTotal')}>
+                {ptTotal}
+              </span>
+            )}
             {pileCount > 0 && (
               <button
                 type="button"

@@ -231,6 +231,30 @@ export const messages = {
     fr: "Déposez une carte sur une carte identique pour les empiler comme sur une vraie table. Le tas se déplace d'un bloc et affiche son compte ; touchez ce compte pour reprendre la carte du dessus. Maintenez Maj (ou continuez à poser la carte) pour empiler des cartes différentes.",
     ar: 'أسقط بطاقة فوق أخرى مطابقة لتصطفّا في كومة كما على طاولة حقيقية. تتحرك الكومة ككائن واحد وتعرض عددها؛ المس العدد لسحب البطاقة العليا. اضغط Shift (أو أبقِ البطاقة مستقرة) لتكويم بطاقات مختلفة.',
   },
+  clTotals: {
+    en: 'No more counting counters',
+    es: 'Se acabó contar contadores',
+    fr: 'Fini de compter les marqueurs',
+    ar: 'لا مزيد من عدّ العلامات',
+  },
+  clTotalsDesc: {
+    en: "Every creature now shows its real power/toughness in the corner - printed values plus every counter, already added up. Counter chips also spell out the whole counter's name, and one tap adds loyalty, lore, charge, stun, shield and the rest.",
+    es: 'Cada criatura muestra ahora su fuerza/resistencia real en la esquina: los valores impresos más todos los contadores, ya sumados. Las fichas de contador muestran el nombre completo y hay atajos para lealtad, saga, carga, aturdimiento, escudo y más.',
+    fr: "Chaque créature affiche désormais sa vraie force/endurance dans le coin : valeurs imprimées et marqueurs, déjà additionnés. Les jetons affichent le nom complet du marqueur, et un appui ajoute loyauté, lore, charge, étourdissement, bouclier et les autres.",
+    ar: 'يعرض كل مخلوق الآن قوته/صلابته الحقيقية في الزاوية: القيم المطبوعة مع كل العلامات مجموعة سلفًا. كما تعرض رقائق العلامات الاسم كاملًا، ونقرة واحدة تضيف الولاء والسرد والشحن والذهول والدرع وغيرها.',
+  },
+  clDeckMat: {
+    en: 'A mat per deck',
+    es: 'Un tapete por mazo',
+    fr: 'Un tapis par deck',
+    ar: 'سجادة لكل مجموعة',
+  },
+  clDeckMatDesc: {
+    en: 'Give a deck its own playmat in the deck editor and the table wears it whenever you sit down with that deck. Decks without one keep following your usual mat.',
+    es: 'Asigna a un mazo su propio tapete en el editor y la mesa lo usará siempre que juegues con él. Los mazos sin tapete siguen usando el tuyo de siempre.',
+    fr: "Donnez à un deck son propre tapis dans l'éditeur et la table le portera dès que vous jouerez avec. Les decks sans tapis suivent toujours le vôtre.",
+    ar: 'امنح مجموعتك سجادتها الخاصة من محرر المجموعات فترتديها الطاولة كلما لعبت بها. أما المجموعات بلا سجادة فتتبع سجادتك المعتادة.',
+  },
   clGrid050: {
     en: 'A readable grid view',
     es: 'Una vista de cuadrícula legible',
@@ -893,6 +917,32 @@ export const messages = {
     es: 'Muestra el tablero rival volteado al otro lado de la mesa (cartas al revés). Desactivado lo deja al derecho.',
     fr: 'Affiche le plateau adverse retourné de l’autre côté de la table (cartes à l’envers). Désactivé le garde à l’endroit.',
     ar: 'اعرض لوحة الخصم مقلوبة عبر الطاولة (بطاقات مقلوبة). عند الإيقاف تبقى قائمة.',
+  },
+  dbMat: { en: 'Deck playmat', es: 'Tapete del mazo', fr: 'Tapis du deck', ar: 'سجادة المجموعة' },
+  dbMatDefault: { en: 'My default mat', es: 'Mi tapete habitual', fr: 'Mon tapis par défaut', ar: 'سجادتي الافتراضية' },
+  dbMatHint: {
+    en: 'Sit down with this deck and the table wears this mat. Leave it on your default and the deck follows whatever you picked in Settings.',
+    es: 'Siéntate con este mazo y la mesa usará este tapete. Déjalo en tu tapete habitual y el mazo seguirá el que elegiste en Ajustes.',
+    fr: "Asseyez-vous avec ce deck et la table portera ce tapis. Laissez-le sur votre tapis par défaut et le deck suivra celui choisi dans les Réglages.",
+    ar: 'اجلس بهذه المجموعة فترتدي الطاولة هذه السجادة. اتركها على سجادتك الافتراضية فتتبع المجموعة ما اخترته في الإعدادات.',
+  },
+  setCardTotals: {
+    en: 'Show power/toughness totals',
+    es: 'Mostrar totales de fuerza/resistencia',
+    fr: 'Afficher les totaux force/endurance',
+    ar: 'إظهار مجاميع القوة/الصلابة',
+  },
+  setCardTotalsHint: {
+    en: "Print each creature's current power/toughness in the corner of its card - printed values plus every +1/+1 style counter already added up, so you never have to do the math mid-turn.",
+    es: 'Muestra en la esquina de cada criatura su fuerza/resistencia actual: los valores impresos más todos los contadores +1/+1 ya sumados, para no hacer cuentas en mitad del turno.',
+    fr: "Affiche dans le coin de chaque créature sa force/endurance actuelle : les valeurs imprimées plus tous les marqueurs +1/+1 déjà additionnés, pour ne plus calculer en plein tour.",
+    ar: 'يعرض في زاوية كل مخلوق قوته/صلابته الحالية: القيم المطبوعة مع كل علامات +1/+1 مجموعة سلفًا، فلا تحتاج إلى الحساب أثناء الدور.',
+  },
+  gpPtTotal: {
+    en: 'Power / toughness, counters included',
+    es: 'Fuerza / resistencia, contadores incluidos',
+    fr: 'Force / endurance, marqueurs compris',
+    ar: 'القوة / الصلابة، شاملة العلامات',
   },
   setAmbientCards: { en: 'Ambient card motion', es: 'Movimiento ambiental de cartas', fr: 'Mouvement ambiant des cartes', ar: 'حركة البطاقات المحيطة' },
   setAmbientCardsHint: {

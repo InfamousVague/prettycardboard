@@ -387,6 +387,9 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
     // Snapshot the deck's name now: match results must survive a later
     // rename or delete of the deck row.
     let deck_name = deck.as_ref().map(|d| d.name.clone());
+    // A deck may bring its own mat; None leaves the seat bare so the client's
+    // global preference lands on it a moment later.
+    let deck_mat = valid_playmat(app, &user.id, deck.as_ref().and_then(|d| d.playmat.clone()));
     let (command, library) = deck
         .map(|d| rooms::build_zones(&d.cards(), is_commander_room, &room.game))
         .unwrap_or_default();
@@ -403,7 +406,7 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
         cmd_damage_by_commander: Default::default(),
         commander_tax: Default::default(),
         mulligan: None,
-        playmat: None,
+        playmat: deck_mat,
         card_back: None,
         deck_meta: None,
         auto_untap: false,
@@ -775,10 +778,18 @@ fn room_deck_set(app: &Arc<App>, user: &db::User, deck_id: &str, tx: &Tx) {
         return;
     }
     let (command, library) = rooms::build_zones(&deck.cards(), rooms::format_has_commander(&room.format), &room.game);
+    // A deck can bring its own mat. Resolved here rather than client-side
+    // because this is the moment the deck is chosen, and it is immune to the
+    // client's re-shares (any preference change, every reconnect) overwriting
+    // the seat with the global preference a beat later.
+    let deck_mat = valid_playmat(app, &user.id, deck.playmat.clone());
     let Some(player) = room.players.iter_mut().find(|p| p.user_id == user.id) else {
         send_err(tx, "not_seated", "you are not seated in this room");
         return;
     };
+    if deck_mat.is_some() {
+        player.playmat = deck_mat;
+    }
     player.deck_id = Some(deck.id);
     player.deck_name = Some(deck.name);
     // Metrics describe the previous deck; the owner's client re-sends fresh
@@ -1240,6 +1251,22 @@ const PLAYMATS: [&str; 39] = [
 
 /// A player's chosen playmat, mirrored into the room so every client can show
 /// the active player's mat as the shared felt. Unknown ids are dropped.
+/// Bundled ids come from the fixed list; `custom-<file>` ids must name a mat
+/// that exists in our upload store AND belongs to `user_id` (files are named
+/// `<user id>-<suffix>` - without the prefix check anyone could adopt a
+/// tablemate's upload). A deck's stored mat goes through this too: the column
+/// is user data like any other.
+fn valid_playmat(app: &Arc<App>, user_id: &str, id: Option<String>) -> Option<String> {
+    id.filter(|v| {
+        PLAYMATS.contains(&v.as_str())
+            || v.strip_prefix("custom-").is_some_and(|f| {
+                crate::api::valid_mat_file(f)
+                    && f.starts_with(&format!("{user_id}-"))
+                    && app.mats_dir.join(f).is_file()
+            })
+    })
+}
+
 fn playmat_set(app: &Arc<App>, user: &db::User, id: Option<String>) {
     let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
         return;
@@ -1250,18 +1277,7 @@ fn playmat_set(app: &Arc<App>, user: &db::User, id: Option<String>) {
     let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
         return;
     };
-    // Bundled ids come from the fixed list; `custom-<file>` ids must name a
-    // mat that exists in our upload store AND belongs to the sender (files are
-    // named `<user id>-<suffix>` - without the prefix check anyone could adopt
-    // a tablemate's upload).
-    let valid = id.filter(|v| {
-        PLAYMATS.contains(&v.as_str())
-            || v.strip_prefix("custom-").is_some_and(|f| {
-                crate::api::valid_mat_file(f)
-                    && f.starts_with(&format!("{}-", user.id))
-                    && app.mats_dir.join(f).is_file()
-            })
-    });
+    let valid = valid_playmat(app, &user.id, id);
     if let Some(p) = room.players.iter_mut().find(|p| p.user_id == user.id) {
         if p.playmat != valid {
             p.playmat = valid;

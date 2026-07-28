@@ -51,6 +51,8 @@ export interface DeckSummary {
   coverImageUrl: string | null;
   /** The cover card's id, for game-aware art resolution. */
   coverCardId?: string | null;
+  /** The mat this deck brings to the table; null = the player's own default. */
+  playmat?: string | null;
   updatedAt: string;
 }
 
@@ -63,6 +65,9 @@ export interface Deck {
   cards: DeckCard[];
   /** Scryfall id of the chosen header/cover card, when customized. */
   header?: string | null;
+  /** The mat this deck brings to the table, overriding the player's global mat
+   *  preference while they are seated with it. null = use the preference. */
+  playmat?: string | null;
 }
 
 export interface FriendEntry {

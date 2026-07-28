@@ -112,8 +112,9 @@ export function createDeck(
   cards: DeckCard[],
   header?: string | null,
   game?: string,
+  playmat?: string | null,
 ): Promise<{ id: string }> {
-  return request('POST', '/api/decks', { name, format, cards, header, game });
+  return request('POST', '/api/decks', { name, format, cards, header, game, playmat });
 }
 
 export function updateDeck(
@@ -122,8 +123,9 @@ export function updateDeck(
   format: string,
   cards: DeckCard[],
   header?: string | null,
+  playmat?: string | null,
 ): Promise<void> {
-  return request('PUT', `/api/decks/${id}`, { name, format, cards, header });
+  return request('PUT', `/api/decks/${id}`, { name, format, cards, header, playmat });
 }
 
 export function deleteDeck(id: string): Promise<void> {

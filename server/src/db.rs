@@ -36,6 +36,10 @@ pub struct DeckRow {
     /// Which card game this deck belongs to ("mtg" | "cyberpunk"). Pre-multigame
     /// decks read back as "mtg".
     pub game: String,
+    /// The playmat this deck brings to the table, overriding the player's
+    /// global mat preference while they are seated with it. None = use the
+    /// preference, which is what every deck did before this column existed.
+    pub playmat: Option<String>,
 }
 
 impl DeckRow {
@@ -169,6 +173,7 @@ pub fn open(path: &std::path::Path) -> Connection {
     let _ = conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT", []);
     let _ = conn.execute("ALTER TABLE decks ADD COLUMN header TEXT", []);
     let _ = conn.execute("ALTER TABLE decks ADD COLUMN game TEXT", []);
+    let _ = conn.execute("ALTER TABLE decks ADD COLUMN playmat TEXT", []);
     let _ = conn.execute("ALTER TABLE match_history ADD COLUMN game TEXT", []);
     let _ = conn.execute("ALTER TABLE match_players ADD COLUMN cards_played INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE match_players ADD COLUMN cards_drawn INTEGER NOT NULL DEFAULT 0", []);
@@ -661,13 +666,14 @@ fn row_deck(row: &rusqlite::Row) -> rusqlite::Result<DeckRow> {
         updated_at: row.get(5)?,
         header: row.get(6)?,
         game: row.get::<_, Option<String>>(7)?.unwrap_or_else(|| "mtg".to_string()),
+        playmat: row.get(8)?,
     })
 }
 
 pub fn decks_for(conn: &Connection, user_id: &str) -> Vec<DeckRow> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, user_id, name, format, cards_json, updated_at, header, game
+            "SELECT id, user_id, name, format, cards_json, updated_at, header, game, playmat
              FROM decks WHERE user_id = ? ORDER BY updated_at DESC",
         )
         .unwrap();
@@ -679,7 +685,7 @@ pub fn decks_for(conn: &Connection, user_id: &str) -> Vec<DeckRow> {
 
 pub fn deck_get(conn: &Connection, id: &str) -> Option<DeckRow> {
     conn.query_row(
-        "SELECT id, user_id, name, format, cards_json, updated_at, header, game FROM decks WHERE id = ?",
+        "SELECT id, user_id, name, format, cards_json, updated_at, header, game, playmat FROM decks WHERE id = ?",
         [id],
         row_deck,
     )
@@ -689,8 +695,8 @@ pub fn deck_get(conn: &Connection, id: &str) -> Option<DeckRow> {
 
 pub fn deck_insert(conn: &Connection, row: &DeckRow) {
     conn.execute(
-        "INSERT INTO decks(id, user_id, name, format, cards_json, updated_at, header, game) VALUES(?,?,?,?,?,?,?,?)",
-        params![row.id, row.user_id, row.name, row.format, row.cards_json, row.updated_at, row.header, row.game],
+        "INSERT INTO decks(id, user_id, name, format, cards_json, updated_at, header, game, playmat) VALUES(?,?,?,?,?,?,?,?,?)",
+        params![row.id, row.user_id, row.name, row.format, row.cards_json, row.updated_at, row.header, row.game, row.playmat],
     )
     .unwrap();
 }
@@ -702,11 +708,12 @@ pub fn deck_update(
     format: &str,
     cards_json: &str,
     header: Option<&str>,
+    playmat: Option<&str>,
     now: i64,
 ) {
     conn.execute(
-        "UPDATE decks SET name = ?, format = ?, cards_json = ?, header = ?, updated_at = ? WHERE id = ?",
-        params![name, format, cards_json, header, now, id],
+        "UPDATE decks SET name = ?, format = ?, cards_json = ?, header = ?, playmat = ?, updated_at = ? WHERE id = ?",
+        params![name, format, cards_json, header, playmat, now, id],
     )
     .unwrap();
 }

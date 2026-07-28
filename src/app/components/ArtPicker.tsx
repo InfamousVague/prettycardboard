@@ -19,7 +19,7 @@ import './pickers.css';
  * header/cover card (persisted in the deck's `header` field).
  */
 
-function PickerShell({
+export function PickerShell({
   title,
   subtitle,
   onClose,

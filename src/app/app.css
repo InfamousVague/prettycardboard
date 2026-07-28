@@ -1085,6 +1085,27 @@ select,
   transform: translateY(-2px);
 }
 
+/* The deck editor's "no mat of its own" tile: a plain plate, so it reads as an
+   absence rather than as another piece of art. */
+.matSwatchNone {
+  display: grid;
+  place-items: center;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in oklch, var(--glacier-surface-raised) 70%, transparent) 0 6px,
+      transparent 6px 12px
+    ),
+    var(--glacier-surface);
+}
+
+.matSwatchNone .matSwatchName {
+  position: static;
+  padding: 0;
+  background: none;
+  text-align: center;
+}
+
 .matSwatch[data-selected] {
   border-color: var(--glacier-accent-solid);
   box-shadow: 0 0 12px color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent);

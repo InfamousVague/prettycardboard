@@ -90,6 +90,12 @@ async function fetchDetails(scryfallId: string): Promise<CardDetails> {
     toughness: card.toughness ?? face?.toughness,
   };
   DETAILS.set(scryfallId, details);
+  // The board wants the same P/T for its on-card total; hand it over rather
+  // than let it fetch this card a second time. Imported dynamically and only
+  // here: printedPt pulls in the (heavy) bundled precon index, and this module
+  // is reachable from the always-loaded shell.
+  const { notePrintedPT } = await import('../data/printedPt.ts');
+  notePrintedPT(scryfallId, details.power, details.toughness);
   return details;
 }
 

@@ -281,6 +281,14 @@ export function SettingsModal({
         />
       </div>
 
+      <Fieldset legend={t('setCardTotals')} description={t('setCardTotalsHint')}>
+        <Switch
+          label={t('setCardTotals')}
+          checked={preferences.cardTotals}
+          onCheckedChange={(checked) => onChange({ cardTotals: checked })}
+        />
+      </Fieldset>
+
       <Fieldset legend={t('setAmbientCards')} description={t('setAmbientCardsHint')}>
         <Switch
           label={t('setAmbientCards')}

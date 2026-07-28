@@ -349,6 +349,9 @@ fn deck_summary(row: &db::DeckRow) -> Value {
         "cardCount": count,
         "coverImageUrl": cover,
         "coverCardId": cover_id,
+        // The seated client needs this to know whether to push its own global
+        // mat or leave the deck's alone.
+        "playmat": row.playmat,
         "updatedAt": iso8601(row.updated_at),
     })
 }
@@ -371,6 +374,10 @@ pub struct DeckBody {
     /// "mtg" (default) or "cyberpunk": which card game this deck is for.
     #[serde(default)]
     game: Option<String>,
+    /// The playmat this deck brings to the table; null/absent = the player's
+    /// global mat preference.
+    #[serde(default)]
+    playmat: Option<String>,
 }
 
 pub async fn deck_create(
@@ -391,6 +398,7 @@ pub async fn deck_create(
         updated_at: now_ms(),
         header: body.header,
         game: body.game.unwrap_or_else(|| "mtg".to_string()),
+        playmat: body.playmat,
     };
     db::deck_insert(&app.db.lock().unwrap(), &row);
     // Multi-device sync: every connection (originator included) refreshes.
@@ -416,6 +424,7 @@ pub async fn deck_get(
         "game": row.game,
         "cards": row.cards(),
         "header": row.header,
+        "playmat": row.playmat,
     }))
     .into_response()
 }
@@ -441,6 +450,7 @@ pub async fn deck_update(
                     &body.format,
                     &serde_json::to_string(&body.cards).unwrap(),
                     body.header.as_deref(),
+                    body.playmat.as_deref(),
                     now_ms(),
                 );
                 true

@@ -19,6 +19,9 @@ export interface FaceInfo {
   backImage?: string;
   frontName?: string;
   backName?: string;
+  /** The BACK face's printed P/T, for the on-card total once flipped. */
+  backPower?: string;
+  backToughness?: string;
 }
 
 const NOT_DFC: FaceInfo = { dfc: false };
@@ -35,6 +38,8 @@ export function getFaces(scryfallId: string | undefined): FaceInfo | undefined {
 interface ScryFace {
   name?: string;
   image_uris?: { normal?: string; large?: string };
+  power?: string;
+  toughness?: string;
 }
 
 /** Fetch + cache a card's face info. Deduped by id; safe to call from render. */
@@ -62,6 +67,8 @@ export function loadFaces(scryfallId: string): Promise<FaceInfo> {
               backImage: back,
               frontName: faces[0]?.name,
               backName: faces[1]?.name,
+              backPower: faces[1]?.power,
+              backToughness: faces[1]?.toughness,
             }
           : NOT_DFC;
       cache.set(scryfallId, info);

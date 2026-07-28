@@ -64,6 +64,10 @@ export interface Preferences {
   /** Extra eye-candy: a very subtle continuous idle drift on battlefield cards
    * that catches the light and shows off holographic art. Off by default. */
   ambientCards: boolean;
+  /** Print each creature's CURRENT power/toughness in its bottom corner -
+   * printed base plus every P/T counter - so nobody has to add up counters in
+   * their head. On by default. */
+  cardTotals: boolean;
   /** Automatically untap your permanents at the start of your turn (off by
    * default; this app is manual-play first). Synced to the table via auto.set. */
   autoUntap: boolean;
@@ -118,6 +122,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   mirrorOpponent: true,
   mobileLayout: 'auto',
   ambientCards: false,
+  cardTotals: true,
   autoUntap: false,
   autoDraw: false,
   enableWip: false,
