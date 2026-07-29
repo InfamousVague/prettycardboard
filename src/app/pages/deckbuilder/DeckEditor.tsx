@@ -116,8 +116,12 @@ export function DeckEditor({ deckId }: { deckId: string }) {
         setDeck(loaded);
         // Imported decks may be full of cards this session has never seen;
         // learn their type lines and identities, then recompute the stats.
-        void hydrateCardMeta(loaded.cards.map((card) => card.scryfallId)).then((learned) => {
-          if (!cancelled && learned > 0) setMetaVersion((version) => version + 1);
+        // Regroup once hydration settles, learned or not: another mount (or
+        // StrictMode's second pass) may have filled the registry between this
+        // render and now, and gating on a fresh-learn count leaves the list
+        // stuck on the pre-hydration grouping - every card in "other".
+        void hydrateCardMeta(loaded.cards.map((card) => card.scryfallId)).finally(() => {
+          if (!cancelled) setMetaVersion((version) => version + 1);
         });
       })
       .catch(() => {

@@ -254,33 +254,76 @@ export async function resolvePrintings(
   return { bySet, byName, notFound };
 }
 
+/** Scryfall rejects the WHOLE collection request - 400, nothing resolved - if a
+ *  single `id` identifier is not a UUID. Our curated-art ids are `pc-…`, so one
+ *  of them in a batch used to cost every card in it its type line. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Ask /cards/collection for one batch of identifiers; returns what it knew. */
+async function collection(identifiers: Record<string, string>[]): Promise<ScryCard[]> {
+  const response = await fetch(`${API}/cards/collection`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifiers }),
+  });
+  if (!response.ok) return []; // partial hydration is still useful
+  const body = (await response.json()) as { data?: unknown };
+  return (Array.isArray(body.data) ? body.data : []).filter(isScryCard);
+}
+
 /**
  * Learn metadata for cards the session has never seen, by Scryfall id. This is
- * how imported decks (whose cards were resolved in a session long gone) get
- * their type lines, curves, and identities back: the deck editor hydrates any
- * unknown ids on load. Already-known ids are skipped, so repeat calls are free.
+ * how saved and imported decks (whose cards were resolved in a session long
+ * gone) get their type lines, curves, and identities back: the deck editor
+ * hydrates any unknown ids on load. Already-known ids are skipped, so repeat
+ * calls are free.
+ *
+ * Cards wearing our own curated art are the awkward case. Their `pc-…` id is
+ * not a Scryfall id at all, so it cannot be looked up directly - and worse, it
+ * poisons the batch it travels in. They are asked for by ORACLE identity
+ * instead, and the answer is aliased back onto every art of that card.
  */
 export async function hydrateCardMeta(ids: string[]): Promise<number> {
   const unknown = [...new Set(ids)].filter((id) => !KNOWN.has(id));
   if (unknown.length === 0) return 0;
   let learned = 0;
-  for (let start = 0; start < unknown.length; start += BATCH) {
+
+  const plain = unknown.filter((id) => UUID.test(id));
+  for (let start = 0; start < plain.length; start += BATCH) {
     if (start > 0) await wait(BATCH_GAP_MS);
-    const slice = unknown.slice(start, start + BATCH);
-    const response = await fetch(`${API}/cards/collection`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifiers: slice.map((id) => ({ id })) }),
-    });
-    if (!response.ok) continue; // partial hydration is still useful
-    const body = (await response.json()) as { data?: unknown };
-    for (const card of Array.isArray(body.data) ? body.data : []) {
-      if (isScryCard(card)) {
-        rememberCard(card);
-        learned += 1;
+    for (const card of await collection(plain.slice(start, start + BATCH).map((id) => ({ id })))) {
+      rememberCard(card);
+      learned += 1;
+    }
+  }
+
+  // Curated art: group the unknown alt ids by the oracle identity they name,
+  // ask for one card per identity, then hand its metadata to every art.
+  const alt = unknown.filter((id) => !UUID.test(id) && isAltArtId(id));
+  if (alt.length > 0) {
+    await loadAltArtCatalog();
+    const byOracle = new Map<string, string[]>();
+    for (const id of alt) {
+      const oracleId = ALT_ID_ORACLE.get(id);
+      if (!oracleId) continue;
+      const list = byOracle.get(oracleId);
+      if (list) list.push(id);
+      else byOracle.set(oracleId, [id]);
+    }
+    const oracles = [...byOracle.keys()];
+    for (let start = 0; start < oracles.length; start += BATCH) {
+      if (start > 0 || plain.length > 0) await wait(BATCH_GAP_MS);
+      const slice = oracles.slice(start, start + BATCH);
+      for (const card of await collection(slice.map((oracle_id) => ({ oracle_id })))) {
+        const meta = rememberCard(card);
+        for (const altId of byOracle.get(card.oracle_id ?? '') ?? []) {
+          KNOWN.set(altId, { ...meta, id: altId });
+          learned += 1;
+        }
       }
     }
   }
+
   return learned;
 }
 
