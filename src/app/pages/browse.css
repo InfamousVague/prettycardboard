@@ -243,3 +243,8 @@
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
   vertical-align: middle;
 }
+
+/* A group opens at a readable size; this asks for the rest of it. */
+.browseShowAll {
+  margin-block-start: var(--glacier-space-3);
+}

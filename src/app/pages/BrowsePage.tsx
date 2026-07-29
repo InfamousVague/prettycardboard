@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Heading, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
-import { useT } from '../i18n.ts';
+import { useT, type MessageKey } from '../i18n.ts';
 import { useVisibleGames } from '../hooks/useVisibleGames.ts';
 import {
   CATALOG,
+  deckFamily,
+  type DeckFamily,
   catalogCardCount,
   catalogDeckCards,
+  catalogFace,
   catalogIdentity,
   featuredDecks,
 } from '../data/catalog.ts';
@@ -70,25 +73,31 @@ export function BrowsePage() {
     () =>
       CATALOG.map((deck) => {
         const commander = deck.commanders[0];
+        const face = catalogFace(deck);
         const identity = catalogIdentity(deck);
         const extra = deck.commanders.length > 1 ? ` +${deck.commanders.length - 1}` : '';
         return {
           id: deck.id,
           name: deck.name,
-          subtitle: commander ? `${commander.name}${extra}` : undefined,
-          cover: commander ? cardImage(commander.sid) : undefined,
-          art: commander ? artCrop(commander.sid) : undefined,
+          subtitle: commander ? `${commander.name}${extra}` : deck.type,
+          cover: face ? cardImage(face.sid) : undefined,
+          art: face ? artCrop(face.sid) : undefined,
           badge: deck.code,
           identity: <ColorIdentity colors={identity} />,
           metaText: `${catalogCardCount(deck)} ${t('decksCards')} · ${deck.date.slice(0, 7)}`,
-          cardId: commander?.sid,
-          cardName: commander?.name,
-          facets: identity,
-          groups: { year: deck.date.slice(0, 4), set: deck.code },
+          cardId: face?.sid,
+          cardName: face?.name,
+          // Colours AND kind share one selection list, so picking Blue plus
+          // Duel narrows to blue duel decks rather than widening.
+          facets: [...identity, deckFamily(deck.type)],
+          kind: deck.type,
+          groups: { year: deck.date.slice(0, 4), set: deck.code, kind: deck.type ?? 'Deck' },
           sortDate: deck.date,
           cards: catalogDeckCards(deck),
           game: 'mtg',
-          format: 'Commander',
+          // Only the commander families are commander decks; a theme deck or a
+          // duel deck imported as Commander would be told it is 40 cards short.
+          format: deckFamily(deck.type) === 'commander' ? 'Commander' : 'Standard',
         };
       }),
     [t],
@@ -127,6 +136,25 @@ export function BrowsePage() {
       value: color,
       node: <ManaSymbol symbol={color} size="1.05em" />,
       ariaLabel: `${t('brFilterColors')} ${color}`,
+    })),
+  };
+  // Thirty years of product names collapse to the handful of things a player
+  // is actually choosing between.
+  const KINDS: { value: DeckFamily; key: MessageKey }[] = [
+    { value: 'commander', key: 'brKindCommander' },
+    { value: 'starter', key: 'brKindStarter' },
+    { value: 'duel', key: 'brKindDuel' },
+    { value: 'competitive', key: 'brKindCompetitive' },
+    { value: 'multiplayer', key: 'brKindMultiplayer' },
+    { value: 'jumpstart', key: 'brKindJumpstart' },
+    { value: 'other', key: 'brKindOther' },
+  ];
+  const mtgKindFacet: BrowseFacet = {
+    label: t('brFilterKind'),
+    options: KINDS.map(({ value, key }) => ({
+      value,
+      node: t(key),
+      ariaLabel: `${t('brFilterKind')} ${t(key)}`,
     })),
   };
   const cyberFacet: BrowseFacet = {
@@ -168,9 +196,10 @@ export function BrowsePage() {
         <BrowseCatalog
           decks={mtg}
           featuredIds={featuredDecks().map((deck) => deck.id)}
-          facet={mtgFacet}
+          facet={[mtgFacet, mtgKindFacet]}
           groupModes={[
             { id: 'year', label: t('brGroupYear') },
+            { id: 'kind', label: t('brGroupKind') },
             { id: 'set', label: t('brGroupSet') },
           ]}
           searchPlaceholder={t('brSearch')}

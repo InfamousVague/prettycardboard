@@ -38,6 +38,8 @@ export interface BrowseDeck {
   cardName?: string;
   /** Values this deck matches, for the filter chips. */
   facets: string[];
+  /** Product kind ("Duel Deck"), searchable and shown on the tile. */
+  kind?: string;
   /** Group label per group-mode id (e.g. { year: '2023', set: 'BLC' }). */
   groups: Record<string, string>;
   /** ISO-ish date for new/old sorting (empty when a game has no dates). */
@@ -70,7 +72,8 @@ export function BrowseCatalog({
 }: {
   decks: BrowseDeck[];
   featuredIds?: string[];
-  facet: BrowseFacet;
+  /** One row of filter chips, or several (colors AND kind, say). */
+  facet: BrowseFacet | BrowseFacet[];
   groupModes: { id: string; label: string }[];
   searchPlaceholder: string;
   emptyQuip: string;
@@ -83,6 +86,7 @@ export function BrowseCatalog({
   const ownedDecks = useApp((state) => state.decks);
   const ownedNames = useMemo(() => new Set(ownedDecks.map((d) => d.name.toLowerCase())), [ownedDecks]);
 
+  const facetRows = Array.isArray(facet) ? facet : [facet];
   const q = query.trim().toLowerCase();
   const filtersActive = q.length > 0 || facets.length > 0;
   const toggleFacet = (value: string, selected: boolean) =>
@@ -94,7 +98,8 @@ export function BrowseCatalog({
         q &&
         !d.name.toLowerCase().includes(q) &&
         !(d.subtitle ?? '').toLowerCase().includes(q) &&
-        !(d.badge ?? '').toLowerCase().includes(q)
+        !(d.badge ?? '').toLowerCase().includes(q) &&
+        !(d.kind ?? '').toLowerCase().includes(q)
       ) {
         return false;
       }
@@ -137,24 +142,27 @@ export function BrowseCatalog({
         <div className="browseSearch">
           <SearchField value={query} onValueChange={setQuery} placeholder={searchPlaceholder} aria-label={searchPlaceholder} />
         </div>
-        {facet.options.length > 0 && (
-          <div className="browseColors" role="group" aria-label={facet.label}>
-            <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="browseToolbarLabel">
-              {facet.label}
-            </Text>
-            {facet.options.map((option) => (
-              <FilterChip
-                key={option.value}
-                size="sm"
-                selected={facets.includes(option.value)}
-                onSelectedChange={(selected) => toggleFacet(option.value, selected)}
-                aria-label={option.ariaLabel}
-                className="browseColorChip"
-              >
-                {option.node}
-              </FilterChip>
-            ))}
-          </div>
+        {facetRows.map(
+          (row) =>
+            row.options.length > 0 && (
+              <div className="browseColors" role="group" aria-label={row.label} key={row.label}>
+                <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="browseToolbarLabel">
+                  {row.label}
+                </Text>
+                {row.options.map((option) => (
+                  <FilterChip
+                    key={option.value}
+                    size="sm"
+                    selected={facets.includes(option.value)}
+                    onSelectedChange={(selected) => toggleFacet(option.value, selected)}
+                    aria-label={option.ariaLabel}
+                    className="browseColorChip"
+                  >
+                    {option.node}
+                  </FilterChip>
+                ))}
+              </div>
+            ),
         )}
         <SegmentedControl
           size="sm"
@@ -213,24 +221,51 @@ export function BrowseCatalog({
         <EmptyFan quip={emptyQuip} />
       ) : (
         sections.map((section) => (
-          <section key={section.id} id={section.id}>
-            <div className="browseYearHead">
-              <Heading level={2} noMargin>
-                {section.title}
-              </Heading>
-              <Text as="span" size={Size.Small} tone={TextTone.Subtle} mono>
-                {section.decks.length}
-              </Text>
-            </div>
-            <div className="browseGrid">
-              {section.decks.map((deck, index) => (
-                <BrowseTile key={deck.id} deck={deck} index={index} owned={ownedNames.has(deck.name.toLowerCase())} />
-              ))}
-            </div>
-          </section>
+          <BrowseSection key={section.id} section={section} ownedNames={ownedNames} />
         ))
       )}
     </>
+  );
+}
+
+/** How many tiles a group shows before asking. The catalogue runs to a couple
+ *  of thousand decks and a year of Jumpstart alone is hundreds, so a group
+ *  opens at a readable size and expands on request rather than mounting every
+ *  card in the archive at once. */
+const SECTION_PAGE = 24;
+
+function BrowseSection({
+  section,
+  ownedNames,
+}: {
+  section: { id: string; title: string; decks: BrowseDeck[] };
+  ownedNames: Set<string>;
+}) {
+  const t = useT();
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? section.decks : section.decks.slice(0, SECTION_PAGE);
+  const hidden = section.decks.length - shown.length;
+  return (
+    <section id={section.id}>
+      <div className="browseYearHead">
+        <Heading level={2} noMargin>
+          {section.title}
+        </Heading>
+        <Text as="span" size={Size.Small} tone={TextTone.Subtle} mono>
+          {section.decks.length}
+        </Text>
+      </div>
+      <div className="browseGrid">
+        {shown.map((deck, index) => (
+          <BrowseTile key={deck.id} deck={deck} index={index} owned={ownedNames.has(deck.name.toLowerCase())} />
+        ))}
+      </div>
+      {hidden > 0 && (
+        <Button variant="soft" size="sm" className="browseShowAll" onClick={() => setExpanded(true)}>
+          {t('brShowAll').replace('{n}', String(hidden))}
+        </Button>
+      )}
+    </section>
   );
 }
 
