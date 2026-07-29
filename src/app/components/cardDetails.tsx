@@ -3,6 +3,7 @@ import { Heading, Size, Spinner, Text, TextTone } from '@glacier/react';
 import { CircleDollarSign, Coins, Cpu, Layers, Palette, Swords } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { cyberpunkCard, type CyberpunkCard } from '../data/cyberpunk.ts';
+import { isAltArtId } from '../data/cards.ts';
 import { ManaCost, ManaSymbol, parseCost } from './Mana.tsx';
 
 /**
@@ -52,15 +53,44 @@ function ensureDetails(): Promise<void> {
   return detailsIndex;
 }
 
-async function fetchDetails(scryfallId: string): Promise<CardDetails> {
-  await ensureDetails();
-  const cached = DETAILS.get(scryfallId);
-  if (cached) return cached;
+/**
+ * The Scryfall record behind a card id. A card wearing our own curated art has
+ * a `pc-…` id Scryfall has never heard of - `/cards/pc-…` is a 404, which is
+ * why those cards used to open with a title and nothing else. They carry an
+ * oracle identity instead, so ask for the card by that.
+ *
+ * The alt-art registry lives in the (heavy) scryfall module, so it is imported
+ * dynamically: this file is reachable from the always-loaded shell.
+ */
+async function fetchScryCard(scryfallId: string): Promise<Record<string, unknown> | undefined> {
+  if (isAltArtId(scryfallId)) {
+    const { altArtOracleId, loadAltArtCatalog } = await import('../data/scryfall.ts');
+    await loadAltArtCatalog();
+    const oracleId = altArtOracleId(scryfallId);
+    if (!oracleId) return undefined;
+    const response = await fetch('https://api.scryfall.com/cards/collection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ identifiers: [{ oracle_id: oracleId }] }),
+    });
+    if (!response.ok) return undefined;
+    const body = (await response.json()) as { data?: Record<string, unknown>[] };
+    return body.data?.[0];
+  }
   const response = await fetch(`https://api.scryfall.com/cards/${scryfallId}`, {
     headers: { Accept: 'application/json' },
   });
   if (!response.ok) throw new Error(String(response.status));
-  const card = (await response.json()) as {
+  return (await response.json()) as Record<string, unknown>;
+}
+
+async function fetchDetails(scryfallId: string): Promise<CardDetails> {
+  await ensureDetails();
+  const cached = DETAILS.get(scryfallId);
+  if (cached) return cached;
+  const raw = await fetchScryCard(scryfallId);
+  if (!raw) throw new Error('not_found');
+  const card = raw as {
     type_line?: string;
     mana_cost?: string;
     oracle_text?: string;
@@ -89,6 +119,16 @@ async function fetchDetails(scryfallId: string): Promise<CardDetails> {
     power: card.power ?? face?.power,
     toughness: card.toughness ?? face?.toughness,
   };
+  // Scryfall named the artist of a PAPER printing. This card is wearing our
+  // art, so credit whoever actually drew what is on screen.
+  if (isAltArtId(scryfallId)) {
+    const { altArtById } = await import('../data/scryfall.ts');
+    const art = altArtById(scryfallId);
+    if (art) {
+      details.artist = art.artist ?? details.artist;
+      details.setName = art.setName || details.setName;
+    }
+  }
   DETAILS.set(scryfallId, details);
   // The board wants the same P/T for its on-card total; hand it over rather
   // than let it fetch this card a second time. Imported dynamically and only

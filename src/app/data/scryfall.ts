@@ -404,6 +404,12 @@ export function hasAltArt(): boolean {
   return ALT_BY_ORACLE.size > 0;
 }
 
+/** The oracle identity a curated art was published against - the only handle
+ *  Scryfall will answer to for a `pc-…` card. Requires loadAltArtCatalog(). */
+export function altArtOracleId(id: string): string | undefined {
+  return ALT_ID_ORACLE.get(id);
+}
+
 /** Look up one curated art by its `pc-…` id, for decklists that name it
  *  explicitly. Unknown ids return undefined so import falls back to the paper
  *  printing rather than producing a card with no resolvable image. */

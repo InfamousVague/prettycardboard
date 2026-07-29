@@ -40,6 +40,7 @@ import { DownloadBanner } from './components/DownloadBanner.tsx';
 import { RotateOverlay } from './pages/table/RotateOverlay.tsx';
 import { useMobileLayout, usePhoneViewport, usePortrait } from './hooks/useIsPhone.ts';
 import { loadAltArtCatalog } from './data/scryfall.ts';
+import { DEFAULT_PLAYMAT, isCustomPlaymat, playmatUrl } from './data/playmats.ts';
 
 // Route pages, the whole table engine, the deck builder, the modals, and the
 // command palette load on first use rather than up front - so the initial
@@ -464,6 +465,27 @@ export function App() {
     window.addEventListener('hashchange', sync);
     return () => window.removeEventListener('hashchange', sync);
   }, []);
+
+  // An account keeps ONE custom mat, and a re-upload deletes the file the old
+  // id named. A preference still pointing at that dead id paints nothing - a
+  // blank felt with no obvious way back - so check it once on boot and fall
+  // back to the default rather than leaving the player staring at emptiness.
+  useEffect(() => {
+    const id = preferences.playmat;
+    if (!isCustomPlaymat(id)) return;
+    let cancelled = false;
+    void fetch(playmatUrl(id), { method: 'HEAD' })
+      .then((response) => {
+        if (!cancelled && !response.ok) update({ playmat: DEFAULT_PLAYMAT, customPlaymat: '' });
+      })
+      .catch(() => {
+        // Offline: keep the id. It may well be fine once the network is back.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preferences.playmat]);
 
   useEffect(() => {
     // Persist BEFORE applying: applyPreferences fires `pc:preferences`

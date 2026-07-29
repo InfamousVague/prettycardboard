@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { isAltArtId } from './cards.ts';
 import { getFaces, loadFaces } from './faces.ts';
 import { PRECONS } from './precons.ts';
 import type { CardInst } from '../net/types.ts';
@@ -93,6 +94,39 @@ export function printedPT(card: CardInst): PrintedPT | null | undefined {
    at once on the first frame. */
 const REQUEST_GAP_MS = 120;
 
+interface ScryPT {
+  power?: string;
+  toughness?: string;
+  card_faces?: { power?: string; toughness?: string }[];
+}
+
+/** One card's P/T from Scryfall. A card wearing our own art has a `pc-…` id
+ *  Scryfall 404s on, so it is asked for by the oracle identity that art was
+ *  published against - the same route the card details take. */
+async function lookup(id: string): Promise<ScryPT | undefined> {
+  if (isAltArtId(id)) {
+    // Dynamic: scryfall.ts is a static dependency of the app shell, and pulling
+    // this module into that graph drags the bundled precon decklists with it.
+    const { altArtOracleId, loadAltArtCatalog } = await import('./scryfall.ts');
+    await loadAltArtCatalog();
+    const oracleId = altArtOracleId(id);
+    if (!oracleId) return undefined;
+    const response = await fetch('https://api.scryfall.com/cards/collection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ identifiers: [{ oracle_id: oracleId }] }),
+    });
+    if (!response.ok) return undefined;
+    const body = (await response.json()) as { data?: ScryPT[] };
+    return body.data?.[0];
+  }
+  const response = await fetch(`https://api.scryfall.com/cards/${id}`, {
+    headers: { Accept: 'application/json' },
+  });
+  if (!response.ok) throw new Error(String(response.status));
+  return (await response.json()) as ScryPT;
+}
+
 async function drain(): Promise<void> {
   if (draining) return;
   draining = true;
@@ -102,15 +136,8 @@ async function drain(): Promise<void> {
       queued.delete(id);
       if (cache.has(id)) continue;
       try {
-        const response = await fetch(`https://api.scryfall.com/cards/${id}`, {
-          headers: { Accept: 'application/json' },
-        });
-        if (!response.ok) throw new Error(String(response.status));
-        const card = (await response.json()) as {
-          power?: string;
-          toughness?: string;
-          card_faces?: { power?: string; toughness?: string }[];
-        };
+        const card = await lookup(id);
+        if (!card) continue;
         const face = card.card_faces?.[0];
         const power = card.power ?? face?.power;
         const toughness = card.toughness ?? face?.toughness;

@@ -116,6 +116,13 @@ export function playmatBackground(id: string): string {
   if (mat?.token) {
     return `${GRID_OVERLAY}, linear-gradient(var(${mat.token}), var(${mat.token}))`;
   }
+  // An account keeps ONE custom mat, so a re-upload (or a server that has since
+  // forgotten the file) leaves old ids pointing at nothing. A second layer
+  // underneath means that paints the default felt rather than a blank surface:
+  // the top layer simply fails to load and the one below shows through.
+  if (isCustomPlaymat(id)) {
+    return `url("${playmatUrl(id)}"), url("${playmatUrl(DEFAULT_PLAYMAT)}")`;
+  }
   return `url("${playmatUrl(id)}")`;
 }
 

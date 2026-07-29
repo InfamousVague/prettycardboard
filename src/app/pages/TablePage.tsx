@@ -310,18 +310,29 @@ export function TablePage() {
     [],
   );
 
+  // The mat this seat last pushed. A deck's own mat is a DEFAULT applied when
+  // you sit down with it - not a lock: picking a mat in Settings afterwards has
+  // to win, or a deck with a mat leaves you unable to change the felt at all.
+  const sentMat = useRef<string | null>(null);
   useEffect(() => {
     if (!roomId || spectating) return;
     const share = () => {
       const prefs = loadPreferences();
-      // A deck that brings its own mat owns the seat. Stated positively rather
-      // than by staying quiet: the server also applies it when the deck is
-      // chosen, but a rejoin that revives an existing seat skips that, and a
-      // mat added to the deck mid-session would never arrive.
-      send({ type: 'playmat.set', id: deckMat ?? prefs.playmat });
+      // First share for this seat (or a deck change) hands the deck's mat over;
+      // after that only a genuine change of the mat PREFERENCE pushes, so the
+      // dozen unrelated `pc:preferences` events - volume, locale, card size -
+      // cannot quietly overwrite the deck's mat either.
+      const first = sentMat.current === null;
+      const prefChanged = !first && sentMat.current !== prefs.playmat;
+      const mat = first ? (deckMat ?? prefs.playmat) : prefChanged ? prefs.playmat : null;
+      if (mat != null) {
+        send({ type: 'playmat.set', id: mat });
+        sentMat.current = prefs.playmat;
+      }
       send({ type: 'cardback.set', id: prefs.cardBack });
       send({ type: 'auto.set', untap: prefs.autoUntap, draw: prefs.autoDraw });
     };
+    sentMat.current = null;
     share();
     window.addEventListener('pc:preferences', share);
     // Reconnects rejoin the room server-side; re-share the mat afterward.
