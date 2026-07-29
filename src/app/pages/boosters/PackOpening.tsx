@@ -4,10 +4,11 @@ import { motion } from 'motion/react';
 import { Button, Size, Text, TextTone } from '@glacier/react';
 import { PackageOpen, X } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
-import { cardImage } from '../../data/cards.ts';
+import { artCrop, cardImage } from '../../data/cards.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useMobileLayout } from '../../hooks/useIsPhone.ts';
 import type { PackCard } from '../../data/boosters.ts';
+import type { SetPool } from '../../data/boosterSets.ts';
 import './packOpening.css';
 
 /**
@@ -75,6 +76,7 @@ const CLIP_BOTTOM = `polygon(${seamPath}, 100% 100%, 0 100%)`;
 
 export function PackOpening({
   cards,
+  pool,
   setName,
   setIcon,
   art,
@@ -83,6 +85,8 @@ export function PackOpening({
   onClose,
 }: {
   cards: PackCard[];
+  /** The whole set pool, so the theatre can show what is actually pullable. */
+  pool?: SetPool | null;
   setName: string;
   setIcon?: string;
   /** The set's cached poster art: wraps the sealed pack and floods the room.
@@ -93,6 +97,11 @@ export function PackOpening({
   onClose: () => void;
 }) {
   const t = useT();
+  // Everything this pack COULD contain, rarest first - the odds made concrete.
+  const pullable = useMemo(
+    () => (pool ? [...pool.mythic, ...pool.rare, ...pool.uncommon, ...pool.common] : []),
+    [pool],
+  );
   const mobile = useMobileLayout();
   const [phase, setPhase] = useState<Phase>('sealed');
 
@@ -145,14 +154,20 @@ export function PackOpening({
         onClose();
         return;
       }
-      if (event.key === ' ' || event.key === 'Enter') {
-        event.preventDefault();
-        tear();
-      }
+      if (event.key !== ' ' && event.key !== 'Enter') return;
+      // preventDefault on a bubbled keydown cancels a native <button>'s own
+      // activation, so only claim the key when there is actually a sealed pack
+      // to tear AND no control owns the keystroke - otherwise "Open another",
+      // "Done" and the close button are dead to the keyboard.
+      if (phase !== 'sealed') return;
+      const target = event.target as Element | null;
+      if (target?.closest?.('button, a, input, textarea, select, [contenteditable="true"]')) return;
+      event.preventDefault();
+      tear();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [tear, onClose]);
+  }, [phase, tear, onClose]);
 
   // The page behind must not scroll while the overlay owns the screen.
   useEffect(lockBodyScroll, []);
@@ -176,6 +191,39 @@ export function PackOpening({
           <X size={18} />
         </Button>
       </div>
+
+      {/* Split: the set's own art holds the left, the pack and its cards get
+          the rest. The showcase is the thing you are opening; the stage is what
+          came out of it, and neither has to share a centred column with the
+          other any more. */}
+      <div className="poBody">
+        <aside className="poShowcase" onClick={(event) => event.stopPropagation()}>
+          {art && (
+            <div className="poShowcaseArt" style={{ backgroundImage: `url("${art}")` }} role="img" aria-label={setName} />
+          )}
+          <div className="poShowcaseInfo">
+            {setIcon && <img className="poShowcaseIcon" src={setIcon} alt="" aria-hidden />}
+            <Text as="span" size={Size.Large} weight="semibold" className="poShowcaseName">
+              {setName}
+            </Text>
+          </div>
+      {pullable.length > 0 && (
+        <div className="poPool">
+          <span className="poPoolHead">
+            {t('boPullable')} · {pullable.length}
+          </span>
+          <ul className="poPoolList">
+            {pullable.map((card) => (
+              <li key={card.id} className="poPoolRow" data-rarity={card.rarity}>
+                <img className="poPoolArt" src={artCrop(card.id)} alt="" loading="lazy" decoding="async" />
+                <span className="poPoolName">{card.name}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+        </aside>
 
       <div className="poStage" onClick={phase === 'sealed' ? tear : undefined}>
         {phase !== 'fanned' ? (
@@ -231,6 +279,8 @@ export function PackOpening({
             <Fan cards={bulk} label={t('boTheRest')} />
           </div>
         )}
+      </div>
+
       </div>
 
       <div className="poFoot" onClick={(event) => event.stopPropagation()}>

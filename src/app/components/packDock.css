@@ -1,0 +1,733 @@
+/* The floating pack dock: a booster to rip from anywhere in the app.
+   It lives on the inline-START edge at mid-height on purpose - the phone
+   table already owns both bottom corners (End turn at bottom-inline-end, the
+   zone piles at bottom-inline-start), and the middle of that edge is the one
+   run of screen no gameplay control reaches for. */
+
+.pdDock {
+  position: fixed;
+  inset-inline-start: calc(var(--glacier-space-2) + env(safe-area-inset-left, 0px));
+  top: 50%;
+  translate: 0 -50%;
+  /* Under the command palette (110), card popup (120) and pickers (130): the
+     dock is a pastime, so anything the player deliberately opened wins. */
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  /* INERT: dragging the pill moves it by transform, so this container's box
+     stays behind at the edge. An empty transparent box is still a hit target,
+     and the strip the player just cleared must go back to the board. */
+  pointer-events: none;
+}
+
+/* Only the two things you can actually touch take pointers back. NOT
+   `.pdDock > *`: that would re-arm the untransformed drag wrapper, which is
+   exactly the box left behind at the old position. */
+.pdPanel,
+.pdPill {
+  pointer-events: auto;
+}
+
+/* RTL: the same logical edge, mirrored - the inset property flips for us, but
+   the safe-area env() does not, so the right inset is read there. */
+:root[dir='rtl'] .pdDock {
+  inset-inline-start: calc(var(--glacier-space-2) + env(safe-area-inset-right, 0px));
+}
+
+/* --- collapsed: a draggable, labelled pill ------------------------------- */
+
+/* The whole pill is the drag handle, so the padding here is not decoration:
+   it is the surface you can grab without pressing either button. */
+.pdPill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  padding: 0.2rem 0.25rem;
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  background: var(--glacier-glass-regular);
+  backdrop-filter: blur(var(--glacier-blur-sm)) saturate(var(--glacier-glass-saturate));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  cursor: grab;
+  /* Present, not loud: it fades in when reached for. `:focus-within` rather
+     than `:focus-visible` now that the pill wraps two focusable buttons. */
+  opacity: 0.62;
+  transition: opacity var(--glacier-duration-fast, 120ms) ease;
+}
+
+.pdPill:hover,
+.pdPill:focus-within {
+  opacity: 1;
+}
+
+.pdPillMain,
+.pdPillClose {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  padding: 0.25rem 0.4rem;
+  border: 0;
+  border-radius: var(--glacier-radius-full);
+  background: transparent;
+  color: var(--glacier-text);
+  font: inherit;
+  font-size: var(--glacier-font-size-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* The unread dot hangs off THIS button, so this button has to be its
+   containing block - otherwise it anchors to `.pdDock` and lands at the
+   screen edge instead of on the pill the player dragged away. */
+.pdPillMain {
+  position: relative;
+}
+
+.pdPillMain:hover,
+.pdPillClose:hover {
+  background: var(--glacier-hover);
+}
+
+.pdPillLabel {
+  white-space: nowrap;
+}
+
+.pdPillClose {
+  opacity: 0.7;
+}
+
+.pdPillClose:hover,
+.pdPillClose:focus-visible {
+  opacity: 1;
+}
+
+/* Something was pulled while the dock was shut. */
+.pdPillDot {
+  position: absolute;
+  top: -1px;
+  inset-inline-end: -1px;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--glacier-radius-full);
+  background: var(--glacier-accent-solid);
+  box-shadow: 0 0 0 2px var(--glacier-surface);
+}
+
+/* --- expanded: the panel ------------------------------------------------ */
+
+.pdPanel {
+  /* Roomy enough to actually read a pack: about a third of the viewport, and
+     never so tall it swallows the screen. */
+  width: min(33vw, 34rem, calc(100vw - 1.5rem));
+  min-width: min(21rem, calc(100vw - 1.5rem));
+  max-height: min(38rem, 78vh);
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-3);
+  border-radius: var(--glacier-radius-xl);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  background: var(--glacier-glass-regular);
+  backdrop-filter: blur(var(--glacier-blur-lg)) saturate(var(--glacier-glass-saturate));
+  box-shadow: 0 18px 50px rgb(0 0 0 / 0.45);
+}
+
+.pdHead {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+.pdHeadTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  min-width: 0;
+  margin-inline-end: auto;
+  color: var(--glacier-text);
+}
+
+.pdBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.pdPicker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+}
+
+.pdEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-4) var(--glacier-space-3);
+  text-align: center;
+  color: var(--glacier-text-subtle);
+}
+
+.pdRetry {
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  border-radius: var(--glacier-radius-md);
+  background: transparent;
+  color: inherit;
+  padding: 0.15rem var(--glacier-space-2);
+  cursor: pointer;
+}
+
+/* --- the opened pack ---------------------------------------------------- */
+
+.pdCards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--glacier-space-2);
+}
+
+.pdCard {
+  position: relative;
+  min-width: 0;
+  animation: pdDeal 240ms ease-out both;
+}
+
+@keyframes pdDeal {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+}
+
+/* The cards you stop on get a halo; commons stay quiet. */
+.pdCard[data-rarity='rare'] {
+  filter: drop-shadow(0 0 6px color-mix(in oklch, gold 45%, transparent));
+}
+
+.pdCard[data-rarity='mythic'] {
+  filter: drop-shadow(0 0 8px color-mix(in oklch, orangered 55%, transparent));
+}
+
+/* Never owned before - the whole point of ripping a pack. */
+.pdCardNew {
+  position: absolute;
+  top: 0.25rem;
+  inset-inline-start: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.1rem 0.3rem;
+  border-radius: var(--glacier-radius-sm);
+  background: var(--glacier-accent-solid);
+  color: var(--glacier-accent-contrast);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+/* --- the friends feed --------------------------------------------------- */
+
+.pdFeed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+}
+
+.pdFeedRow {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-2);
+  border-radius: var(--glacier-radius-md);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  background: color-mix(in oklch, var(--glacier-surface) 55%, transparent);
+}
+
+.pdFeedRow[data-mine] {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-glass-border));
+}
+
+.pdFeedArt {
+  /* The card's face, cropped to its art box: a 2.4rem square of the painting
+     reads far better at this size than a whole shrunken card. */
+  width: 2.4rem;
+  height: 2.4rem;
+  flex: none;
+  object-fit: cover;
+  object-position: 50% 22%;
+  border-radius: var(--glacier-radius-sm);
+  background: var(--glacier-surface-sunken, var(--glacier-surface));
+}
+
+.pdFeedBody {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-inline-end: auto;
+}
+
+.pdFeedName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdFeedTags {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: none;
+}
+
+/* --- incoming pull notifications ---------------------------------------- */
+
+/* Stacked up the same edge the dock sits on, and INERT: a cheer must never
+   swallow a tap meant for the board underneath it. */
+.pdNotices {
+  position: fixed;
+  inset-inline-start: calc(var(--glacier-space-2) + env(safe-area-inset-left, 0px));
+  bottom: calc(50% + 2.5rem);
+  z-index: 100;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--glacier-space-2);
+  pointer-events: none;
+}
+
+:root[dir='rtl'] .pdNotices {
+  inset-inline-start: calc(var(--glacier-space-2) + env(safe-area-inset-right, 0px));
+}
+
+.pdNotice {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  width: min(17rem, calc(100vw - 1.5rem));
+  padding: var(--glacier-space-2);
+  border-radius: var(--glacier-radius-lg);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  background: var(--glacier-glass-regular);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  box-shadow: 0 12px 34px rgb(0 0 0 / 0.4);
+}
+
+.pdNotice[data-rarity='mythic'] {
+  border-color: color-mix(in oklch, orangered 45%, var(--glacier-glass-border));
+}
+
+.pdNotice[data-rarity='rare'] {
+  border-color: color-mix(in oklch, gold 40%, var(--glacier-glass-border));
+}
+
+.pdNoticeArt {
+  width: 2.2rem;
+  height: 2.2rem;
+  flex: none;
+  object-fit: cover;
+  object-position: 50% 22%;
+  border-radius: var(--glacier-radius-sm);
+}
+
+.pdNoticeBody {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-inline-end: auto;
+}
+
+.pdNoticeName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- phones ------------------------------------------------------------- */
+
+/* The button stays on the edge; the PANEL moves to the top of the screen.
+   Opening it must not bury the hand, the piles or the turn button, and on a
+   phone a mid-height panel would cover all three. */
+@media (max-width: 700px), (max-height: 480px) {
+  .pdPanel {
+    position: fixed;
+    top: calc(var(--glacier-space-3) + env(safe-area-inset-top, 0px) + 2.75rem);
+    inset-inline: calc(var(--glacier-space-2) + env(safe-area-inset-left, 0px))
+      calc(var(--glacier-space-2) + env(safe-area-inset-right, 0px));
+    width: auto;
+    max-height: min(26rem, 58vh);
+  }
+
+  .pdNotices {
+    bottom: calc(50% + 2.25rem);
+  }
+
+  .pdNotice {
+    width: min(15rem, calc(100vw - 1.5rem));
+  }
+
+  .pdCards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdCard {
+    animation: none;
+  }
+
+  .pdPill {
+    transition: none;
+  }
+}
+
+/* --- rarity bands ---------------------------------------------------------
+   A pack reads as bands, rarest first, each lit by its own colour so the hit
+   is obvious before you read a single name. The glow rides the band, and a
+   stronger version rides each card, so a lone mythic still reads as an event. */
+.pdBand {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: var(--glacier-space-2);
+  border-radius: var(--glacier-radius-md);
+  background: color-mix(in oklch, var(--pc-rarity, var(--glacier-border)) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--pc-rarity, var(--glacier-border)) 30%, transparent);
+}
+
+.pdBandHead {
+  font-size: var(--glacier-font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: color-mix(in oklch, var(--pc-rarity, var(--glacier-text-subtle)) 75%, var(--glacier-text));
+}
+
+/* One hue per rarity, reused by the band and its cards. */
+.pdBand[data-rarity='mythic'] { --pc-rarity: oklch(0.72 0.19 48); }
+.pdBand[data-rarity='rare'] { --pc-rarity: oklch(0.78 0.13 92); }
+.pdBand[data-rarity='uncommon'] { --pc-rarity: oklch(0.75 0.08 220); }
+.pdBand[data-rarity='common'] { --pc-rarity: oklch(0.62 0.01 260); }
+
+.pdCard[data-rarity='mythic'] { --pc-rarity: oklch(0.72 0.19 48); }
+.pdCard[data-rarity='rare'] { --pc-rarity: oklch(0.78 0.13 92); }
+.pdCard[data-rarity='uncommon'] { --pc-rarity: oklch(0.75 0.08 220); }
+.pdCard[data-rarity='common'] { --pc-rarity: oklch(0.62 0.01 260); }
+
+/* Rare and up get a real glow; commons stay quiet so the good ones carry. */
+.pdCard[data-rarity='rare'],
+.pdCard[data-rarity='mythic'],
+.pdCard[data-foil] {
+  border-radius: var(--glacier-radius-md);
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--pc-rarity) 55%, transparent),
+    0 0 16px color-mix(in oklch, var(--pc-rarity) 45%, transparent);
+}
+
+/* A foil of any rarity earns the shimmer treatment on top of its own hue. */
+.pdCard[data-foil] {
+  animation: pdFoilPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes pdFoilPulse {
+  0%, 100% { box-shadow: 0 0 0 1px color-mix(in oklch, var(--pc-rarity) 55%, transparent), 0 0 14px color-mix(in oklch, var(--pc-rarity) 40%, transparent); }
+  50% { box-shadow: 0 0 0 1px color-mix(in oklch, var(--pc-rarity) 80%, transparent), 0 0 26px color-mix(in oklch, var(--pc-rarity) 65%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdCard[data-foil] { animation: none; }
+}
+
+/* Phones: the third-of-viewport rule would leave a sliver, so the panel keeps
+   its own width there (see the phone block above). */
+@media (max-width: 700px), (max-height: 480px) {
+  .pdPanel {
+    width: min(20rem, calc(100vw - 1.5rem));
+    min-width: 0;
+  }
+}
+
+/* --- the set on the shelf -------------------------------------------------
+   Choosing a pack should feel like taking a box off a shelf, not like reading
+   a dropdown: the selected set is shown as the product - poster art wearing
+   its name, with three of its cards fanned out beside it. Art that 404s (the
+   server's cache is cold, or the set has no usable poster) removes itself and
+   the box falls back to a printed accent panel; a showcase card that 404s
+   falls back to the Magic card back. Never a broken image. */
+.pdShelf {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-2);
+  border-radius: var(--glacier-radius-lg);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  background: color-mix(in oklch, var(--glacier-surface) 45%, transparent);
+}
+
+/* The pack itself: taller than it is wide, art bled to the edges, name band
+   printed across the bottom the way a real wrapper carries it. */
+.pdShelfBox {
+  position: relative;
+  flex: none;
+  width: 4.4rem;
+  aspect-ratio: 3 / 4.2;
+  display: grid;
+  justify-items: center;
+  align-content: end;
+  gap: 0.15rem;
+  padding-block-end: 0.35rem;
+  border-radius: 4px;
+  overflow: hidden;
+  background: linear-gradient(
+    155deg,
+    color-mix(in oklch, var(--glacier-accent-solid) 26%, var(--glacier-surface-raised, #1a1c20)),
+    color-mix(in oklch, var(--glacier-accent-solid) 6%, var(--glacier-surface-sunken, #101114)) 70%
+  );
+  box-shadow:
+    inset 0 -1.9rem 1.5rem -1.2rem rgb(0 0 0 / 0.8),
+    0 10px 22px rgb(0 0 0 / 0.45);
+}
+
+.pdShelfArt {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 30%;
+}
+
+.pdShelfIcon {
+  position: relative;
+  width: 0.95rem;
+  height: 0.95rem;
+  filter: invert(1) brightness(1.7) drop-shadow(0 1px 3px rgb(0 0 0 / 0.7));
+  opacity: 0.95;
+}
+
+.pdShelfTag {
+  position: relative;
+  max-width: 92%;
+  font-size: 0.48rem;
+  font-weight: var(--glacier-font-weight-bold, 700);
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+  text-wrap: balance;
+  color: rgb(255 255 255 / 0.92);
+  text-shadow: 0 1px 4px rgb(0 0 0 / 0.9);
+}
+
+/* The foil crimp along the top edge - and the line the wrapper tears along. */
+.pdShelfSeam {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+  height: 0.42rem;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgb(255 255 255 / 0.28) 0 2px,
+      rgb(0 0 0 / 0.22) 2px 4px
+    );
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.45);
+}
+
+.pdShelfBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.pdShelfName {
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-medium, 600);
+  color: var(--glacier-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Three of the set's cards, fanned like they are being slid out of the pack. */
+.pdShelfFan {
+  position: relative;
+  height: 2.7rem;
+  margin-block-start: 0.3rem;
+}
+
+.pdShelfCard {
+  position: absolute;
+  inset-block-start: 0;
+  width: 1.9rem;
+  aspect-ratio: 488 / 680;
+  border-radius: 4.75% / 3.41%;
+  object-fit: cover;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 6px 14px rgb(0 0 0 / 0.5);
+  transform-origin: 50% 92%;
+  transition:
+    rotate var(--glacier-duration-fast, 120ms) var(--glacier-ease-out, ease-out),
+    translate var(--glacier-duration-fast, 120ms) var(--glacier-ease-out, ease-out);
+}
+
+.pdShelfCard:nth-child(1) {
+  inset-inline-start: 0;
+  rotate: -11deg;
+}
+
+.pdShelfCard:nth-child(2) {
+  inset-inline-start: 1.15rem;
+  z-index: 1;
+}
+
+.pdShelfCard:nth-child(3) {
+  inset-inline-start: 2.3rem;
+  rotate: 11deg;
+  z-index: 2;
+}
+
+/* Reaching for the box spreads the fan a little wider. */
+.pdShelf:hover .pdShelfCard:nth-child(1) {
+  rotate: -17deg;
+  translate: -12% 3%;
+}
+
+.pdShelf:hover .pdShelfCard:nth-child(3) {
+  rotate: 17deg;
+  translate: 12% 3%;
+}
+
+/* --- the half-second the pack takes to open -------------------------------
+   MIN_RIP_MS holds every opening for at least half a second so it reads as a
+   moment. That time must be SHOWN: the wrapper's seam splits, the box shudders
+   in its hand, and a row of real face-down Magic backs lifts underneath. */
+.pdShelf[data-tearing] .pdShelfBox {
+  animation: pdShudder 320ms ease-in-out infinite;
+}
+
+.pdShelf[data-tearing] .pdShelfSeam {
+  animation: pdSeamSplit 500ms ease-out infinite;
+}
+
+@keyframes pdShudder {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  35% {
+    transform: translate3d(-1px, 1px, 0) rotate(-1.1deg);
+  }
+  70% {
+    transform: translate3d(1px, -1px, 0) rotate(1.1deg);
+  }
+}
+
+@keyframes pdSeamSplit {
+  from {
+    height: 0.42rem;
+    opacity: 0.9;
+  }
+  to {
+    height: 1.5rem;
+    opacity: 0;
+  }
+}
+
+.pdRip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-2);
+  border-radius: var(--glacier-radius-md);
+  background: color-mix(in oklch, var(--glacier-surface) 40%, transparent);
+  /* The sheen that runs across the backs as the wrapper comes off. */
+  position: relative;
+  overflow: hidden;
+}
+
+.pdRip::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    rgb(255 255 255 / 0.16) 50%,
+    transparent 65%
+  );
+  background-size: 220% 100%;
+  animation: pdRipSheen 900ms linear infinite;
+  pointer-events: none;
+}
+
+.pdRipCard {
+  min-width: 0;
+  animation: pdRipLift 620ms ease-in-out infinite;
+}
+
+@keyframes pdRipLift {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  40% {
+    transform: translateY(-4px) rotate(-1.4deg);
+  }
+  75% {
+    transform: translateY(1px) rotate(1deg);
+  }
+}
+
+@keyframes pdRipSheen {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+/* Motion is the flourish, not the message: the shelf, the seam and the backs
+   all stay put, and the half-second still passes with the button in its
+   loading state. */
+@media (prefers-reduced-motion: reduce) {
+  .pdShelfCard,
+  .pdShelf[data-tearing] .pdShelfBox,
+  .pdShelf[data-tearing] .pdShelfSeam,
+  .pdRipCard,
+  .pdRip::after {
+    animation: none;
+    transition: none;
+  }
+}
+
+@media (max-width: 700px), (max-height: 480px) {
+  .pdShelfBox {
+    width: 3.6rem;
+  }
+}
+
+/* The floating pill: kit Button + IconButton in a draggable row. The wrapper
+   only positions and drags - the buttons bring their own look, which is what
+   makes it match every other control in the app. */
+.pdPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  cursor: grab;
+  /* The whole pill is a drag handle, so the browser must not claim the gesture
+     for panning first. */
+  touch-action: none;
+}
+
+.pdPill .pdPillLabel {
+  white-space: nowrap;
+}
