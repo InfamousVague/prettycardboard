@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { cardImage, isAltArtId } from './cards.ts';
 
 /**
  * Double-faced card resolution. The server only tracks a `transformed` flag per
@@ -42,6 +43,59 @@ interface ScryFace {
   toughness?: string;
 }
 
+/**
+ * One card's record from Scryfall. A card wearing our own curated art carries a
+ * `pc-…` id Scryfall has never heard of - asking for it directly is a 404, and
+ * a 404 here reads as "this card has no second face", which is why flipping a
+ * double-faced commander in our art did nothing at all. Those are asked for by
+ * the oracle identity the art was published against instead.
+ */
+async function lookup(id: string): Promise<{ layout?: string; card_faces?: ScryFace[] } | undefined> {
+  if (isAltArtId(id)) {
+    const { altArtOracleId, loadAltArtCatalog } = await import('./scryfall.ts');
+    await loadAltArtCatalog();
+    const oracleId = altArtOracleId(id);
+    if (!oracleId) return undefined;
+    const response = await fetch('https://api.scryfall.com/cards/collection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ identifiers: [{ oracle_id: oracleId }] }),
+    });
+    if (!response.ok) return undefined;
+    const body = (await response.json()) as { data?: { layout?: string; card_faces?: ScryFace[] }[] };
+    return body.data?.[0];
+  }
+  const response = await fetch(`https://api.scryfall.com/cards/${id}`, {
+    headers: { Accept: 'application/json' },
+  });
+  if (!response.ok) throw new Error(String(response.status));
+  return (await response.json()) as { layout?: string; card_faces?: ScryFace[] };
+}
+
+/** Our own art for each face of a two-faced card, when it has been published.
+ *  Either side may be missing, in which case that face falls back to paper. */
+async function curatedFaces(
+  altId: string,
+  faces: ScryFace[],
+): Promise<{ front?: string; back?: string } | undefined> {
+  const { altArtForFace, altArtOracleId } = await import('./scryfall.ts');
+  const oracleId = altArtOracleId(altId);
+  if (!oracleId) return undefined;
+  const front = altArtForFace(oracleId, faces[0]?.name);
+  const back = altArtForFace(oracleId, faces[1]?.name);
+  // A deck can be sitting on either art - decks saved before import learned to
+  // prefer the front are wearing the back one. "Flip" has to mean "show the
+  // other face" either way, so the pair is stated relative to the art the card
+  // is actually wearing.
+  const wearingBack = back?.id === altId;
+  const shown = wearingBack ? back : front;
+  const other = wearingBack ? front : back;
+  return {
+    front: shown ? cardImage(shown.id) : undefined,
+    back: other ? cardImage(other.id) : undefined,
+  };
+}
+
 /** Fetch + cache a card's face info. Deduped by id; safe to call from render. */
 export function loadFaces(scryfallId: string): Promise<FaceInfo> {
   const cached = cache.get(scryfallId);
@@ -51,19 +105,21 @@ export function loadFaces(scryfallId: string): Promise<FaceInfo> {
 
   const run = (async (): Promise<FaceInfo> => {
     try {
-      const response = await fetch(`https://api.scryfall.com/cards/${scryfallId}`, {
-        headers: { Accept: 'application/json' },
-      });
-      if (!response.ok) throw new Error(String(response.status));
-      const card = (await response.json()) as { layout?: string; card_faces?: ScryFace[] };
+      const card = await lookup(scryfallId);
+      if (!card) return NOT_DFC;
       const twoFaced = card.layout === 'transform' || card.layout === 'modal_dfc';
       const faces = card.card_faces ?? [];
-      const back = faces[1]?.image_uris?.normal ?? faces[1]?.image_uris?.large;
+      // Our curated art publishes a two-faced card as TWO arts under one oracle
+      // identity, one per face. When the card on the table is wearing one of
+      // them, flip between our arts rather than dropping the player onto a
+      // paper scan halfway through their deck.
+      const ourFaces = twoFaced && isAltArtId(scryfallId) ? await curatedFaces(scryfallId, faces) : undefined;
+      const back = ourFaces?.back ?? faces[1]?.image_uris?.normal ?? faces[1]?.image_uris?.large;
       const info: FaceInfo =
         twoFaced && faces.length >= 2 && back
           ? {
               dfc: true,
-              frontImage: faces[0]?.image_uris?.normal ?? faces[0]?.image_uris?.large,
+              frontImage: ourFaces?.front ?? faces[0]?.image_uris?.normal ?? faces[0]?.image_uris?.large,
               backImage: back,
               frontName: faces[0]?.name,
               backName: faces[1]?.name,

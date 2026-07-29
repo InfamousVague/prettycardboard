@@ -1,5 +1,5 @@
 import { PRECONS } from './precons.ts';
-import { isAltArtId, registerAltArt } from './cards.ts';
+import { ALT_ART_PREFIX, isAltArtId, registerAltArt } from './cards.ts';
 import { SERVER_URL } from '../net/api.ts';
 
 /**
@@ -397,6 +397,29 @@ let altCatalogPromise: Promise<void> | null = null;
 export function altArtsFor(oracleId: string | undefined): Printing[] {
   if (!oracleId) return [];
   return ALT_BY_ORACLE.get(oracleId) ?? [];
+}
+
+/** `"Liliana, Heretical Healer"` -> `"liliana-heretical-healer"`, the shape our
+ *  curated ids take (`pc-` + that). */
+export function artSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/**
+ * A two-faced card gets TWO curated arts under one oracle identity - one per
+ * face - and their ids carry the face name. This picks the art for a given
+ * face, which is how a transforming commander shows our creature on the front
+ * and our planeswalker on the back instead of an arbitrary one of the two.
+ */
+export function altArtForFace(oracleId: string | undefined, faceName: string | undefined): Printing | undefined {
+  if (!oracleId || !faceName) return undefined;
+  const wanted = `${ALT_ART_PREFIX}${artSlug(faceName)}`;
+  return ALT_BY_ORACLE.get(oracleId)?.find((printing) => printing.id === wanted);
 }
 
 /** Whether any curated art is published at all (gates the import checkbox). */

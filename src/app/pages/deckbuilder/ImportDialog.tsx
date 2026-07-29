@@ -6,7 +6,7 @@ import type { DeckCard } from '../../net/types.ts';
 import { useApp } from '../../state/appStore.ts';
 import { useUi } from '../../state/uiStore.ts';
 import { parseDecklist } from '../../data/decklist.ts';
-import { aliasCardMeta, altArtById, altArtsFor, hasAltArt, loadAltArtCatalog, resolvePrintings } from '../../data/scryfall.ts';
+import { aliasCardMeta, altArtById, altArtForFace, altArtsFor, hasAltArt, loadAltArtCatalog, resolvePrintings } from '../../data/scryfall.ts';
 import { fetchMoxfieldDeck, MoxfieldError, parseMoxfieldRef } from '../../data/moxfield.ts';
 
 /**
@@ -71,7 +71,16 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
         // An explicit `[pc-…]` pointer in the file wins over the checkbox: the
         // author said which art they wanted, so honour it even unticked.
         const named = entry.art ? altArtById(entry.art) : undefined;
-        const alts = named ? [named] : useAltArt ? altArtsFor(card.oracle_id) : [];
+        let alts = named ? [named] : useAltArt ? altArtsFor(card.oracle_id) : [];
+        // A two-faced card has one curated art PER FACE under a single oracle
+        // identity, so the raw list is two arts of one card, not two arts to
+        // choose between. Take the front: a deck opening on the back face put
+        // a planeswalker in the command zone where a creature belongs, and the
+        // flip had nothing left to turn to.
+        if (!named && (card.card_faces?.length ?? 0) >= 2) {
+          const front = altArtForFace(card.oracle_id, card.card_faces?.[0]?.name);
+          alts = front ? [front] : [];
+        }
         // An alt id is not a Scryfall id, so the metadata registry has to be told
         // they are the same card - otherwise the deck loses its type line, curve
         // and color identity for grouping and legality checks.
