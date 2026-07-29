@@ -915,6 +915,7 @@ export function DeckEditor({ deckId }: { deckId: string }) {
               {t('dbMatHint')}
             </Text>
             <PlaymatPicker
+              scrollable
               ariaLabel={t('dbMat')}
               selectedId={deck.playmat ?? ''}
               customId={loadPreferences().customPlaymat}

@@ -53,17 +53,18 @@
 }
 
 /* A picker whose grid is not .pkGrid (the playmat catalogue) still has to
-   scroll inside the capped panel. `flex: 1 1 0` makes it TAKE the leftover
-   height rather than merely be allowed to shrink into it, and min-height:0 is
-   what lets a flex child shrink below its content at all. The filter chips
-   above and the upload row below stay put. */
-.pkPanel .matPicker {
+   scroll inside the capped panel - but the GRID must not be the scroller.
+   As a flex item with a definite height its rows are sized against the
+   container instead of the tiles, and swatches that get their height from
+   aspect-ratio then overflow their row and overlap the one below (measured:
+   101px tiles in 60px rows). A plain block scroll box keeps the grid in
+   normal flow, exactly as it lays out in Settings. */
+.pkPanel .pickerScroll {
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-inline-end: var(--glacier-space-1);
-  align-content: start;
 }
 
 /* Fixed furniture around the scrolling grid. */

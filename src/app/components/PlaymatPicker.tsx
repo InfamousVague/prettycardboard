@@ -26,6 +26,7 @@ export function ThemedPicker<T extends { id: string; name: string; theme: AssetT
   swatchClass,
   renderMedia,
   lead,
+  scrollable,
 }: {
   items: readonly T[];
   selectedId: string;
@@ -36,11 +37,17 @@ export function ThemedPicker<T extends { id: string; name: string; theme: AssetT
   renderMedia: (item: T) => ReactNode;
   /** An extra swatch rendered before the catalog (the deck's "no mat" tile). */
   lead?: ReactNode;
+  /** Put the grid in its own scroll box - for a height-capped modal, where the
+   *  page itself cannot scroll. The grid must NOT be the scroller: as a flex
+   *  item with a definite height its rows size against the container rather
+   *  than the tiles, and aspect-ratio swatches then overlap the row below. */
+  scrollable?: boolean;
 }) {
   const t = useT();
   const [filter, setFilter] = useState<Filter>('all');
   const themes = presentThemes(items);
   const shown = filter === 'all' ? items : items.filter((item) => item.theme === filter);
+  const wrap = (grid: ReactNode) => (scrollable ? <div className="pickerScroll">{grid}</div> : grid);
 
   return (
     <>
@@ -58,23 +65,25 @@ export function ThemedPicker<T extends { id: string; name: string; theme: AssetT
           />
         </div>
       )}
-      <div className={gridClass} role="radiogroup" aria-label={ariaLabel}>
-        {lead}
-        {shown.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="radio"
-            aria-checked={selectedId === item.id}
-            className={swatchClass}
-            data-selected={selectedId === item.id || undefined}
-            title={item.name}
-            onClick={() => onSelect(item.id)}
-          >
-            {renderMedia(item)}
-          </button>
-        ))}
-      </div>
+      {wrap(
+        <div className={gridClass} role="radiogroup" aria-label={ariaLabel}>
+          {lead}
+          {shown.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="radio"
+              aria-checked={selectedId === item.id}
+              className={swatchClass}
+              data-selected={selectedId === item.id || undefined}
+              title={item.name}
+              onClick={() => onSelect(item.id)}
+            >
+              {renderMedia(item)}
+            </button>
+          ))}
+        </div>,
+      )}
     </>
   );
 }
@@ -165,10 +174,13 @@ export function PlaymatPicker({
   noneLabel,
   onNone,
   customId,
+  scrollable,
 }: {
   selectedId: string;
   onSelect: (id: string) => void;
   ariaLabel: string;
+  /** See ThemedPicker: the modal needs its own scroll box. */
+  scrollable?: boolean;
   /** Present = offer a "use my own mat" tile ahead of the catalog. */
   noneLabel?: string;
   onNone?: () => void;
@@ -186,6 +198,7 @@ export function PlaymatPicker({
       ariaLabel={ariaLabel}
       gridClass="matPicker"
       swatchClass="matSwatch"
+      scrollable={scrollable}
       lead={
         <>
           {noneLabel != null && onNone != null && (

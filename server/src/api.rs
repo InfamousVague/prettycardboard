@@ -323,6 +323,11 @@ pub async fn friend_remove(
 
 // --- decks ---
 
+/// Prefix of the synthetic printing ids used by curated alt art (`pc-<slug>`).
+/// Mirrors `ALT_ART_PREFIX` in src/app/data/cards.ts. Scryfall ids are UUIDs, so
+/// these can never collide with a real printing.
+const ALT_ART_PREFIX: &str = "pc-";
+
 fn deck_summary(row: &db::DeckRow) -> Value {
     let cards = row.cards();
     let commander = cards.iter().find(|c| c.board == "commander");
@@ -334,10 +339,17 @@ fn deck_summary(row: &db::DeckRow) -> Value {
         .header
         .clone()
         .or_else(|| commander.or_else(|| cards.first()).map(|c| c.scryfall_id.clone()));
+    // A curated alt art carries a `pc-` id Scryfall has never heard of; building a
+    // CDN URL from one yields a guaranteed 404 that the client cannot recover from,
+    // because a truthy coverImageUrl short-circuits its own alt-art resolution. Leave
+    // it null exactly like Cyberpunk does and let the client resolve coverCardId.
     let cover = if row.game == "cyberpunk" {
         None
     } else {
-        cover_id.as_deref().map(rooms::scryfall_image_url)
+        cover_id
+            .as_deref()
+            .filter(|id| !id.starts_with(ALT_ART_PREFIX))
+            .map(rooms::scryfall_image_url)
     };
     let count: u32 = cards.iter().map(|c| c.quantity).sum();
     json!({

@@ -964,6 +964,10 @@ select,
 .matPicker {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  /* Rows hug their swatches. The tiles take their height from aspect-ratio,
+     which a row sized any other way can compute too short - leaving the tile
+     spilling over the row below. */
+  grid-auto-rows: max-content;
   gap: var(--glacier-space-3);
 }
 
