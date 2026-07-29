@@ -78,6 +78,46 @@
   padding-block: var(--glacier-space-2);
 }
 
+/* A deck that carries its own playmat wears it as the tile's backdrop, so the
+   list reads like a shelf of mats with a commander standing on each. Behind a
+   scrim, because the card art and the deck name have to stay the loud part. */
+.deckTile[data-mat] {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.deckTile[data-mat]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: var(--pc-deck-mat);
+  background-size: cover;
+  background-position: center;
+  opacity: 0.55;
+  transition: opacity var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+/* The scrim: dark at the foot where the name and format sit, thinner over the
+   card so the art still reads against its own mat. */
+.deckTile[data-mat]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklch, var(--glacier-surface) 55%, transparent) 0%,
+    color-mix(in oklch, var(--glacier-surface) 70%, transparent) 45%,
+    color-mix(in oklch, var(--glacier-surface) 92%, transparent) 100%
+  );
+}
+
+.deckTile[data-mat]:hover::before {
+  opacity: 0.72;
+}
+
 .deckTileInfo {
   display: flex;
   flex-direction: column;

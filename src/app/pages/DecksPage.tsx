@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { motion } from 'motion/react';
 import { Button, EmptyState, Heading, Pill, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
 import { Download, Layers, Plus } from '@glacier/icons';
@@ -6,6 +6,7 @@ import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useUi } from '../state/uiStore.ts';
 import { resolveCardImage } from '../data/games.ts';
+import { playmatBackground } from '../data/playmats.ts';
 import { useVisibleGames } from '../hooks/useVisibleGames.ts';
 import type { DeckSummary } from '../net/types.ts';
 import { GameCard } from '../components/GameCard.tsx';
@@ -151,6 +152,10 @@ function DeckTile({
     <motion.button
       type="button"
       className="deckTile"
+      // A deck that brings its own mat to the table wears it here too, so the
+      // list shows at a glance which deck plays on what.
+      data-mat={deck.playmat ? '' : undefined}
+      style={deck.playmat ? ({ ['--pc-deck-mat' as string]: playmatBackground(deck.playmat) } as CSSProperties) : undefined}
       onClick={onOpen}
       onContextMenu={(event) => {
         event.preventDefault();
