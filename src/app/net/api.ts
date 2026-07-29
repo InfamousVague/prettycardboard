@@ -66,7 +66,15 @@ export function login(username: string, password: string): Promise<Identity> {
   return request('POST', '/api/login', { username, password });
 }
 
-export function me(): Promise<{ userId: string; username: string; createdAt: string }> {
+export function me(): Promise<{
+  userId: string;
+  username: string;
+  createdAt: string;
+  /** The `custom-…` id of this account's uploaded playmat, if it has one. Kept
+   *  on the account rather than in one browser's storage, so signing in on
+   *  another machine still finds your own mat. */
+  customPlaymat?: string | null;
+}> {
   return request('GET', '/api/me');
 }
 

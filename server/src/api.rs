@@ -156,13 +156,31 @@ pub async fn login(State(app): State<Arc<App>>, Json(body): Json<LoginBody>) -> 
     Json(json!({"userId": id, "username": username, "token": token})).into_response()
 }
 
-pub async fn me(Extension(user): Extension<db::User>) -> Response {
+pub async fn me(State(app): State<Arc<App>>, Extension(user): Extension<db::User>) -> Response {
     Json(json!({
         "userId": user.id,
         "username": user.username,
         "createdAt": iso8601(user.created_at),
+        // The account's uploaded playmat, if it has one. The id used to live
+        // only in the uploader's localStorage, so signing in anywhere else lost
+        // it: no tile to pick, and a stale id nobody could correct. It is a
+        // property of the account (one file per user, on our disk), so the
+        // account is what should carry it.
+        "customPlaymat": custom_playmat_id(&app, &user.id),
     }))
     .into_response()
+}
+
+/// The `custom-<file>` id of this account's uploaded mat, by looking for the
+/// one file named after them. None when they have never uploaded.
+fn custom_playmat_id(app: &Arc<App>, user_id: &str) -> Option<String> {
+    let mine = format!("{user_id}-");
+    std::fs::read_dir(&app.mats_dir)
+        .ok()?
+        .flatten()
+        .map(|entry| entry.file_name().to_string_lossy().to_string())
+        .find(|name| name.starts_with(&mine) && valid_mat_file(name))
+        .map(|name| format!("custom-{name}"))
 }
 
 #[derive(Deserialize)]

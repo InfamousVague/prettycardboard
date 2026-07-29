@@ -318,17 +318,21 @@ export function TablePage() {
     if (!roomId || spectating) return;
     const share = () => {
       const prefs = loadPreferences();
-      // First share for this seat (or a deck change) hands the deck's mat over;
-      // after that only a genuine change of the mat PREFERENCE pushes, so the
-      // dozen unrelated `pc:preferences` events - volume, locale, card size -
-      // cannot quietly overwrite the deck's mat either.
+      // The seat is the source of truth: the server already put the deck's own
+      // mat on it at join, so the first share must not talk over that. It only
+      // dresses a seat that arrived bare. After that, only a genuine change of
+      // the mat PREFERENCE pushes - the dozen unrelated `pc:preferences` events
+      // (volume, locale, card size) leave the felt alone.
+      const seatMat = useGame
+        .getState()
+        .room?.players.find((player) => player.userId === identity?.userId)?.playmat;
       const first = sentMat.current === null;
       const prefChanged = !first && sentMat.current !== prefs.playmat;
-      const mat = first ? (deckMat ?? prefs.playmat) : prefChanged ? prefs.playmat : null;
-      if (mat != null) {
-        send({ type: 'playmat.set', id: mat });
-        sentMat.current = prefs.playmat;
-      }
+      const mat = first ? (seatMat ? null : (deckMat ?? prefs.playmat)) : prefChanged ? prefs.playmat : null;
+      if (mat != null) send({ type: 'playmat.set', id: mat });
+      // Remember the preference either way: the next share only pushes when
+      // the player has actually chosen a different mat since this one.
+      sentMat.current = prefs.playmat;
       send({ type: 'cardback.set', id: prefs.cardBack });
       send({ type: 'auto.set', untap: prefs.autoUntap, draw: prefs.autoDraw });
     };

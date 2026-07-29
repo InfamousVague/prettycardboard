@@ -452,6 +452,11 @@ cosmetic-setting pattern (not a game action: no undo/timeline churn).
   accepts `custom-<file>` ids that name an existing stored mat.
 - `GET /api/mats/{file}` — public (CSS url() can't send auth); serves the
   stored image with immutable caching. Filenames are per-upload unique.
+- `GET /api/me` carries `customPlaymat`: the `custom-<file>` id of this
+  account's upload, or null. The id is a property of the ACCOUNT (one file per
+  user on the server's disk), not of the browser that uploaded it - signing in
+  elsewhere adopts it, and an id left over from a replaced upload is corrected
+  rather than painting a mat that no longer exists.
 - A DECK may carry its own mat: `POST /api/decks` / `PUT /api/decks/{id}` body
   gains `playmat?: string | null` and `GET /api/decks` items + `GET
   /api/decks/{id}` gain `playmat`. When a seat takes that deck (at `room.join`,

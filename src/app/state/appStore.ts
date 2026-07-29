@@ -3,7 +3,8 @@ import * as api from '../net/api.ts';
 import * as ws from '../net/ws.ts';
 import type { DeckSummary, FriendsPayload, Identity, ServerMessage } from '../net/types.ts';
 import { cyberpunkStarters } from '../data/cyberpunk.ts';
-import { loadPreferences } from '../preferences.ts';
+import { loadPreferences, savePreferences } from '../preferences.ts';
+import { DEFAULT_PLAYMAT, isCustomPlaymat } from '../data/playmats.ts';
 
 /**
  * App-level state: the temporary identity, the social graph, and the deck
@@ -47,6 +48,27 @@ function loadIdentity(): Identity | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Reconcile this browser with the account's uploaded playmat. The id is a
+ * property of the account (one file per user on our disk), not of the machine
+ * that happened to upload it, so every sign-in adopts it: the picker can offer
+ * the tile anywhere, and an id left behind by a re-upload - or by an upload
+ * that has since been deleted - stops painting a mat that no longer exists.
+ */
+function syncCustomPlaymat(accountMat: string): void {
+  const prefs = loadPreferences();
+  if (prefs.customPlaymat === accountMat) return;
+  const usingOld = isCustomPlaymat(prefs.playmat) && prefs.playmat !== accountMat;
+  savePreferences({
+    ...prefs,
+    customPlaymat: accountMat,
+    // Following a dead custom id? Move to the live one, or to the default when
+    // the account has no upload at all.
+    playmat: usingOld ? accountMat || DEFAULT_PLAYMAT : prefs.playmat,
+  });
+  window.dispatchEvent(new CustomEvent('pc:preferences', { detail: loadPreferences() }));
 }
 
 export const useApp = create<AppState>((set, get) => {
@@ -134,7 +156,12 @@ export const useApp = create<AppState>((set, get) => {
         try {
           // Validate the stored token; a dead one (server reset, revoked)
           // must drop to the auth screen instead of a forever-offline shell.
-          await api.me();
+          const account = await api.me();
+          // Adopt the account's uploaded mat. It is stored per-account on the
+          // server, so a machine that has never uploaded still finds it - and a
+          // stale id left in this browser gets corrected (or cleared, if the
+          // upload is gone) rather than painting a blank felt forever.
+          syncCustomPlaymat(account.customPlaymat ?? '');
           await goOnline(identity);
         } catch (cause) {
           if (cause instanceof api.ApiError && cause.status === 401) {
