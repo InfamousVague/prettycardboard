@@ -1,5 +1,5 @@
 use crate::rooms::{self, Room};
-use crate::{db, hex_id, iso8601, now_ms, ws, App};
+use crate::{brackets, db, hex_id, iso8601, now_ms, ws, App};
 use axum::extract::{Path, Query, Request, State};
 use axum::http::{header, StatusCode};
 use axum::middleware::Next;
@@ -166,7 +166,10 @@ pub async fn me(State(app): State<Arc<App>>, Extension(user): Extension<db::User
         // it: no tile to pick, and a stale id nobody could correct. It is a
         // property of the account (one file per user, on our disk), so the
         // account is what should carry it.
-        "customPlaymat": custom_playmat_id(&app, &user.id),
+        // Newest upload, for anything that still wants just "the" custom mat.
+        "customPlaymat": custom_playmat_ids(&app, &user.id).first().cloned(),
+        // All of them: each deck can be wearing a different one.
+        "customPlaymats": custom_playmat_ids(&app, &user.id),
         // Same reasoning as the mat: one file per user on our disk, so the
         // account carries it and every sign-in adopts it.
         "customCardBack": custom_card_back_id(&app, &user.id),
@@ -176,14 +179,26 @@ pub async fn me(State(app): State<Arc<App>>, Extension(user): Extension<db::User
 
 /// The `custom-<file>` id of this account's uploaded mat, by looking for the
 /// one file named after them. None when they have never uploaded.
-fn custom_playmat_id(app: &Arc<App>, user_id: &str) -> Option<String> {
+/// Every mat this account has uploaded, newest first. An account keeps SEVERAL:
+/// a mat belongs to the deck that chose it, so uploading art for one deck must
+/// not reach into another deck and change what it plays on.
+fn custom_playmat_ids(app: &Arc<App>, user_id: &str) -> Vec<String> {
     let mine = format!("{user_id}-");
-    std::fs::read_dir(&app.mats_dir)
-        .ok()?
+    let mut files: Vec<(std::time::SystemTime, String)> = std::fs::read_dir(&app.mats_dir)
+        .into_iter()
         .flatten()
-        .map(|entry| entry.file_name().to_string_lossy().to_string())
-        .find(|name| name.starts_with(&mine) && valid_mat_file(name))
-        .map(|name| format!("custom-{name}"))
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !name.starts_with(&mine) || !valid_mat_file(&name) {
+                return None;
+            }
+            let at = entry.metadata().and_then(|m| m.modified()).ok()?;
+            Some((at, name))
+        })
+        .collect();
+    files.sort_by(|a, b| b.0.cmp(&a.0));
+    files.into_iter().map(|(_, name)| format!("custom-{name}")).collect()
 }
 
 #[derive(Deserialize)]
@@ -373,6 +388,17 @@ fn deck_summary(row: &db::DeckRow) -> Value {
             .map(rooms::scryfall_image_url)
     };
     let count: u32 = cards.iter().map(|c| c.quantity).sum();
+    // The estimated Commander bracket, derived here because the cards are
+    // already in hand - the alternative, shipping every deck's full card list to
+    // the browser just so it can count Game Changer names, would add tens of KB
+    // to a payload the deck browser wants to be tiny. Null for anything the
+    // bracket system does not cover (Cyberpunk, non-Commander formats).
+    let bracket = brackets::estimate_for(&row.game, &row.format, &cards).map(|est| {
+        json!({
+            "bracket": est.bracket,
+            "gameChangers": est.game_changers,
+        })
+    });
     json!({
         "id": row.id,
         "name": row.name,
@@ -380,6 +406,7 @@ fn deck_summary(row: &db::DeckRow) -> Value {
         "game": row.game,
         "commander": commander.map(|c| c.name.clone()),
         "cardCount": count,
+        "bracket": bracket,
         "coverImageUrl": cover,
         "coverCardId": cover_id,
         // The seated client needs this to know whether to push its own global
@@ -1015,19 +1042,28 @@ pub async fn playmat_upload(
     // (parallel uploads from one account would each survive the scan and
     // strand orphans), and the global-cap check must see a settled dir.
     let _guard = app.mats_lock.lock().await;
-    // Replace any previous upload by this player - storage stays bounded at
-    // one mat per account - and cap the store as a whole so open registration
-    // can't be scripted into filling the disk.
+    // Uploads ACCUMULATE: a mat belongs to the deck that chose it, so a new one
+    // for another deck must not replace it. Bounded per account instead, plus
+    // the store-wide cap so open registration can't be scripted into filling
+    // the disk.
     let mut total: u64 = 0;
+    let mut mine_count = 0usize;
     if let Ok(entries) = std::fs::read_dir(&app.mats_dir) {
         let mine = format!("{}-", user.id);
         for entry in entries.flatten() {
+            total += entry.metadata().map(|m| m.len()).unwrap_or(0);
             if entry.file_name().to_string_lossy().starts_with(&mine) {
-                let _ = std::fs::remove_file(entry.path());
-            } else {
-                total += entry.metadata().map(|m| m.len()).unwrap_or(0);
+                mine_count += 1;
             }
         }
+    }
+    const MATS_PER_USER: usize = 16;
+    if mine_count >= MATS_PER_USER {
+        return err(
+            StatusCode::CONFLICT,
+            "mats_full_user",
+            "you have reached the custom playmat limit - delete one to upload another",
+        );
     }
     const MATS_TOTAL_CAP: u64 = 2 * 1024 * 1024 * 1024; // 2GiB across all accounts
     if total + body.len() as u64 > MATS_TOTAL_CAP {
@@ -1044,12 +1080,7 @@ pub async fn playmat_upload(
     if std::fs::write(app.mats_dir.join(&file), &body).is_err() {
         return err(StatusCode::INTERNAL_SERVER_ERROR, "write_failed", "could not store the image");
     }
-    let id = format!("custom-{file}");
-    // The old file is gone, so any deck that pointed at it would silently fall
-    // back to the global mat. One upload per account means "the custom mat" is
-    // a single thing to a player - carry those decks over to the new one.
-    db::decks_repoint_custom_playmat(&app.db.lock().unwrap(), &user.id, &id);
-    Json(json!({ "id": id, "url": format!("/api/mats/{file}") })).into_response()
+    Json(json!({ "id": format!("custom-{file}"), "url": format!("/api/mats/{file}") })).into_response()
 }
 
 /// How long a "this set has no art" marker is trusted before we look again.
@@ -1302,6 +1333,27 @@ async fn curl_bytes(url: &str) -> Option<Vec<u8>> {
     curl_out(url).await
 }
 
+/// DELETE /api/playmat/{file} - remove ONE of this account's uploads.
+///
+/// Uploads accumulate now (a mat belongs to the deck that chose it), so there
+/// has to be a way back out. Any deck still pointing at the file falls back to
+/// the player's own mat, which is what a deck with no mat of its own does
+/// anyway - so nothing has to be rewritten here.
+pub async fn playmat_delete(
+    State(app): State<Arc<App>>,
+    Extension(user): Extension<db::User>,
+    Path(file): Path<String>,
+) -> Response {
+    // The filename carries its owner, so this is also the ownership check: you
+    // can only name a file that starts with your own id.
+    if !valid_mat_file(&file) || !file.starts_with(&format!("{}-", user.id)) {
+        return err(StatusCode::BAD_REQUEST, "bad_mat", "not one of your playmats");
+    }
+    let _guard = app.mats_lock.lock().await;
+    let _ = std::fs::remove_file(app.mats_dir.join(&file));
+    Json(json!({ "ok": true })).into_response()
+}
+
 /// GET /api/mats/{file} — serves stored custom mats. Public: mats are painted
 /// from CSS url() / <img>, which cannot attach auth headers.
 pub async fn playmat_serve(State(app): State<Arc<App>>, Path(file): Path<String>) -> Response {
@@ -1521,4 +1573,127 @@ pub async fn cardback_serve(State(app): State<Arc<App>>, Path(file): Path<String
             .into_response(),
         Err(_) => err(StatusCode::NOT_FOUND, "not_found", "no such card back"),
     }
+}
+
+// --- card collection ("Pokedex") ---
+
+/// One POST may only carry a sane number of cards: a booster is ~15, and even a
+/// box-opening spree lands far short of this.
+const PULLS_MAX: usize = 400;
+
+/// POST /api/collection/pulls — record the cards just opened.
+///
+/// Body is a bare array of `{scryfallId, name, setCode, rarity, foil?,
+/// released?}`. Every entry bumps that printing's `pull_count`; the ones the
+/// account had never owned come back in `new` so the client can celebrate a
+/// first pull. Notable cards (see `collection::is_notable`) also land in the
+/// friends feed.
+pub async fn collection_pulls(
+    State(app): State<Arc<App>>,
+    Extension(user): Extension<db::User>,
+    Json(body): Json<Vec<crate::collection::PulledCard>>,
+) -> Response {
+    if body.is_empty() {
+        return err(StatusCode::BAD_REQUEST, "no_cards", "no cards in this pull");
+    }
+    if body.len() > PULLS_MAX {
+        return err(StatusCode::BAD_REQUEST, "too_many_cards", "too many cards in one pull");
+    }
+    let now = now_ms();
+    let conn = app.db.lock().unwrap();
+    let mut new_cards: Vec<Value> = Vec::new();
+    let mut notable_cards: Vec<Value> = Vec::new();
+    let mut fed = false;
+    for card in &body {
+        // Set code and rarity are lowercased on the way in. Scryfall already
+        // sends them that way, but one mixed-case caller would otherwise split
+        // a set into two rows in the per-set tallies.
+        let set_code = card.set_code.trim().to_ascii_lowercase();
+        let rarity = card.rarity.trim().to_ascii_lowercase();
+        let pull = db::CollectionPull {
+            scryfall_id: &card.scryfall_id,
+            name: &card.name,
+            set_code: &set_code,
+            rarity: &rarity,
+            foil: card.foil,
+        };
+        let is_new = db::collection_pull(&conn, &user.id, &pull, now);
+        let notable = crate::collection::is_notable(&rarity, card.foil, card.released.as_deref());
+        let value = json!({
+            "scryfallId": card.scryfall_id,
+            "name": card.name,
+            "setCode": set_code,
+            "rarity": rarity,
+            "foil": card.foil,
+            "notable": notable,
+            "new": is_new,
+        });
+        if is_new {
+            new_cards.push(value.clone());
+        }
+        if notable {
+            notable_cards.push(value);
+            db::pull_feed_insert(&conn, &hex_id(8), &user.id, &user.username, &pull, now);
+            fed = true;
+        }
+    }
+    // One trim per request, not per card: the caps are per user, so doing it
+    // after the batch is both cheaper and identical in effect.
+    if fed {
+        db::pull_feed_trim(&conn, &user.id, now);
+    }
+    let (owned, pulls) = db::collection_totals(&conn, &user.id);
+    Json(json!({
+        "new": new_cards,
+        "notable": notable_cards,
+        "total": owned,
+        "pulls": pulls,
+    }))
+    .into_response()
+}
+
+#[derive(Deserialize)]
+pub struct CollectionQuery {
+    #[serde(default)]
+    set: Option<String>,
+}
+
+/// GET /api/collection[?set=CODE] — the caller's collection for the library
+/// page: totals, per-set tallies, and the owned printings (filtered to one set
+/// when `set` is given; the per-set tallies always cover everything, so the
+/// set switcher stays populated).
+pub async fn collection_get(
+    State(app): State<Arc<App>>,
+    Extension(user): Extension<db::User>,
+    Query(query): Query<CollectionQuery>,
+) -> Response {
+    let set = query.set.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let conn = app.db.lock().unwrap();
+    let (owned, pulls) = db::collection_totals(&conn, &user.id);
+    Json(json!({
+        "total": owned,
+        "pulls": pulls,
+        "sets": db::collection_set_counts(&conn, &user.id),
+        "cards": db::collection_cards(&conn, &user.id, set),
+        "set": set,
+    }))
+    .into_response()
+}
+
+#[derive(Deserialize)]
+pub struct FeedQuery {
+    #[serde(default)]
+    limit: Option<i64>,
+}
+
+/// GET /api/collection/feed[?limit=N] — notable pulls by the caller and their
+/// friends, newest first (default 50, hard cap 200).
+pub async fn collection_feed(
+    State(app): State<Arc<App>>,
+    Extension(user): Extension<db::User>,
+    Query(query): Query<FeedQuery>,
+) -> Response {
+    let limit = query.limit.unwrap_or(50).clamp(1, 200);
+    let conn = app.db.lock().unwrap();
+    Json(db::pull_feed_for(&conn, &user.id, limit)).into_response()
 }

@@ -103,6 +103,25 @@ export function DeckEditor({ deckId }: { deckId: string }) {
   const [matPicking, setMatPicking] = useState(false);
   // The sleeves this deck plays in (Settings' card back when unset).
   const [backPicking, setBackPicking] = useState(false);
+
+  /** Drop one of the account's uploaded mats. A deck still wearing it falls
+   *  back to the player's own mat, exactly like a deck that never had one, so
+   *  there is nothing to rewrite - only this deck's own choice is cleared. */
+  const removeMat = async (id: string) => {
+    try {
+      await api.deletePlaymat(id);
+    } catch {
+      // Already gone, or offline: the list below still drops it locally.
+    }
+    const prefs = loadPreferences();
+    savePreferences({
+      ...prefs,
+      customPlaymats: prefs.customPlaymats.filter((mat) => mat !== id),
+      customPlaymat: prefs.customPlaymat === id ? '' : prefs.customPlaymat,
+      playmat: prefs.playmat === id ? DEFAULT_PREFERENCES.playmat : prefs.playmat,
+    });
+    if (deck?.playmat === id) mutate((d) => ({ ...d, playmat: null }));
+  };
   const saveSeq = useRef(0);
   const randomHeaderRef = useRef<string | null>(null);
 
@@ -948,7 +967,8 @@ export function DeckEditor({ deckId }: { deckId: string }) {
               scrollable
               ariaLabel={t('dbMat')}
               selectedId={deck.playmat ?? ''}
-              customId={loadPreferences().customPlaymat}
+              customIds={loadPreferences().customPlaymats}
+              onDeleteCustom={(id) => void removeMat(id)}
               noneLabel={t('dbMatDefault')}
               onNone={() => {
                 mutate((d) => ({ ...d, playmat: null }));
@@ -963,7 +983,15 @@ export function DeckEditor({ deckId }: { deckId: string }) {
                 picking it here and there means the same image. */}
             <PlaymatUpload
               onUploaded={(id) => {
-                savePreferences({ ...loadPreferences(), customPlaymat: id });
+                // The upload joins the account's mats and dresses THIS deck.
+                // No other deck is touched: that was the whole problem with
+                // one-mat-per-account.
+                const prefs = loadPreferences();
+                savePreferences({
+                  ...prefs,
+                  customPlaymat: id,
+                  customPlaymats: [id, ...prefs.customPlaymats.filter((mat) => mat !== id)],
+                });
                 mutate((d) => ({ ...d, playmat: id }));
                 setMatPicking(false);
               }}

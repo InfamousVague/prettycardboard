@@ -1110,6 +1110,37 @@ select,
   text-align: center;
 }
 
+/* An uploaded mat carries its own delete, tucked in the corner so the tile
+   still reads as one swatch among the bundled ones. */
+.matSwatchWrap {
+  position: relative;
+  display: block;
+}
+
+.matSwatchWrap .matSwatch {
+  width: 100%;
+}
+
+.matSwatchDelete {
+  position: absolute;
+  top: 0.25rem;
+  inset-inline-end: 0.25rem;
+  opacity: 0;
+  background: color-mix(in oklch, var(--glacier-surface) 80%, transparent);
+  transition: opacity var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.matSwatchWrap:hover .matSwatchDelete,
+.matSwatchDelete:focus-visible {
+  opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .matSwatchDelete {
+    opacity: 1;
+  }
+}
+
 .matSwatch[data-selected] {
   border-color: var(--glacier-accent-solid);
   box-shadow: 0 0 12px color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent);

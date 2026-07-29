@@ -25,7 +25,7 @@ token the client stores locally.
 
 ### Decks
 Deck cards reference Scryfall ids; the server stores, never validates.
-- `GET /api/decks` → `[{id, name, format, commander, cardCount, coverImageUrl, updatedAt}]`
+- `GET /api/decks` → `[{id, name, format, commander, cardCount, bracket, coverImageUrl, updatedAt}]`
 - `GET /api/decks/{id}` → `{id, name, format, cards: [{scryfallId, name, quantity, board}]}`
   - `board` ∈ `commander | main | side`
 - `POST /api/decks` `{name, format, cards}` → `201 {id}`
@@ -455,8 +455,16 @@ cosmetic-setting pattern (not a game action: no undo/timeline churn).
   accepts `custom-<file>` ids that name an existing stored mat.
 - `GET /api/mats/{file}` — public (CSS url() can't send auth); serves the
   stored image with immutable caching. Filenames are per-upload unique.
-- `GET /api/me` carries `customPlaymat`: the `custom-<file>` id of this
-  account's upload, or null. The id is a property of the ACCOUNT (one file per
+- `GET /api/me` carries `customPlaymats`: every `custom-<file>` id this account
+  has uploaded, newest first, plus `customPlaymat` (the newest) for anything
+  that wants just one. Uploads ACCUMULATE - a mat belongs to the deck that
+  chose it, so a new upload never replaces another deck's - capped at 16 per
+  account on top of the store-wide cap.
+- `DELETE /api/playmat/{file}` (Bearer) — remove one upload. The filename
+  carries its owner, so naming a file that is not yours is a `bad_mat`. Decks
+  still pointing at it fall back to the player's own mat, exactly as a deck
+  with no mat of its own does, so nothing is rewritten.
+- Historically `customPlaymat` was singular. The id is a property of the ACCOUNT (one file per
   user on the server's disk), not of the browser that uploaded it - signing in
   elsewhere adopts it, and an id left over from a replaced upload is corrected
   rather than painting a mat that no longer exists.
@@ -503,3 +511,56 @@ cosmetic-setting pattern (not a game action: no undo/timeline churn).
   `room.state`). Taking a card out of a peek window (`card.move` by iid from
   the library) now shrinks the window instead of clearing it, so
   `library.reorder` / `library.bottom` keep working on the rest.
+
+## Card collection addendum (2026-07-29) — pulls, binder, pull feed
+
+Every pack opened anywhere in the app (the boosters page and the floating pack
+dock) is recorded against the account. The SERVER owns the collection and the
+single notability rule (`server/src/collection.rs::is_notable`): clients report
+what they opened and celebrate what comes back, they never judge a card
+themselves.
+
+- `POST /api/collection/pulls` (Bearer) — body is a BARE ARRAY, 1..=400 of
+  `{scryfallId, name, setCode, rarity, foil?, released?}`. `released` is the
+  SET's release date (`YYYY-MM-DD`, Scryfall's `set.released_at`); without it a
+  pre-1995 rare cannot be judged notable. `setCode` and `rarity` are lowercased
+  server-side so per-set tallies cannot split on casing. Replies
+  `{new, notable, total, pulls}` where `new` and `notable` are arrays of
+  `{scryfallId, name, setCode, rarity, foil, notable, new}` — `new` is only the
+  printings this account had never owned (what to celebrate), `notable` is every
+  notable card in the batch, new or repeat (what hit the feed). `total` is
+  distinct printings owned after the batch (a foil counts as its own printing),
+  `pulls` is lifetime cards pulled. Errors: `no_cards`, `too_many_cards`.
+- `GET /api/collection[?set=CODE]` (Bearer) — `{total, pulls, sets, cards, set}`.
+  `sets` is ALWAYS every set (`{setCode, owned, pulls, foils}`, owned desc) so a
+  set switcher stays populated under a filter; `cards` is filtered by `set`
+  (case-insensitive) and ordered `firstPulledAt` desc then name, each
+  `{scryfallId, name, setCode, rarity, foil, firstPulledAt (unix ms), pullCount}`.
+  A card owned in both finishes appears TWICE with the same `scryfallId` — key
+  lists on `scryfallId + foil`.
+- `GET /api/collection/feed[?limit=N]` (Bearer, default 50, clamped 1..=200) —
+  a BARE ARRAY, newest first, covering the caller AND their accepted friends:
+  `{id, userId, username, scryfallId, name, setCode, rarity, foil, ts, mine}`.
+  The feed records an EVENT, so cracking the same notable card twice yields two
+  rows. Retention is per user: newest 200, nothing older than 30 days.
+- Client -> server `{type: "pull.notify", scryfallId, name, setCode, rarity,
+  foil?}` — "look what I just cracked". Requires the sender to be in a room as a
+  player or a spectator (otherwise `{"type":"error","code":"not_in_room"}`), and
+  should only be sent for cards the pulls response flagged `notable`.
+- Server -> client `{type: "pull", roomId, fromUserId, username, seat, scryfallId,
+  name, setCode, rarity, foil, ts}` — relayed to every player and spectator of
+  the room, including the sender. `seat` is null when the sender is spectating.
+  The server relays notability rather than re-deriving it: the message carries no
+  release date.
+- `GET /api/decks` items carry `bracket: {bracket: 2|3|4, gameChangers: string[]}
+  | null` — the deck's estimated Commander bracket and the Game Changer cards
+  behind it. `null` wherever the bracket system does not apply (Cyberpunk decks,
+  any non-Commander format), so a client can tell "no bracket" from "bracket 2"
+  and show nothing at all rather than a placeholder. The server derives it
+  because it already holds the cards; sending every deck's full card list just so
+  the browser could count names would add tens of KB to this payload. Both sides
+  read ONE list — `src/data/gamechangers.json`, the official 53-card Scryfall
+  `is:gamechanger` sync — matching names case-insensitively including the front
+  face of a `A // B` split/double-faced entry. 0 Game Changers = bracket 2, 1-3 =
+  3, 4+ = 4; brackets 1 and 5 are social calls a card list cannot make, so the
+  estimate never claims them and clients must label it an estimate.

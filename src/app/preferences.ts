@@ -52,6 +52,12 @@ export interface Preferences {
    * remembered so the upload stays pickable after switching to a bundled mat.
    * Empty = never uploaded. */
   customPlaymat: string;
+  /** Every playmat this account has uploaded, newest first - a mat belongs to
+   *  the deck that chose it, so there are as many as the player has made.
+   *  Mirrored from the account on sign-in; the pickers list them all. */
+  customPlaymats: string[];
+  /** The account's uploaded card back id, mirrored from /api/me. */
+  customCardBack: string;
   /** Lay battlefield cards perfectly upright instead of the natural slight
    * per-card tilt. */
   verticalCards: boolean;
@@ -118,6 +124,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   playmat: DEFAULT_PLAYMAT,
   diceSkin: DEFAULT_DICE_SKIN,
   customPlaymat: '',
+  customPlaymats: [],
+  customCardBack: '',
   verticalCards: false,
   mirrorOpponent: true,
   mobileLayout: 'auto',

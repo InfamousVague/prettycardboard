@@ -2,11 +2,11 @@ import { useState, type CSSProperties } from 'react';
 import { FormSection, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
 import { useT } from '../i18n.ts';
 import type { Preferences } from '../preferences.ts';
-import { CARD_BACKS, DEFAULT_CARD_BACK, cardBackUrl } from '../data/cardBacks.ts';
+import { CARD_BACKS, DEFAULT_CARD_BACK, cardBackUrl, isCustomCardBack } from '../data/cardBacks.ts';
 import { DICE_SKINS } from '../data/diceSkins.ts';
 import { type AssetTheme } from '../data/themes.ts';
 import { GameCard } from '../components/GameCard.tsx';
-import { PlaymatPicker, PlaymatUpload, ThemedPicker } from '../components/PlaymatPicker.tsx';
+import { CardBackUpload, PlaymatPicker, PlaymatUpload, ThemedPicker } from '../components/PlaymatPicker.tsx';
 import { cardImage } from '../data/cards.ts';
 import { cyberpunkImage } from '../data/cyberpunk.ts';
 
@@ -85,10 +85,18 @@ export function CustomizeTab({
           <PlaymatPicker
             ariaLabel={t('custPlaymat')}
             selectedId={preferences.playmat}
-            customId={preferences.customPlaymat}
+            customIds={preferences.customPlaymats}
             onSelect={(id) => onChange({ playmat: id })}
           />
-          <PlaymatUpload onUploaded={(id) => onChange({ customPlaymat: id, playmat: id })} />
+          <PlaymatUpload
+            onUploaded={(id) =>
+              onChange({
+                customPlaymat: id,
+                customPlaymats: [id, ...preferences.customPlaymats.filter((mat) => mat !== id)],
+                playmat: id,
+              })
+            }
+          />
         </FormSection>
       )}
 
@@ -99,7 +107,13 @@ export function CustomizeTab({
           </FormSection>
           <FormSection title={t('setCardBack')} description={t('setCardBackHint')}>
             <ThemedPicker
-              items={CARD_BACKS}
+              items={
+                // The account's own upload leads the grid as a real tile, so it
+                // is selectable again after switching away from it.
+                preferences.customCardBack
+                  ? [{ id: preferences.customCardBack, name: t('custYourUpload'), theme: 'generic' as const }, ...CARD_BACKS]
+                  : CARD_BACKS
+              }
               selectedId={preferences.cardBack}
               onSelect={(id) => onChange({ cardBack: id })}
               ariaLabel={t('setCardBack')}
@@ -108,6 +122,17 @@ export function CustomizeTab({
               renderMedia={(back) => (
                 <img src={cardBackUrl(back.id)} alt={back.name} loading="lazy" draggable={false} />
               )}
+            />
+            <CardBackUpload
+              hasUpload={!!preferences.customCardBack}
+              onUploaded={(id) => onChange({ customCardBack: id, cardBack: id })}
+              onRemoved={() =>
+                onChange({
+                  customCardBack: '',
+                  // Only fall back when the removed back was the one in use.
+                  cardBack: isCustomCardBack(preferences.cardBack) ? DEFAULT_CARD_BACK : preferences.cardBack,
+                })
+              }
             />
           </FormSection>
         </>

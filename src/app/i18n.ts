@@ -772,6 +772,7 @@ export const messages = {
     fr: 'Rechercher des éditions…',
     ar: 'ابحث عن الإصدارات…',
   },
+  boAll: { en: 'All', es: 'Todas', fr: 'Toutes', ar: 'الكل' },
   boOpenPack: { en: 'Open a pack', es: 'Abrir un sobre', fr: 'Ouvrir un booster', ar: 'افتح عبوة' },
   boOpenAnother: { en: 'Open another', es: 'Abrir otro', fr: 'En ouvrir un autre', ar: 'افتح أخرى' },
   boBackToSets: { en: 'All sets', es: 'Todas las colecciones', fr: 'Toutes les éditions', ar: 'كل الإصدارات' },
@@ -842,6 +843,67 @@ export const messages = {
     fr: 'Aucune édition ne correspond.',
     ar: 'لا توجد إصدارات مطابقة.',
   },
+
+  // Booster specs: what kind of pack a set shipped in, and the collation note
+  // that goes with it. One note per historical era, picked by the set's spec.
+  boSpecPlay: { en: 'Play Booster', es: 'Sobre de juego', fr: 'Booster de jeu', ar: 'عبوة لعب' },
+  boSpecDraft: { en: 'Draft Booster', es: 'Sobre de draft', fr: 'Booster de draft', ar: 'عبوة درافت' },
+  boSpecPack: { en: 'Booster Pack', es: 'Sobre', fr: 'Booster', ar: 'عبوة' },
+  boNotePlay: {
+    en: '14 cards: 7 commons, 3 uncommons, a rare or mythic, two wildcards (one always foil) and a land.',
+    es: '14 cartas: 7 comunes, 3 infrecuentes, una rara o mítica, dos comodines (uno siempre foil) y una tierra.',
+    fr: '14 cartes : 7 communes, 3 peu communes, une rare ou mythique, deux jokers (dont un toujours foil) et un terrain.',
+    ar: '14 بطاقة: 7 عادية، 3 غير شائعة، نادرة أو أسطورية، بطاقتان حرتان (إحداهما فويل دائمًا) وأرض.',
+  },
+  boNoteLateDraft: {
+    en: '15 cards: 10 commons, 3 uncommons, a rare or mythic and a land. A foil replaces a common in 1 pack in 3.',
+    es: '15 cartas: 10 comunes, 3 infrecuentes, una rara o mítica y una tierra. Un foil sustituye a una común en 1 de cada 3 sobres.',
+    fr: '15 cartes : 10 communes, 3 peu communes, une rare ou mythique et un terrain. Un foil remplace une commune dans 1 booster sur 3.',
+    ar: '15 بطاقة: 10 عادية، 3 غير شائعة، نادرة أو أسطورية وأرض. تحل بطاقة فويل محل بطاقة عادية في عبوة من كل 3.',
+  },
+  boNoteModernFoil: {
+    en: '15 cards: 10 commons, 3 uncommons, a rare or mythic and a land. From Core Set 2020 the foil rate rose to 1 in 3 packs.',
+    es: '15 cartas: 10 comunes, 3 infrecuentes, una rara o mítica y una tierra. Desde Core Set 2020 la tasa de foil subió a 1 de cada 3 sobres.',
+    fr: '15 cartes : 10 communes, 3 peu communes, une rare ou mythique et un terrain. À partir de Core Set 2020, le taux de foil est passé à 1 booster sur 3.',
+    ar: '15 بطاقة: 10 عادية، 3 غير شائعة، نادرة أو أسطورية وأرض. منذ Core Set 2020 ارتفعت نسبة الفويل إلى عبوة من كل 3.',
+  },
+  boNoteMythic: {
+    en: '15 cards: 10 commons, 3 uncommons, a rare or mythic and a land. A foil replaces a common in 1 pack in 4.4.',
+    es: '15 cartas: 10 comunes, 3 infrecuentes, una rara o mítica y una tierra. Un foil sustituye a una común en 1 de cada 4,4 sobres.',
+    fr: '15 cartes : 10 communes, 3 peu communes, une rare ou mythique et un terrain. Un foil remplace une commune dans 1 booster sur 4,4.',
+    ar: '15 بطاقة: 10 عادية، 3 غير شائعة، نادرة أو أسطورية وأرض. تحل بطاقة فويل محل بطاقة عادية في عبوة من كل 4.4.',
+  },
+  boNoteUnified: {
+    en: '15 cards: 10 commons, 3 uncommons, a rare and a land. Mythic rares did not exist yet.',
+    es: '15 cartas: 10 comunes, 3 infrecuentes, una rara y una tierra. Las míticas aún no existían.',
+    fr: "15 cartes : 10 communes, 3 peu communes, une rare et un terrain. Les mythiques n'existaient pas encore.",
+    ar: '15 بطاقة: 10 عادية، 3 غير شائعة، نادرة وأرض. لم تكن البطاقات الأسطورية موجودة بعد.',
+  },
+  boNoteClassicLand: {
+    en: '15 cards: 10 commons, 3 uncommons, a rare and a land.',
+    es: '15 cartas: 10 comunes, 3 infrecuentes, una rara y una tierra.',
+    fr: '15 cartes : 10 communes, 3 peu communes, une rare et un terrain.',
+    ar: '15 بطاقة: 10 عادية، 3 غير شائعة، نادرة وأرض.',
+  },
+  boNoteClassicNoLand: {
+    en: '15 cards: 11 commons, 3 uncommons and a rare. Basics rode the common sheet.',
+    es: '15 cartas: 11 comunes, 3 infrecuentes y una rara. Las tierras básicas iban en la plancha de comunes.',
+    fr: '15 cartes : 11 communes, 3 peu communes et une rare. Les terrains de base figuraient sur la planche des communes.',
+    ar: '15 بطاقة: 11 عادية، 3 غير شائعة ونادرة. كانت الأراضي الأساسية ضمن لوح البطاقات العادية.',
+  },
+  boNoteFoilsPerRarity: {
+    en: 'A foil replaced a card of its own rarity, about 1 card in 70.',
+    es: 'Un foil sustituía a una carta de su misma rareza, aproximadamente 1 carta de cada 70.',
+    fr: 'Un foil remplaçait une carte de sa propre rareté, environ 1 carte sur 70.',
+    ar: 'كانت بطاقة الفويل تحل محل بطاقة من ندرتها نفسها، بمعدل بطاقة واحدة من كل 70 تقريبًا.',
+  },
+  boNoteNoFoils: {
+    en: 'Foils did not exist yet.',
+    es: 'Los foils aún no existían.',
+    fr: "Les foils n'existaient pas encore.",
+    ar: 'لم تكن بطاقات الفويل موجودة بعد.',
+  },
+
   sbFriendsPeople: { en: 'People', es: 'Personas', fr: 'Personnes', ar: 'الأشخاص' },
   sbProfileYou: { en: 'You', es: 'Tú', fr: 'Vous', ar: 'أنت' },
   sbQuickActions: { en: 'Quick actions', es: 'Acciones rápidas', fr: 'Actions rapides', ar: 'إجراءات سريعة' },
@@ -974,6 +1036,7 @@ export const messages = {
     ar: 'اجلس بهذه المجموعة فترتدي الطاولة هذه السجادة. اتركها على سجادتك الافتراضية فتتبع المجموعة ما اخترته في الإعدادات.',
   },
   setMullUnlimited: { en: 'Unlimited', es: 'Ilimitadas', fr: 'Illimitées', ar: 'غير محدودة' },
+  custDeleteMat: { en: 'Delete this playmat', es: 'Eliminar este tapete', fr: 'Supprimer ce tapis', ar: 'حذف هذه السجادة' },
   navNew: { en: 'New game', es: 'Nueva partida', fr: 'Nouvelle partie', ar: 'مباراة جديدة' },
   plTablesLede: {
     en: 'Tables you are already at, and everything you have played.',
@@ -1216,6 +1279,8 @@ export const messages = {
   },
 
   // table
+  // The board card leaf's alt text when the back is showing.
+  gcFaceDown: { en: 'Face-down card', es: 'Carta boca abajo', fr: 'Carte face cachée', ar: 'بطاقة مقلوبة' },
   tblLeave: { en: 'Leave table', es: 'Salir de la mesa', fr: 'Quitter la table', ar: 'مغادرة الطاولة' },
   tblStart: { en: 'Deal opening hands', es: 'Repartir manos iniciales', fr: 'Distribuer les mains', ar: 'وزّع الأيدي الافتتاحية' },
 
@@ -1910,7 +1975,20 @@ export const messages = {
     ar: 'تعذّر تحميل الأخبار.',
   },
   pdPulled: { en: 'pulled', es: 'sacó', fr: 'a tiré', ar: 'سحب' },
-  pdYou: { en: 'You', es: 'Tú', fr: 'Vous', ar: 'أنت' },
+  // Whole sentences, not name + verb + time glued together in JSX: Arabic puts
+  // the verb first, so the feed row has to be one translatable string.
+  pdFeedPulledBy: {
+    en: '{name} pulled · {when}',
+    es: '{name} sacó · {when}',
+    fr: '{name} a tiré · {when}',
+    ar: 'سحب {name} · {when}',
+  },
+  pdFeedYouPulled: {
+    en: 'You pulled · {when}',
+    es: 'Sacaste · {when}',
+    fr: 'Vous avez tiré · {when}',
+    ar: 'سحبتَ · {when}',
+  },
   pdSealed: { en: 'Sealed', es: 'Sellado', fr: 'Scellé', ar: 'مغلق' },
   pdTearing: { en: 'Tearing open…', es: 'Abriendo…', fr: 'Ouverture…', ar: 'جارٍ الفتح…' },
 } satisfies Record<string, Entry>;

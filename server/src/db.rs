@@ -166,6 +166,31 @@ CREATE TABLE IF NOT EXISTS salt_ratings(
     PRIMARY KEY(match_id, from_id, deck_id)
 );
 CREATE INDEX IF NOT EXISTS idx_salt_deck ON salt_ratings(deck_id);
+CREATE TABLE IF NOT EXISTS collection_cards(
+    user_id TEXT NOT NULL,
+    scryfall_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    set_code TEXT NOT NULL,
+    rarity TEXT NOT NULL,
+    foil INTEGER NOT NULL DEFAULT 0,
+    first_pulled_at INTEGER NOT NULL,
+    pull_count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(user_id, scryfall_id, foil)
+);
+CREATE INDEX IF NOT EXISTS idx_collection_user ON collection_cards(user_id);
+CREATE TABLE IF NOT EXISTS pull_feed(
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    scryfall_id TEXT NOT NULL,
+    card_name TEXT NOT NULL,
+    set_code TEXT NOT NULL,
+    rarity TEXT NOT NULL,
+    foil INTEGER NOT NULL DEFAULT 0,
+    ts INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pull_feed_ts ON pull_feed(ts);
+CREATE INDEX IF NOT EXISTS idx_pull_feed_user ON pull_feed(user_id, ts);
 ";
 
 pub fn open(path: &std::path::Path) -> Connection {
@@ -803,18 +828,212 @@ pub fn deck_update(
     .unwrap();
 }
 
-/// A re-upload replaces the account's one custom mat file, which orphans the
-/// id any of their decks had stored. Point those decks at the new file rather
-/// than letting them quietly fall back to the global preference.
-pub fn decks_repoint_custom_playmat(conn: &Connection, user_id: &str, new_id: &str) {
+pub fn deck_delete(conn: &Connection, id: &str) {
+    conn.execute("DELETE FROM decks WHERE id = ?", [id]).unwrap();
+}
+
+// --- card collection ("Pokedex") + pull feed ---
+
+/// One card pulled from a pack, as posted by the client and stored.
+pub struct CollectionPull<'a> {
+    pub scryfall_id: &'a str,
+    pub name: &'a str,
+    pub set_code: &'a str,
+    pub rarity: &'a str,
+    pub foil: bool,
+}
+
+/// Record one pulled card against a user's collection. Returns true when this
+/// is the FIRST time they have owned this printing (the client celebrates that;
+/// a repeat only bumps `pull_count`). Foils are their own row by primary key, so
+/// a foil of a card you already own is still a first pull.
+///
+/// `first_pulled_at` is written once and never touched again - it is the
+/// "discovered on" date the library page shows.
+pub fn collection_pull(conn: &Connection, user_id: &str, card: &CollectionPull, now: i64) -> bool {
+    let existed = conn
+        .query_row(
+            "SELECT 1 FROM collection_cards WHERE user_id = ? AND scryfall_id = ? AND foil = ?",
+            params![user_id, card.scryfall_id, card.foil as i64],
+            |_| Ok(()),
+        )
+        .optional()
+        .unwrap_or(None)
+        .is_some();
+    if existed {
+        let _ = conn.execute(
+            "UPDATE collection_cards SET pull_count = pull_count + 1, name = ?, set_code = ?, rarity = ?
+             WHERE user_id = ? AND scryfall_id = ? AND foil = ?",
+            params![
+                card.name,
+                card.set_code,
+                card.rarity,
+                user_id,
+                card.scryfall_id,
+                card.foil as i64
+            ],
+        );
+    } else {
+        let _ = conn.execute(
+            "INSERT INTO collection_cards(user_id, scryfall_id, name, set_code, rarity, foil, first_pulled_at, pull_count)
+             VALUES(?,?,?,?,?,?,?,1)",
+            params![
+                user_id,
+                card.scryfall_id,
+                card.name,
+                card.set_code,
+                card.rarity,
+                card.foil as i64,
+                now
+            ],
+        );
+    }
+    !existed
+}
+
+/// (distinct printings owned, total cards pulled) for a user.
+pub fn collection_totals(conn: &Connection, user_id: &str) -> (i64, i64) {
+    conn.query_row(
+        "SELECT COUNT(*), COALESCE(SUM(pull_count), 0) FROM collection_cards WHERE user_id = ?",
+        [user_id],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )
+    .unwrap_or((0, 0))
+}
+
+/// Per-set tallies for the library page, biggest collection first.
+pub fn collection_set_counts(conn: &Connection, user_id: &str) -> Vec<serde_json::Value> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT set_code, COUNT(*), COALESCE(SUM(pull_count), 0),
+                    SUM(CASE WHEN foil = 1 THEN 1 ELSE 0 END)
+             FROM collection_cards WHERE user_id = ?
+             GROUP BY set_code ORDER BY COUNT(*) DESC, set_code",
+        )
+        .unwrap();
+    let rows = stmt.query_map([user_id], |r| {
+        Ok(serde_json::json!({
+            "setCode": r.get::<_, String>(0)?,
+            "owned": r.get::<_, i64>(1)?,
+            "pulls": r.get::<_, i64>(2)?,
+            "foils": r.get::<_, i64>(3)?,
+        }))
+    });
+    match rows {
+        Ok(iter) => iter.filter_map(|r| r.ok()).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// A user's owned printings, newest discovery first. `set` filters to one set
+/// code (case-insensitive); None returns everything.
+pub fn collection_cards(
+    conn: &Connection,
+    user_id: &str,
+    set: Option<&str>,
+) -> Vec<serde_json::Value> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT scryfall_id, name, set_code, rarity, foil, first_pulled_at, pull_count
+             FROM collection_cards
+             WHERE user_id = ?1 AND (?2 IS NULL OR set_code = ?2 COLLATE NOCASE)
+             ORDER BY first_pulled_at DESC, name",
+        )
+        .unwrap();
+    let rows = stmt.query_map(params![user_id, set], |r| {
+        Ok(serde_json::json!({
+            "scryfallId": r.get::<_, String>(0)?,
+            "name": r.get::<_, String>(1)?,
+            "setCode": r.get::<_, String>(2)?,
+            "rarity": r.get::<_, String>(3)?,
+            "foil": r.get::<_, i64>(4)? != 0,
+            "firstPulledAt": r.get::<_, i64>(5)?,
+            "pullCount": r.get::<_, i64>(6)?,
+        }))
+    });
+    match rows {
+        Ok(iter) => iter.filter_map(|r| r.ok()).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// How many feed rows any one user may keep, and for how long. The feed is a
+/// rolling highlight reel, not an archive - `pull_feed_trim` enforces both caps
+/// on every insert so the table cannot grow without bound.
+const FEED_PER_USER: i64 = 200;
+const FEED_MAX_AGE_MS: i64 = 30 * 24 * 60 * 60 * 1000;
+
+pub fn pull_feed_insert(
+    conn: &Connection,
+    id: &str,
+    user_id: &str,
+    username: &str,
+    card: &CollectionPull,
+    now: i64,
+) {
     let _ = conn.execute(
-        "UPDATE decks SET playmat = ? WHERE user_id = ? AND playmat LIKE 'custom-%'",
-        params![new_id, user_id],
+        "INSERT OR REPLACE INTO pull_feed(id, user_id, username, scryfall_id, card_name, set_code, rarity, foil, ts)
+         VALUES(?,?,?,?,?,?,?,?,?)",
+        params![
+            id,
+            user_id,
+            username,
+            card.scryfall_id,
+            card.name,
+            card.set_code,
+            card.rarity,
+            card.foil as i64,
+            now
+        ],
     );
 }
 
-pub fn deck_delete(conn: &Connection, id: &str) {
-    conn.execute("DELETE FROM decks WHERE id = ?", [id]).unwrap();
+/// Drop this user's feed rows past the retention caps (older than 30 days, or
+/// beyond their newest 200).
+pub fn pull_feed_trim(conn: &Connection, user_id: &str, now: i64) {
+    let _ = conn.execute(
+        "DELETE FROM pull_feed
+         WHERE user_id = ?1
+           AND (ts < ?2
+                OR id NOT IN (SELECT id FROM pull_feed WHERE user_id = ?1 ORDER BY ts DESC LIMIT ?3))",
+        params![user_id, now - FEED_MAX_AGE_MS, FEED_PER_USER],
+    );
+}
+
+/// Notable pulls by this user and their friends, newest first. Friendship is
+/// the existing `friendships` table, so the feed is exactly the people you have
+/// already accepted - never the whole server.
+pub fn pull_feed_for(conn: &Connection, user_id: &str, limit: i64) -> Vec<serde_json::Value> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT f.id, f.user_id, f.username, f.scryfall_id, f.card_name, f.set_code, f.rarity, f.foil, f.ts
+             FROM pull_feed f
+             WHERE f.user_id = ?1
+                OR f.user_id IN (SELECT CASE WHEN a_id = ?1 THEN b_id ELSE a_id END
+                                   FROM friendships WHERE a_id = ?1 OR b_id = ?1)
+             ORDER BY f.ts DESC LIMIT ?2",
+        )
+        .unwrap();
+    let rows = stmt.query_map(params![user_id, limit], |r| {
+        let from: String = r.get(1)?;
+        let mine = from == user_id;
+        Ok(serde_json::json!({
+            "id": r.get::<_, String>(0)?,
+            "userId": from,
+            "username": r.get::<_, String>(2)?,
+            "scryfallId": r.get::<_, String>(3)?,
+            "name": r.get::<_, String>(4)?,
+            "setCode": r.get::<_, String>(5)?,
+            "rarity": r.get::<_, String>(6)?,
+            "foil": r.get::<_, i64>(7)? != 0,
+            "ts": r.get::<_, i64>(8)?,
+            "mine": mine,
+        }))
+    });
+    match rows {
+        Ok(iter) => iter.filter_map(|r| r.ok()).collect(),
+        Err(_) => Vec::new(),
+    }
 }
 
 // --- room persistence ---

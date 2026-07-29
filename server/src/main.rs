@@ -1,4 +1,6 @@
 mod api;
+mod brackets;
+mod collection;
 mod db;
 mod game;
 mod rooms;
@@ -40,6 +42,10 @@ pub struct App {
     pub mats_dir: std::path::PathBuf,
     /// Serializes mat uploads (scan-delete-write is racy unguarded).
     pub mats_lock: tokio::sync::Mutex<()>,
+    /// Player-uploaded custom card backs (served at /api/backs/{file}).
+    pub backs_dir: std::path::PathBuf,
+    /// Serializes card-back uploads (scan-delete-write is racy unguarded).
+    pub backs_lock: tokio::sync::Mutex<()>,
     /// Curated global alternate-art printings (served at /api/art/{file}).
     /// Unlike mats these are NOT user uploads: the directory is published by
     /// ops and every player sees the same catalog as extra printing options.
@@ -188,6 +194,8 @@ async fn main() {
     std::fs::create_dir_all(&mats_dir).expect("create mats dir");
     let booster_art_dir = data_dir.join("booster-art");
     std::fs::create_dir_all(&booster_art_dir).expect("create booster art dir");
+    let backs_dir = data_dir.join("backs");
+    std::fs::create_dir_all(&backs_dir).expect("create backs dir");
     let alt_art_dir = data_dir.join("alt-art");
     std::fs::create_dir_all(&alt_art_dir).expect("create alt art dir");
 
@@ -202,6 +210,8 @@ async fn main() {
         conn_seq: AtomicU64::new(1),
         mats_dir,
         mats_lock: tokio::sync::Mutex::new(()),
+        backs_dir,
+        backs_lock: tokio::sync::Mutex::new(()),
         alt_art_dir,
         booster_art_dir,
         booster_art_lock: tokio::sync::Mutex::new(()),
@@ -231,6 +241,7 @@ async fn main() {
 
     let protected = Router::new()
         .route("/api/me", get(api::me))
+        .route("/api/playmat/{file}", axum::routing::delete(api::playmat_delete))
         .route("/api/me/stats", get(api::my_stats))
         .route("/api/me/decks/stats", get(api::my_deck_stats))
         .route("/api/users/search", get(api::search_users))
@@ -249,6 +260,9 @@ async fn main() {
         .route("/api/import/moxfield/{id}", get(api::import_moxfield))
         .route("/api/rooms", post(api::room_create))
         .route("/api/rooms/mine", get(api::rooms_mine))
+        .route("/api/collection", get(api::collection_get))
+        .route("/api/collection/pulls", post(api::collection_pulls))
+        .route("/api/collection/feed", get(api::collection_feed))
         .route("/api/matches", get(api::matches))
         .route("/api/matches/{id}/endorse", post(api::match_endorse))
         .route("/api/matches/{id}/salt", post(api::match_salt))
@@ -257,6 +271,12 @@ async fn main() {
         .route(
             "/api/playmat",
             post(api::playmat_upload).layer(axum::extract::DefaultBodyLimit::max(api::MAT_MAX_BYTES)),
+        )
+        .route(
+            "/api/cardback",
+            post(api::cardback_upload)
+                .delete(api::cardback_delete)
+                .layer(axum::extract::DefaultBodyLimit::max(api::BACK_MAX_BYTES)),
         )
         .route_layer(middleware::from_fn_with_state(app.clone(), api::auth_mw));
 
@@ -268,6 +288,7 @@ async fn main() {
         .route("/api/mats/{file}", get(api::playmat_serve))
         // Public, like mats: art loads from <img> tags that cannot send a
         // Bearer header. This is curated global content, not user data.
+        .route("/api/backs/{file}", get(api::cardback_serve))
         .route("/api/art/catalog", get(api::alt_art_catalog))
         .route("/api/art/{file}", get(api::alt_art_serve))
         .route("/api/boosters/art/{code}", get(api::booster_art))

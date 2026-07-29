@@ -5,6 +5,7 @@ import type { DeckSummary, FriendsPayload, Identity, ServerMessage } from '../ne
 import { cyberpunkStarters } from '../data/cyberpunk.ts';
 import { loadPreferences, savePreferences } from '../preferences.ts';
 import { DEFAULT_PLAYMAT, isCustomPlaymat } from '../data/playmats.ts';
+import { DEFAULT_CARD_BACK, isCustomCardBack } from '../data/cardBacks.ts';
 
 /**
  * App-level state: the temporary identity, the social graph, and the deck
@@ -57,16 +58,39 @@ function loadIdentity(): Identity | null {
  * the tile anywhere, and an id left behind by a re-upload - or by an upload
  * that has since been deleted - stops painting a mat that no longer exists.
  */
-function syncCustomPlaymat(accountMat: string): void {
+/**
+ * Same contract as syncCustomPlaymat, for the card back: the upload is a
+ * property of the account, so every sign-in adopts it, and a preference still
+ * pointing at a back that has since been replaced or deleted is corrected
+ * rather than left painting a 404 on every face-down card.
+ */
+function syncCustomCardBack(accountBack: string): void {
   const prefs = loadPreferences();
-  if (prefs.customPlaymat === accountMat) return;
-  const usingOld = isCustomPlaymat(prefs.playmat) && prefs.playmat !== accountMat;
+  if (prefs.customCardBack === accountBack) return;
+  const usingOld = isCustomCardBack(prefs.cardBack) && prefs.cardBack !== accountBack;
+  savePreferences({
+    ...prefs,
+    customCardBack: accountBack,
+    cardBack: usingOld ? accountBack || DEFAULT_CARD_BACK : prefs.cardBack,
+  });
+  window.dispatchEvent(new CustomEvent('pc:preferences', { detail: loadPreferences() }));
+}
+
+function syncCustomPlaymat(accountMat: string, accountMats: string[]): void {
+  const prefs = loadPreferences();
+  const same =
+    prefs.customPlaymat === accountMat &&
+    prefs.customPlaymats.length === accountMats.length &&
+    prefs.customPlaymats.every((mat, index) => mat === accountMats[index]);
+  if (same) return;
+  // The account's mats are the truth; a browser only mirrors them. Following an
+  // id the account no longer has (deleted elsewhere) falls back to the default.
+  const orphaned = isCustomPlaymat(prefs.playmat) && !accountMats.includes(prefs.playmat);
   savePreferences({
     ...prefs,
     customPlaymat: accountMat,
-    // Following a dead custom id? Move to the live one, or to the default when
-    // the account has no upload at all.
-    playmat: usingOld ? accountMat || DEFAULT_PLAYMAT : prefs.playmat,
+    customPlaymats: accountMats,
+    playmat: orphaned ? DEFAULT_PLAYMAT : prefs.playmat,
   });
   window.dispatchEvent(new CustomEvent('pc:preferences', { detail: loadPreferences() }));
 }
@@ -161,7 +185,8 @@ export const useApp = create<AppState>((set, get) => {
           // server, so a machine that has never uploaded still finds it - and a
           // stale id left in this browser gets corrected (or cleared, if the
           // upload is gone) rather than painting a blank felt forever.
-          syncCustomPlaymat(account.customPlaymat ?? '');
+          syncCustomPlaymat(account.customPlaymat ?? '', account.customPlaymats ?? []);
+          syncCustomCardBack(account.customCardBack ?? '');
           await goOnline(identity);
         } catch (cause) {
           if (cause instanceof api.ApiError && cause.status === 401) {
@@ -189,6 +214,11 @@ export const useApp = create<AppState>((set, get) => {
       localStorage.removeItem(IDENTITY_KEY);
       api.setToken(null);
       ws.disconnect();
+      // The collection is per account, so it must not survive into the next
+      // sign-in. Imported lazily: the library page is a lazy chunk, and a
+      // static import here would pull it into the shell (and close a cycle,
+      // since the collection store reads identity from this one).
+      void import('./collectionStore.ts').then((m) => m.useCollection.getState().clear());
       set({ identity: null, friends: EMPTY_FRIENDS, decks: [], invites: [] });
     },
 

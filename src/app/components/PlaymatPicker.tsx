@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { Button, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
-import { Upload } from '@glacier/icons';
+import { Button, IconButton, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
+import { Trash2, Upload } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { PLAYMATS, playmatBackground, playmatUrl } from '../data/playmats.ts';
 import { CARD_BACKS, cardBackUrl } from '../data/cardBacks.ts';
@@ -326,7 +326,8 @@ export function PlaymatPicker({
   ariaLabel,
   noneLabel,
   onNone,
-  customId,
+  customIds,
+  onDeleteCustom,
   scrollable,
 }: {
   selectedId: string;
@@ -337,10 +338,12 @@ export function PlaymatPicker({
   /** Present = offer a "use my own mat" tile ahead of the catalog. */
   noneLabel?: string;
   onNone?: () => void;
-  /** The account's uploaded mat, rendered as the first real tile. It belongs
-   *  IN the grid: outside it the swatch has no track to size against and its
-   *  16/9 ratio blows it up to the width of the row. */
-  customId?: string;
+  /** The account's uploaded mats, rendered as the first real tiles. They
+   *  belong IN the grid: outside it a swatch has no track to size against and
+   *  its 16/9 ratio blows it up to the width of the row. */
+  customIds?: string[];
+  /** Offered on each upload, so sixteen mats is not a trap. */
+  onDeleteCustom?: (id: string) => void;
 }) {
   const t = useT();
   return (
@@ -367,20 +370,36 @@ export function PlaymatPicker({
               <span className="matSwatchName">{noneLabel}</span>
             </button>
           )}
-          {customId ? (
-            <button
-              type="button"
-              role="radio"
-              aria-checked={selectedId === customId}
-              className="matSwatch matSwatchCustom"
-              data-selected={selectedId === customId || undefined}
-              title={t('custUploadYours')}
-              onClick={() => onSelect(customId)}
-            >
-              <img src={playmatUrl(customId)} alt={t('custUploadYours')} draggable={false} />
-              <span className="matSwatchName">{t('custUploadYours')}</span>
-            </button>
-          ) : null}
+          {(customIds ?? []).map((id, index) => (
+            <span className="matSwatchWrap" key={id}>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={selectedId === id}
+                className="matSwatch matSwatchCustom"
+                data-selected={selectedId === id || undefined}
+                title={t('custUploadYours')}
+                onClick={() => onSelect(id)}
+              >
+                <img src={playmatUrl(id)} alt={t('custUploadYours')} draggable={false} />
+                <span className="matSwatchName">
+                  {t('custUploadYours')}
+                  {index > 0 ? ` ${index + 1}` : ''}
+                </span>
+              </button>
+              {onDeleteCustom && (
+                <IconButton
+                  size="sm"
+                  variant="ghost"
+                  className="matSwatchDelete"
+                  aria-label={t('custDeleteMat')}
+                  onClick={() => onDeleteCustom(id)}
+                >
+                  <Trash2 size={14} />
+                </IconButton>
+              )}
+            </span>
+          ))}
         </>
       }
       renderMedia={(mat) => <PlaymatSwatchMedia id={mat.id} name={mat.name} />}

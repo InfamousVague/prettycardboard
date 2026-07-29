@@ -70,10 +70,13 @@ export function me(): Promise<{
   userId: string;
   username: string;
   createdAt: string;
-  /** The `custom-…` id of this account's uploaded playmat, if it has one. Kept
-   *  on the account rather than in one browser's storage, so signing in on
-   *  another machine still finds your own mat. */
+  /** The newest uploaded playmat, for surfaces that want just one. */
   customPlaymat?: string | null;
+  /** EVERY playmat this account has uploaded, newest first. A mat belongs to
+   *  the deck that chose it, so an account keeps as many as it has decks. Kept
+   *  on the account rather than in one browser's storage, so signing in on
+   *  another machine still finds them. */
+  customPlaymats?: string[];
   /** The `custom-…` id of this account's uploaded card back, same reasoning. */
   customCardBack?: string | null;
 }> {
@@ -276,7 +279,176 @@ export function myDeckStats(): Promise<MyDeckStats[]> {
   return request('GET', '/api/me/decks/stats');
 }
 
+/** Remove one uploaded playmat. Decks still pointing at it fall back to the
+ *  player's own mat, the same as a deck that never had one. */
+export function deletePlaymat(id: string): Promise<{ ok: boolean }> {
+  const file = id.replace(/^custom-/, '');
+  return request('DELETE', `/api/playmat/${encodeURIComponent(file)}`);
+}
+
 /** A deck's all-time record + saltiness, for the deck inspector. */
 export function deckStats(deckId: string): Promise<DeckStats> {
   return request('GET', `/api/decks/${encodeURIComponent(deckId)}/stats`);
+}
+
+// --- collection (the "Magic Pokedex") ---
+
+/**
+ * One card the player has ever pulled. `firstPulledAt` is what makes the
+ * library a collection rather than a pile: it is the moment the card entered
+ * it, so a re-pull bumps `pullCount` without disturbing the discovery date.
+ */
+export interface CollectionCard {
+  scryfallId: string;
+  name: string;
+  setCode: string;
+  /** common | uncommon | rare | mythic (whatever the server recorded). */
+  rarity: string;
+  foil: boolean;
+  /** Unix ms of the first time this card was pulled (the server's column). */
+  firstPulledAt: number;
+  /** How many copies have been pulled in total (>= 1). */
+  pullCount: number;
+}
+
+/** Per-set owned tally, so a set's completion needs no client-side grouping. */
+export interface CollectionSetRow {
+  code: string;
+  owned: number;
+}
+
+export interface CollectionPayload {
+  /** Distinct printings owned (same meaning as PullsResult.total). */
+  total: number;
+  /** Cards pulled all-time, duplicates included (same as PullsResult.pulls). */
+  pulls: number;
+  cards: CollectionCard[];
+  sets: CollectionSetRow[];
+}
+
+/**
+ * The whole collection, normalized HERE and nowhere else.
+ *
+ * The server side of this feature is being written in parallel, so the exact
+ * wire shape may still move (snake_case columns, a missing `sets` roll-up, a
+ * count named `copies` instead of `pullCount`). Every one of those variations
+ * is absorbed by this one function: the store and the page only ever see
+ * `CollectionPayload`, and reconciling a shape change is a one-file edit.
+ */
+function normalizeCollection(raw: unknown): CollectionPayload {
+  const body = (raw ?? {}) as Record<string, unknown>;
+  const rows = (Array.isArray(body.cards) ? body.cards : []) as Record<string, unknown>[];
+
+  const cards: CollectionCard[] = rows.map((row) => {
+    const pulls = Number(row.pullCount ?? row.pull_count ?? row.copies ?? row.count ?? 1);
+    // The server stores the discovery moment as unix ms; a server that ever
+    // sends an ISO string instead still lands as a number here.
+    const rawFirst = row.firstPulledAt ?? row.first_pulled_at ?? row.createdAt ?? row.created_at ?? 0;
+    const first = typeof rawFirst === 'string' ? Date.parse(rawFirst) : Number(rawFirst);
+    return {
+      scryfallId: String(row.scryfallId ?? row.scryfall_id ?? row.cardId ?? row.card_id ?? row.id ?? ''),
+      name: String(row.name ?? ''),
+      setCode: String(row.setCode ?? row.set_code ?? row.set ?? '').toLowerCase(),
+      rarity: String(row.rarity ?? 'common').toLowerCase(),
+      foil: row.foil === true || row.foil === 1,
+      firstPulledAt: Number.isFinite(first) ? first : 0,
+      pullCount: Number.isFinite(pulls) && pulls > 0 ? pulls : 1,
+    };
+  });
+
+  // A server that does not roll sets up yet still gets a per-set readout: the
+  // tally falls out of the cards themselves.
+  const rawSets = (Array.isArray(body.sets) ? body.sets : []) as Record<string, unknown>[];
+  let sets: CollectionSetRow[] = rawSets.map((row) => ({
+    code: String(row.code ?? row.setCode ?? row.set_code ?? '').toLowerCase(),
+    owned: Number(row.owned ?? row.count ?? 0),
+  }));
+  if (sets.length === 0 && cards.length > 0) {
+    const tally = new Map<string, number>();
+    for (const card of cards) tally.set(card.setCode, (tally.get(card.setCode) ?? 0) + 1);
+    sets = [...tally].map(([code, owned]) => ({ code, owned }));
+  }
+
+  // `total` counts distinct printings and `pulls` counts copies - the same
+  // split PullsResult uses. Either can be summed from the rows if absent.
+  const total = Number(body.total ?? 0);
+  const pulls = Number(body.pulls ?? body.totalPulls ?? body.total_pulls ?? 0);
+  const summedPulls = cards.reduce((sum, card) => sum + card.pullCount, 0);
+  return {
+    total: Number.isFinite(total) && total > 0 ? total : cards.length,
+    pulls: Number.isFinite(pulls) && pulls > 0 ? pulls : summedPulls,
+    cards,
+    sets,
+  };
+}
+
+/** Every card this account has ever pulled, with per-set tallies. */
+export async function getCollection(): Promise<CollectionPayload> {
+  return normalizeCollection(await request<unknown>('GET', '/api/collection'));
+}
+
+// --- pulls (the pack dock) ---
+
+/** One opened card, as the pack dock reports it. */
+export interface PulledCard {
+  scryfallId: string;
+  name: string;
+  setCode: string;
+  rarity: string;
+  foil: boolean;
+  /** The SET's release date (ISO `YYYY-MM-DD`). The server needs it to judge a
+   *  1993-94 rare notable - that window is where the Power Nine came from. */
+  released?: string;
+}
+
+/** What the server says about one recorded pull. */
+export interface PullOutcome {
+  scryfallId: string;
+  name: string;
+  setCode: string;
+  rarity: string;
+  foil: boolean;
+  /** Worth telling other players about (mythic, old-frame rare, foil rare+). */
+  notable: boolean;
+  /** First copy of this printing the account has ever owned. */
+  new: boolean;
+}
+
+export interface PullsResult {
+  /** Only the cards that were new; the pack's other cards are not echoed. */
+  new: PullOutcome[];
+  notable: PullOutcome[];
+  /** Distinct printings owned after this pack. */
+  total: number;
+  /** Cards pulled all-time, duplicates included. */
+  pulls: number;
+}
+
+/**
+ * Record a freshly opened pack against the account's collection. The server is
+ * the authority on what is NEW (it owns the collection) and on what is NOTABLE
+ * (one rule, shared with the websocket relay), so the dock celebrates what
+ * comes back rather than guessing.
+ */
+export function recordPulls(cards: PulledCard[]): Promise<PullsResult> {
+  return request('POST', '/api/collection/pulls', cards);
+}
+
+/** One row of the notable-pull feed: mine, or a friend's. */
+export interface FeedPull {
+  id: string;
+  userId: string;
+  username: string;
+  scryfallId: string;
+  name: string;
+  setCode: string;
+  rarity: string;
+  foil: boolean;
+  ts: number;
+  mine: boolean;
+}
+
+/** Notable pulls by this account and its friends, newest first. */
+export function pullFeed(limit = 30): Promise<FeedPull[]> {
+  return request('GET', `/api/collection/feed?limit=${limit}`);
 }
