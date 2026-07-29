@@ -1,15 +1,13 @@
-import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { Button, FormSection, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
-import { Upload } from '@glacier/icons';
+import { useState, type CSSProperties } from 'react';
+import { FormSection, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
 import { useT } from '../i18n.ts';
 import type { Preferences } from '../preferences.ts';
 import { CARD_BACKS, DEFAULT_CARD_BACK, cardBackUrl } from '../data/cardBacks.ts';
-import { PLAYMATS, playmatBackground, playmatUrl } from '../data/playmats.ts';
-import { uploadPlaymat } from '../net/api.ts';
+import { PLAYMATS } from '../data/playmats.ts';
 import { DICE_SKINS } from '../data/diceSkins.ts';
-import { presentThemes, THEME_LABEL_KEY, type AssetTheme } from '../data/themes.ts';
+import { type AssetTheme } from '../data/themes.ts';
 import { GameCard } from '../components/GameCard.tsx';
-import { PlaymatSwatchMedia, ThemedPicker } from '../components/PlaymatPicker.tsx';
+import { PlaymatSwatchMedia, PlaymatUpload, ThemedPicker } from '../components/PlaymatPicker.tsx';
 import { cardImage } from '../data/cards.ts';
 import { cyberpunkImage } from '../data/cyberpunk.ts';
 
@@ -55,79 +53,6 @@ function CardPreview({ back }: { back: string }) {
 }
 
 /**
- * Upload-your-own playmat: the image goes to the server (one per account),
- * comes back as a `custom-…` id, and syncs to every viewer through the normal
- * playmat preference + `playmat.set` flow. The last upload stays pickable as
- * its own tile beside the bundled mats.
- */
-function UploadMatRow({
-  preferences,
-  onChange,
-}: {
-  preferences: Preferences;
-  onChange: (patch: Partial<Preferences>) => void;
-}) {
-  const t = useT();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const custom = preferences.customPlaymat;
-
-  const pick = async (file: File | undefined) => {
-    if (!file) return;
-    setError(null);
-    if (file.size > 8 * 1024 * 1024) {
-      setError(t('custUploadTooBig'));
-      return;
-    }
-    setBusy(true);
-    try {
-      const { id } = await uploadPlaymat(file);
-      onChange({ customPlaymat: id, playmat: id });
-    } catch {
-      setError(t('custUploadFailed'));
-    } finally {
-      setBusy(false);
-      if (inputRef.current) inputRef.current.value = '';
-    }
-  };
-
-  return (
-    <div className="matUploadRow">
-      {custom && (
-        <button
-          type="button"
-          role="radio"
-          aria-checked={preferences.playmat === custom}
-          className="matSwatch matSwatchCustom"
-          data-selected={preferences.playmat === custom || undefined}
-          title={t('custUploadYours')}
-          onClick={() => onChange({ playmat: custom })}
-        >
-          <img src={playmatUrl(custom)} alt={t('custUploadYours')} draggable={false} />
-          <span className="matSwatchName">{t('custUploadYours')}</span>
-        </button>
-      )}
-      <div className="matUploadActions">
-        <Button variant="soft" size="sm" loading={busy} onClick={() => inputRef.current?.click()}>
-          <Upload size={15} /> {t('custUpload')}
-        </Button>
-        <Text as="span" size={Size.XSmall} tone={error ? TextTone.Danger : TextTone.Subtle}>
-          {error ?? t('custUploadHint')}
-        </Text>
-      </div>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        hidden
-        onChange={(event) => void pick(event.target.files?.[0])}
-      />
-    </div>
-  );
-}
-
-/**
  * The Customize tab of the Settings modal: pick a playmat (bundled artwork or a
  * solid Glacier-token color under a faint grid) and a card back, with a live
  * preview. Choices write straight through to preferences, so the app re-themes
@@ -158,7 +83,12 @@ export function CustomizeTab({
 
       {section === 'playmat' && (
         <FormSection title={t('custPlaymat')} description={t('custPlaymatHint')}>
-          <UploadMatRow preferences={preferences} onChange={onChange} />
+          <PlaymatUpload
+            customId={preferences.customPlaymat}
+            selectedId={preferences.playmat}
+            onSelect={(id) => onChange({ playmat: id })}
+            onUploaded={(id) => onChange({ customPlaymat: id, playmat: id })}
+          />
           <ThemedPicker
             items={PLAYMATS}
             selectedId={preferences.playmat}

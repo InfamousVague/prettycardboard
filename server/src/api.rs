@@ -1002,7 +1002,12 @@ pub async fn playmat_upload(
     if std::fs::write(app.mats_dir.join(&file), &body).is_err() {
         return err(StatusCode::INTERNAL_SERVER_ERROR, "write_failed", "could not store the image");
     }
-    Json(json!({ "id": format!("custom-{file}"), "url": format!("/api/mats/{file}") })).into_response()
+    let id = format!("custom-{file}");
+    // The old file is gone, so any deck that pointed at it would silently fall
+    // back to the global mat. One upload per account means "the custom mat" is
+    // a single thing to a player - carry those decks over to the new one.
+    db::decks_repoint_custom_playmat(&app.db.lock().unwrap(), &user.id, &id);
+    Json(json!({ "id": id, "url": format!("/api/mats/{file}") })).into_response()
 }
 
 /// How long a "this set has no art" marker is trusted before we look again.
@@ -1277,4 +1282,75 @@ pub async fn playmat_serve(State(app): State<Arc<App>>, Path(file): Path<String>
             .into_response(),
         Err(_) => err(StatusCode::NOT_FOUND, "not_found", "no such mat"),
     }
+}
+
+/// A servable alt-art filename: `<slug>.<content hash>.<ext>`, lowercase and
+/// flat. Publishing embeds a content hash so the immutable cache below is safe
+/// to hand out - republishing a card's art yields a new filename rather than
+/// poisoning every CDN edge with a stale image.
+pub fn valid_alt_art_file(file: &str) -> bool {
+    let Some((stem, ext)) = file.rsplit_once('.') else {
+        return false;
+    };
+    matches!(ext, "webp" | "png" | "jpg")
+        && !stem.is_empty()
+        && stem.len() <= 128
+        && !stem.starts_with('.')
+        && stem
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '.')
+}
+
+/// GET /api/art/{file} — a curated alternate-art card image.
+///
+/// Public and unauthenticated on purpose: these load from plain <img> tags that
+/// cannot attach a Bearer header, and the content is global (an extra printing
+/// every player can pick), not user data.
+pub async fn alt_art_serve(State(app): State<Arc<App>>, Path(file): Path<String>) -> Response {
+    if !valid_alt_art_file(&file) {
+        return err(StatusCode::BAD_REQUEST, "bad_name", "not an art file");
+    }
+    let ctype = match file.rsplit_once('.').map(|(_, e)| e) {
+        Some("webp") => "image/webp",
+        Some("png") => "image/png",
+        _ => "image/jpeg",
+    };
+    match std::fs::read(app.alt_art_dir.join(&file)) {
+        Ok(bytes) => (
+            [
+                (header::CONTENT_TYPE, ctype),
+                // Content-hashed filenames - safe to cache forever.
+                (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(_) => err(StatusCode::NOT_FOUND, "not_found", "no such art"),
+    }
+}
+
+/// GET /api/art/catalog — the alt-art index the client merges into a card's
+/// printing list.
+///
+/// Shape: `{"arts":[{"id","oracleId","name","setName","artist","file"}]}`, where
+/// `id` is a synthetic printing id (`pc-<slug>`) that cannot collide with a
+/// Scryfall UUID, and `oracleId` is the Scryfall oracle id shared by every
+/// printing of that card - that is what lets the client attach an alt art to
+/// whichever printing the player happens to own.
+///
+/// Missing file is an empty catalog, not an error: a fresh server simply has no
+/// alt art published yet, and the client should degrade to Scryfall printings.
+pub async fn alt_art_catalog(State(app): State<Arc<App>>) -> Response {
+    let body = std::fs::read_to_string(app.alt_art_dir.join("catalog.json"))
+        .unwrap_or_else(|_| r#"{"arts":[]}"#.to_string());
+    (
+        [
+            (header::CONTENT_TYPE, "application/json"),
+            // Short: the catalog changes whenever ops publishes, while the
+            // images it points at are immutable.
+            (header::CACHE_CONTROL, "public, max-age=300"),
+        ],
+        body,
+    )
+        .into_response()
 }

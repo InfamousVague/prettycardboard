@@ -1,4 +1,5 @@
 import idManifest from '../../data/precon-ids.json' with { type: 'json' };
+import { SERVER_URL } from '../net/api.ts';
 
 /**
  * Card-image resolution plus the precon type shapes.
@@ -51,9 +52,38 @@ const BUNDLED_ART = new Set<string>(manifest.commanderIds);
 
 const BASE = import.meta.env.BASE_URL;
 
-/** The `normal`-size card front for any Scryfall id: bundled cache first, CDN otherwise. */
+/**
+ * Prefix marking a curated alternate-art printing served by our own CDN rather
+ * than Scryfall. Scryfall ids are UUIDs, so a `pc-` id can never collide with
+ * one - which is what lets alt arts travel through the deck/room protocol in
+ * the same `scryfallId` field the server already stores, with no schema change.
+ */
+export const ALT_ART_PREFIX = 'pc-';
+
+/** Alt art is served by our own server, wherever this build points at it. */
+const ALT_ART_BASE = SERVER_URL;
+
+export function isAltArtId(id: string | undefined): boolean {
+  return !!id && id.startsWith(ALT_ART_PREFIX);
+}
+
+/** id -> filename, populated from /api/art/catalog (see loadAltArtCatalog). */
+const ALT_ART_FILES = new Map<string, string>();
+
+export function registerAltArt(id: string, file: string): void {
+  ALT_ART_FILES.set(id, file);
+}
+
+/** The `normal`-size card front for any card id: alt art, bundled cache, then CDN. */
 export function cardImage(scryfallId: string | undefined): string {
   if (!scryfallId) return '';
+  if (isAltArtId(scryfallId)) {
+    const file = ALT_ART_FILES.get(scryfallId);
+    // An unresolved alt id means the catalog has not loaded yet (or the art was
+    // unpublished). Empty string keeps the <img> blank rather than firing a
+    // doomed request at Scryfall with a non-UUID.
+    return file ? `${ALT_ART_BASE}/api/art/${file}` : '';
+  }
   if (BUNDLED_IDS.has(scryfallId)) return `${BASE}cache/cards/${scryfallId}.jpg`;
   return `https://cards.scryfall.io/normal/front/${scryfallId[0]}/${scryfallId[1]}/${scryfallId}.jpg`;
 }

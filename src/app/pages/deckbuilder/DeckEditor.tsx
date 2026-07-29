@@ -44,13 +44,13 @@ import { aliasCardMeta, getCardMeta, hydrateCardMeta, type ScryCard } from '../.
 import { bracketKey, estimateBracket } from '../../data/brackets.ts';
 import { FORMATS, formatFor, formatTarget, isBasicLand } from '../../data/formats.ts';
 import { applyDeckTint, clearDeckTint } from '../../state/accent.ts';
-import { DEFAULT_PREFERENCES, loadPreferences } from '../../preferences.ts';
+import { DEFAULT_PREFERENCES, loadPreferences, savePreferences } from '../../preferences.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { GameTag } from '../../components/GameTag.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import { CardRowSkeleton } from '../../components/Skeletons.tsx';
 import { ArtPicker, HeaderCardPicker, PickerShell } from '../../components/ArtPicker.tsx';
-import { PlaymatPicker } from '../../components/PlaymatPicker.tsx';
+import { PlaymatPicker, PlaymatUpload } from '../../components/PlaymatPicker.tsx';
 import { PLAYMATS } from '../../data/playmats.ts';
 import { useLongPress } from '../../hooks/useLongPress.ts';
 import { CardSearch } from './CardSearch.tsx';
@@ -923,6 +923,21 @@ export function DeckEditor({ deckId }: { deckId: string }) {
                 setMatPicking(false);
               }}
               onSelect={(id) => {
+                mutate((d) => ({ ...d, playmat: id }));
+                setMatPicking(false);
+              }}
+            />
+            {/* Your own artwork, same upload as Settings - one per account, so
+                picking it here and there means the same image. */}
+            <PlaymatUpload
+              customId={loadPreferences().customPlaymat}
+              selectedId={deck.playmat ?? ''}
+              onSelect={(id) => {
+                mutate((d) => ({ ...d, playmat: id }));
+                setMatPicking(false);
+              }}
+              onUploaded={(id) => {
+                savePreferences({ ...loadPreferences(), customPlaymat: id });
                 mutate((d) => ({ ...d, playmat: id }));
                 setMatPicking(false);
               }}

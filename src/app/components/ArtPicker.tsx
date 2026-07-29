@@ -130,6 +130,7 @@ export function ArtPicker({
               type="button"
               className="pkCard"
               data-current={printing.id === scryfallId || undefined}
+              data-alt={printing.alt || undefined}
               onClick={() => {
                 onSelect(printing.id);
                 onClose();
@@ -139,7 +140,7 @@ export function ArtPicker({
               <span className="pkCaption">
                 <span className="pkSet">{printing.setName}</span>
                 <span className="pkMeta">
-                  {printing.set.toUpperCase()}
+                  {printing.alt ? 'ALT ART' : printing.set.toUpperCase()}
                   {printing.releasedAt ? ` · ${printing.releasedAt.slice(0, 4)}` : ''}
                   {printing.artist ? ` · ${printing.artist}` : ''}
                 </span>

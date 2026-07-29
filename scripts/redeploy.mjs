@@ -5,6 +5,7 @@
  *   npm run redeploy            # web + API
  *   npm run redeploy -- web     # web (SPA) only
  *   npm run redeploy -- api     # API (Rust server) only
+ *   npm run redeploy -- art     # curated alt-art catalog only (no restart)
  *
  * Target credentials come from the gitignored `.env` at the repo root:
  *   PC_DEPLOY_HOST, PC_DEPLOY_USER, PC_DEPLOY_PASS
@@ -32,6 +33,9 @@ const WEB_ROOT = '/var/www/prettycardboard';
 const WEB_OWNER = 'caddy:caddy';
 const BIN_REMOTE = '/opt/prettycardboard/bin/prettycardboard-server';
 const SERVICE = 'prettycardboard';
+const ART_REMOTE = '/opt/prettycardboard/data/alt-art';
+// Matches the ownership the other data dirs (mats, booster-art) already carry.
+const DATA_OWNER = 'root:root';
 const RUST_TARGET = 'x86_64-unknown-linux-gnu.2.35'; // glibc pin for broad compatibility
 const RUST_TARGET_DIR = 'x86_64-unknown-linux-gnu';
 const DOMAIN = 'https://prettycardboard.com';
@@ -136,6 +140,33 @@ function deployWeb(env) {
   console.log(c.green('  web deployed'));
 }
 
+function deployArt(env) {
+  const local = join(ROOT, 'server/data/alt-art');
+  if (!existsSync(join(local, 'catalog.json'))) {
+    fail(`no catalog at ${local}/catalog.json — run scripts/publish-alt-art.mjs first`);
+  }
+  step(`Uploading alt art → ${ART_REMOTE}`);
+  const target = `${env.PC_DEPLOY_USER}@${env.PC_DEPLOY_HOST}`;
+  ssh(env, `mkdir -p ${ART_REMOTE}`);
+  // --delete mirrors, so unpublishing locally unpublishes live. Safe here in a
+  // way it would never be for data/: this directory holds only generated art,
+  // and the SQLite database lives one level up and is never in scope.
+  run(
+    'rsync',
+    [
+      '-az', '--delete',
+      '-e', 'sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20',
+      `${local}/`,
+      `${target}:${ART_REMOTE}/`,
+    ],
+    { pass: env.PC_DEPLOY_PASS },
+  );
+  // The service reads these off disk per request, so no restart is needed —
+  // which is the point of shipping art separately from the binary.
+  ssh(env, `chown -R ${DATA_OWNER} ${ART_REMOTE}`);
+  console.log(c.green('  alt art deployed'));
+}
+
 function deployApi(env) {
   step(`Cross-compiling the API → Linux (${RUST_TARGET})`);
   run('cargo', ['zigbuild', '--release', '--target', RUST_TARGET], { cwd: join(ROOT, 'server') });
@@ -169,6 +200,7 @@ function verify(what) {
     checks.push(['card back asset', `${DOMAIN}/backs/classic.jpg`, '200']);
   }
   if (what.api) checks.push(['API (401 = up, unauth)', `${DOMAIN}/api/me`, '401']);
+  if (what.art) checks.push(['alt-art catalog', `${DOMAIN}/api/art/catalog`, '200']);
   let ok = true;
   for (const [label, url, want] of checks) {
     const got = httpStatus(url);
@@ -182,8 +214,14 @@ function verify(what) {
 // --------------------------------------------------------------------------
 
 const arg = (process.argv[2] || 'all').toLowerCase();
-const what = { web: arg === 'all' || arg === 'web', api: arg === 'all' || arg === 'api' };
-if (!what.web && !what.api) fail(`unknown target '${arg}' (use: all | web | api)`);
+const what = {
+  web: arg === 'all' || arg === 'web',
+  api: arg === 'all' || arg === 'api',
+  // Art ships on demand only: it is large, changes on its own cadence, and
+  // needs neither a build nor a service restart.
+  art: arg === 'art',
+};
+if (!what.web && !what.api && !what.art) fail(`unknown target '${arg}' (use: all | web | api | art)`);
 
 const env = loadEnv();
 
@@ -218,6 +256,7 @@ if (what.api) console.log(c.dim('  note: the API restart briefly drops live game
 
 if (what.web) deployWeb(env);
 if (what.api) deployApi(env);
+if (what.art) deployArt(env);
 verify(what);
 
 console.log(`\n${c.green(c.bold('✓ redeploy complete'))}  ${c.dim(DOMAIN)}\n`);

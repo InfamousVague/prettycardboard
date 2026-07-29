@@ -15,6 +15,9 @@
 .pkPanel {
   display: flex;
   flex-direction: column;
+  /* The panel is height-capped, so anything inside it that can grow has to
+     scroll rather than paint past the rounded edge. */
+  overflow: hidden;
   gap: var(--glacier-space-4);
   width: min(46rem, calc(100vw - 3rem));
   max-height: min(36rem, calc(100vh - 4rem));
@@ -39,6 +42,20 @@
 
 .pkLoading {
   padding: var(--glacier-space-4) 0;
+}
+
+/* A picker whose grid is not .pkGrid (the playmat catalogue) still has to
+   scroll inside the capped panel; min-height:0 is what lets a flex child
+   shrink far enough to do it, and the filter chips stay put above it. */
+.pkPanel .matPicker {
+  overflow-y: auto;
+  min-height: 0;
+  padding-inline-end: var(--glacier-space-1);
+}
+
+/* The upload row sits under the scrolling grid, always reachable. */
+.pkPanel .matUploadRow {
+  flex: none;
 }
 
 .pkGrid {

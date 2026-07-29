@@ -1,4 +1,6 @@
 import { PRECONS } from './precons.ts';
+import { isAltArtId, registerAltArt } from './cards.ts';
+import { SERVER_URL } from '../net/api.ts';
 
 /**
  * Scryfall client + the app's known-card metadata registry.
@@ -22,6 +24,8 @@ const API = 'https://api.scryfall.com';
 export interface ScryCard {
   id: string;
   name: string;
+  /** Shared by every printing of a card — how alt arts attach to it. */
+  oracle_id?: string;
   type_line?: string;
   mana_cost?: string;
   cmc?: number;
@@ -303,9 +307,103 @@ export interface Printing {
   set: string;
   releasedAt: string;
   artist?: string;
+  /** A curated PrettyCardboard alternate art rather than a paper printing. */
+  alt?: boolean;
 }
 
 const PRINTINGS = new Map<string, Printing[]>();
+
+// --- curated alternate arts ---
+
+/**
+ * Alt arts are OUR printings: community/curated card faces hosted on the
+ * PrettyCardboard CDN and offered alongside the paper ones in the art picker.
+ *
+ * They key off Scryfall's `oracle_id` (shared by every printing of a card)
+ * rather than a printing id, so one published art covers all printings of that
+ * card - a player who owns the M13 Liliana Vess and one who owns the DDD copy
+ * both see it.
+ */
+interface AltArt {
+  id: string;
+  oracleId: string;
+  name: string;
+  setName: string;
+  artist?: string;
+  file: string;
+  releasedAt?: string;
+}
+
+/** oracleId -> alt printings. Empty until loadAltArtCatalog() resolves. */
+const ALT_BY_ORACLE = new Map<string, Printing[]>();
+/** alt printing id -> oracleId, so a card sitting on an alt art can still list
+ * its paper siblings (Scryfall has never heard of a `pc-` id). */
+const ALT_ID_ORACLE = new Map<string, string>();
+
+let altCatalogPromise: Promise<void> | null = null;
+
+/**
+ * Every curated art published for an oracle identity. Import uses this to open a
+ * deck already wearing our art instead of making the player swap artwork on a
+ * hundred cards by hand.
+ *
+ * A card can have several (the six Swamps), which is why this returns the whole
+ * list: the importer spreads a stacked quantity across them so a 28-Swamp mana
+ * base hits the table varied rather than as 28 identical lands.
+ */
+export function altArtsFor(oracleId: string | undefined): Printing[] {
+  if (!oracleId) return [];
+  return ALT_BY_ORACLE.get(oracleId) ?? [];
+}
+
+/** Whether any curated art is published at all (gates the import checkbox). */
+export function hasAltArt(): boolean {
+  return ALT_BY_ORACLE.size > 0;
+}
+
+/** Look up one curated art by its `pc-…` id, for decklists that name it
+ *  explicitly. Unknown ids return undefined so import falls back to the paper
+ *  printing rather than producing a card with no resolvable image. */
+export function altArtById(id: string): Printing | undefined {
+  const oracleId = ALT_ID_ORACLE.get(id);
+  if (!oracleId) return undefined;
+  return ALT_BY_ORACLE.get(oracleId)?.find((p) => p.id === id);
+}
+
+/**
+ * Fetch and index the alt-art catalog (once per session). Failure is silent and
+ * non-fatal: the art picker just shows paper printings, which is the correct
+ * degradation if our CDN is unreachable.
+ */
+export function loadAltArtCatalog(): Promise<void> {
+  altCatalogPromise ??= (async () => {
+    try {
+      const response = await fetch(`${SERVER_URL}/api/art/catalog`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) return;
+      const body = (await response.json()) as { arts?: AltArt[] };
+      for (const art of body.arts ?? []) {
+        if (!art?.id || !art.oracleId || !art.file) continue;
+        registerAltArt(art.id, art.file);
+        ALT_ID_ORACLE.set(art.id, art.oracleId);
+        const list = ALT_BY_ORACLE.get(art.oracleId) ?? [];
+        list.push({
+          id: art.id,
+          setName: art.setName || 'PrettyCardboard',
+          set: 'pc',
+          releasedAt: art.releasedAt ?? '',
+          artist: art.artist,
+          alt: true,
+        });
+        ALT_BY_ORACLE.set(art.oracleId, list);
+      }
+    } catch {
+      // offline / CDN down - paper printings only
+    }
+  })();
+  return altCatalogPromise;
+}
 
 /**
  * Every paper printing of the card behind `scryfallId` (any printing id of it),
@@ -315,11 +413,27 @@ const PRINTINGS = new Map<string, Printing[]>();
 export async function fetchPrintings(scryfallId: string): Promise<Printing[]> {
   const cached = PRINTINGS.get(scryfallId);
   if (cached) return cached;
-  const cardResponse = await fetch(`${API}/cards/${scryfallId}`, { headers: { Accept: 'application/json' } });
-  if (!cardResponse.ok) throw new Error(String(cardResponse.status));
-  const card = (await cardResponse.json()) as { prints_search_uri?: string };
-  if (!card.prints_search_uri) return [];
-  const url = new URL(card.prints_search_uri);
+  await loadAltArtCatalog();
+
+  let oracleId: string | undefined;
+  let printsUri: string | undefined;
+
+  if (isAltArtId(scryfallId)) {
+    // The card is already sitting on one of our arts, so Scryfall has no id to
+    // look up. Go the other way: the catalog knows the oracle identity, and an
+    // oracleid: search lists the paper family from that alone.
+    oracleId = ALT_ID_ORACLE.get(scryfallId);
+    if (!oracleId) return ALT_BY_ORACLE.get('') ?? [];
+    printsUri = `${API}/cards/search?q=${encodeURIComponent(`oracleid:${oracleId}`)}&order=released`;
+  } else {
+    const cardResponse = await fetch(`${API}/cards/${scryfallId}`, { headers: { Accept: 'application/json' } });
+    if (!cardResponse.ok) throw new Error(String(cardResponse.status));
+    const card = (await cardResponse.json()) as { prints_search_uri?: string; oracle_id?: string };
+    oracleId = card.oracle_id;
+    printsUri = card.prints_search_uri;
+  }
+  if (!printsUri) return [];
+  const url = new URL(printsUri);
   url.searchParams.set('unique', 'prints');
   const printings: Printing[] = [];
   let next: string | null = url.toString();
@@ -344,8 +458,12 @@ export async function fetchPrintings(scryfallId: string): Promise<Printing[]> {
     next = data.has_more ? (data.next_page ?? null) : null;
   }
   printings.sort((a, b) => b.releasedAt.localeCompare(a.releasedAt));
+  // Our arts lead the wall: they are the reason a player opened this picker on
+  // a proxy deck, and they are far fewer than the paper printings behind them.
+  const alts = (oracleId && ALT_BY_ORACLE.get(oracleId)) || [];
+  const all = [...alts, ...printings];
   // Cache under every printing id so reopening from any art is instant.
-  for (const printing of printings) PRINTINGS.set(printing.id, printings);
-  PRINTINGS.set(scryfallId, printings);
-  return printings;
+  for (const printing of all) PRINTINGS.set(printing.id, all);
+  PRINTINGS.set(scryfallId, all);
+  return all;
 }

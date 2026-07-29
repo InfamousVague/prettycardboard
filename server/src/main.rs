@@ -40,6 +40,10 @@ pub struct App {
     pub mats_dir: std::path::PathBuf,
     /// Serializes mat uploads (scan-delete-write is racy unguarded).
     pub mats_lock: tokio::sync::Mutex<()>,
+    /// Curated global alternate-art printings (served at /api/art/{file}).
+    /// Unlike mats these are NOT user uploads: the directory is published by
+    /// ops and every player sees the same catalog as extra printing options.
+    pub alt_art_dir: std::path::PathBuf,
     /// Cached booster-set poster art (served at /api/boosters/art/{code}).
     pub booster_art_dir: std::path::PathBuf,
     /// Serializes cache misses: one Scryfall fetch at a time keeps us far
@@ -184,6 +188,8 @@ async fn main() {
     std::fs::create_dir_all(&mats_dir).expect("create mats dir");
     let booster_art_dir = data_dir.join("booster-art");
     std::fs::create_dir_all(&booster_art_dir).expect("create booster art dir");
+    let alt_art_dir = data_dir.join("alt-art");
+    std::fs::create_dir_all(&alt_art_dir).expect("create alt art dir");
 
     let app = Arc::new(App {
         db: Mutex::new(conn),
@@ -196,6 +202,7 @@ async fn main() {
         conn_seq: AtomicU64::new(1),
         mats_dir,
         mats_lock: tokio::sync::Mutex::new(()),
+        alt_art_dir,
         booster_art_dir,
         booster_art_lock: tokio::sync::Mutex::new(()),
     });
@@ -259,6 +266,10 @@ async fn main() {
         // Public: custom playmats load from CSS url()/<img>, which can't send
         // Bearer headers. Filenames are unguessable (user id + random suffix).
         .route("/api/mats/{file}", get(api::playmat_serve))
+        // Public, like mats: art loads from <img> tags that cannot send a
+        // Bearer header. This is curated global content, not user data.
+        .route("/api/art/catalog", get(api::alt_art_catalog))
+        .route("/api/art/{file}", get(api::alt_art_serve))
         .route("/api/boosters/art/{code}", get(api::booster_art))
         .route("/api/boosters/card/{code}/{index}", get(api::booster_card))
         .route("/api/ws", get(ws::ws_handler))

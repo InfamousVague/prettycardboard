@@ -797,6 +797,16 @@ pub fn deck_update(
     .unwrap();
 }
 
+/// A re-upload replaces the account's one custom mat file, which orphans the
+/// id any of their decks had stored. Point those decks at the new file rather
+/// than letting them quietly fall back to the global preference.
+pub fn decks_repoint_custom_playmat(conn: &Connection, user_id: &str, new_id: &str) {
+    let _ = conn.execute(
+        "UPDATE decks SET playmat = ? WHERE user_id = ? AND playmat LIKE 'custom-%'",
+        params![new_id, user_id],
+    );
+}
+
 pub fn deck_delete(conn: &Connection, id: &str) {
     conn.execute("DELETE FROM decks WHERE id = ?", [id]).unwrap();
 }

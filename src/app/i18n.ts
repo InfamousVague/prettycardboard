@@ -1371,6 +1371,12 @@ export const messages = {
   dbImportUrl: { en: 'Moxfield URL or deck id', es: 'URL de Moxfield o id del mazo', fr: 'URL Moxfield ou id du deck', ar: 'رابط Moxfield أو معرّف المجموعة' },
   dbImportRun: { en: 'Import deck', es: 'Importar mazo', fr: 'Importer le deck', ar: 'استيراد المجموعة' },
   dbImportEmpty: { en: 'Nothing to import yet.', es: 'Aún no hay nada que importar.', fr: 'Rien à importer pour l’instant.', ar: 'لا شيء للاستيراد بعد.' },
+  dbImportAltArt: {
+    en: 'Use PrettyCardboard alternate art where available',
+    es: 'Usar arte alternativo de PrettyCardboard cuando esté disponible',
+    fr: 'Utiliser les illustrations alternatives PrettyCardboard si disponibles',
+    ar: 'استخدم الأعمال الفنية البديلة من PrettyCardboard عند توفرها',
+  },
   dbImportNotFound: {
     en: 'Some names were not recognized and were skipped:',
     es: 'Algunos nombres no se reconocieron y se omitieron:',

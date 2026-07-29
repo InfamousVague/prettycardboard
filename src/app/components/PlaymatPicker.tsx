@@ -1,7 +1,9 @@
-import { useState, type ReactNode } from 'react';
-import { SegmentedControl } from '@glacier/react';
+import { useRef, useState, type ReactNode } from 'react';
+import { Button, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
+import { Upload } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { PLAYMATS, playmatBackground, playmatUrl } from '../data/playmats.ts';
+import { uploadPlaymat } from '../net/api.ts';
 import { presentThemes, THEME_LABEL_KEY, type AssetTheme } from '../data/themes.ts';
 
 type Filter = 'all' | AssetTheme;
@@ -89,6 +91,85 @@ export function PlaymatSwatchMedia({ id, name }: { id: string; name: string }) {
       )}
       <span className="matSwatchName">{name}</span>
     </>
+  );
+}
+
+/**
+ * Upload-your-own: the image goes to the server (one per account) and comes
+ * back as a `custom-...` id. Deliberately id-in / id-out rather than
+ * preference-coupled, so the Customize tab and a deck's own mat can both use
+ * it - the caller decides what "chosen" means.
+ */
+export function PlaymatUpload({
+  customId,
+  selectedId,
+  onSelect,
+  onUploaded,
+}: {
+  /** The account's existing upload, if any - shown as a pickable tile. */
+  customId: string;
+  selectedId: string;
+  onSelect: (id: string) => void;
+  /** Fired with the new id after a successful upload (the caller decides
+   *  whether to also remember it as the account's custom mat). */
+  onUploaded: (id: string) => void;
+}) {
+  const t = useT();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const pick = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    if (file.size > 8 * 1024 * 1024) {
+      setError(t('custUploadTooBig'));
+      return;
+    }
+    setBusy(true);
+    try {
+      const { id } = await uploadPlaymat(file);
+      onUploaded(id);
+    } catch {
+      setError(t('custUploadFailed'));
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  return (
+    <div className="matUploadRow">
+      {customId && (
+        <button
+          type="button"
+          role="radio"
+          aria-checked={selectedId === customId}
+          className="matSwatch matSwatchCustom"
+          data-selected={selectedId === customId || undefined}
+          title={t('custUploadYours')}
+          onClick={() => onSelect(customId)}
+        >
+          <img src={playmatUrl(customId)} alt={t('custUploadYours')} draggable={false} />
+          <span className="matSwatchName">{t('custUploadYours')}</span>
+        </button>
+      )}
+      <div className="matUploadActions">
+        <Button variant="soft" size="sm" loading={busy} onClick={() => inputRef.current?.click()}>
+          <Upload size={15} /> {t('custUpload')}
+        </Button>
+        <Text as="span" size={Size.XSmall} tone={error ? TextTone.Danger : TextTone.Subtle}>
+          {error ?? t('custUploadHint')}
+        </Text>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        hidden
+        onChange={(event) => void pick(event.target.files?.[0])}
+      />
+    </div>
   );
 }
 

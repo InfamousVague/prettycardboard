@@ -1,12 +1,12 @@
-import { useState } from 'react';
-import { Button, Callout, Modal, Size, Tabs, Text, TextTone, Textarea, Input, useToast } from '@glacier/react';
+import { useEffect, useState } from 'react';
+import { Button, Callout, Checkbox, Modal, Size, Tabs, Text, TextTone, Textarea, Input, useToast } from '@glacier/react';
 import { useT } from '../../i18n.ts';
 import * as api from '../../net/api.ts';
 import type { DeckCard } from '../../net/types.ts';
 import { useApp } from '../../state/appStore.ts';
 import { useUi } from '../../state/uiStore.ts';
 import { parseDecklist } from '../../data/decklist.ts';
-import { resolvePrintings } from '../../data/scryfall.ts';
+import { aliasCardMeta, altArtById, altArtsFor, hasAltArt, loadAltArtCatalog, resolvePrintings } from '../../data/scryfall.ts';
 import { fetchMoxfieldDeck, MoxfieldError, parseMoxfieldRef } from '../../data/moxfield.ts';
 
 /**
@@ -23,6 +23,14 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState<string[]>([]);
+  // Curated alt art is opt-in per import: it silently replaces the artwork on
+  // every card we have one for, which is great for a proxy deck and wrong if
+  // the player wanted the paper printings they listed.
+  const [useAltArt, setUseAltArt] = useState(false);
+  const [altAvailable, setAltAvailable] = useState(false);
+  useEffect(() => {
+    if (open) void loadAltArtCatalog().then(() => setAltAvailable(hasAltArt()));
+  }, [open]);
 
   const finish = async (name: string, cards: DeckCard[]) => {
     const { id } = await api.createDeck(name, 'Commander', cards);
@@ -60,7 +68,34 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
           misses.push(entry.name);
           continue;
         }
-        cards.push({ scryfallId: card.id, name: card.name, quantity: entry.quantity, board: entry.board });
+        // An explicit `[pc-…]` pointer in the file wins over the checkbox: the
+        // author said which art they wanted, so honour it even unticked.
+        const named = entry.art ? altArtById(entry.art) : undefined;
+        const alts = named ? [named] : useAltArt ? altArtsFor(card.oracle_id) : [];
+        // An alt id is not a Scryfall id, so the metadata registry has to be told
+        // they are the same card - otherwise the deck loses its type line, curve
+        // and color identity for grouping and legality checks.
+        for (const alt of alts) aliasCardMeta(card.id, alt.id);
+
+        if (alts.length > 1 && entry.quantity > 1) {
+          // Several arts for one card (basic lands): split the stack across them
+          // as evenly as it divides, remainder to the earliest arts.
+          const base = Math.floor(entry.quantity / alts.length);
+          const extra = entry.quantity % alts.length;
+          alts.forEach((alt, i) => {
+            const quantity = base + (i < extra ? 1 : 0);
+            if (quantity > 0) {
+              cards.push({ scryfallId: alt.id, name: card.name, quantity, board: entry.board });
+            }
+          });
+          continue;
+        }
+        cards.push({
+          scryfallId: alts[0]?.id ?? card.id,
+          name: card.name,
+          quantity: entry.quantity,
+          board: entry.board,
+        });
       }
       void notFoundKeys;
       if (cards.length === 0) {
@@ -129,6 +164,13 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
                   aria-label={t('dbImportTabText')}
                   className="importTextarea"
                 />
+                {altAvailable && (
+                  <Checkbox
+                    label={t('dbImportAltArt')}
+                    checked={useAltArt}
+                    onCheckedChange={setUseAltArt}
+                  />
+                )}
                 {errorBlock}
                 {notFound.length > 0 && (
                   <Callout tone="warning" title={t('dbImportNotFound')}>

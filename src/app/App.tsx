@@ -39,6 +39,7 @@ import { InvitePopup } from './components/InvitePopup.tsx';
 import { DownloadBanner } from './components/DownloadBanner.tsx';
 import { RotateOverlay } from './pages/table/RotateOverlay.tsx';
 import { useMobileLayout, usePhoneViewport, usePortrait } from './hooks/useIsPhone.ts';
+import { loadAltArtCatalog } from './data/scryfall.ts';
 
 // Route pages, the whole table engine, the deck builder, the modals, and the
 // command palette load on first use rather than up front - so the initial
@@ -227,6 +228,20 @@ function Shell({
   useEffect(() => {
     document.documentElement.dataset.phone = phoneLayout ? 'on' : 'off';
   }, [phoneLayout]);
+  // Load the curated alt-art catalog once at boot. Cards already sitting on one
+  // of our arts cannot resolve an image URL until it lands, so the bump forces a
+  // single re-render when it does rather than leaving those cards blank. Failure
+  // is silent inside the loader - paper printings still work.
+  const [, bumpAltArt] = useState(0);
+  useEffect(() => {
+    let live = true;
+    loadAltArtCatalog().then(() => {
+      if (live) bumpAltArt((n) => n + 1);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
   // First launch opens Settings on the Customize tab so the player sets up their
   // playmat and card back; afterwards it lives behind the Customize rail button.
   const firstRun = useRef(localStorage.getItem(CUSTOMIZED_KEY) == null);
