@@ -146,6 +146,27 @@
   inset-inline-end: calc(var(--glacier-space-4) * -1);
 }
 
+/* The face toggle for a two-faced card: beside the close button, naming the
+   side it will turn to so it reads as an invitation rather than a mystery. */
+.cpFaceToggle {
+  position: absolute;
+  top: calc(var(--glacier-space-4) * -1);
+  inset-inline-end: var(--glacier-space-5);
+  z-index: 3;
+  max-width: min(16rem, 40vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 46rem) {
+  .cpFaceToggle {
+    position: fixed;
+    top: var(--glacier-space-4);
+    inset-inline-end: calc(var(--glacier-space-4) + 3rem);
+  }
+}
+
 @media (max-width: 46rem) {
   .cpStage {
     flex-direction: column;

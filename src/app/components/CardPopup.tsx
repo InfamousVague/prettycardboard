@@ -8,12 +8,13 @@ import {
   type ReactNode,
 } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { IconButton } from '@glacier/react';
-import { X } from '@glacier/icons';
+import { Button, IconButton } from '@glacier/react';
+import { Repeat, X } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { cardImage } from '../data/cards.ts';
 import { isFoil } from '../data/foil.ts';
 import { cyberpunkCard, cyberpunkImage } from '../data/cyberpunk.ts';
+import { useFaces } from '../data/faces.ts';
 import { GameCard } from './GameCard.tsx';
 import { CardDetailsBody } from './cardDetails.tsx';
 import './cardpopup.css';
@@ -131,7 +132,19 @@ function Popup({ card, onClose }: { card: PopupCard; onClose: () => void }) {
   // A Cyberpunk card is recognized by its id living in the bundled catalog; its
   // full art ships with the app, so we never hit Scryfall for it.
   const cyber = card.scryfallId ? cyberpunkCard(card.scryfallId) : undefined;
-  const image = cyber ? cyberpunkImage(cyber.id) : card.imageUrl || cardImage(card.scryfallId);
+  // Two-faced cards get a face toggle right here. This is where people come to
+  // look at a card, so it is where "let me see the other side" belongs - it
+  // works from the command zone, the hand and every pile viewer, none of which
+  // have a board context menu to hang a Transform action off.
+  const faces = useFaces(cyber ? undefined : card.scryfallId);
+  const [showBack, setShowBack] = useState(false);
+  useEffect(() => {
+    setShowBack(false);
+  }, [card.scryfallId]);
+  const flippable = !!faces?.dfc && !!faces.backImage;
+  const faceImg = flippable ? (showBack ? faces.backImage : faces.frontImage) : undefined;
+  const image = cyber ? cyberpunkImage(cyber.id) : faceImg || card.imageUrl || cardImage(card.scryfallId);
+  const faceName = (flippable && (showBack ? faces.backName : faces.frontName)) || card.name;
 
   return (
     <motion.div
@@ -162,7 +175,7 @@ function Popup({ card, onClose }: { card: PopupCard; onClose: () => void }) {
           <div className="cpFront">
             {/* The pointer tilt fights a drag gesture, so the pannable card is flat. */}
             <GameCard
-              name={card.name}
+              name={faceName}
               imageUrl={image}
               width={cardWidth}
               tilt={split ? 0 : 13}
@@ -183,6 +196,16 @@ function Popup({ card, onClose }: { card: PopupCard; onClose: () => void }) {
           <CardDetailsBody scryfallId={card.scryfallId} name={card.name} />
         </motion.aside>
 
+        {flippable && (
+          <Button
+            className="cpFaceToggle"
+            size="sm"
+            variant="soft"
+            onClick={() => setShowBack((back) => !back)}
+          >
+            <Repeat size={15} /> {showBack ? faces?.frontName : faces?.backName}
+          </Button>
+        )}
         <IconButton className="cpClose" variant="ghost" aria-label={t('cpClose')} onClick={onClose}>
           <X size={18} />
         </IconButton>

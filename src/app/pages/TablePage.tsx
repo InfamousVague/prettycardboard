@@ -1352,6 +1352,15 @@ function CardMenu({
       )}
       {menu.zone === 'command' && card && (
         <>
+          {/* A transforming commander sits here as its front face. The zone had
+              no flip at all, so the only way to see the other side was to cast
+              it - offer it here too, and the popup carries a preview toggle. */}
+          {faces?.dfc &&
+            item(
+              card.transformed ? 'Front face' : 'Transform',
+              <Repeat size={15} />,
+              { kind: 'card.transform', iid: menu.iid, transformed: !card.transformed },
+            )}
           {item(`${t('tblCommand')} → Battlefield`, <Play size={15} />, { kind: 'cmd.cast', iid: menu.iid, x: 0.55, y: 0.55 }, 'field:mine')}
           {item(t('tblHand'), <Hand size={15} />, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
           {/* Manual tax control: +2 always (the server creates the entry), -2
