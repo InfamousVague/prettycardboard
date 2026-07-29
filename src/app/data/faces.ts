@@ -83,17 +83,39 @@ async function curatedFaces(
   if (!oracleId) return undefined;
   const front = altArtForFace(oracleId, faces[0]?.name);
   const back = altArtForFace(oracleId, faces[1]?.name);
-  // A deck can be sitting on either art - decks saved before import learned to
-  // prefer the front are wearing the back one. "Flip" has to mean "show the
-  // other face" either way, so the pair is stated relative to the art the card
-  // is actually wearing.
-  const wearingBack = back?.id === altId;
-  const shown = wearingBack ? back : front;
-  const other = wearingBack ? front : back;
   return {
-    front: shown ? cardImage(shown.id) : undefined,
-    back: other ? cardImage(other.id) : undefined,
+    front: front ? cardImage(front.id) : undefined,
+    back: back ? cardImage(back.id) : undefined,
   };
+}
+
+/**
+ * The image for the face this card is currently showing.
+ *
+ * Which face you see is decided by `transformed`, NOT by which art id the deck
+ * happens to store. A two-faced card publishes one curated art per face, so a
+ * deck saved on the back-face art would otherwise sit in the command zone as a
+ * planeswalker that has never been transformed. An untransformed card shows its
+ * front face; that is just the rules.
+ *
+ * Cheap by construction: a plain paper id already resolves to its front, so
+ * only transformed cards and cards wearing our art cost a lookup.
+ */
+export function faceImage(card: {
+  scryfallId?: string;
+  transformed?: boolean;
+  imageUrl?: string | null;
+}): string {
+  const id = card.scryfallId;
+  const fallback = card.imageUrl || cardImage(id);
+  if (!id || (!card.transformed && !isAltArtId(id))) return fallback;
+  const info = getFaces(id);
+  if (!info) {
+    void loadFaces(id);
+    return fallback;
+  }
+  if (!info.dfc) return fallback;
+  return (card.transformed ? info.backImage : info.frontImage) || fallback;
 }
 
 /** Fetch + cache a card's face info. Deduped by id; safe to call from render. */

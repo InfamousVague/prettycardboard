@@ -17,7 +17,7 @@ import { cardBackUrl, effectiveCardBack } from '../../data/cardBacks.ts';
 import { useEdgeColor } from '../../data/edgeColor.ts';
 import { usePreference } from '../../hooks/usePreference.ts';
 import { primePrintedPT, usePrintedPtVersion } from '../../data/printedPt.ts';
-import { useFacesVersion } from '../../data/faces.ts';
+import { faceImage, useFacesVersion } from '../../data/faces.ts';
 import { getGame, zoneLabel } from '../../data/games.ts';
 import { ManaPoolReadout } from '../../components/Mana.tsx';
 
@@ -156,7 +156,7 @@ export function SeatFrame({
     // The .fieldCard::after hitbox paints over the GameCard, so elementFromPoint
     // lands on .fieldCard (no data-preview-src) and the hover preview never fires.
     // Mirror the preview attrs onto the wrapper so the opponent's board previews too.
-    const cardPreview = card.faceDown ? undefined : card.imageUrl || cardImage(card.scryfallId);
+    const cardPreview = card.faceDown ? undefined : faceImage(card);
     return (
       <div
         key={card.iid}
@@ -187,7 +187,7 @@ export function SeatFrame({
       >
         <GameCard
           name={card.name}
-          imageUrl={card.imageUrl || cardImage(card.scryfallId)}
+          imageUrl={faceImage(card)}
           width={stage ? Math.round(120 * cardScale) : 56}
           tapped={card.tapped}
           faceDown={card.faceDown}

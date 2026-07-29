@@ -13,6 +13,7 @@ import { selectCardScale, useTableUi } from './tableUi.ts';
 import { useLongPress, menuEventFrom } from '../../hooks/useLongPress.ts';
 import { useMobileLayout } from '../../hooks/useIsPhone.ts';
 import { flyFromAnchor, flightAnchor, setFlightAnchor } from './juice.ts';
+import { faceImage, useFacesVersion } from '../../data/faces.ts';
 import { formatPtCounter, parsePtCounter, ptCounterModifier } from './boardModes.ts';
 
 /**
@@ -793,6 +794,9 @@ function CmdCard({
   const t = useT();
   const act = useGame((state) => state.act);
   const popup = useCardPopup();
+  // A two-faced commander resolves its front face asynchronously; repaint when
+  // it lands so the zone stops showing whichever art the deck stored.
+  useFacesVersion();
 
   // Touch has no right-click; press-and-hold opens the commander's menu.
   const longPress = useLongPress((info) => {
@@ -880,7 +884,7 @@ function CmdCard({
           marking, and not every card in it carries isCommander. */}
       <GameCard
         name={card.name}
-        imageUrl={card.imageUrl || cardImage(card.scryfallId)}
+        imageUrl={faceImage(card)}
         faceDown={card.faceDown}
         width={width}
         foil

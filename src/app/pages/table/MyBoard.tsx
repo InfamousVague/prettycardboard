@@ -25,7 +25,7 @@ import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
 import { isFoilInst } from '../../data/foil.ts';
-import { getFaces, loadFaces, useFacesVersion } from '../../data/faces.ts';
+import { faceImage, getFaces, useFacesVersion } from '../../data/faces.ts';
 import { primePrintedPT, usePrintedPtVersion } from '../../data/printedPt.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
@@ -998,11 +998,12 @@ export function MyBoard({
     // and throttled, and the badge simply stays empty until it lands.
     if (cardTotals && mtg) primePrintedPT(card);
     const ptTotal = cardTotals ? ptTotalLabel(card, mtg) : '';
-    const faces = card.transformed ? getFaces(card.scryfallId) : undefined;
-    if (card.transformed && card.scryfallId && !faces) void loadFaces(card.scryfallId);
-    const backImg = card.transformed && faces?.dfc ? faces.backImage : undefined;
-    const displayImg = backImg || card.imageUrl || cardImage(card.scryfallId);
-    const displayName = (card.transformed && faces?.dfc && faces.backName) || card.name;
+    // Which face shows is decided by `transformed`, not by whichever of a
+    // two-faced card's arts the deck happens to store (see faceImage).
+    const faces = getFaces(card.scryfallId);
+    const displayImg = faceImage(card);
+    const displayName =
+        (faces?.dfc && (card.transformed ? faces.backName : faces.frontName)) || card.name;
     const fieldPreview = card.faceDown ? undefined : displayImg;
 
     return (
@@ -1698,7 +1699,7 @@ export function MyBoard({
           >
             <GameCard
               name={card.name}
-              imageUrl={card.imageUrl || cardImage(card.scryfallId)}
+              imageUrl={faceImage(card)}
               width={width}
               foil={isFoilInst(card)}
               tilt={0}
@@ -1720,7 +1721,7 @@ export function MyBoard({
         >
           <GameCard
             name={draggedGhostCard.name}
-            imageUrl={draggedGhostCard.faceDown ? undefined : draggedGhostCard.imageUrl || cardImage(draggedGhostCard.scryfallId)}
+            imageUrl={draggedGhostCard.faceDown ? undefined : faceImage(draggedGhostCard)}
             faceDown={draggedGhostCard.faceDown}
             width={handCardWidth}
             foil={isFoilInst(draggedGhostCard)}
