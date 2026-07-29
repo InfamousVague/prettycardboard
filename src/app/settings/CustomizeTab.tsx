@@ -3,11 +3,10 @@ import { FormSection, SegmentedControl, Size, Text, TextTone } from '@glacier/re
 import { useT } from '../i18n.ts';
 import type { Preferences } from '../preferences.ts';
 import { CARD_BACKS, DEFAULT_CARD_BACK, cardBackUrl } from '../data/cardBacks.ts';
-import { PLAYMATS } from '../data/playmats.ts';
 import { DICE_SKINS } from '../data/diceSkins.ts';
 import { type AssetTheme } from '../data/themes.ts';
 import { GameCard } from '../components/GameCard.tsx';
-import { PlaymatSwatchMedia, PlaymatUpload, ThemedPicker } from '../components/PlaymatPicker.tsx';
+import { PlaymatPicker, PlaymatUpload, ThemedPicker } from '../components/PlaymatPicker.tsx';
 import { cardImage } from '../data/cards.ts';
 import { cyberpunkImage } from '../data/cyberpunk.ts';
 
@@ -83,21 +82,13 @@ export function CustomizeTab({
 
       {section === 'playmat' && (
         <FormSection title={t('custPlaymat')} description={t('custPlaymatHint')}>
-          <PlaymatUpload
-            customId={preferences.customPlaymat}
-            selectedId={preferences.playmat}
-            onSelect={(id) => onChange({ playmat: id })}
-            onUploaded={(id) => onChange({ customPlaymat: id, playmat: id })}
-          />
-          <ThemedPicker
-            items={PLAYMATS}
-            selectedId={preferences.playmat}
-            onSelect={(id) => onChange({ playmat: id })}
+          <PlaymatPicker
             ariaLabel={t('custPlaymat')}
-            gridClass="matPicker"
-            swatchClass="matSwatch"
-            renderMedia={(mat) => <PlaymatSwatchMedia id={mat.id} name={mat.name} />}
+            selectedId={preferences.playmat}
+            customId={preferences.customPlaymat}
+            onSelect={(id) => onChange({ playmat: id })}
           />
+          <PlaymatUpload onUploaded={(id) => onChange({ customPlaymat: id, playmat: id })} />
         </FormSection>
       )}
 

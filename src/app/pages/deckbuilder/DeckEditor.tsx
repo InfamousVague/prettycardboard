@@ -910,13 +910,14 @@ export function DeckEditor({ deckId }: { deckId: string }) {
           />
         )}
         {matPicking && (
-          <PickerShell title={t('dbMat')} subtitle={deck.name} onClose={() => setMatPicking(false)}>
+          <PickerShell wide title={t('dbMat')} subtitle={deck.name} onClose={() => setMatPicking(false)}>
             <Text size={Size.Small} tone={TextTone.Subtle} className="pkHint">
               {t('dbMatHint')}
             </Text>
             <PlaymatPicker
               ariaLabel={t('dbMat')}
               selectedId={deck.playmat ?? ''}
+              customId={loadPreferences().customPlaymat}
               noneLabel={t('dbMatDefault')}
               onNone={() => {
                 mutate((d) => ({ ...d, playmat: null }));
@@ -930,12 +931,6 @@ export function DeckEditor({ deckId }: { deckId: string }) {
             {/* Your own artwork, same upload as Settings - one per account, so
                 picking it here and there means the same image. */}
             <PlaymatUpload
-              customId={loadPreferences().customPlaymat}
-              selectedId={deck.playmat ?? ''}
-              onSelect={(id) => {
-                mutate((d) => ({ ...d, playmat: id }));
-                setMatPicking(false);
-              }}
               onUploaded={(id) => {
                 savePreferences({ ...loadPreferences(), customPlaymat: id });
                 mutate((d) => ({ ...d, playmat: id }));

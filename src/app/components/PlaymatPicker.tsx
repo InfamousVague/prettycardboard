@@ -101,17 +101,11 @@ export function PlaymatSwatchMedia({ id, name }: { id: string; name: string }) {
  * it - the caller decides what "chosen" means.
  */
 export function PlaymatUpload({
-  customId,
-  selectedId,
-  onSelect,
   onUploaded,
 }: {
-  /** The account's existing upload, if any - shown as a pickable tile. */
-  customId: string;
-  selectedId: string;
-  onSelect: (id: string) => void;
   /** Fired with the new id after a successful upload (the caller decides
-   *  whether to also remember it as the account's custom mat). */
+   *  whether to also remember it as the account's custom mat, and whether to
+   *  select it). The uploaded mat appears as a tile in the grid above. */
   onUploaded: (id: string) => void;
 }) {
   const t = useT();
@@ -140,20 +134,6 @@ export function PlaymatUpload({
 
   return (
     <div className="matUploadRow">
-      {customId && (
-        <button
-          type="button"
-          role="radio"
-          aria-checked={selectedId === customId}
-          className="matSwatch matSwatchCustom"
-          data-selected={selectedId === customId || undefined}
-          title={t('custUploadYours')}
-          onClick={() => onSelect(customId)}
-        >
-          <img src={playmatUrl(customId)} alt={t('custUploadYours')} draggable={false} />
-          <span className="matSwatchName">{t('custUploadYours')}</span>
-        </button>
-      )}
       <div className="matUploadActions">
         <Button variant="soft" size="sm" loading={busy} onClick={() => inputRef.current?.click()}>
           <Upload size={15} /> {t('custUpload')}
@@ -184,6 +164,7 @@ export function PlaymatPicker({
   ariaLabel,
   noneLabel,
   onNone,
+  customId,
 }: {
   selectedId: string;
   onSelect: (id: string) => void;
@@ -191,7 +172,12 @@ export function PlaymatPicker({
   /** Present = offer a "use my own mat" tile ahead of the catalog. */
   noneLabel?: string;
   onNone?: () => void;
+  /** The account's uploaded mat, rendered as the first real tile. It belongs
+   *  IN the grid: outside it the swatch has no track to size against and its
+   *  16/9 ratio blows it up to the width of the row. */
+  customId?: string;
 }) {
+  const t = useT();
   return (
     <ThemedPicker
       items={PLAYMATS}
@@ -201,19 +187,35 @@ export function PlaymatPicker({
       gridClass="matPicker"
       swatchClass="matSwatch"
       lead={
-        noneLabel != null && onNone != null ? (
-          <button
-            type="button"
-            role="radio"
-            aria-checked={selectedId === ''}
-            className="matSwatch matSwatchNone"
-            data-selected={selectedId === '' || undefined}
-            title={noneLabel}
-            onClick={onNone}
-          >
-            <span className="matSwatchName">{noneLabel}</span>
-          </button>
-        ) : undefined
+        <>
+          {noneLabel != null && onNone != null && (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={selectedId === ''}
+              className="matSwatch matSwatchNone"
+              data-selected={selectedId === '' || undefined}
+              title={noneLabel}
+              onClick={onNone}
+            >
+              <span className="matSwatchName">{noneLabel}</span>
+            </button>
+          )}
+          {customId ? (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={selectedId === customId}
+              className="matSwatch matSwatchCustom"
+              data-selected={selectedId === customId || undefined}
+              title={t('custUploadYours')}
+              onClick={() => onSelect(customId)}
+            >
+              <img src={playmatUrl(customId)} alt={t('custUploadYours')} draggable={false} />
+              <span className="matSwatchName">{t('custUploadYours')}</span>
+            </button>
+          ) : null}
+        </>
       }
       renderMedia={(mat) => <PlaymatSwatchMedia id={mat.id} name={mat.name} />}
     />

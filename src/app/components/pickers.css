@@ -20,7 +20,7 @@
   overflow: hidden;
   gap: var(--glacier-space-4);
   width: min(46rem, calc(100vw - 3rem));
-  max-height: min(36rem, calc(100vh - 4rem));
+  max-height: min(36rem, calc(100dvh - 4rem));
   padding: var(--glacier-space-5);
   border-radius: var(--glacier-radius-xl);
   border: var(--glacier-hairline) solid var(--glacier-glass-border);
@@ -44,16 +44,30 @@
   padding: var(--glacier-space-4) 0;
 }
 
-/* A picker whose grid is not .pkGrid (the playmat catalogue) still has to
-   scroll inside the capped panel; min-height:0 is what lets a flex child
-   shrink far enough to do it, and the filter chips stay put above it. */
-.pkPanel .matPicker {
-  overflow-y: auto;
-  min-height: 0;
-  padding-inline-end: var(--glacier-space-1);
+/* Near-fullscreen: the playmat catalogue is 39 tiles, and at the default panel
+   size two rows show and the rest is a scroll nobody expects. */
+.pkPanel[data-wide] {
+  width: min(92rem, calc(100vw - 2rem));
+  height: calc(100dvh - 2rem);
+  max-height: calc(100dvh - 2rem);
 }
 
-/* The upload row sits under the scrolling grid, always reachable. */
+/* A picker whose grid is not .pkGrid (the playmat catalogue) still has to
+   scroll inside the capped panel. `flex: 1 1 0` makes it TAKE the leftover
+   height rather than merely be allowed to shrink into it, and min-height:0 is
+   what lets a flex child shrink below its content at all. The filter chips
+   above and the upload row below stay put. */
+.pkPanel .matPicker {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-inline-end: var(--glacier-space-1);
+  align-content: start;
+}
+
+/* Fixed furniture around the scrolling grid. */
+.pkPanel .pickerFilter,
 .pkPanel .matUploadRow {
   flex: none;
 }

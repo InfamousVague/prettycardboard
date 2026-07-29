@@ -24,11 +24,15 @@ export function PickerShell({
   subtitle,
   onClose,
   children,
+  wide,
 }: {
   title: string;
   subtitle?: string;
   onClose: () => void;
   children: ReactNode;
+  /** Near-fullscreen: for a catalogue big enough that a 46rem panel shows two
+   *  rows of it and hides the rest behind a scroll. */
+  wide?: boolean;
 }) {
   const t = useT();
   useEffect(() => {
@@ -56,6 +60,7 @@ export function PickerShell({
     >
       <motion.div
         className="pkPanel"
+        data-wide={wide || undefined}
         initial={{ y: 18, scale: 0.98, opacity: 0 }}
         animate={{ y: 0, scale: 1, opacity: 1 }}
         exit={{ y: 12, opacity: 0 }}
