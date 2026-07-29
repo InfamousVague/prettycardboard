@@ -70,6 +70,10 @@ pub struct GameSettings {
     /// Free mulligans before hands start shrinking; `None` = the classic rule
     /// (1 in 3+ player commander, else 0).
     pub free_mulligans: Option<u32>,
+    /// Mulligan as often as you like and never bottom a card. Overrides
+    /// `free_mulligans` outright - a table that wants a keepable hand more than
+    /// it wants the ritual of paying for one.
+    pub unlimited_mulligans: bool,
     /// "london" (draw full, bottom N on keep) or "vancouver" (draw one fewer
     /// each mulligan, no bottoming).
     pub mulligan_rule: String,
@@ -88,6 +92,7 @@ impl Default for GameSettings {
             starting_life: None,
             starting_hand: None,
             free_mulligans: None,
+            unlimited_mulligans: false,
             mulligan_rule: "london".to_string(),
             first_player: "auto".to_string(),
             first_seat: None,

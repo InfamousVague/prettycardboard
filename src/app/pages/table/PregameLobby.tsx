@@ -46,6 +46,7 @@ const DEFAULT_SETTINGS: GameSettings = {
   startingLife: null,
   startingHand: null,
   freeMulligans: null,
+  unlimitedMulligans: false,
   mulliganRule: 'london',
   firstPlayer: 'auto',
   firstSeat: null,
@@ -141,7 +142,11 @@ export function PregameLobby({
     },
     {
       label: t('setFreeMulls'),
-      value: settings.freeMulligans == null ? t('setDefault') : String(settings.freeMulligans),
+      value: settings.unlimitedMulligans
+        ? t('setMullUnlimited')
+        : settings.freeMulligans == null
+          ? t('setDefault')
+          : String(settings.freeMulligans),
     },
     { label: t('setFirstPlayer'), value: firstLabel },
     { label: t('setSkipDraw'), value: skipDrawLabel },
@@ -397,9 +402,19 @@ export function PregameLobby({
               <span className="pregameSettingLabel">{t('setFreeMulls')}</span>
               <Select
                 fullWidth
-                value={settings.freeMulligans == null ? 'default' : String(settings.freeMulligans)}
+                value={
+                  settings.unlimitedMulligans
+                    ? 'unlimited'
+                    : settings.freeMulligans == null
+                      ? 'default'
+                      : String(settings.freeMulligans)
+                }
                 onValueChange={(value) =>
-                  patchSettings({ freeMulligans: value === 'default' ? null : Number(value) })
+                  patchSettings(
+                    value === 'unlimited'
+                      ? { unlimitedMulligans: true, freeMulligans: null }
+                      : { unlimitedMulligans: false, freeMulligans: value === 'default' ? null : Number(value) },
+                  )
                 }
                 options={[
                   { value: 'default', label: t('setDefault') },
@@ -407,6 +422,7 @@ export function PregameLobby({
                   { value: '1', label: '1' },
                   { value: '2', label: '2' },
                   { value: '3', label: '3' },
+                  { value: 'unlimited', label: t('setMullUnlimited') },
                 ]}
               />
             </label>

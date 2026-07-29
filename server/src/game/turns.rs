@@ -96,6 +96,11 @@ pub fn maybe_begin_first_turn(room: &mut Room, now: i64) -> Vec<String> {
 /// The free-mulligan allowance: the host's override if set, else 1 in 3+ player
 /// commander pods and 0 elsewhere.
 pub(super) fn free_first_mulls(room: &Room) -> u32 {
+    // Unlimited: every mulligan is free, so nothing is ever owed. Saturating
+    // arithmetic downstream turns this into "bottom zero cards, always".
+    if room.settings.unlimited_mulligans {
+        return u32::MAX;
+    }
     if let Some(free) = room.settings.free_mulligans {
         return free;
     }

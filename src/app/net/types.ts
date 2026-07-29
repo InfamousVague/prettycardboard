@@ -340,6 +340,8 @@ export interface GameSettings {
   startingHand?: number | null;
   /** Free mulligans before hands shrink; null for the classic rule. */
   freeMulligans?: number | null;
+  /** Mulligan freely and never bottom a card. Beats freeMulligans. */
+  unlimitedMulligans?: boolean;
   /** "london" (draw full, bottom N) or "vancouver" (draw one fewer each time). */
   mulliganRule: 'london' | 'vancouver';
   /** Who takes the first turn: "auto" (lowest seat), "random", or "seat". */

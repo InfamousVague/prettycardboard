@@ -403,6 +403,24 @@ export const messages = {
     fr: 'PNG, JPEG ou WebP jusqu’à 8 Mo — visible par toute la table.',
     ar: 'PNG أو JPEG أو WebP حتى 8MB — يراه الجميع على طاولتك.',
   },
+  custBackHint: {
+    en: 'PNG, JPEG or WebP, up to 4MB. Use a 5:7 card-shaped image for the cleanest fit.',
+    es: 'PNG, JPEG o WebP, hasta 4MB. Usa una imagen con forma de carta 5:7 para el mejor ajuste.',
+    fr: 'PNG, JPEG ou WebP, jusqu’à 4 Mo. Utilisez une image au format carte 5:7 pour un rendu net.',
+    ar: 'PNG أو JPEG أو WebP، حتى 4 ميجابايت. استخدم صورة بنسبة 5:7 لأفضل ملاءمة.',
+  },
+  custBackTooBig: {
+    en: 'That image is over 4MB. Try a smaller one.',
+    es: 'Esa imagen supera los 4MB. Prueba con una más pequeña.',
+    fr: 'Cette image dépasse 4 Mo. Essayez-en une plus petite.',
+    ar: 'هذه الصورة أكبر من 4 ميجابايت. جرّب صورة أصغر.',
+  },
+  custYourUpload: {
+    en: 'Your upload', es: 'Tu subida', fr: 'Votre import', ar: 'ملفك المرفوع',
+  },
+  custRemove: {
+    en: 'Remove', es: 'Quitar', fr: 'Supprimer', ar: 'إزالة',
+  },
   custUploadTooBig: {
     en: 'That image is over 8MB — try a smaller one.',
     es: 'La imagen supera los 8MB; prueba una más pequeña.',
@@ -938,6 +956,7 @@ export const messages = {
     fr: "Asseyez-vous avec ce deck et la table portera ce tapis. Laissez-le sur votre tapis par défaut et le deck suivra celui choisi dans les Réglages.",
     ar: 'اجلس بهذه المجموعة فترتدي الطاولة هذه السجادة. اتركها على سجادتك الافتراضية فتتبع المجموعة ما اخترته في الإعدادات.',
   },
+  setMullUnlimited: { en: 'Unlimited', es: 'Ilimitadas', fr: 'Illimitées', ar: 'غير محدودة' },
   preDeckSize: { en: 'Cards in deck', es: 'Cartas del mazo', fr: 'Cartes du deck', ar: 'بطاقات المجموعة' },
   preAvgCost: { en: 'Average cost', es: 'Coste medio', fr: 'Coût moyen', ar: 'متوسط التكلفة' },
   preRam: { en: 'RAM', es: 'RAM', fr: 'RAM', ar: 'ذاكرة' },

@@ -416,9 +416,10 @@ export function MulliganOverlay({ room, me }: { room: RoomState; me: TablePlayer
   // Mirror the server exactly (turns.rs free_first_mulls + MullKeep): the host's
   // freeMulligans override beats the classic default (?? not ||: an explicit 0
   // must win), and Vancouver never bottoms cards.
-  const freeFirst =
-    room.settings?.freeMulligans ??
-    (formatFor(room.format).hasCommander && room.players.length >= 3 ? 1 : 0);
+  const freeFirst = room.settings?.unlimitedMulligans
+    ? Number.POSITIVE_INFINITY
+    : (room.settings?.freeMulligans ??
+      (formatFor(room.format).hasCommander && room.players.length >= 3 ? 1 : 0));
   const vancouver = room.settings?.mulliganRule === 'vancouver';
   const owed = vancouver ? 0 : Math.max(0, (mulligan?.taken ?? 0) - freeFirst);
 

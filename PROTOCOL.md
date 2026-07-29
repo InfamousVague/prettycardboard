@@ -266,7 +266,10 @@ Mulligan (game start):
 - `{kind: "mull.take"}` — reshuffle hand, draw 7, taken += 1.
 - `{kind: "mull.keep", bottomIids}` — bottom N cards where
   N = max(0, taken - freeFirst) (freeFirst = 1 in 3+ player commander and any
-  Brawl, 0 in 1v1 standard), then state -> "kept". Game phase work begins when
+  Brawl, 0 in 1v1 standard), then state -> "kept".
+- Game settings gain `unlimitedMulligans?: bool`. It beats `freeMulligans`
+  outright: every mulligan is free, so a London keep bottoms nothing and a
+  Vancouver redraw never shrinks, however many you take. Game phase work begins when
   all seats are kept.
 
 Undo:
