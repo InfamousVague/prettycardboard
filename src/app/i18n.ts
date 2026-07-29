@@ -810,6 +810,14 @@ export const messages = {
   boCards: { en: 'cards', es: 'cartas', fr: 'cartes', ar: 'بطاقة' },
   boPacksOpened: { en: 'packs opened', es: 'sobres abiertos', fr: 'boosters ouverts', ar: 'عبوات مفتوحة' },
   boMythicRate: { en: 'Mythic rate', es: 'Tasa de mítica', fr: 'Taux de mythique', ar: 'نسبة الأسطورية' },
+  pdOpenPacks: { en: 'Open Packs', es: 'Abrir sobres', fr: 'Ouvrir des boosters', ar: 'افتح العبوات' },
+  pdDismissDock: {
+    en: 'Hide the pack opener',
+    es: 'Ocultar el abridor de sobres',
+    fr: "Masquer l'ouvreur de boosters",
+    ar: 'إخفاء فاتح العبوات',
+  },
+  boPullable: { en: 'In this set', es: 'En este set', fr: 'Dans ce set', ar: 'في هذه المجموعة' },
   boFoilRate: { en: 'Foil rate', es: 'Tasa de foil', fr: 'Taux de foil', ar: 'نسبة الفويل' },
   boPerPack: { en: 'per pack', es: 'por sobre', fr: 'par booster', ar: 'لكل عبوة' },
   boRevealAll: { en: 'Reveal all', es: 'Revelar todo', fr: 'Tout révéler', ar: 'اكشف الكل' },
@@ -966,6 +974,13 @@ export const messages = {
     ar: 'اجلس بهذه المجموعة فترتدي الطاولة هذه السجادة. اتركها على سجادتك الافتراضية فتتبع المجموعة ما اخترته في الإعدادات.',
   },
   setMullUnlimited: { en: 'Unlimited', es: 'Ilimitadas', fr: 'Illimitées', ar: 'غير محدودة' },
+  navNew: { en: 'New game', es: 'Nueva partida', fr: 'Nouvelle partie', ar: 'مباراة جديدة' },
+  plTablesLede: {
+    en: 'Tables you are already at, and everything you have played.',
+    es: 'Las mesas en las que ya estás y todo lo que has jugado.',
+    fr: 'Les tables où vous êtes déjà, et tout ce que vous avez joué.',
+    ar: 'الطاولات التي تجلس إليها بالفعل، وكل ما لعبته.',
+  },
   brShowAll: { en: 'Show {n} more', es: 'Mostrar {n} más', fr: 'Afficher {n} de plus', ar: 'إظهار {n} إضافية' },
   brFilterKind: { en: 'Kind', es: 'Tipo', fr: 'Type', ar: 'النوع' },
   brGroupKind: { en: 'Kind', es: 'Tipo', fr: 'Type', ar: 'النوع' },
@@ -1896,6 +1911,8 @@ export const messages = {
   },
   pdPulled: { en: 'pulled', es: 'sacó', fr: 'a tiré', ar: 'سحب' },
   pdYou: { en: 'You', es: 'Tú', fr: 'Vous', ar: 'أنت' },
+  pdSealed: { en: 'Sealed', es: 'Sellado', fr: 'Scellé', ar: 'مغلق' },
+  pdTearing: { en: 'Tearing open…', es: 'Abriendo…', fr: 'Ouverture…', ar: 'جارٍ الفتح…' },
 } satisfies Record<string, Entry>;
 
 export type MessageKey = keyof typeof messages;

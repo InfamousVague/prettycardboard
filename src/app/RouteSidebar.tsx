@@ -57,7 +57,7 @@ export function RouteSidebar({ route, desktop }: { route: Route; desktop: boolea
 
   const quickActions = (
     <SidebarSection title={t('sbQuickActions')}>
-      <SidebarItem icon={<Swords size={17} />} onClick={() => go('play')}>
+      <SidebarItem icon={<Swords size={17} />} onClick={() => go('new')}>
         {t('playNewTable')}
       </SidebarItem>
       <SidebarItem

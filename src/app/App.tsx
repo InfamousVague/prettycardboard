@@ -13,7 +13,20 @@ import {
   VisualFeedbackProvider,
   direction,
 } from '@glacier/react';
-import { Compass, House, Layers, PackageOpen, PanelLeft, Paintbrush, Settings, Swords, User, Users } from '@glacier/icons';
+import {
+  Compass,
+  House,
+  Library,
+  PackageOpen,
+  PanelLeft,
+  Paintbrush,
+  Plus,
+  Settings,
+  Swords,
+  User,
+  Users,
+  WalletCards,
+} from '@glacier/icons';
 import {
   applyPreferences,
   loadPreferences,
@@ -39,6 +52,7 @@ import { InvitePopup } from './components/InvitePopup.tsx';
 import { DownloadBanner } from './components/DownloadBanner.tsx';
 import { RotateOverlay } from './pages/table/RotateOverlay.tsx';
 import { useMobileLayout, usePhoneViewport, usePortrait } from './hooks/useIsPhone.ts';
+import { usePreference } from './hooks/usePreference.ts';
 import { loadAltArtCatalog } from './data/scryfall.ts';
 import { DEFAULT_PLAYMAT, isCustomPlaymat, playmatUrl } from './data/playmats.ts';
 
@@ -53,6 +67,11 @@ const PlayPage = lazy(() => import('./pages/PlayPage.tsx').then((m) => ({ defaul
 const DecksPage = lazy(() => import('./pages/DecksPage.tsx').then((m) => ({ default: m.DecksPage })));
 const BrowsePage = lazy(() => import('./pages/BrowsePage.tsx').then((m) => ({ default: m.BrowsePage })));
 const BoostersPage = lazy(() => import('./pages/BoostersPage.tsx').then((m) => ({ default: m.BoostersPage })));
+const CollectionPage = lazy(() => import('./pages/CollectionPage.tsx').then((m) => ({ default: m.CollectionPage })));
+// The floating pack dock follows the player everywhere, table included, so it
+// is mounted beside the shell rather than inside a route - and lazily, since a
+// player who never opens it should not pay for the booster machinery.
+const PackDock = lazy(() => import('./components/PackDock.tsx'));
 const FriendsPage = lazy(() => import('./pages/FriendsPage.tsx').then((m) => ({ default: m.FriendsPage })));
 const ProfilePage = lazy(() => import('./pages/ProfilePage.tsx').then((m) => ({ default: m.ProfilePage })));
 const TablePage = lazy(() => import('./pages/TablePage.tsx').then((m) => ({ default: m.TablePage })));
@@ -87,12 +106,23 @@ function PageFallback() {
   );
 }
 
-const SIDEBAR_LABEL: Record<Route, 'sbPlayTables' | 'sbDecksLibrary' | 'sbBrowseCatalog' | 'sbBoosterSets' | 'sbFriendsPeople' | 'sbProfileYou'> = {
+const SIDEBAR_LABEL: Record<
+  Route,
+  | 'sbPlayTables'
+  | 'sbDecksLibrary'
+  | 'sbBrowseCatalog'
+  | 'sbBoosterSets'
+  | 'sbCollectionBinder'
+  | 'sbFriendsPeople'
+  | 'sbProfileYou'
+> = {
   home: 'sbPlayTables',
+  new: 'sbPlayTables',
   play: 'sbPlayTables',
   decks: 'sbDecksLibrary',
   browse: 'sbBrowseCatalog',
   boosters: 'sbBoosterSets',
+  collection: 'sbCollectionBinder',
   friends: 'sbFriendsPeople',
   profile: 'sbProfileYou',
   download: 'sbProfileYou',
@@ -149,6 +179,7 @@ function AppRail({
 }) {
   const t = useT();
   const incoming = useApp((state) => state.friends.incoming.length);
+  const wip = usePreference('enableWip');
   return (
     <NavBar
       orientation={horizontal ? 'horizontal' : 'vertical'}
@@ -172,13 +203,19 @@ function AppRail({
         onClick={() => onNavigate('home')}
       />
       <NavBarItem
+        icon={<Plus size={20} />}
+        label={t('navNew')}
+        active={route === 'new'}
+        onClick={() => onNavigate('new')}
+      />
+      <NavBarItem
         icon={<Swords size={20} />}
         label={t('navPlay')}
         active={route === 'play'}
         onClick={() => onNavigate('play')}
       />
       <NavBarItem
-        icon={<Layers size={20} />}
+        icon={<WalletCards size={20} />}
         label={t('navDecks')}
         active={route === 'decks'}
         onClick={() => onNavigate('decks')}
@@ -189,11 +226,29 @@ function AppRail({
         active={route === 'browse'}
         onClick={() => onNavigate('browse')}
       />
+      {/* Packs are not in the rail: the route still works and the floating
+          dock still opens them, but browsing boosters is not a top-level
+          errand next to playing a game. Behind the WIP toggle for the people
+          still building it. */}
+      {wip && (
+        <NavBarItem
+          icon={<PackageOpen size={20} />}
+          label={t('navBoosters')}
+          active={route === 'boosters'}
+          // Additive: still navigates, and ALSO brings the floating pack dock
+          // back if the player dismissed its pill (PackDock listens for this
+          // event) - so Boosters is always the way back to packs.
+          onClick={() => {
+            onNavigate('boosters');
+            window.dispatchEvent(new Event('pc:open-packdock'));
+          }}
+        />
+      )}
       <NavBarItem
-        icon={<PackageOpen size={20} />}
-        label={t('navBoosters')}
-        active={route === 'boosters'}
-        onClick={() => onNavigate('boosters')}
+        icon={<Library size={20} />}
+        label={t('navCollection')}
+        active={route === 'collection'}
+        onClick={() => onNavigate('collection')}
       />
       <NavBarItem
         icon={<Users size={20} />}
@@ -313,6 +368,8 @@ function Shell({
     <JoinTablePage code={pendingJoin} />
   ) : route === 'home' ? (
     <HomePage />
+  ) : route === 'new' ? (
+    <PlayPage mode="new" />
   ) : route === 'play' ? (
     <PlayPage />
   ) : route === 'decks' ? (
@@ -321,6 +378,8 @@ function Shell({
     <BrowsePage />
   ) : route === 'boosters' ? (
     <BoostersPage />
+  ) : route === 'collection' ? (
+    <CollectionPage onOpenBoosters={() => navigate('boosters')} />
   ) : route === 'friends' ? (
     <FriendsPage />
   ) : route === 'download' ? (
@@ -522,6 +581,9 @@ export function App() {
                   </Suspense>
                   <Notifier />
                   <InvitePopup />
+                  <Suspense fallback={null}>
+                    <PackDock />
+                  </Suspense>
                 </>
               ) : (
                 <Suspense fallback={<PageFallback />}>

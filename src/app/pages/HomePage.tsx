@@ -224,7 +224,7 @@ function PlayerHero({
           <span className="heroResumeGo">{t('plResume')} →</span>
         </button>
       ) : (
-        <button type="button" className="heroSide heroPlayCta" onClick={() => (window.location.hash = '/play')}>
+        <button type="button" className="heroSide heroPlayCta" onClick={() => (window.location.hash = '/new')}>
           <Swords size={26} />
           <span className="heroCtaTitle">{t('hmStartTable')}</span>
           <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>

@@ -36,9 +36,15 @@ import './play.css';
  * table, join by code, and answer invites. Joining always asks which deck to
  * bring - the fanned-out game itself lives in TablePage. Resuming a saved
  * table sends no deckId: the seat already holds the deck.
+ *
+ * Two routes, one component: `new` (the + in the rail) is every way INTO a
+ * game - create, join by code, answer an invite - and `tables` is the games you
+ * are already in plus what you have played. They share the deck picker, the
+ * join call and the room list, which is why splitting them into two files would
+ * mean keeping two copies of all of it in step.
  */
 
-export function PlayPage() {
+export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
   const t = useT();
   const locale = useLocale();
   const { toast } = useToast();
@@ -152,13 +158,16 @@ export function PlayPage() {
     }
   };
 
+  const starting = mode === 'new';
   return (
     <div className="page playPage">
-      <Heading level={1}>{t('playTitle')}</Heading>
+      <Heading level={1}>{starting ? t('playTitle') : t('plYourTables')}</Heading>
       <Text size={Size.Large} tone={TextTone.Muted} className="lede">
-        {t('playLede')}
+        {starting ? t('playLede') : t('plTablesLede')}
       </Text>
 
+      {starting && (
+      <>
       <div className="playGrid">
         <Card elevation={2} className="playCard">
           <div className="playCardIcon" aria-hidden>
@@ -281,8 +290,12 @@ export function PlayPage() {
         </section>
       )}
 
+      </>
+      )}
+
+      {!starting && (
+      <>
       <section className="myTables">
-        <Heading level={2}>{t('plYourTables')}</Heading>
         {rooms !== null && rooms.length === 0 ? (
           <Text tone={TextTone.Muted}>{t('plNoTables')}</Text>
         ) : (
@@ -358,6 +371,8 @@ export function PlayPage() {
           <Heading level={2}>{t('plHistory')}</Heading>
           <MatchHistory matches={history} myUsername={identity?.username} onReplay={(roomId) => join(roomId)} />
         </section>
+      )}
+      </>
       )}
 
       <AlertDialog

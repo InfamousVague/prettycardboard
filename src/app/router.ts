@@ -2,7 +2,18 @@ import { useEffect, useState } from 'react';
 
 /** The routed pages. Settings opens in a modal; the live table is not a route -
  * it takes over the shell whenever the player is seated (or spectating). */
-export const ROUTES = ['home', 'play', 'decks', 'browse', 'boosters', 'friends', 'profile', 'download'] as const;
+export const ROUTES = [
+  'home',
+  'new',
+  'play',
+  'decks',
+  'browse',
+  'boosters',
+  'collection',
+  'friends',
+  'profile',
+  'download',
+] as const;
 export type Route = (typeof ROUTES)[number];
 
 const DEFAULT_ROUTE: Route = 'home';
