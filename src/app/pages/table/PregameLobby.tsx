@@ -1,6 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { Avatar, Button, Input, Kbd, Pill, SegmentedControl, Select, Size, StatusDot, Text, TextTone } from '@glacier/react';
-import { Check, Circle, Crown, Eye, Layers, Link2, Play, Settings2, ThumbsUp, Trophy, UserPlus, WifiOff } from '@glacier/icons';
+import {
+  Check,
+  Circle,
+  Cpu,
+  Crown,
+  Eye,
+  Gauge,
+  Layers,
+  Link2,
+  Mountain,
+  Play,
+  Settings2,
+  Sparkles,
+  Swords,
+  ThumbsUp,
+  Timer,
+  Trophy,
+  UserPlus,
+  WifiOff,
+} from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import { useApp } from '../../state/appStore.ts';
 import { useGame } from '../../state/gameStore.ts';
@@ -9,10 +28,19 @@ import { userStats } from '../../net/api.ts';
 import { deckSummaryArt } from '../../data/deckCover.ts';
 import { rankFor, winRate } from '../../data/ranks.ts';
 import { GameTag } from '../../components/GameTag.tsx';
+import { GameCard } from '../../components/GameCard.tsx';
 import { SaltPile } from '../../components/SaltPile.tsx';
+import { playmatBackground } from '../../data/playmats.ts';
+import { resolveCardImage } from '../../data/games.ts';
 import { formatFor } from '../../data/formats.ts';
 import { LobbyChat } from './LobbyChat.tsx';
 import type { GameSettings, RoomState, TablePlayer, UserStats } from '../../net/types.ts';
+
+/** "1m 40s" / "45s" - a typical turn, short enough for a stat chip. */
+function fmtTurn(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return s >= 60 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s` : `${s}s`;
+}
 
 const DEFAULT_SETTINGS: GameSettings = {
   startingLife: null,
@@ -158,7 +186,28 @@ export function PregameLobby({
               data-ready={player.ready || undefined}
               data-offline={player.online === false || undefined}
             >
-              <span className="pregameSeatNumber">{t('preSeat')} {seat + 1}</span>
+              {/* The seat wears the deck it brought: that player's playmat as
+                  the felt, their cover card standing on it. */}
+              <div
+                className="pregameArt"
+                data-empty={!player.deckMeta?.cover || undefined}
+                style={
+                  player.playmat
+                    ? ({ ['--pc-seat-mat' as string]: playmatBackground(player.playmat) } as CSSProperties)
+                    : undefined
+                }
+              >
+                {player.deckMeta?.cover && (
+                  <GameCard
+                    name={player.deckName || ''}
+                    imageUrl={resolveCardImage(room.game, player.deckMeta.cover)}
+                    width={96}
+                    foil
+                    tilt={6}
+                  />
+                )}
+                <span className="pregameSeatNumber">{t('preSeat')} {seat + 1}</span>
+              </div>
               <div className="pregameIdentity">
                 <Avatar name={player.username} size="md" />
                 <div className="pregamePlayerName">
@@ -204,12 +253,65 @@ export function PregameLobby({
                         <SaltPile size={11} /> {stats.salt.toFixed(1)}
                       </span>
                     )}
+                    {/* How long this player usually takes on a turn - the one
+                        number everyone at a four-player table wants. */}
+                    {stats != null && stats.avgTurnMs > 0 && (
+                      <span className="pregameStat" title={t('preAvgTurn')}>
+                        <Timer size={11} /> {fmtTurn(stats.avgTurnMs)}
+                      </span>
+                    )}
                   </div>
                 );
               })()}
               <span className="pregameDeck" data-empty={!player.deckName || undefined}>
                 <Layers size={14} /> {player.deckName || t('preNoDeck')}
               </span>
+              {/* What the deck is made of. Aggregates only - the list itself is
+                  never public - and only once its owner has pushed them. */}
+              {player.deckMeta && (
+                <div className="pregameDeckMeta">
+                  {player.deckMeta.colors && player.deckMeta.colors.length > 0 && (
+                    <span className="pregameDeckPips" aria-hidden>
+                      {player.deckMeta.colors.map((color) => (
+                        <i key={color} data-color={color} />
+                      ))}
+                    </span>
+                  )}
+                  <span className="pregameStat" title={t('preDeckSize')}>
+                    <Layers size={11} /> {player.deckMeta.size}
+                  </span>
+                  {player.deckMeta.avgMv != null && player.deckMeta.avgMv > 0 && (
+                    <span className="pregameStat" title={t('preAvgMv')}>
+                      <Gauge size={11} /> {player.deckMeta.avgMv}
+                    </span>
+                  )}
+                  {player.deckMeta.creatures != null && player.deckMeta.creatures > 0 && (
+                    <span className="pregameStat" title={t('preCreatures')}>
+                      <Swords size={11} /> {player.deckMeta.creatures}
+                    </span>
+                  )}
+                  {player.deckMeta.lands != null && player.deckMeta.lands > 0 && (
+                    <span className="pregameStat" title={t('preLands')}>
+                      <Mountain size={11} /> {player.deckMeta.lands}
+                    </span>
+                  )}
+                  {player.deckMeta.spells != null && player.deckMeta.spells > 0 && (
+                    <span className="pregameStat" title={t('preSpells')}>
+                      <Sparkles size={11} /> {player.deckMeta.spells}
+                    </span>
+                  )}
+                  {player.deckMeta.ram != null && (
+                    <span className="pregameStat" title={t('preRam')}>
+                      <Cpu size={11} /> {player.deckMeta.ram}
+                    </span>
+                  )}
+                  {player.deckMeta.avgCost != null && player.deckMeta.avgCost > 0 && (
+                    <span className="pregameStat" title={t('preAvgCost')}>
+                      <Gauge size={11} /> {player.deckMeta.avgCost}
+                    </span>
+                  )}
+                </div>
+              )}
               <span className="pregameReady" data-ready={player.ready || undefined}>
                 {player.online === false ? (
                   <><WifiOff size={14} /> {t('preOffline')}</>

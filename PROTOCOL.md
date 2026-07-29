@@ -479,7 +479,10 @@ cosmetic-setting pattern (not a game action: no undo/timeline churn).
   small client-computed public metrics blob for their current deck (colors /
   curve / type counts; the server stores decks as bare card ids and cannot
   derive these). Object-only, clamped to 2KB, cleared on `room.deck.set`.
-  Each player in `RoomState` gains `deckMeta` (public to all viewers).
+  Each player in `RoomState` gains `deckMeta` (public to all viewers). The blob
+  also carries `cover`: the deck's cover-card id, so the lobby can show every
+  seat the deck it is sitting behind. The card LIST stays private - only its
+  face and the aggregates are public.
 - `library.reveal`'s `room.event` payload has always carried the full `cards`
   array to every viewer INCLUDING spectators; clients now render it as a
   fanned reveal tray (dismiss is viewer-local; reveals are never in

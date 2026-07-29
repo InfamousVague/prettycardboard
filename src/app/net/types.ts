@@ -22,6 +22,9 @@ export interface MatPos {
  * MTG decks fill colors/avgMv/type counts; Cyberpunk fills ram/avgCost. */
 export interface DeckMeta {
   size: number;
+  /** The deck's cover card id, so every seat at the table can show the deck's
+   *  artwork - decks themselves are never public, but their face is. */
+  cover?: string;
   colors?: string[];
   avgMv?: number;
   creatures?: number;

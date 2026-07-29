@@ -11,10 +11,12 @@ import type { Deck, DeckMeta } from '../net/types.ts';
  * cyberDeckStats. Deliberately coarse - aggregates only, never the list.
  */
 export async function computeDeckMeta(deck: Deck, game: string): Promise<DeckMeta> {
+  const cover = coverOf(deck);
   if (game === 'cyberpunk') {
     const stats = cyberDeckStats(deck);
     return {
       size: stats.total,
+      cover,
       ram: stats.ramBudget.reduce((sum, entry) => sum + entry.ram, 0),
       avgCost: round1(stats.avgCost),
     };
@@ -46,6 +48,7 @@ export async function computeDeckMeta(deck: Deck, game: string): Promise<DeckMet
   const ORDER = ['W', 'U', 'B', 'R', 'G'];
   return {
     size,
+    cover,
     colors: ORDER.filter((color) => colors.has(color)),
     avgMv: mvCount > 0 ? round1(mvSum / mvCount) : 0,
     creatures,
@@ -57,4 +60,12 @@ export async function computeDeckMeta(deck: Deck, game: string): Promise<DeckMet
 
 function round1(value: number): number {
   return Math.round(value * 10) / 10;
+}
+
+/** The deck's face: the chosen header card, else its commander, else the first
+ *  card it lists - the same order the decks list uses for its tiles. */
+function coverOf(deck: Deck): string | undefined {
+  if (deck.header) return deck.header;
+  const commander = deck.cards.find((card) => card.board === 'commander');
+  return (commander ?? deck.cards[0])?.scryfallId;
 }

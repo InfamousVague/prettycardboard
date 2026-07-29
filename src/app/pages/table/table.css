@@ -339,14 +339,17 @@
 
 .pregameLobby {
   flex: 1;
-  width: min(72rem, 100%);
+  /* Seat cards now carry deck artwork, so they need real width - and the lobby
+     scrolls itself rather than growing the page off the bottom. */
+  width: min(90rem, 100%);
   min-height: 0;
   margin-inline: auto;
   padding: var(--glacier-space-5) var(--glacier-space-6) var(--glacier-space-6);
   display: flex;
   flex-direction: column;
   gap: var(--glacier-space-5);
-  overflow: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .pregameHero {
@@ -386,17 +389,18 @@
 
 .pregameSeats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
-  gap: var(--glacier-space-3);
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: var(--glacier-space-4);
+  align-content: start;
 }
 
 .pregameSeat {
   min-width: 0;
-  min-height: 10rem;
-  padding: var(--glacier-space-3);
+  padding: 0 0 var(--glacier-space-3);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: var(--glacier-space-3);
+  gap: var(--glacier-space-2);
   border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 72%, transparent);
   border-radius: 8px;
   background: color-mix(in oklch, var(--glacier-surface-raised) 76%, transparent);
@@ -688,7 +692,7 @@
   }
 
   .pregameSeats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
   }
 }
 

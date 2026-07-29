@@ -938,6 +938,15 @@ export const messages = {
     fr: "Asseyez-vous avec ce deck et la table portera ce tapis. Laissez-le sur votre tapis par défaut et le deck suivra celui choisi dans les Réglages.",
     ar: 'اجلس بهذه المجموعة فترتدي الطاولة هذه السجادة. اتركها على سجادتك الافتراضية فتتبع المجموعة ما اخترته في الإعدادات.',
   },
+  preDeckSize: { en: 'Cards in deck', es: 'Cartas del mazo', fr: 'Cartes du deck', ar: 'بطاقات المجموعة' },
+  preAvgCost: { en: 'Average cost', es: 'Coste medio', fr: 'Coût moyen', ar: 'متوسط التكلفة' },
+  preRam: { en: 'RAM', es: 'RAM', fr: 'RAM', ar: 'ذاكرة' },
+  preAvgTurn: {
+    en: 'How long their turns usually take',
+    es: 'Cuánto suelen durar sus turnos',
+    fr: 'Durée habituelle de leurs tours',
+    ar: 'كم يستغرق دوره عادةً',
+  },
   preSaltHint: {
     en: "How salty this player's decks have played, averaged across the ones the table has rated",
     es: 'Qué tan salados han resultado los mazos de este jugador, en promedio de los valorados por la mesa',
