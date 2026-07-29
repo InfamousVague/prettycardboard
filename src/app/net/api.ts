@@ -74,8 +74,40 @@ export function me(): Promise<{
    *  on the account rather than in one browser's storage, so signing in on
    *  another machine still finds your own mat. */
   customPlaymat?: string | null;
+  /** The `custom-…` id of this account's uploaded card back, same reasoning. */
+  customCardBack?: string | null;
 }> {
   return request('GET', '/api/me');
+}
+
+/**
+ * Upload an image as your custom card back (raw bytes; the server sniffs the
+ * real type and keeps ONE back per account). The returned id (`custom-…`) flows
+ * through the normal card-back preference and the seat's `cardBack` sync, so
+ * every viewer paints your face-down cards with it.
+ */
+export async function uploadCardBack(file: Blob): Promise<{ id: string; url: string }> {
+  const headers: Record<string, string> = {};
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
+  const response = await fetch(`${SERVER_URL}/api/cardback`, { method: 'POST', headers, body: file });
+  if (!response.ok) {
+    let code = 'error';
+    let message = response.statusText;
+    try {
+      const data = (await response.json()) as { code?: string; message?: string };
+      code = data.code ?? code;
+      message = data.message ?? message;
+    } catch {
+      // non-JSON error body
+    }
+    throw new ApiError(response.status, code, message);
+  }
+  return (await response.json()) as { id: string; url: string };
+}
+
+/** Remove this account's uploaded card back. */
+export function deleteCardBack(): Promise<{ ok: boolean }> {
+  return request('DELETE', '/api/cardback');
 }
 
 export function searchUsers(q: string): Promise<UserHit[]> {
@@ -121,8 +153,9 @@ export function createDeck(
   header?: string | null,
   game?: string,
   playmat?: string | null,
+  cardBack?: string | null,
 ): Promise<{ id: string }> {
-  return request('POST', '/api/decks', { name, format, cards, header, game, playmat });
+  return request('POST', '/api/decks', { name, format, cards, header, game, playmat, cardBack });
 }
 
 export function updateDeck(
@@ -132,8 +165,9 @@ export function updateDeck(
   cards: DeckCard[],
   header?: string | null,
   playmat?: string | null,
+  cardBack?: string | null,
 ): Promise<void> {
-  return request('PUT', `/api/decks/${id}`, { name, format, cards, header, playmat });
+  return request('PUT', `/api/decks/${id}`, { name, format, cards, header, playmat, cardBack });
 }
 
 export function deleteDeck(id: string): Promise<void> {

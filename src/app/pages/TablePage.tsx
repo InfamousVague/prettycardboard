@@ -255,6 +255,7 @@ export function TablePage() {
     ),
   );
   const deckMat = myDeck?.playmat ?? null;
+  const deckBack = myDeck?.cardBack ?? null;
   useEffect(() => {
     const prime = () => primeSounds();
     window.addEventListener('pointerdown', prime, { once: true });
@@ -314,6 +315,7 @@ export function TablePage() {
   // you sit down with it - not a lock: picking a mat in Settings afterwards has
   // to win, or a deck with a mat leaves you unable to change the felt at all.
   const sentMat = useRef<string | null>(null);
+  const sentBack = useRef<string | null>(null);
   useEffect(() => {
     if (!roomId || spectating) return;
     const share = () => {
@@ -323,9 +325,8 @@ export function TablePage() {
       // dresses a seat that arrived bare. After that, only a genuine change of
       // the mat PREFERENCE pushes - the dozen unrelated `pc:preferences` events
       // (volume, locale, card size) leave the felt alone.
-      const seatMat = useGame
-        .getState()
-        .room?.players.find((player) => player.userId === identity?.userId)?.playmat;
+      const seat = useGame.getState().room?.players.find((player) => player.userId === identity?.userId);
+      const seatMat = seat?.playmat;
       const first = sentMat.current === null;
       const prefChanged = !first && sentMat.current !== prefs.playmat;
       const mat = first ? (seatMat ? null : (deckMat ?? prefs.playmat)) : prefChanged ? prefs.playmat : null;
@@ -333,10 +334,24 @@ export function TablePage() {
       // Remember the preference either way: the next share only pushes when
       // the player has actually chosen a different mat since this one.
       sentMat.current = prefs.playmat;
-      send({ type: 'cardback.set', id: prefs.cardBack });
+      // The deck's sleeves work exactly like its mat: the server dresses the
+      // seat when the deck is chosen, the first share only covers a seat that
+      // arrived bare, and afterwards only a real change of the card-back
+      // preference pushes - so everyone at the table sees the change the
+      // moment it happens, and each seat keeps its own back.
+      const firstBack = sentBack.current === null;
+      const backChanged = !firstBack && sentBack.current !== prefs.cardBack;
+      const back = firstBack
+        ? (seat?.cardBack ? null : (deckBack ?? prefs.cardBack))
+        : backChanged
+          ? prefs.cardBack
+          : null;
+      if (back != null) send({ type: 'cardback.set', id: back });
+      sentBack.current = prefs.cardBack;
       send({ type: 'auto.set', untap: prefs.autoUntap, draw: prefs.autoDraw });
     };
     sentMat.current = null;
+    sentBack.current = null;
     share();
     window.addEventListener('pc:preferences', share);
     // Reconnects rejoin the room server-side; re-share the mat afterward.
@@ -349,7 +364,7 @@ export function TablePage() {
     };
     // Re-runs on a deck change too: switching to a deck with no mat of its own
     // must hand the seat back to the global preference.
-  }, [roomId, spectating, deckMat]);
+  }, [roomId, spectating, deckMat, deckBack]);
 
   // Share my deck's public metrics (colors/curve/counts) for the matchup
   // splash whenever my seat has a deck but no metrics yet - the server clears
@@ -782,24 +797,15 @@ export function TablePage() {
                       <MyBoard me={me} room={room} onMenu={openMenu} onHover={handleHover} />
                     </div>
                   ) : (
-                    <>
-                      {/* Inert: SeatFrame renders real buttons (pile triggers, take
-                          damage, defender chips). Nesting those inside the cell's
-                          own button was invalid DOM and let a pile click both open
-                          the viewer AND stage the seat. */}
-                      <div className="playerGridPreview" inert>
-                        <SeatFrame room={room} player={player} me={me} canAct={false} onHover={handleHover} stage />
-                      </div>
-                      <button
-                        type="button"
-                        className="playerGridHit"
-                        aria-label={player.username}
-                        onClick={() => {
-                          setPinnedSeat(player.seat);
-                          setGridView(false);
-                        }}
-                      />
-                    </>
+                    /* Live, not inert, and with no staging overlay: the grid is
+                       for READING other boards, so hovering a card previews it
+                       and clicking blows it up in the lightbox. Clicking a mat
+                       no longer throws you into that seat's fullscreen view.
+                       SeatFrame is read-only (no move actions), so nothing here
+                       can mutate another player's board. */
+                    <div className="playerGridPreview">
+                      <SeatFrame room={room} player={player} me={me} canAct={false} onHover={handleHover} stage />
+                    </div>
                   )}
                 </div>
               ))}

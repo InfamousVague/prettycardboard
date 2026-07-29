@@ -78,6 +78,51 @@
   padding-block: var(--glacier-space-2);
 }
 
+/* The card-back picker reuses the mat grid, but a card back is portrait, so it
+   gets its own track and aspect. */
+.backPicker {
+  display: grid;
+  /* Portrait tiles, so a wider track than the mats get - a card back is worth
+     seeing at something like the size it will play at. */
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  grid-auto-rows: max-content;
+  gap: var(--glacier-space-3);
+}
+
+.backSwatch {
+  appearance: none;
+  position: relative;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--glacier-radius-md);
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+  aspect-ratio: 488 / 680;
+  transition: transform var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.backSwatch img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.backSwatch:hover {
+  transform: translateY(-2px);
+}
+
+.backSwatch[data-selected] {
+  border-color: var(--glacier-accent-solid);
+  box-shadow: 0 0 12px color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent);
+}
+
+.backSwatch:focus-visible {
+  outline: 2px solid var(--glacier-accent-solid);
+  outline-offset: 2px;
+}
+
 /* A deck that carries its own playmat wears it as the tile's backdrop, so the
    list reads like a shelf of mats with a commander standing on each. Behind a
    scrim, because the card art and the deck name have to stay the loud part. */

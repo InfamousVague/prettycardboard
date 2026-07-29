@@ -56,6 +56,8 @@ export interface DeckSummary {
   coverCardId?: string | null;
   /** The mat this deck brings to the table; null = the player's own default. */
   playmat?: string | null;
+  /** The card back this deck's cards wear; null = the player's own default. */
+  cardBack?: string | null;
   updatedAt: string;
 }
 
@@ -71,6 +73,8 @@ export interface Deck {
   /** The mat this deck brings to the table, overriding the player's global mat
    *  preference while they are seated with it. null = use the preference. */
   playmat?: string | null;
+  /** The card back this deck's cards wear, same deal - its sleeves. */
+  cardBack?: string | null;
 }
 
 export interface FriendEntry {
@@ -421,7 +425,7 @@ export type ServerMessage =
       roomId: string;
     }
   | { type: 'room.hand.hover'; fromUserId: string; position: number | null; roomId: string }
-  | { type: 'cursor'; fromUserId: string; username: string; seat: number; x: number; y: number; hover: string | null; roomId: string }
+  | { type: 'cursor'; fromUserId: string; username: string; seat: number; mat?: number | null; x: number; y: number; hover: string | null; roomId: string }
   | { type: 'room.event'; seq: number; actor: string; action: GameAction & Record<string, unknown>; roomId: string }
   | { type: 'chat'; from: { userId: string; username: string }; text: string; ts: number; roomId: string }
   | { type: 'log'; seq: number; text: string; ts: number; roomId: string }

@@ -3,7 +3,8 @@ import { Button, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
 import { Upload } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { PLAYMATS, playmatBackground, playmatUrl } from '../data/playmats.ts';
-import { uploadPlaymat } from '../net/api.ts';
+import { CARD_BACKS, cardBackUrl } from '../data/cardBacks.ts';
+import { deleteCardBack, uploadCardBack, uploadPlaymat } from '../net/api.ts';
 import { presentThemes, THEME_LABEL_KEY, type AssetTheme } from '../data/themes.ts';
 
 type Filter = 'all' | AssetTheme;
@@ -159,6 +160,158 @@ export function PlaymatUpload({
         onChange={(event) => void pick(event.target.files?.[0])}
       />
     </div>
+  );
+}
+
+/**
+ * Upload-your-own card back. Same id-in / id-out contract as PlaymatUpload, with
+ * one addition: a card back is on screen constantly and on every face-down card,
+ * so a bad upload needs to be removable — the mat equivalent can just be
+ * switched away from.
+ */
+export function CardBackUpload({
+  hasUpload,
+  onUploaded,
+  onRemoved,
+}: {
+  hasUpload: boolean;
+  onUploaded: (id: string) => void;
+  onRemoved: () => void;
+}) {
+  const t = useT();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const pick = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    // Matches the server's BACK_MAX_BYTES so the failure is immediate and
+    // legible rather than a 413 after the whole body has been uploaded.
+    if (file.size > 4 * 1024 * 1024) {
+      setError(t('custBackTooBig'));
+      return;
+    }
+    setBusy(true);
+    try {
+      const { id } = await uploadCardBack(file);
+      onUploaded(id);
+    } catch {
+      setError(t('custUploadFailed'));
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try {
+      await deleteCardBack();
+      onRemoved();
+    } catch {
+      setError(t('custUploadFailed'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="matUploadRow">
+      <div className="matUploadActions">
+        <Button variant="soft" size="sm" loading={busy} onClick={() => inputRef.current?.click()}>
+          <Upload size={15} /> {t('custUpload')}
+        </Button>
+        {hasUpload && (
+          <Button variant="ghost" size="sm" disabled={busy} onClick={() => void remove()}>
+            {t('custRemove')}
+          </Button>
+        )}
+        <Text as="span" size={Size.XSmall} tone={error ? TextTone.Danger : TextTone.Subtle}>
+          {error ?? t('custBackHint')}
+        </Text>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        hidden
+        onChange={(event) => void pick(event.target.files?.[0])}
+      />
+    </div>
+  );
+}
+
+/**
+ * The card-back grid, same shape as the playmat one: a "no back of its own"
+ * lead tile for a deck that should follow the player's setting, the account's
+ * upload if it has one, then the bundled catalogue.
+ */
+export function CardBackPicker({
+  selectedId,
+  onSelect,
+  ariaLabel,
+  noneLabel,
+  onNone,
+  customId,
+  scrollable,
+}: {
+  selectedId: string;
+  onSelect: (id: string) => void;
+  ariaLabel: string;
+  noneLabel?: string;
+  onNone?: () => void;
+  customId?: string;
+  scrollable?: boolean;
+}) {
+  const t = useT();
+  return (
+    <ThemedPicker
+      items={CARD_BACKS}
+      selectedId={selectedId}
+      onSelect={onSelect}
+      ariaLabel={ariaLabel}
+      gridClass="backPicker"
+      swatchClass="backSwatch"
+      scrollable={scrollable}
+      lead={
+        <>
+          {noneLabel != null && onNone != null && (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={selectedId === ''}
+              className="backSwatch matSwatchNone"
+              data-selected={selectedId === '' || undefined}
+              title={noneLabel}
+              onClick={onNone}
+            >
+              <span className="matSwatchName">{noneLabel}</span>
+            </button>
+          )}
+          {customId ? (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={selectedId === customId}
+              className="backSwatch"
+              data-selected={selectedId === customId || undefined}
+              title={t('custUploadYours')}
+              onClick={() => onSelect(customId)}
+            >
+              <img src={cardBackUrl(customId)} alt={t('custUploadYours')} draggable={false} />
+              <span className="matSwatchName">{t('custUploadYours')}</span>
+            </button>
+          ) : null}
+        </>
+      }
+      renderMedia={(back) => (
+        <>
+          <img src={cardBackUrl(back.id)} alt={back.name} loading="lazy" draggable={false} />
+          <span className="matSwatchName">{back.name}</span>
+        </>
+      )}
+    />
   );
 }
 

@@ -40,7 +40,9 @@ enum ClientMsg {
     /// Live table pointer: normalized position over the table plus the card iid
     /// currently hovered (if any). Ephemeral presence, relayed and never stored.
     #[serde(rename = "cursor.move")]
-    CursorMove { x: f64, y: f64, hover: Option<String> },
+    /// `mat` is the seat whose playmat the position is normalized against -
+    /// None when the pointer is off every mat, which hides it for viewers.
+    CursorMove { x: f64, y: f64, hover: Option<String>, mat: Option<i64> },
     #[serde(rename = "chat.send")]
     ChatSend { text: String },
     #[serde(rename = "invite.send", rename_all = "camelCase")]
@@ -202,7 +204,7 @@ fn handle_msg(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
         ClientMsg::RoomSettings { settings } => room_settings(app, user, settings, tx),
         ClientMsg::RoomPing { target_user_id } => room_ping(app, user, &target_user_id, tx),
         ClientMsg::RoomHandHover { position } => room_hand_hover(app, user, position, tx),
-        ClientMsg::CursorMove { x, y, hover } => cursor_move(app, user, x, y, hover, tx),
+        ClientMsg::CursorMove { x, y, hover, mat } => cursor_move(app, user, x, y, hover, mat, tx),
         ClientMsg::ChatSend { text } => chat_send(app, user, &text, tx),
         ClientMsg::InviteSend { to_user_id, room_id } => invite_send(app, user, &to_user_id, &room_id),
         ClientMsg::GameAction { action } => game_action(app, user, action, tx),
@@ -390,6 +392,10 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
     // A deck may bring its own mat; None leaves the seat bare so the client's
     // global preference lands on it a moment later.
     let deck_mat = valid_playmat(app, &user.id, deck.as_ref().and_then(|d| d.playmat.clone()));
+    // Same deal for the deck's sleeves. Card-back ids are relayed unvalidated
+    // (they are client asset names - see card_back_set), so this is a plain
+    // carry-over rather than a check.
+    let deck_back = deck.as_ref().and_then(|d| d.card_back.clone());
     let (command, library) = deck
         .map(|d| rooms::build_zones(&d.cards(), is_commander_room, &room.game))
         .unwrap_or_default();
@@ -407,7 +413,7 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
         commander_tax: Default::default(),
         mulligan: None,
         playmat: deck_mat,
-        card_back: None,
+        card_back: deck_back,
         deck_meta: None,
         auto_untap: false,
         auto_draw: false,
@@ -783,12 +789,16 @@ fn room_deck_set(app: &Arc<App>, user: &db::User, deck_id: &str, tx: &Tx) {
     // client's re-shares (any preference change, every reconnect) overwriting
     // the seat with the global preference a beat later.
     let deck_mat = valid_playmat(app, &user.id, deck.playmat.clone());
+    let deck_back = deck.card_back.clone();
     let Some(player) = room.players.iter_mut().find(|p| p.user_id == user.id) else {
         send_err(tx, "not_seated", "you are not seated in this room");
         return;
     };
     if deck_mat.is_some() {
         player.playmat = deck_mat;
+    }
+    if deck_back.is_some() {
+        player.card_back = deck_back;
     }
     player.deck_id = Some(deck.id);
     player.deck_name = Some(deck.name);
@@ -957,7 +967,15 @@ fn room_hand_hover(app: &Arc<App>, user: &db::User, position: Option<f64>, tx: &
 /// Live table pointer relay: broadcast the sender's normalized position and the
 /// card they are hovering to everyone in the room. Ephemeral - nothing is
 /// stored and it never enters the game state.
-fn cursor_move(app: &Arc<App>, user: &db::User, x: f64, y: f64, hover: Option<String>, tx: &Tx) {
+fn cursor_move(
+    app: &Arc<App>,
+    user: &db::User,
+    x: f64,
+    y: f64,
+    hover: Option<String>,
+    mat: Option<i64>,
+    tx: &Tx,
+) {
     let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
         send_err(tx, "not_in_room", "you are not in a room");
         return;
@@ -985,6 +1003,7 @@ fn cursor_move(app: &Arc<App>, user: &db::User, x: f64, y: f64, hover: Option<St
             "x": x.clamp(0.0, 1.0),
             "y": y.clamp(0.0, 1.0),
             "hover": hover,
+            "mat": mat,
         }),
     );
 }

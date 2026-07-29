@@ -59,6 +59,7 @@
    aspect-ratio then overflow their row and overlap the one below (measured:
    101px tiles in 60px rows). A plain block scroll box keeps the grid in
    normal flow, exactly as it lays out in Settings. */
+/* Same scroll treatment for the card-back grid inside a capped panel. */
 .pkPanel .pickerScroll {
   flex: 1 1 0;
   min-height: 0;

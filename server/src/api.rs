@@ -167,6 +167,9 @@ pub async fn me(State(app): State<Arc<App>>, Extension(user): Extension<db::User
         // property of the account (one file per user, on our disk), so the
         // account is what should carry it.
         "customPlaymat": custom_playmat_id(&app, &user.id),
+        // Same reasoning as the mat: one file per user on our disk, so the
+        // account carries it and every sign-in adopts it.
+        "customCardBack": custom_card_back_id(&app, &user.id),
     }))
     .into_response()
 }
@@ -382,6 +385,7 @@ fn deck_summary(row: &db::DeckRow) -> Value {
         // The seated client needs this to know whether to push its own global
         // mat or leave the deck's alone.
         "playmat": row.playmat,
+        "cardBack": row.card_back,
         "updatedAt": iso8601(row.updated_at),
     })
 }
@@ -408,6 +412,11 @@ pub struct DeckBody {
     /// global mat preference.
     #[serde(default)]
     playmat: Option<String>,
+    /// The card back this deck's cards wear; null/absent = the player's global
+    /// card-back preference. The struct has no `rename_all`, so the wire name
+    /// is spelled out here to match the camelCase the client sends.
+    #[serde(default, rename = "cardBack")]
+    card_back: Option<String>,
 }
 
 pub async fn deck_create(
@@ -429,6 +438,7 @@ pub async fn deck_create(
         header: body.header,
         game: body.game.unwrap_or_else(|| "mtg".to_string()),
         playmat: body.playmat,
+        card_back: body.card_back,
     };
     db::deck_insert(&app.db.lock().unwrap(), &row);
     // Multi-device sync: every connection (originator included) refreshes.
@@ -455,6 +465,7 @@ pub async fn deck_get(
         "cards": row.cards(),
         "header": row.header,
         "playmat": row.playmat,
+        "cardBack": row.card_back,
     }))
     .into_response()
 }
@@ -481,6 +492,7 @@ pub async fn deck_update(
                     &serde_json::to_string(&body.cards).unwrap(),
                     body.header.as_deref(),
                     body.playmat.as_deref(),
+                    body.card_back.as_deref(),
                     now_ms(),
                 );
                 true
@@ -1278,6 +1290,7 @@ async fn curl_out(url: &str) -> Option<Vec<u8>> {
     if !output.status.success() {
         return None;
     }
+
     Some(output.stdout)
 }
 
@@ -1383,4 +1396,129 @@ pub async fn alt_art_catalog(State(app): State<Arc<App>>) -> Response {
         body,
     )
         .into_response()
+}
+
+// --- custom card backs -----------------------------------------------------
+//
+// Same shape as custom playmats: one file per account, named after the user, so
+// the id can be derived by scanning the directory instead of adding a users
+// column. Backs are smaller than mats (a card is 63x88mm, not a tabletop), so
+// the cap is tighter.
+
+/// Upload cap for a custom card back (also the route's body limit).
+pub const BACK_MAX_BYTES: usize = 4 * 1024 * 1024;
+
+/// A servable card-back filename: `<hex user id>-<hex suffix>.<ext>`.
+pub fn valid_back_file(file: &str) -> bool {
+    let Some((stem, ext)) = file.rsplit_once('.') else {
+        return false;
+    };
+    matches!(ext, "webp" | "png" | "jpg")
+        && !stem.is_empty()
+        && stem.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
+/// The `custom-<file>` id of this account's uploaded back, or None.
+pub fn custom_card_back_id(app: &Arc<App>, user_id: &str) -> Option<String> {
+    let mine = format!("{user_id}-");
+    std::fs::read_dir(&app.backs_dir)
+        .ok()?
+        .flatten()
+        .map(|entry| entry.file_name().to_string_lossy().to_string())
+        .find(|name| name.starts_with(&mine) && valid_back_file(name))
+        .map(|name| format!("custom-{name}"))
+}
+
+/// POST /api/cardback — body is the raw image bytes. One back per account; a
+/// new upload replaces the previous file. The returned id (`custom-<file>`)
+/// rides the normal card-back preference, so every viewer of the table resolves
+/// the same URL for a face-down card.
+pub async fn cardback_upload(
+    State(app): State<Arc<App>>,
+    Extension(user): Extension<db::User>,
+    body: axum::body::Bytes,
+) -> Response {
+    if body.is_empty() {
+        return err(StatusCode::BAD_REQUEST, "empty_upload", "no image data received");
+    }
+    let Some(ext) = sniff_image(&body) else {
+        return err(StatusCode::BAD_REQUEST, "bad_image", "upload a PNG, JPEG, or WebP image");
+    };
+    // One writer at a time: the scan-delete-write below is racy unguarded, and
+    // the global cap must see a settled directory.
+    let _guard = app.backs_lock.lock().await;
+    let mut total: u64 = 0;
+    if let Ok(entries) = std::fs::read_dir(&app.backs_dir) {
+        let mine = format!("{}-", user.id);
+        for entry in entries.flatten() {
+            if entry.file_name().to_string_lossy().starts_with(&mine) {
+                let _ = std::fs::remove_file(entry.path());
+            } else {
+                total += entry.metadata().map(|m| m.len()).unwrap_or(0);
+            }
+        }
+    }
+    const BACKS_TOTAL_CAP: u64 = 1024 * 1024 * 1024; // 1GiB across all accounts
+    if total + body.len() as u64 > BACKS_TOTAL_CAP {
+        return err(
+            StatusCode::INSUFFICIENT_STORAGE,
+            "backs_full",
+            "custom card back storage is full right now - try again later",
+        );
+    }
+    let file = format!("{}-{}.{ext}", user.id, hex_id(4));
+    if !valid_back_file(&file) {
+        return err(StatusCode::BAD_REQUEST, "bad_image", "unexpected upload name");
+    }
+    if std::fs::write(app.backs_dir.join(&file), &body).is_err() {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, "write_failed", "could not store the image");
+    }
+    Json(json!({ "id": format!("custom-{file}"), "url": format!("/api/backs/{file}") })).into_response()
+}
+
+/// DELETE /api/cardback — drop this account's upload. Unlike a mat, a card back
+/// is on screen constantly and for every face-down card, so being able to take
+/// a bad one back off matters more than it does for a tabletop image.
+pub async fn cardback_delete(
+    State(app): State<Arc<App>>,
+    Extension(user): Extension<db::User>,
+) -> Response {
+    let _guard = app.backs_lock.lock().await;
+    let mine = format!("{}-", user.id);
+    if let Ok(entries) = std::fs::read_dir(&app.backs_dir) {
+        for entry in entries.flatten() {
+            if entry.file_name().to_string_lossy().starts_with(&mine) {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
+    Json(json!({ "ok": true })).into_response()
+}
+
+/// GET /api/backs/{file} — a player's custom card back.
+///
+/// Public and unauthenticated, like mats: this feeds the `--pc-card-back` CSS
+/// custom property, and a `url()` in a stylesheet cannot carry a Bearer header.
+/// Filenames are unguessable (user id + random suffix).
+pub async fn cardback_serve(State(app): State<Arc<App>>, Path(file): Path<String>) -> Response {
+    if !valid_back_file(&file) {
+        return err(StatusCode::BAD_REQUEST, "bad_name", "not a card back file");
+    }
+    let ctype = match file.rsplit_once('.').map(|(_, e)| e) {
+        Some("webp") => "image/webp",
+        Some("png") => "image/png",
+        _ => "image/jpeg",
+    };
+    match std::fs::read(app.backs_dir.join(&file)) {
+        Ok(bytes) => (
+            [
+                (header::CONTENT_TYPE, ctype),
+                // Filenames are unique per upload - safe to cache hard.
+                (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(_) => err(StatusCode::NOT_FOUND, "not_found", "no such card back"),
+    }
 }

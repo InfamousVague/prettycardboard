@@ -949,6 +949,14 @@ export const messages = {
     ar: 'اعرض لوحة الخصم مقلوبة عبر الطاولة (بطاقات مقلوبة). عند الإيقاف تبقى قائمة.',
   },
   dbMat: { en: 'Deck playmat', es: 'Tapete del mazo', fr: 'Tapis du deck', ar: 'سجادة المجموعة' },
+  dbSleeves: { en: 'Deck card back', es: 'Reverso del mazo', fr: 'Dos de cartes du deck', ar: 'ظهر بطاقات المجموعة' },
+  dbSleevesDefault: { en: 'My default back', es: 'Mi reverso habitual', fr: 'Mon dos par défaut', ar: 'ظهري الافتراضي' },
+  dbSleevesHint: {
+    en: "These sleeves go on the table with this deck, and everyone playing you sees them - each seat's cards wear their own back.",
+    es: 'Estas fundas van a la mesa con este mazo y las ven todos los que juegan contigo: las cartas de cada asiento llevan su propio reverso.',
+    fr: "Ces protections arrivent sur la table avec ce deck et tous vos adversaires les voient : les cartes de chaque siège portent leur propre dos.",
+    ar: 'تصل هذه الأغلفة إلى الطاولة مع هذه المجموعة ويراها كل من يلعب معك: بطاقات كل مقعد ترتدي ظهرها الخاص.',
+  },
   dbMatDefault: { en: 'My default mat', es: 'Mi tapete habitual', fr: 'Mon tapis par défaut', ar: 'سجادتي الافتراضية' },
   dbMatHint: {
     en: 'Sit down with this deck and the table wears this mat. Leave it on your default and the deck follows whatever you picked in Settings.',

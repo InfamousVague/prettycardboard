@@ -460,6 +460,12 @@ cosmetic-setting pattern (not a game action: no undo/timeline churn).
   user on the server's disk), not of the browser that uploaded it - signing in
   elsewhere adopts it, and an id left over from a replaced upload is corrected
   rather than painting a mat that no longer exists.
+- A DECK may also carry its own CARD BACK: the same body/response fields gain
+  `cardBack?: string | null`, applied to `Player.cardBack` at `room.join` and
+  `room.deck.set` exactly like `playmat`, and relayed unvalidated like
+  `cardback.set` (back ids are client asset names). Every seat paints its own
+  back, so a table shows as many backs as it has players, and a change
+  broadcasts through the usual room state push.
 - A DECK may carry its own mat: `POST /api/decks` / `PUT /api/decks/{id}` body
   gains `playmat?: string | null` and `GET /api/decks` items + `GET
   /api/decks/{id}` gain `playmat`. When a seat takes that deck (at `room.join`,

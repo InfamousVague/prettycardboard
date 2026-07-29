@@ -20,6 +20,7 @@ import {
   Crown,
   Flame,
   Image,
+  Layers,
   Minus,
   Mountain,
   Plus,
@@ -50,8 +51,9 @@ import { GameTag } from '../../components/GameTag.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import { CardRowSkeleton } from '../../components/Skeletons.tsx';
 import { ArtPicker, HeaderCardPicker, PickerShell } from '../../components/ArtPicker.tsx';
-import { PlaymatPicker, PlaymatUpload } from '../../components/PlaymatPicker.tsx';
+import { CardBackPicker, PlaymatPicker, PlaymatUpload } from '../../components/PlaymatPicker.tsx';
 import { PLAYMATS } from '../../data/playmats.ts';
+import { CARD_BACKS } from '../../data/cardBacks.ts';
 import { useLongPress } from '../../hooks/useLongPress.ts';
 import { CardSearch } from './CardSearch.tsx';
 import { CyberpunkCardSearch } from './CyberpunkCardSearch.tsx';
@@ -99,6 +101,8 @@ export function DeckEditor({ deckId }: { deckId: string }) {
   const [headerPicking, setHeaderPicking] = useState(false);
   // The mat this deck brings to the table (Settings' global mat when unset).
   const [matPicking, setMatPicking] = useState(false);
+  // The sleeves this deck plays in (Settings' card back when unset).
+  const [backPicking, setBackPicking] = useState(false);
   const saveSeq = useRef(0);
   const randomHeaderRef = useRef<string | null>(null);
 
@@ -139,7 +143,15 @@ export function DeckEditor({ deckId }: { deckId: string }) {
     const timer = setTimeout(async () => {
       setSaveState('saving');
       try {
-        await api.updateDeck(deck.id, deck.name, deck.format, deck.cards, deck.header ?? null, deck.playmat ?? null);
+        await api.updateDeck(
+          deck.id,
+          deck.name,
+          deck.format,
+          deck.cards,
+          deck.header ?? null,
+          deck.playmat ?? null,
+          deck.cardBack ?? null,
+        );
         if (saveSeq.current === seq) setSaveState('saved');
         void useApp.getState().refreshDecks();
       } catch {
@@ -158,7 +170,15 @@ export function DeckEditor({ deckId }: { deckId: string }) {
       const { deck: last, saveState: state } = latest.current;
       if (last && state === 'dirty') {
         api
-          .updateDeck(last.id, last.name, last.format, last.cards, last.header ?? null, last.playmat ?? null)
+          .updateDeck(
+            last.id,
+            last.name,
+            last.format,
+            last.cards,
+            last.header ?? null,
+            last.playmat ?? null,
+            last.cardBack ?? null,
+          )
           .then(() => useApp.getState().refreshDecks())
           .catch(() => {
             // Nothing to surface - the editor is gone.
@@ -565,6 +585,12 @@ export function DeckEditor({ deckId }: { deckId: string }) {
                 <Image size={14} aria-hidden />
                 {deck.playmat ? (PLAYMATS.find((mat) => mat.id === deck.playmat)?.name ?? deck.playmat) : t('dbMatDefault')}
               </Button>
+              <Button size="sm" variant="soft" className="deckMatButton" onClick={() => setBackPicking(true)}>
+                <Layers size={14} aria-hidden />
+                {deck.cardBack
+                  ? (CARD_BACKS.find((back) => back.id === deck.cardBack)?.name ?? t('custUploadYours'))
+                  : t('dbSleevesDefault')}
+              </Button>
               {!cyber && <ColorPips colors={derived.deckIdentity} label={t('dbIdentity')} />}
               <Text as="span" size={Size.Small} tone={TextTone.Muted} mono>
                 {derived.total} {t('decksCards')}
@@ -940,6 +966,28 @@ export function DeckEditor({ deckId }: { deckId: string }) {
                 savePreferences({ ...loadPreferences(), customPlaymat: id });
                 mutate((d) => ({ ...d, playmat: id }));
                 setMatPicking(false);
+              }}
+            />
+          </PickerShell>
+        )}
+        {backPicking && (
+          <PickerShell wide title={t('dbSleeves')} subtitle={deck.name} onClose={() => setBackPicking(false)}>
+            <Text size={Size.Small} tone={TextTone.Subtle} className="pkHint">
+              {t('dbSleevesHint')}
+            </Text>
+            <CardBackPicker
+              scrollable
+              ariaLabel={t('dbSleeves')}
+              selectedId={deck.cardBack ?? ''}
+              customId={loadPreferences().customCardBack}
+              noneLabel={t('dbSleevesDefault')}
+              onNone={() => {
+                mutate((d) => ({ ...d, cardBack: null }));
+                setBackPicking(false);
+              }}
+              onSelect={(id) => {
+                mutate((d) => ({ ...d, cardBack: id }));
+                setBackPicking(false);
               }}
             />
           </PickerShell>
