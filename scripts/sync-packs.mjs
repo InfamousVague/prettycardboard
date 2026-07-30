@@ -278,6 +278,16 @@ for (const file of files) {
 }
 console.log(`packs: ${pool.size} printings indexed`);
 
+/**
+ * Windows refuses to create a file whose stem is a legacy DOS device name, and
+ * git's checkout on that platform fails the whole clone rather than skipping
+ * the one file. Magic has exactly one such set code - CON, for Conflux - so it
+ * is written with a trailing underscore and undone by the matching helper in
+ * src/app/data/packs.ts.
+ */
+const DOS_DEVICE = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i;
+const packFile = (code) => (DOS_DEVICE.test(code) ? `${code}_.json` : `${code}.json`);
+
 for (const file of files) {
   const data = read(file);
   if (!data || data.isOnlineOnly) continue;
@@ -285,7 +295,7 @@ for (const file of files) {
   const spec = collation(data, pool);
   if (spec) {
     const body = JSON.stringify(spec);
-    writeFileSync(join(OUT_DIR, `${spec.code}.json`), body);
+    writeFileSync(join(OUT_DIR, packFile(spec.code)), body);
     specBytes += body.length;
     specs[spec.code] = {
       kind: spec.kind,

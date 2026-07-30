@@ -100,8 +100,22 @@ function toCard(tuple: CardTuple): PoolCard {
 
 // --- loading --------------------------------------------------------------
 
+/**
+ * Windows cannot hold a file named for a legacy DOS device, and git aborts the
+ * entire checkout when a repo contains one - which is how Conflux (set code
+ * CON) once broke every Windows build. scripts/sync-packs.mjs writes those
+ * codes with a trailing underscore; this puts it back so callers still address
+ * a set by its real code.
+ */
+const DOS_DEVICE = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i;
+
+function packFile(file: string): string {
+  const code = file.replace(/\.json$/, '');
+  return DOS_DEVICE.test(code) ? `${code}_.json` : file;
+}
+
 async function getJson<T>(file: string): Promise<T> {
-  const response = await fetch(`${BASE}${file}`, { headers: { Accept: 'application/json' } });
+  const response = await fetch(`${BASE}${packFile(file)}`, { headers: { Accept: 'application/json' } });
   if (!response.ok) throw new Error(`packs ${response.status}: ${file}`);
   return (await response.json()) as T;
 }
