@@ -22,6 +22,7 @@ npm run lobby      # readiness, deck privacy, targeted ping, and public mana
 npm run pod        # scenario 1
 npm run duel       # scenario 2
 npm run chaos      # scenario 3 (node scenarios/chaos-monkey.js <seed> to reproduce)
+npm run draft      # scenario 5 — booster draft pass-and-pick
 npm run restart    # scenario 4 — LOCAL ONLY: kills + relaunches the dev server
 ```
 
@@ -112,6 +113,28 @@ lacks the `float_roundtrip` feature, so battlefield x/y floats reloaded from
 the persisted `state_json` can drift by 1 ULP across a restart
 (`0.41800000000000004` → `0.418`). The deep-equal therefore compares numbers
 at 1e-9 tolerance; everything else is exact.
+
+### 5. `scenarios/booster-draft.js` — booster draft pass-and-pick
+3 seats join a `draft` room with **no deck** (the point of drafting), and the
+host deals 6 synthesized packs whose cards are named `P{pack}-c{card}`, so the
+identity of a pack is readable from any card in it. That is what makes the
+rotation provable rather than plausible:
+- Packs are dealt in table seat order, and each seat sees only its own `pack`
+  and `pool` — another seat's cards are absent from the payload, not merely
+  hidden, though `packCount` is public.
+- **Round 1 passes left**: seat 0 receives seat 2's pack, seat 1 receives seat
+  0's, seat 2 receives seat 1's. **Round 2 passes right**: the same three
+  assertions with the direction reversed.
+- A pack arriving after a pass is exactly one card lighter, and the card that
+  left it is the one now in the taker's pool.
+- Picking again in the same pass changes nothing; an `index`/`id` disagreement
+  is refused as `bad_pick`; a stale pick does not move the draft.
+- `room.start` is refused with `draft_running` until every deck is built.
+- Conservation: across both rounds no card appears twice in a pool, no card
+  reaches two pools, and every card of every pack ends in exactly one pool.
+- `draft.built` without a saved deck is refused (`deck_required`); saving a
+  deck from the pool seats it automatically, and the last build flips the
+  draft to `done`.
 
 ## Notes
 - `lib.js` is the protocol client: register-or-login, REST, WS with a

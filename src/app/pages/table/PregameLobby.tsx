@@ -73,6 +73,11 @@ export function PregameLobby({
   const gameDecks = decks.filter((deck) => (deck.game || 'mtg') === game);
   const selectedDeck = gameDecks.find((deck) => deck.id === me?.deckId);
   const selectedArt = selectedDeck ? deckSummaryArt(selectedDeck) : '';
+  // This table drafted its decks and the host locked them in: no swapping the
+  // limited pool for something built at home.
+  const deckLocked = Boolean(
+    room.draft?.lockDecks && room.draft.seats.some((seat) => seat.userId === me?.userId && seat.built),
+  );
   const playersBySeat = new Map(room.players.map((player) => [player.seat, player]));
   const seats = Array.from({ length: room.seats }, (_, seat) => playersBySeat.get(seat));
 
@@ -475,7 +480,14 @@ export function PregameLobby({
           >
             <div className="pregameDeckSetupBody">
               <label className="pregameDeckLabel" htmlFor="pregame-deck">{t('playPickDeck')}</label>
-              {gameDecks.length > 0 ? (
+              {deckLocked ? (
+                // A locked draft table plays what it drafted. The server refuses
+                // the swap either way; this just stops the picker from offering
+                // a choice that is not one.
+                <Text size={Size.Small} tone={TextTone.Muted}>
+                  {me.deckName ?? t('dfLockOn')}
+                </Text>
+              ) : gameDecks.length > 0 ? (
                 <Select
                   id="pregame-deck"
                   fullWidth

@@ -1,3 +1,4 @@
+import { Pill } from '@glacier/react';
 import { Cpu, Sparkles } from '@glacier/icons';
 import { getGame } from '../data/games.ts';
 import './GameTag.css';
@@ -9,6 +10,9 @@ const ICONS = { mtg: Sparkles, cyberpunk: Cpu } as const;
  * A compact identity chip - game icon + name in the game's accent - shown
  * anywhere it is otherwise ambiguous which card game a deck, room, or match
  * belongs to. Pass showName={false} for an icon-only badge in tight spots.
+ *
+ * It is the kit's Pill underneath (shape, size steps, glass/skeleton support);
+ * only the hue is ours, since a game's accent is not one of the kit's tones.
  */
 export function GameTag({
   game,
@@ -24,15 +28,19 @@ export function GameTag({
   const def = getGame(game);
   const Icon = ICONS[def.id] ?? Sparkles;
   return (
-    <span
+    <Pill
+      size="sm"
+      variant="soft"
       className={`gameTag${className ? ` ${className}` : ''}`}
       data-game={def.id}
+      data-iconly={showName ? undefined : ''}
       title={def.name}
+      aria-label={showName ? undefined : def.name}
+      icon={<Icon size={size} />}
       style={{ ['--game-accent' as string]: def.accent }}
     >
-      <Icon size={size} />
       {showName && <span className="gameTagName">{def.name}</span>}
-    </span>
+    </Pill>
   );
 }
 

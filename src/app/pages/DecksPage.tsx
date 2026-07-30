@@ -5,6 +5,7 @@ import { Download, Layers, Plus } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useUi } from '../state/uiStore.ts';
+import { bracketKey } from '../data/brackets.ts';
 import { resolveCardImage } from '../data/games.ts';
 import { playmatBackground } from '../data/playmats.ts';
 import { useVisibleGames } from '../hooks/useVisibleGames.ts';
@@ -168,6 +169,26 @@ function DeckTile({
       <div className="deckTileArt">
         <GameCard name={deck.commander || deck.name} imageUrl={cover} width={168} foil tilt={7} />
         <GameTag game={deck.game} showName={false} className="deckTileGame" />
+        {/* The server sends a bracket only for MTG Commander decks; everything
+            else gets no chip at all rather than an empty slot. */}
+        {deck.bracket && (
+          <span
+            className="deckTileBracket"
+            data-bracket={deck.bracket.bracket}
+            // A bare numeral means nothing read aloud, so name what it is - the
+            // same sentence the editor's bracket stat carries.
+            role="img"
+            aria-label={`${t('bkBracket')} ${deck.bracket.bracket}: ${t(bracketKey(deck.bracket.bracket))} (${t('bkEstimate')})`}
+            title={
+              deck.bracket.gameChangers.length > 0
+                ? `${t('bkGameChangers')}: ${deck.bracket.gameChangers.join(', ')}`
+                : t('bkNote')
+            }
+          >
+            <span className="deckTileBracketNum">{deck.bracket.bracket}</span>
+            <span className="deckTileBracketName">{t(bracketKey(deck.bracket.bracket))}</span>
+          </span>
+        )}
       </div>
       <div className="deckTileInfo">
         <span className="deckTileName">{deck.name}</span>

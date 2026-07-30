@@ -36,8 +36,11 @@ const UA = 'PrettyCardboard-AltArtPublisher/1.0';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const slug = (t) => t.normalize('NFKD').replace(/[^\w\s-]/g, '').trim().toLowerCase().replace(/[-\s]+/g, '-');
+
 function parseArgs(argv) {
-  const args = { _: [], set: 'Alt Art', artist: undefined, out: join(ROOT, 'server/data/alt-art'), prune: false, dry: false };
+  const args = { _: [], set: 'Alt Art', artist: undefined, out: join(ROOT, 'server/data/alt-art'),
+                 prune: false, dry: false, flatIds: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--set') args.set = argv[++i];
@@ -45,6 +48,7 @@ function parseArgs(argv) {
     else if (a === '--out') args.out = resolve(argv[++i]);
     else if (a === '--prune') args.prune = true;
     else if (a === '--dry-run') args.dry = true;
+    else if (a === '--flat-ids') args.flatIds = true;
     else args._.push(a);
   }
   return args;
@@ -141,11 +145,20 @@ async function main() {
     arts.push({
       // `pc-` cannot collide with a Scryfall UUID, so this id rides through the
       // existing deck/room protocol in the same field with no schema change.
-      id: `pc-${card.slug}`,
+      // Ids are namespaced by collection: two decks can both ship a Sol Ring
+      // art, and the picker should offer BOTH rather than one silently
+      // replacing the other. --flat-ids reproduces the original unnamespaced
+      // scheme, which the Goth Mommy and Bunny Brigade sets predate this fix on.
+      id: args.flatIds ? `pc-${card.slug}` : `pc-${slug(args.set)}-${card.slug}`,
       oracleId: hit.oracleId,
       name: hit.name,
-      // The label distinguishes multiple arts of one card (the six Swamps).
-      setName: card.label ? `${args.set} · ${card.label}` : args.set,
+      // The label only belongs in the display name when it actually
+      // distinguishes two arts of the SAME card (the six Swamps) — which is
+      // exactly when process_cards.py folded it into the slug. Otherwise it is
+      // a production detail (a layout name) that players should never see.
+      setName: card.label && card.slug.endsWith(slug(card.label))
+        ? `${args.set} \u00b7 ${card.label}`
+        : args.set,
       artist: args.artist,
       file,
     });
@@ -153,7 +166,51 @@ async function main() {
 
   if (skipped.length) console.warn(`  skipped ${skipped.length} unresolved: ${skipped.slice(0, 5).join(', ')}${skipped.length > 5 ? '…' : ''}`);
 
-  const catalog = { arts: arts.sort((a, b) => a.name.localeCompare(b.name)) };
+  // MERGE, never overwrite. The catalog holds every published collection, so a
+  // wholesale rewrite would silently unpublish every other deck's art the moment
+  // you published a new one — the images survive on disk but nothing lists them.
+  // New entries replace same-id entries; everything else is carried forward.
+  const catalogPath = join(args.out, 'catalog.json');
+  const byId = new Map();
+  if (existsSync(catalogPath)) {
+    try {
+      for (const art of JSON.parse(readFileSync(catalogPath, 'utf8')).arts ?? []) {
+        if (art?.id) byId.set(art.id, art);
+      }
+    } catch {
+      console.warn('  existing catalog.json is unreadable — starting a fresh one');
+    }
+  }
+  const before = byId.size;
+  let replaced = 0;
+  const crossSet = [];
+  for (const art of arts) {
+    const prev = byId.get(art.id);
+    if (prev) {
+      replaced++;
+      // Replacing your own set's art is a re-publish. Replacing ANOTHER set's is
+      // almost always an accident, and it silently unpublishes their artwork.
+      const prevSet = (prev.setName || '').split(' \u00b7 ')[0];
+      const thisSet = (art.setName || '').split(' \u00b7 ')[0];
+      if (prevSet && prevSet !== thisSet) crossSet.push(`${art.id} (${prevSet} -> ${thisSet})`);
+    }
+    byId.set(art.id, art);
+  }
+  if (crossSet.length) {
+    console.error(`\n\u2717 refusing to publish: ${crossSet.length} id(s) already belong to another collection`);
+    for (const c of crossSet.slice(0, 10)) console.error(`    ${c}`);
+    if (crossSet.length > 10) console.error(`    \u2026 ${crossSet.length - 10} more`);
+    console.error('\n  Re-run without --flat-ids so ids are namespaced by set.\n');
+    process.exit(1);
+  }
+  const merged = [...byId.values()];
+  // Everything the merged catalog points at must survive a --prune, not just
+  // this run's files.
+  for (const art of merged) files.add(art.file);
+  console.log(`  catalog: ${before} existing + ${arts.length - replaced} new` +
+              (replaced ? `, ${replaced} replaced` : '') + ` = ${merged.length}`);
+
+  const catalog = { arts: merged.sort((a, b) => a.name.localeCompare(b.name)) };
   if (args.dry) {
     console.log(`\n--dry-run, nothing written. ${arts.length} art(s) would publish to ${args.out}`);
     for (const a of arts.slice(0, 8)) console.log(`  ${a.id.padEnd(34)} ${a.name}`);
@@ -161,7 +218,7 @@ async function main() {
     return;
   }
 
-  writeFileSync(join(args.out, 'catalog.json'), JSON.stringify(catalog, null, 2));
+  writeFileSync(catalogPath, JSON.stringify(catalog, null, 2));
 
   if (args.prune) {
     // Content-hashed names mean a re-publish leaves the previous image orphaned.
@@ -176,7 +233,7 @@ async function main() {
 
   const bytes = arts.reduce((sum, a) => sum + readFileSync(join(args.out, a.file)).length, 0);
   console.log(`\npublished ${arts.length} art(s) → ${args.out}`);
-  console.log(`catalog:  ${join(args.out, 'catalog.json')}`);
+  console.log(`catalog:  ${catalogPath}  (${catalog.arts.length} arts total)`);
   console.log(`payload:  ${(bytes / 1024 / 1024).toFixed(1)} MB`);
 }
 

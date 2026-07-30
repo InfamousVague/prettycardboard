@@ -686,6 +686,7 @@ pub async fn room_create(
         match_result: None,
         departed: Vec::new(),
         first_turn_begun: false,
+        draft: None,
         players: Vec::new(),
         spectators: Vec::new(),
         history: Vec::new(),

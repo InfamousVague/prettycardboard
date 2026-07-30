@@ -288,7 +288,7 @@ export function SeatFrame({
       {/* Their hand renders at the screen level (OpponentHand, mounted by
           TablePage) so it can hang off the very bottom edge exactly like mine,
           rather than being trapped inside this board's border. */}
-      <div className="oppField">
+      <div className="oppField" data-mat-seat={player.seat}>
         {hosts.map((card) => {
           const { piled, auras } = splitPile(attachments.get(card.iid) ?? []);
           return (

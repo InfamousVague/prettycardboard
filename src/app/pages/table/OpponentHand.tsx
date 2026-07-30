@@ -7,6 +7,7 @@ import { useGame } from '../../state/gameStore.ts';
 import { selectCardScale, useTableUi } from './tableUi.ts';
 import { usePreference } from '../../hooks/usePreference.ts';
 import { useCardPopup } from '../../components/CardPopup.tsx';
+import { focusFromPointer, handSlinky, paintSlinky, restFocus, slinkyOffsets } from '../../components/slinky.ts';
 import { cardBackUrl, effectiveCardBack } from '../../data/cardBacks.ts';
 import type { CardInst, TablePlayer } from '../../net/types.ts';
 import { onMessage } from '../../net/ws.ts';
@@ -55,11 +56,16 @@ export function OpponentHand({ player }: { player: TablePlayer }) {
   const applyRemotePosition = (position: number | null) => {
     if (position == null) {
       handX.set(Number.POSITIVE_INFINITY);
+      paintSlinky(fanRef.current, null);
       return;
     }
     const rect = fanRef.current?.getBoundingClientRect();
     const visualPosition = mirror ? 1 - position : position;
     handX.set(rect ? rect.left + rect.width * visualPosition : Number.POSITIVE_INFINITY);
+    // Their fan opens where THEY are hovering, which is most of the point of
+    // sharing the position at all - you can watch them dither over a card.
+    const count = fanRef.current?.children.length ?? 0;
+    paintSlinky(fanRef.current, visualPosition * Math.max(0, count - 1));
   };
 
   useEffect(() => {
@@ -82,7 +88,6 @@ export function OpponentHand({ player }: { player: TablePlayer }) {
     setRemotePeek(false);
     if (!localHover.current) handX.set(Number.POSITIVE_INFINITY);
   }, [player.online, handX]);
-
   // Peek up whenever the pointer sits in the bottom band of the screen, and feed
   // the same pointer x to the dock-genie. Driven off a window listener (not the
   // fan's own pointer events) so the strip can stay click-through and never
@@ -94,8 +99,12 @@ export function OpponentHand({ player }: { player: TablePlayer }) {
         : event.clientY > window.innerHeight - HAND_PEEK_ZONE;
       localHover.current = inBand;
       setLocalPeek(inBand);
-      if (inBand) handX.set(event.clientX);
-      else applyRemotePosition(remotePosition.current);
+      if (inBand) {
+        handX.set(event.clientX);
+        const rect = fanRef.current?.getBoundingClientRect();
+        const count = fanRef.current?.children.length ?? 0;
+        paintSlinky(fanRef.current, rect ? focusFromPointer(event.clientX, rect, count) : null);
+      } else applyRemotePosition(remotePosition.current);
     };
     window.addEventListener('pointermove', onMove);
     return () => window.removeEventListener('pointermove', onMove);
@@ -110,12 +119,22 @@ export function OpponentHand({ player }: { player: TablePlayer }) {
     ...Array.from({ length: backs }, (_, i) => ({ card: { ...HAND_BACK, iid: `back-${i}` }, faceDown: true })),
   ];
   const width = Math.round(132 * cardScale);
+  // Same fixed track as my own hand: the fan asks for a card plus a step each,
+  // the strip caps it, and the slinky deals the cards across whatever it gets.
+  const span = Math.round(width + (slots.length - 1) * Math.max(18, width - 44 * cardScale));
+  const offsets = slinkyOffsets(slots.length, restFocus(slots.length), handSlinky(slots.length));
 
   return (
     <div
       className="oppHandStrip"
       data-mirror={mirror || undefined}
-      style={{ ['--card-scale' as string]: cardScale, ['--pc-card-back' as string]: `url("${backSrc}")` }}
+      style={{
+        ['--card-scale' as string]: cardScale,
+        ['--pc-card-back' as string]: `url("${backSrc}")`,
+        ['--pc-hand-h' as string]: `${Math.round(width * (680 / 488))}px`,
+        ['--pc-hand-w' as string]: `${width}px`,
+        ['--pc-hand-span' as string]: `${span}px`,
+      }}
     >
       <div className="myHand">
         <div
@@ -130,7 +149,8 @@ export function OpponentHand({ player }: { player: TablePlayer }) {
               card={slot.card}
               faceDown={slot.faceDown}
               width={width}
-              spread={index - (slots.length - 1) / 2}
+              offset={offsets[index] ?? 0.5}
+              count={slots.length}
               dimmed={false}
               handX={handX}
               onPointerDown={() => {}}

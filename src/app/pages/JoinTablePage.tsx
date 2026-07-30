@@ -1,19 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import {
   Avatar,
   Button,
-  Card,
   Heading,
   Kbd,
-  Pill,
   Select,
   Size,
+  Spinner,
   Text,
   TextTone,
   useToast,
 } from '@glacier/react';
-import { Eye, LogIn, Users } from '@glacier/icons';
+import { Eye, Hash, LogIn, Package, Play, Sparkles, Users } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
@@ -25,9 +25,20 @@ import './play.css';
 
 /**
  * The landing screen for a shared table link (#/join/CODE), shown once the
- * visitor is authenticated. It resolves the code to the live table, previews
- * who's already seated, and lets the player pick a deck and take a seat (or
- * spectate). Joining hands off to the game store, and TablePage takes over.
+ * visitor is authenticated.
+ *
+ * It is a MODAL over a dimmed screen rather than a page in the app frame. An
+ * invite is an interruption with exactly three answers - sit down, watch, or
+ * not now - and rendering it as an ordinary route left the sidebar and the tab
+ * bar live behind it, offering a dozen other things to click instead of
+ * answering. Portalled to <body> for the same reason PackOpening is: a
+ * transformed ancestor becomes the containing block for a fixed element, and
+ * inside the route frame the scrim would only dim the content column.
+ *
+ * Draft tables are the exception the deck picker has to know about: there you
+ * arrive with nothing and build a deck out of packs at the table, so asking
+ * for a deck up front asks a question the visitor cannot answer yet - and,
+ * worse, disabled the seat button for anyone who owns no decks at all.
  */
 export function JoinTablePage({ code }: { code: string }) {
   const t = useT();
@@ -43,6 +54,9 @@ export function JoinTablePage({ code }: { code: string }) {
   const [busy, setBusy] = useState(false);
 
   const chosenDeck = deckId || decks[0]?.id || '';
+  const drafting = (room?.format ?? '').toLowerCase() === 'draft';
+  const full = room ? room.players.length >= room.seats : false;
+  const needsDeck = !drafting && decks.length === 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -64,21 +78,21 @@ export function JoinTablePage({ code }: { code: string }) {
 
   // Consuming the invite: drop the pending code and normalise the URL so a
   // refresh or a later "leave table" never bounces back through this screen.
-  const consume = () => {
+  const consume = useCallback(() => {
     clearPendingJoin();
     setPendingJoin(null);
     window.location.hash = '/play';
-  };
+  }, [setPendingJoin]);
 
-  const dismiss = () => {
+  const dismiss = useCallback(() => {
     consume();
     toast({ tone: 'neutral', message: t('joinDismissed') });
-  };
+  }, [consume, toast, t]);
 
   const takeSeat = () => {
     if (!room) return;
     setBusy(true);
-    join(room.roomId, chosenDeck || undefined);
+    join(room.roomId, drafting ? undefined : chosenDeck || undefined);
     consume();
   };
 
@@ -88,32 +102,47 @@ export function JoinTablePage({ code }: { code: string }) {
     consume();
   };
 
-  return (
-    <div className="page joinPage">
+  // Escape answers "not now". A modal that holds you until you find the ghost
+  // button is a modal people learn to resent.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      dismiss();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [dismiss]);
+
+  return createPortal(
+    <div
+      className="joinScrim"
+      role="dialog"
+      aria-modal="true"
+      aria-label={room?.name ?? t('joinFinding')}
+    >
       <motion.div
         className="joinCardWrap"
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ type: 'spring', stiffness: 150, damping: 20 }}
+        initial={{ opacity: 0, y: 18, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: 'spring', stiffness: 220, damping: 26 }}
       >
-        <Card elevation={3} className="joinCard">
-          <div className="joinCardIcon" aria-hidden>
-            <Users size={24} />
-          </div>
-
+        <div className="joinCard" data-draft={drafting || undefined}>
           {status === 'loading' && (
-            <>
+            <div className="joinState">
+              <Spinner size="sm" />
               <Heading level={2} align="center" noMargin>
                 {t('joinFinding')}
               </Heading>
-              <Text align="center" tone={TextTone.Muted}>
-                <Kbd>{code}</Kbd>
-              </Text>
-            </>
+              <Kbd>{code}</Kbd>
+            </div>
           )}
 
           {status === 'notfound' && (
-            <>
+            <div className="joinState">
+              <div className="joinIcon" data-tone="warn" aria-hidden>
+                <Hash size={22} />
+              </div>
               <Heading level={2} align="center" noMargin>
                 {t('joinNotFound')}
               </Heading>
@@ -121,76 +150,102 @@ export function JoinTablePage({ code }: { code: string }) {
                 {t('joinNotFoundBody')}
               </Text>
               <Button onClick={dismiss}>{t('joinBackToPlay')}</Button>
-            </>
+            </div>
           )}
 
           {status === 'ready' && room && (
             <>
-              <Text align="center" size={Size.Small} tone={TextTone.Subtle}>
-                {t('joinInvited')}
-              </Text>
-              <Heading level={1} align="center" noMargin>
-                {room.name}
-              </Heading>
-              <div className="joinMeta">
-                <Pill size="sm" variant="outline">
-                  <Kbd>{code}</Kbd>
-                </Pill>
-                <Pill size="sm" tone={room.players.length >= room.seats ? 'warning' : 'neutral'}>
-                  {room.players.length} / {room.seats} {t('playSeats').toLowerCase()}
-                </Pill>
-                {room.started && <Pill size="sm" tone="accent">{t('joinInProgress')}</Pill>}
-              </div>
+              <header className="joinHead">
+                <div className="joinIcon" aria-hidden>
+                  {drafting ? <Package size={22} /> : <Users size={22} />}
+                </div>
+                <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="joinEyebrow">
+                  {drafting ? t('joinInvitedDraft') : t('joinInvited')}
+                </Text>
+                <Heading level={1} align="center" noMargin className="joinName">
+                  {room.name}
+                </Heading>
+                <div className="joinMeta">
+                  <span className="joinTag">
+                    <Hash size={12} aria-hidden />
+                    <Kbd>{code}</Kbd>
+                  </span>
+                  <span className="joinTag" data-tone={full ? 'warn' : undefined}>
+                    <Users size={12} aria-hidden />
+                    {room.players.length} / {room.seats}
+                  </span>
+                  {room.started && (
+                    <span className="joinTag" data-tone="live">
+                      <Play size={12} aria-hidden />
+                      {t('joinInProgress')}
+                    </span>
+                  )}
+                </div>
+              </header>
 
-              {room.players.length > 0 && (
-                <div className="joinPlayers">
-                  {room.players.map((player) => (
+              <section className="joinWho" aria-label={t('playSeats')}>
+                {room.players.length === 0 ? (
+                  <Text size={Size.Small} tone={TextTone.Subtle}>
+                    {t('joinNobody')}
+                  </Text>
+                ) : (
+                  room.players.map((player) => (
                     <span key={player.userId} className="joinPlayer">
                       <Avatar name={player.username} size="sm" />
                       <Text as="span" size={Size.Small}>
                         {player.username}
                       </Text>
                     </span>
-                  ))}
+                  ))
+                )}
+              </section>
+
+              {/* A draft table takes the deck question off the table entirely,
+                  so it explains what will happen instead of asking. */}
+              {drafting ? (
+                <p className="joinNote">
+                  <Sparkles size={14} aria-hidden />
+                  <Text as="span" size={Size.Small}>
+                    {t('joinDraftNote')}
+                  </Text>
+                </p>
+              ) : (
+                <div className="joinDeck control">
+                  <Text as="span" size={Size.Small} tone={TextTone.Muted}>
+                    {t('playPickDeck')}
+                  </Text>
+                  <Select
+                    value={chosenDeck}
+                    onValueChange={setDeckId}
+                    options={decks.map((deck) => ({ value: deck.id, label: deck.name }))}
+                    placeholder={t('playPickDeck')}
+                  />
                 </div>
               )}
 
-              <div className="joinDeck control">
-                <Text as="span" size={Size.Small} tone={TextTone.Muted}>
-                  {t('playPickDeck')}
-                </Text>
-                <Select
-                  value={chosenDeck}
-                  onValueChange={setDeckId}
-                  options={decks.map((deck) => ({ value: deck.id, label: deck.name }))}
-                  placeholder={t('playPickDeck')}
-                />
-              </div>
-
               <div className="joinActions">
-                <Button
-                  onClick={takeSeat}
-                  loading={busy}
-                  disabled={decks.length === 0 || room.players.length >= room.seats}
-                >
-                  <LogIn size={16} /> {t('joinTakeSeat')}
+                <Button onClick={takeSeat} loading={busy} disabled={needsDeck || full}>
+                  {drafting ? <Package size={16} aria-hidden /> : <LogIn size={16} aria-hidden />}
+                  {drafting ? t('joinJoinDraft') : t('joinTakeSeat')}
                 </Button>
                 <Button variant="soft" onClick={watch}>
-                  <Eye size={16} /> {t('joinSpectate')}
+                  <Eye size={16} aria-hidden /> {t('joinSpectate')}
                 </Button>
                 <Button variant="ghost" onClick={dismiss}>
                   {t('joinNotNow')}
                 </Button>
               </div>
-              {room.players.length >= room.seats && (
+
+              {(full || needsDeck) && (
                 <Text align="center" size={Size.XSmall} tone={TextTone.Warning}>
-                  {t('joinFull')}
+                  {full ? t('joinFull') : t('joinNoDecks')}
                 </Text>
               )}
             </>
           )}
-        </Card>
+        </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -7,6 +7,7 @@
  * reads - one switch, the whole app follows.
  */
 import { assetUrl } from './assets.ts';
+import { SERVER_URL } from '../net/api.ts';
 import type { AssetTheme } from './themes.ts';
 
 export interface CardBack {
@@ -68,13 +69,28 @@ export const DEFAULT_CARD_BACK_BY_GAME: Record<string, string> = {
  */
 export function effectiveCardBack(prefBack: string | undefined, game: string | undefined): string {
   const pref = prefBack || DEFAULT_CARD_BACK;
+  // A custom upload is always an explicit choice - never substitute the
+  // game-appropriate default over the top of it.
+  if (isCustomCardBack(pref)) return pref;
   if (pref === DEFAULT_CARD_BACK && game) {
     return DEFAULT_CARD_BACK_BY_GAME[game] ?? DEFAULT_CARD_BACK;
   }
   return pref;
 }
 
+/** Player-uploaded backs: `custom-<file>`, stored and served by the API. Every
+ * viewer resolves the same URL from the synced id alone, so a face-down card
+ * wears the owner's back on every screen at the table. */
+export const CUSTOM_CARD_BACK_PREFIX = 'custom-';
+
+export function isCustomCardBack(id: string | undefined): boolean {
+  return !!id && id.startsWith(CUSTOM_CARD_BACK_PREFIX);
+}
+
 export function cardBackUrl(id: string): string {
+  if (isCustomCardBack(id)) {
+    return `${SERVER_URL}/api/backs/${id.slice(CUSTOM_CARD_BACK_PREFIX.length)}`;
+  }
   const known = CARD_BACKS.some((back) => back.id === id) ? id : DEFAULT_CARD_BACK;
   // Absolute: this feeds the --pc-card-back custom property (see assetUrl).
   return assetUrl(`${import.meta.env.BASE_URL}backs/${known}.jpg`);

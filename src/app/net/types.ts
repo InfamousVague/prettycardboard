@@ -42,6 +42,17 @@ export interface DeckCard {
   board: Board;
 }
 
+/** A deck's estimated Commander bracket: the 2-4 range a card list can actually
+ *  prove, plus the Game Changers behind it. Derived identically on both sides -
+ *  server/src/brackets.rs and src/app/data/brackets.ts read one shared Game
+ *  Changers list (src/data/gamechangers.json), so the two can never disagree. */
+export interface BracketEstimate {
+  /** 2 | 3 | 4 - the detectable range; 1 and 5 are social calls a list can't make. */
+  bracket: 2 | 3 | 4;
+  /** The Game Changer card names found in the deck. */
+  gameChangers: string[];
+}
+
 export interface DeckSummary {
   id: string;
   name: string;
@@ -50,6 +61,10 @@ export interface DeckSummary {
   game: string;
   commander: string;
   cardCount: number;
+  /** Bracket estimated server-side (it already holds the cards, and shipping
+   *  every deck's full list just to count names would bloat this payload).
+   *  null wherever brackets don't apply: Cyberpunk, non-Commander formats. */
+  bracket?: BracketEstimate | null;
   /** MTG cover (Scryfall scan URL); null for Cyberpunk (resolve from coverCardId). */
   coverImageUrl: string | null;
   /** The cover card's id, for game-aware art resolution. */
@@ -100,6 +115,9 @@ export interface RoomInfo {
   roomId: string;
   name: string;
   seats: number;
+  /** The table's format. 'draft' means seats are filled by drafting a deck at
+   *  the table, so an invitee is NOT asked to bring one. */
+  format?: string | null;
   players: { userId: string; username: string }[];
   started: boolean;
 }
@@ -356,6 +374,70 @@ export interface GameSettings {
   skipFirstDraw?: boolean | null;
 }
 
+/** One card in a draft pack or pool. */
+export interface DraftCard {
+  /** Scryfall id, which is also what a deck list stores. */
+  id: string;
+  name: string;
+  rarity: string;
+  foil: boolean;
+  /** WUBRG letters joined ('WU'); empty for colorless and lands. */
+  colors: string;
+  typeLine: string;
+  /** Collector number. */
+  cn: string;
+}
+
+/**
+ * One drafter, as everyone else sees them.
+ *
+ * `pack` and `pool` arrive for YOUR seat only - the server filters them out of
+ * everyone else's snapshot, so a draft cannot be read off the wire. The counts
+ * are public because the table needs to know who is still thinking.
+ */
+export interface DraftSeat {
+  userId: string;
+  picked: boolean;
+  built: boolean;
+  packCount: number;
+  poolCount: number;
+  pack?: DraftCard[];
+  pool?: DraftCard[];
+}
+
+/**
+ * How a limited pool is opened.
+ *
+ * 'draft' passes packs round the table a card at a time; 'sealed' hands every
+ * player their whole allocation at once. Sealed therefore has no picking phase
+ * at all - the state arrives already in 'building'.
+ */
+export type LimitedMode = 'draft' | 'sealed';
+
+/** A limited pool being opened in front of the pre-game lobby. */
+export interface DraftState {
+  set: string;
+  setName: string;
+  mode: LimitedMode;
+  /** Packs per player. */
+  rounds: number;
+  phase: 'picking' | 'building' | 'done';
+  /** 1-based pack number. */
+  round: number;
+  /** 1-based pick within the round. */
+  pick: number;
+  /** Unix ms this pick lapses and is taken automatically; 0 = untimed.
+   *  In the building phase this is the build clock's deadline instead. */
+  deadlineMs: number;
+  /** Always 0 for sealed: there are no picks to put a clock on. */
+  pickSeconds: number;
+  /** Seconds allowed for deckbuilding; 0 = untimed. */
+  buildSeconds: number;
+  /** Seats cannot swap in an outside deck once they have built. */
+  lockDecks: boolean;
+  seats: DraftSeat[];
+}
+
 export interface RoomState {
   roomId: string;
   name: string;
@@ -384,6 +466,8 @@ export interface RoomState {
   combat?: CombatState | null;
   markers?: TableMarkers;
   matchResult?: MatchResult | null;
+  /** A booster draft in progress; null on every ordinary table. */
+  draft?: DraftState | null;
 }
 
 export type Zone = 'library' | 'hand' | 'battlefield' | 'graveyard' | 'exile' | 'command';
@@ -428,6 +512,21 @@ export type ServerMessage =
   | { type: 'cursor'; fromUserId: string; username: string; seat: number; mat?: number | null; x: number; y: number; hover: string | null; roomId: string }
   | { type: 'room.event'; seq: number; actor: string; action: GameAction & Record<string, unknown>; roomId: string }
   | { type: 'chat'; from: { userId: string; username: string }; text: string; ts: number; roomId: string }
+  | {
+      /** Someone at this table opened something worth cheering (mythic, an
+       *  old-frame rare, or a foil rare+) in the pack dock. */
+      type: 'pull';
+      fromUserId: string;
+      username: string;
+      seat: number | null;
+      scryfallId: string;
+      name: string;
+      setCode: string;
+      rarity: string;
+      foil: boolean;
+      ts: number;
+      roomId: string;
+    }
   | { type: 'log'; seq: number; text: string; ts: number; roomId: string }
   | { type: 'decks.changed' }
   | { type: 'room.closed'; roomId: string }

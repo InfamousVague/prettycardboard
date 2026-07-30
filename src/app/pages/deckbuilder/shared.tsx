@@ -1,5 +1,5 @@
 import { COLOR_ORDER } from '../../data/cards.ts';
-import { manaSymbols, type CardMeta } from '../../data/scryfall.ts';
+import { manaSymbols } from '../../data/scryfall.ts';
 import { ManaSymbol } from '../../components/Mana.tsx';
 import type { MessageKey } from '../../i18n.ts';
 
@@ -49,8 +49,12 @@ export const TYPE_LABEL: Record<TypeBucket, MessageKey> = {
  * Classify a type line into a display bucket. Lands win over creatures
  * (creature lands read as lands, matching common deck tools); creatures win
  * over the remaining artifact/enchantment overlaps.
+ *
+ * Takes anything carrying a type line rather than a full CardMeta, so a draft
+ * pick - which arrives from the server with its type line but no registry
+ * entry - is bucketed by exactly these rules instead of a second copy of them.
  */
-export function typeBucket(meta: CardMeta | undefined): TypeBucket {
+export function typeBucket(meta: { typeLine: string } | undefined): TypeBucket {
   if (!meta) return 'other';
   const front = meta.typeLine.split(' // ')[0] ?? meta.typeLine;
   if (/\bLand\b/.test(front)) return 'land';

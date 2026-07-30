@@ -6,22 +6,22 @@ import { isTauri } from '../tauri.ts';
 import { DownloadButton } from './DownloadButton.tsx';
 import './downloadBanner.css';
 
-const DISMISS_KEY = 'pc.downloadBannerDismissed';
-
 /**
  * A slim, dismissible banner prompting web visitors to install the desktop app
  * (which auto-updates and gets native window chrome). Hidden inside the desktop
- * app itself, and once dismissed it stays gone.
+ * app itself.
+ *
+ * Dismissal deliberately lives in component state and nowhere else: closing it
+ * clears the banner for the rest of this page view, and the next load offers
+ * the app again. The web build is the trial, not the destination, so a single
+ * dismissal should not opt someone out of the pitch forever.
  */
 export function DownloadBanner() {
   const t = useT();
-  const [dismissed, setDismissed] = useState(() => isTauri() || localStorage.getItem(DISMISS_KEY) === '1');
+  const [dismissed, setDismissed] = useState(() => isTauri());
   if (dismissed) return null;
 
-  const close = () => {
-    localStorage.setItem(DISMISS_KEY, '1');
-    setDismissed(true);
-  };
+  const close = () => setDismissed(true);
 
   return (
     <div className="downloadBanner" role="region" aria-label={t('dlGetDesktop')}>

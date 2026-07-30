@@ -1,5 +1,5 @@
 import gameChangersData from '../../data/gamechangers.json' with { type: 'json' };
-import type { DeckCard } from '../net/types.ts';
+import type { BracketEstimate, DeckCard } from '../net/types.ts';
 
 /**
  * Commander Bracket estimation, grounded in the official Game Changers list
@@ -19,12 +19,10 @@ const GAME_CHANGERS = new Set(
   (gameChangersData as { names: string[] }).names.map((name) => name.toLowerCase()),
 );
 
-export interface BracketEstimate {
-  /** 2 | 3 | 4 - the detectable range. */
-  bracket: 2 | 3 | 4;
-  /** The Game Changer card names found in the deck. */
-  gameChangers: string[];
-}
+/** The shape lives with the protocol types, because the server emits it too
+ *  (GET /api/decks) from this same list; re-exported here so callers keep
+ *  importing it beside the estimator that produces it. */
+export type { BracketEstimate };
 
 export function estimateBracket(cards: DeckCard[]): BracketEstimate {
   const found = new Set<string>();

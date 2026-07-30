@@ -111,6 +111,17 @@
   padding: 0 var(--glacier-space-4) var(--glacier-space-2);
 }
 
+/* Once the cards are out they ARE the screen: the showcase has done its job
+   (it described a pack that no longer exists), so it steps aside and the fans
+   get the whole width to spread across. */
+.poRoot[data-phase='fanned'] .poBody {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.poRoot[data-phase='fanned'] .poShowcase {
+  display: none;
+}
+
 .poShowcase {
   min-height: 0;
   display: flex;
@@ -197,17 +208,48 @@
   min-height: 4.5rem;
 }
 
-.poFoot button svg {
-  margin-inline-end: var(--glacier-space-1);
-}
+/* No size overrides here on purpose: the kit's `size="lg"` already fixes the
+   height, inline padding and font size, so anything added locally is what makes
+   these buttons read as a different size from every other action in the app.
+   The icon/label gap is the kit's own `gap`, not an extra margin. */
 
 /* ---- the pack + its tear ---- */
 
 .poPack {
   position: relative;
-  width: clamp(9rem, 30vh, 16rem);
+  /* Twice the old clamp(9rem, 30vh, 16rem): the pack is the thing being opened,
+     so on a big display it gets to be the size of a real one in your hands. */
+  width: clamp(18rem, 60vh, 32rem);
   aspect-ratio: 488 / 680;
   animation: poFloat 3.4s ease-in-out infinite;
+}
+
+/* The shadow the pack casts on the stage. It is a child of the floating pack,
+   so it gets the float's translation for free - and counter-animates it, which
+   is what keeps the shadow on the ground while the pack rises off it. */
+.poPack::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset-block-end: -7%;
+  inset-inline: 9%;
+  height: 7%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgb(0 0 0 / 0.62), transparent 70%);
+  filter: blur(11px);
+  animation: poPackShadow 3.4s ease-in-out infinite;
+}
+
+@keyframes poPackShadow {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateY(10px) scale(0.88);
+    opacity: 0.5;
+  }
 }
 
 /* The tense-then-rip: the pack braces for a beat before the seam gives. */
@@ -234,7 +276,15 @@
   border-radius: var(--glacier-radius-md);
   background-size: cover;
   background-position: center;
-  box-shadow: 0 18px 40px rgb(0 0 0 / 0.6);
+  /* Stepped edges: what is inside a booster is a STACK of cards, and saying so
+     here is what makes the cards sliding out of it a moment later read as the
+     same objects rather than a new set of props. */
+  box-shadow:
+    0 18px 40px rgb(0 0 0 / 0.6),
+    2px 2px 0 rgb(255 255 255 / 0.07),
+    4px 4px 0 rgb(0 0 0 / 0.38),
+    6px 6px 0 rgb(255 255 255 / 0.05),
+    8px 8px 0 rgb(0 0 0 / 0.32);
 }
 
 /* Light spilling out of the torn pack. */
@@ -258,8 +308,41 @@
   background-size: cover;
   background-position: center;
   border-radius: var(--glacier-radius-lg);
-  box-shadow: 0 26px 54px rgb(0 0 0 / 0.5);
+  /* Cast shadow, then the wrapper's own edges: a lit top lip, a lit left edge
+     where the light is coming from, and a dark right edge rolling away. Those
+     three insets are most of what turns a rectangle into an object. */
+  box-shadow:
+    0 26px 54px rgb(0 0 0 / 0.5),
+    0 5px 12px rgb(0 0 0 / 0.38),
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    inset 1px 0 0 rgb(255 255 255 / 0.09),
+    inset -1px 0 0 rgb(0 0 0 / 0.45),
+    inset 0 -1px 0 rgb(0 0 0 / 0.4);
   overflow: hidden;
+}
+
+/* Curvature. A booster is a foil bag, not a card: it bulges where the stack
+   inside pushes it out and falls away to a dark fold at either side. The two
+   steep bands after it are creases catching the same light. */
+.poHalf::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      rgb(0 0 0 / 0.55) 0%,
+      rgb(0 0 0 / 0.2) 6%,
+      rgb(255 255 255 / 0.07) 22%,
+      rgb(255 255 255 / 0.15) 38%,
+      rgb(255 255 255 / 0.03) 52%,
+      rgb(0 0 0 / 0.12) 70%,
+      rgb(0 0 0 / 0.3) 88%,
+      rgb(0 0 0 / 0.6) 100%
+    ),
+    linear-gradient(96deg, transparent 44%, rgb(255 255 255 / 0.08) 47%, transparent 50%),
+    linear-gradient(84deg, transparent 66%, rgb(0 0 0 / 0.18) 69%, transparent 72%);
 }
 
 .poPack[data-tearing] .poHalfTop {
@@ -350,26 +433,29 @@
   opacity: 0.9;
 }
 
+/* The idle float is also the parallax: swinging the pack a few degrees about
+   its own Y axis under a perspective is what reads as depth, and it is why the
+   edge shading above changes character as it turns. */
 @keyframes poFloat {
   0%,
   100% {
-    transform: translateY(0) rotate(-1.2deg);
+    transform: perspective(1400px) translateY(0) rotateY(-8deg) rotateX(2deg) rotate(-1.2deg);
   }
   50% {
-    transform: translateY(-10px) rotate(1.2deg);
+    transform: perspective(1400px) translateY(-10px) rotateY(8deg) rotateX(-2deg) rotate(1.2deg);
   }
 }
 
 @keyframes poShake {
   0%,
   100% {
-    transform: translateX(0) rotate(0deg);
+    transform: perspective(1400px) translateX(0) rotate(0deg);
   }
   25% {
-    transform: translateX(-5px) rotate(-1.6deg);
+    transform: perspective(1400px) translateX(-5px) rotateY(-6deg) rotate(-1.6deg);
   }
   75% {
-    transform: translateX(5px) rotate(1.6deg);
+    transform: perspective(1400px) translateX(5px) rotateY(6deg) rotate(1.6deg);
   }
 }
 
@@ -451,7 +537,7 @@
 
 .poLineCard {
   flex: none;
-  width: clamp(7rem, 42vh, 12rem);
+  width: clamp(14rem, 72vh, 24rem);
   scroll-snap-align: center;
   animation: poLineIn 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
@@ -487,6 +573,18 @@
   padding-block: var(--glacier-space-2);
 }
 
+/* With the showcase gone the stage owns the window, so the two fans sit beside
+   each other rather than stacked. That is what buys the cards their size: a
+   single row has the whole viewport height to spread into instead of half. */
+@media (min-width: 60rem) {
+  .poFans {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    align-items: center;
+    gap: clamp(var(--glacier-space-4), 4vw, var(--glacier-space-10));
+  }
+}
+
 .poFan {
   display: grid;
   justify-items: center;
@@ -508,11 +606,13 @@
 }
 
 .poFan[data-feature] {
-  --po-card-w: clamp(5.5rem, 18vh, 10.5rem);
+  /* Was clamp(5.5rem, 18vh, 10.5rem), back when both fans shared the height. */
+  --po-card-w: clamp(9rem, 30vh, 20rem);
 }
 
 .poFan:not([data-feature]) {
-  --po-card-w: clamp(3.5rem, 11vh, 7.25rem);
+  /* Was clamp(3.5rem, 11vh, 7.25rem). */
+  --po-card-w: clamp(6rem, 20vh, 14rem);
 }
 
 .poFanArc {
@@ -532,16 +632,32 @@
      hand rather than spinning it in place. */
   transform-origin: 50% 320%;
   cursor: default;
-  /* `rotate` above holds the fan angle; the entrance animates `transform`, so
-     the two compose instead of overwriting each other. `backwards` keeps a card
-     hidden through its stagger delay. */
+  /* `rotate`/`translate` above hold the stack-to-arc pose; the entrance
+     animates `transform`, so the two compose instead of overwriting each
+     other. `backwards` keeps a card hidden through its stagger delay. */
   animation: poFanIn 480ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  /* The spread itself: cards come out of the pack stacked and open into the
+     arc from there, rather than appearing already fanned. */
+  transition:
+    rotate 660ms cubic-bezier(0.22, 1, 0.36, 1),
+    translate 660ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Once the arc has finished opening, the same rotation is being driven by the
+   pointer rather than by the reveal, and the long eased sweep above would trail
+   a whole card behind the cursor. Short enough to feel attached to the pointer,
+   long enough to smooth over the quantised focus steps. */
+.poFanArc[data-open] .poFanCard {
+  transition:
+    rotate 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    translate 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @keyframes poFanIn {
   from {
     opacity: 0;
-    transform: translateY(70px) scale(0.72);
+    /* Up out of where the pack was standing, not in from nowhere. */
+    transform: translateY(120px) scale(0.86);
   }
   to {
     opacity: 1;
@@ -549,12 +665,65 @@
   }
 }
 
+/* The same three-tier treatment the dock uses, on the bigger stage: a rare
+   glows, a mythic breathes and bursts once as it lands, a foil mythic drifts
+   through the spectrum. The keyframes live in packDock.css, which this screen
+   always loads (it imports packVisuals, which imports that file) - deliberately
+   shared, so a pull is celebrated the same way wherever it is seen. */
 .poFanCard[data-rarity='rare'] {
-  filter: drop-shadow(0 0 10px rgb(217 164 65 / 0.55));
+  --pc-rarity: oklch(0.78 0.13 92);
+  filter: drop-shadow(0 0 12px color-mix(in oklch, var(--pc-rarity) 55%, transparent));
 }
 
 .poFanCard[data-rarity='mythic'] {
-  filter: drop-shadow(0 0 14px rgb(240 132 72 / 0.65));
+  --pc-rarity: oklch(0.72 0.19 48);
+}
+
+.poFanCard[data-rarity='mythic']::before {
+  content: '';
+  position: absolute;
+  inset: -18%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklch, var(--pc-rarity) 85%, transparent),
+    transparent 72%
+  );
+  filter: blur(18px);
+  opacity: 0;
+  pointer-events: none;
+  animation:
+    pcHaloIn 700ms ease-out 460ms forwards,
+    pcHaloBreathe 2.8s ease-in-out 1.16s infinite;
+}
+
+.poFanCard[data-rarity='mythic']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: 5%;
+  border: 2px solid color-mix(in oklch, var(--pc-rarity) 85%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  animation: pcMythicBurst 1.1s cubic-bezier(0.16, 1, 0.3, 1) 520ms 1;
+}
+
+.poFanCard[data-rarity='mythic'][data-foil]::before {
+  background: conic-gradient(
+    from 0deg,
+    oklch(0.76 0.2 20),
+    oklch(0.84 0.19 95),
+    oklch(0.8 0.18 165),
+    oklch(0.74 0.2 265),
+    oklch(0.76 0.2 20)
+  );
+  filter: blur(22px);
+  animation:
+    pcHaloIn 700ms ease-out 460ms forwards,
+    pcHaloBreathe 2.8s ease-in-out 1.16s infinite,
+    pcHaloSpin 7s linear 1.16s infinite;
 }
 
 .poFanLabel {
@@ -593,8 +762,28 @@
 
 @media (prefers-reduced-motion: reduce) {
   .poPack,
+  .poPack::after,
   .poSheen {
     animation: none;
+  }
+
+  .poFanCard {
+    transition: none;
+  }
+
+  .poFanArc[data-open] .poFanCard {
+    transition: none;
+  }
+
+  /* The rarity glow stays - it is information - but stops moving. */
+  .poFanCard[data-rarity='mythic']::before {
+    animation: none;
+    opacity: 0.85;
+  }
+
+  .poFanCard[data-rarity='mythic']::after {
+    animation: none;
+    opacity: 0;
   }
 
   /* The rip still has to clear the screen, just without the flourish. */

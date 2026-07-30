@@ -1752,10 +1752,17 @@
   pointer-events: auto;
 }
 
+/* A fixed track the cards are dealt across, rather than a row they add up to.
+   The width is what the fan WANTS (one card plus a step each) capped at the
+   strip, and the cards inside are placed by fraction - so seven cards look
+   exactly as they always did, and forty compress into the same footprint
+   instead of running off both edges of the screen. */
 .myFan {
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
+  position: relative;
+  flex: none;
+  width: var(--pc-hand-span, auto);
+  max-width: 100%;
+  height: var(--pc-hand-h);
   min-width: 0;
   border-radius: var(--glacier-radius-xl) var(--glacier-radius-xl) 0 0;
   /* Rests half off the bottom edge; peeks fully up on hover / while dragging. */
@@ -1803,12 +1810,21 @@
   box-shadow: inset 0 2px 0 var(--glacier-accent-solid), 0 -8px 24px color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent);
 }
 
+/* Placed by fraction along the track, not by flow: --slink is 0 for the card at
+   the near end and 1 for the one at the far end, and the space between them is
+   whatever is left of the strip after one card's width. Written by React at
+   rest and repainted in place while the pointer is over the fan, which is what
+   opens the cards under the cursor and bunches the rest to the far side. */
 .handCard {
-  position: relative;
-  /* Overlap scales with the card so the fan keeps its shape at any size. */
-  margin-inline: calc(-22px * var(--card-scale, 1));
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline-start: calc(var(--slink, 0.5) * (100% - var(--pc-hand-w, 132px)));
+  width: var(--pc-hand-w, 132px);
   cursor: grab;
   touch-action: none;
+  /* Short enough to feel attached to the pointer, long enough that a card
+     being played does not teleport its neighbours into the gap. */
+  transition: inset-inline-start 240ms var(--pc-settle);
 }
 
 .handCard::after {
@@ -1826,6 +1842,10 @@
 /* Reduced motion opts out of the magnification springs; keep the old
    instant lift so hover still answers. */
 @media (prefers-reduced-motion: reduce) {
+  .handCard {
+    transition: none;
+  }
+
   .handCard:hover {
     translate: 0 -26px;
     z-index: 10;
@@ -2826,14 +2846,23 @@
   gap: var(--glacier-space-3);
 }
 
+/* A fixed track, like the table's hands: the cards are dealt across it by
+   fraction rather than added up, so the fan cannot outgrow the panel however
+   many cards a mulligan puts in it. */
 .mullFan {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
+  position: relative;
+  width: var(--mull-span);
+  max-width: 100%;
+  height: var(--mull-h);
+  margin-inline: auto;
 }
 
 .mullCard {
-  margin-inline: -16px;
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline-start: calc(var(--slink, 0.5) * (100% - var(--mull-w)));
+  width: var(--mull-w);
+  transition: inset-inline-start 240ms var(--pc-settle);
 }
 
 .mullCard:hover {
@@ -4913,23 +4942,12 @@
   zoom: calc(var(--pc-grid-zoom, 0.5) * var(--pc-grid-user-zoom, 1));
 }
 
-.playerGridHit {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  padding: 0;
-  border: none;
-  background: none;
-  cursor: pointer;
-}
-
-/* The cell is a preview: its board must not swallow the click that stages it. */
+/* The cell's board stays interactive so cards can be hovered and clicked. */
 .playerGridCell .seatFrame {
   flex: 1;
   min-width: 0;
   min-height: 0;
   margin: 0;
-  pointer-events: none;
 }
 
 /* ...except my own cell, which is the live board rather than a preview of one.

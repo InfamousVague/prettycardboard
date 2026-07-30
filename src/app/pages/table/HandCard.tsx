@@ -14,12 +14,18 @@ export const HAND_PEEK_ZONE = 230;
  * to the card's center drives a gaussian bump - biggest under the cursor,
  * tapering through the neighbors, gone by roughly two cards away. Motion
  * values keep the whole effect off the React render path.
+ *
+ * Where the card sits along the fan is NOT a transform: `--slink` drives its
+ * `inset-inline-start` in CSS, so the fan can be reshaped by writing one custom
+ * property per card without going through React (see MyBoard's paintSlinky),
+ * and the transform is left free for the lift, tilt and drag.
  */
 export function HandCard({
   card,
   dataIid,
   width,
-  spread,
+  offset,
+  count,
   dimmed,
   faceDown,
   handX,
@@ -33,7 +39,10 @@ export function HandCard({
   /** Marks the card for hit-testing during a touch hand-scrub (MyBoard). */
   dataIid?: string;
   width: number;
-  spread: number;
+  /** This card's place along the fan, 0 at the near end and 1 at the far one. */
+  offset: number;
+  /** How many cards are in the fan, which sets how far it leans and bows. */
+  count: number;
   dimmed: boolean;
   faceDown?: boolean;
   handX: MotionValue<number>;
@@ -60,6 +69,14 @@ export function HandCard({
   const lift = useSpring(useTransform(bump, (v) => liftMax * v), { stiffness: 430, damping: 30 });
   const z = useTransform(bump, (v) => Math.round(v * 20));
 
+  // The lean and the bow both come from the card's place in the fan rather than
+  // its index, and both are capped: with forty cards an index-driven tilt put
+  // the outermost cards on their sides and pushed them a hand's height down the
+  // screen. A fan is a fan at any size - only the density inside it changes.
+  const away = (offset - 0.5) * 2; // -1 at the near end, +1 at the far one
+  const lean = Math.min(13, count * 1.75);
+  const bow = Math.min(22, count * 3) * (width / 132);
+
   // The dock magnification lifts the inner .handCardZoom (which carries GameCard's
   // data-preview-src) up out of the fan, while the .handCard::after hit-buffer
   // stays put on top of the base footprint - so a pointer on the card body lands on
@@ -72,15 +89,15 @@ export function HandCard({
     <motion.div
       ref={ref}
       className="handCard"
-      style={{ zIndex: z }}
+      style={{ zIndex: z, ['--slink' as string]: offset }}
       data-hand-iid={dataIid}
       data-preview-src={previewSrc}
       data-preview-name={previewSrc ? card.name : undefined}
       initial={{ y: 60, opacity: 0 }}
       animate={{
-        y: Math.abs(spread) * 6,
+        y: Math.abs(away) * bow,
         opacity: dimmed ? 0.28 : 1,
-        rotate: spread * 3.5,
+        rotate: away * lean,
       }}
       transition={{ type: 'spring', stiffness: 260, damping: 22 }}
       onPointerDown={onPointerDown}

@@ -414,9 +414,382 @@ fn default_format() -> String {
 }
 
 /// Every MTG format a room can be created with (the client's preset picker).
+/// "draft" is Limited: the table opens packs and builds a pool at the table
+/// before the game starts, by drafting or by sealed (see `Draft`).
 pub const MTG_FORMATS: &[&str] = &[
-    "commander", "brawl", "standard", "pioneer", "modern", "legacy", "vintage", "pauper", "freeform",
+    "commander", "brawl", "standard", "pioneer", "modern", "legacy", "vintage", "pauper",
+    "draft", "freeform",
 ];
+
+// --- limited: booster draft and sealed -------------------------------------
+
+/// A card in a limited pool, as the server handles it.
+///
+/// The server deliberately knows nothing about Magic here: the HOST's client
+/// generates every pack from the bundled collation data (public/cache/packs)
+/// and uploads them at `draft.start`, because that data - the real sheets and
+/// weights - already lives in the browser and re-implementing it in Rust would
+/// mean shipping and refreshing a second copy of MTGJSON server-side. What
+/// arrives is an opaque list of cards to deal, pass and hand back.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftCard {
+    /// Scryfall id, which is also what a deck list stores.
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub rarity: String,
+    #[serde(default)]
+    pub foil: bool,
+    /// WUBRG letters, joined ("WU"). Drives the build screen's colour columns.
+    #[serde(default)]
+    pub colors: String,
+    #[serde(default)]
+    pub type_line: String,
+    /// Collector number.
+    #[serde(default)]
+    pub cn: String,
+}
+
+/// One drafter.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftSeat {
+    pub user_id: String,
+    /// The pack in front of this seat right now.
+    #[serde(default)]
+    pub pack: Vec<DraftCard>,
+    /// Everything taken, in pick order.
+    #[serde(default)]
+    pub pool: Vec<DraftCard>,
+    /// This seat has taken its card for the current pick and is waiting on the
+    /// rest of the table. Cleared when the packs rotate.
+    #[serde(default)]
+    pub picked: bool,
+    /// Finished building a deck out of the pool.
+    #[serde(default)]
+    pub built: bool,
+}
+
+/// A limited pool in progress, living in the room BEFORE the game starts.
+///
+/// This is a phase in front of the normal pre-game lobby rather than a
+/// separate kind of room: when it finishes every seat has a real, saved deck,
+/// and the existing lobby, start, and table code take over untouched.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Draft {
+    /// Set code the packs came from, for the artwork and the log.
+    pub set: String,
+    pub set_name: String,
+    /// "draft" (pass the packs round) or "sealed" (open them all, keep it all).
+    ///
+    /// Sealed is the same tournament with the passing taken out, so it reuses
+    /// this whole structure rather than getting one of its own: the pool, the
+    /// build phase, the build clock, the deck lock and the forced auto-deck are
+    /// identical either way. The only structural difference is that a sealed
+    /// pool is born in its building phase - there is nothing to pick.
+    #[serde(default = "default_draft_mode")]
+    pub mode: String,
+    /// Packs per player (three to draft, six to seal, traditionally).
+    pub rounds: usize,
+    /// "picking" | "building" | "done"
+    pub phase: String,
+    /// 1-based pack number.
+    pub round: usize,
+    /// 1-based pick number within the round.
+    pub pick: usize,
+    pub seats: Vec<DraftSeat>,
+    /// Packs not dealt yet, consumed a round at a time from the front.
+    #[serde(default)]
+    pub reserve: Vec<Vec<DraftCard>>,
+    /// Unix ms the current pick lapses and is taken automatically; 0 = untimed.
+    /// Doubles as the deadline for the building phase when a build clock is set.
+    #[serde(default)]
+    pub deadline_ms: i64,
+    /// Seconds on the clock for each pick; 0 = untimed.
+    #[serde(default)]
+    pub pick_seconds: u64,
+    /// Seconds each seat gets to build once the picking ends; 0 = untimed.
+    /// Optional because a table that is all in the same room does not need a
+    /// referee - but a table with a stranger in it very much does.
+    #[serde(default)]
+    pub build_seconds: u64,
+    /// The table plays what it drafted: once a seat reports its deck built it
+    /// cannot swap in something it brought from home.
+    #[serde(default)]
+    pub lock_decks: bool,
+    /// Basic lands from the drafted set, uploaded with the packs. Only used to
+    /// fill out a forced build - a pool alone cannot cast anything.
+    #[serde(default)]
+    pub basics: Vec<DraftCard>,
+}
+
+/// A room saved mid-draft before sealed existed replays as what it was.
+fn default_draft_mode() -> String {
+    "draft".to_string()
+}
+
+/// Colour order, and the basic that produces each. Lands are colourless to
+/// Scryfall, so a basic can only be matched to a colour by its name - and
+/// `ends_with` catches the snow-covered sets, which print nothing else.
+const COLORS: [char; 5] = ['W', 'U', 'B', 'R', 'G'];
+const BASIC_NAMES: [&str; 5] = ["Plains", "Island", "Swamp", "Mountain", "Forest"];
+
+/// Bounds on an uploaded pool, so a crafted `draft.start` cannot pin the
+/// server's memory. A real draft is 3 packs of 15 for up to 8 seats; a real
+/// sealed is 6 packs each, which is why the ceiling is not 3.
+pub const DRAFT_MAX_ROUNDS: usize = 8;
+pub const DRAFT_MAX_PACK: usize = 60;
+/// Five basics, plus room for the odd Wastes or snow variant.
+pub const DRAFT_MAX_BASICS: usize = 12;
+
+/// Everything the host chose on the setup screen, kept together so starting a
+/// draft is not a nine-argument function.
+pub struct DraftSetup {
+    pub set: String,
+    pub set_name: String,
+    pub mode: String,
+    pub rounds: usize,
+    pub pick_seconds: u64,
+    pub build_seconds: u64,
+    pub lock_decks: bool,
+    pub basics: Vec<DraftCard>,
+}
+
+impl Draft {
+    /// Sealed: every pack opened at once, nothing passed to anyone.
+    pub fn sealed(&self) -> bool {
+        self.mode == "sealed"
+    }
+
+    /// Which way packs pass this round. Left on odd packs, right on even -
+    /// the real alternation, and the reason pack two feels different.
+    fn shift(&self) -> usize {
+        let n = self.seats.len();
+        if n == 0 {
+            return 0;
+        }
+        if self.round % 2 == 1 {
+            1
+        } else {
+            n - 1
+        }
+    }
+
+    /// Take the next `seats.len()` packs off the reserve and put one in front
+    /// of each drafter.
+    fn deal_round(&mut self) {
+        for index in 0..self.seats.len() {
+            let pack = if self.reserve.is_empty() {
+                Vec::new()
+            } else {
+                self.reserve.remove(0)
+            };
+            self.seats[index].pack = pack;
+        }
+    }
+
+    /// Deal the opening packs and start whichever clock applies.
+    pub fn begin(&mut self, now: i64) {
+        if self.sealed() {
+            // Nothing is passed, so there is no reason to hand these out a
+            // round at a time: each seat opens its whole allocation at once and
+            // the pool simply IS those packs. That is also why a sealed pool
+            // skips the picking phase outright and opens on the build screen.
+            for index in 0..self.seats.len() {
+                for _ in 0..self.rounds {
+                    if self.reserve.is_empty() {
+                        break;
+                    }
+                    let pack = self.reserve.remove(0);
+                    self.seats[index].pool.extend(pack);
+                }
+            }
+            self.round = self.rounds;
+            self.phase = "building".to_string();
+            self.deadline_ms = if self.build_seconds > 0 {
+                now + (self.build_seconds as i64) * 1000
+            } else {
+                0
+            };
+            return;
+        }
+        self.deal_round();
+        self.deadline_ms = if self.pick_seconds > 0 {
+            now + (self.pick_seconds as i64) * 1000
+        } else {
+            0
+        };
+    }
+
+    /// Take a card for one seat. Returns false when the pick is not legal.
+    pub fn take(&mut self, seat: usize, index: usize, id: &str) -> bool {
+        let Some(entry) = self.seats.get_mut(seat) else {
+            return false;
+        };
+        if entry.picked {
+            return false;
+        }
+        // The index is what the client clicked; the id is what it believed was
+        // there. Both must agree or the seat is acting on a stale pack.
+        let Some(card) = entry.pack.get(index) else {
+            return false;
+        };
+        if card.id != id {
+            return false;
+        }
+        let card = entry.pack.remove(index);
+        entry.pool.push(card);
+        entry.picked = true;
+        true
+    }
+
+    /// Every seat that still has a pack has picked from it.
+    pub fn pass_complete(&self) -> bool {
+        self.seats.iter().all(|s| s.picked || s.pack.is_empty())
+    }
+
+    /// Rotate the packs and open the next pick, moving to the next round (or
+    /// out of the draft entirely) once the packs run out.
+    pub fn advance(&mut self, now: i64) {
+        let n = self.seats.len();
+        if n == 0 {
+            return;
+        }
+        let shift = self.shift();
+        let packs: Vec<Vec<DraftCard>> =
+            self.seats.iter_mut().map(|s| std::mem::take(&mut s.pack)).collect();
+        for (index, pack) in packs.into_iter().enumerate() {
+            self.seats[(index + shift) % n].pack = pack;
+        }
+        for seat in self.seats.iter_mut() {
+            seat.picked = false;
+        }
+        if self.seats.iter().all(|s| s.pack.is_empty()) {
+            self.round += 1;
+            self.pick = 1;
+            if self.round > self.rounds {
+                self.phase = "building".to_string();
+                // The build clock, if the host set one, starts the moment the
+                // last card is picked.
+                self.deadline_ms = if self.build_seconds > 0 {
+                    now + (self.build_seconds as i64) * 1000
+                } else {
+                    0
+                };
+                return;
+            }
+            self.deal_round();
+        } else {
+            self.pick += 1;
+        }
+        self.deadline_ms = if self.pick_seconds > 0 {
+            now + (self.pick_seconds as i64) * 1000
+        } else {
+            0
+        };
+    }
+
+    /// Take the first card of the pack for one seat that has not picked.
+    /// Returns false when there was nothing to take.
+    ///
+    /// The table has to be able to act for someone, or one closed laptop
+    /// wedges it forever waiting on a pick that is never coming.
+    pub fn force_seat(&mut self, seat: usize) -> bool {
+        let Some(entry) = self.seats.get_mut(seat) else {
+            return false;
+        };
+        if entry.picked || entry.pack.is_empty() {
+            return false;
+        }
+        let card = entry.pack.remove(0);
+        entry.pool.push(card);
+        entry.picked = true;
+        true
+    }
+
+    /// A playable deck assembled from one seat's pool, for when the build
+    /// clock lapses on someone who is not there to build it themselves.
+    ///
+    /// Not a good deck - a legal one. The two heaviest colours in the pool,
+    /// every spell castable in them up to 23, and 17 basics split the same way.
+    /// That is the shape a limited deck wants, and it beats seating someone
+    /// with nothing at all.
+    pub fn auto_deck(&self, seat: usize) -> Vec<crate::db::DeckCard> {
+        const SPELLS: usize = 23;
+        const LANDS: usize = 17;
+        let Some(entry) = self.seats.get(seat) else {
+            return Vec::new();
+        };
+        // Weight each colour by how many cards in the pool want it.
+        let mut weight = [0usize; 5];
+        for card in &entry.pool {
+            for letter in card.colors.chars() {
+                if let Some(i) = COLORS.iter().position(|c| *c == letter) {
+                    weight[i] += 1;
+                }
+            }
+        }
+        let mut order: Vec<usize> = (0..COLORS.len()).collect();
+        order.sort_by_key(|i| std::cmp::Reverse(weight[*i]));
+        let (first, second) = (order[0], order[1]);
+        let castable = |card: &DraftCard| {
+            card.colors.chars().all(|letter| {
+                COLORS
+                    .iter()
+                    .position(|c| *c == letter)
+                    .is_some_and(|i| i == first || i == second)
+            })
+        };
+        let mut list: Vec<(String, String)> = entry
+            .pool
+            .iter()
+            .filter(|c| castable(c))
+            .take(SPELLS)
+            .map(|c| (c.id.clone(), c.name.clone()))
+            .collect();
+        // A pool too shallow in its own colours takes the rest anyway: an
+        // undersized deck is illegal, an off-colour one is merely bad.
+        for card in entry.pool.iter().filter(|c| !castable(c)) {
+            if list.len() >= SPELLS {
+                break;
+            }
+            list.push((card.id.clone(), card.name.clone()));
+        }
+        let basic = |index: usize| {
+            self.basics
+                .iter()
+                .find(|b| b.name.ends_with(BASIC_NAMES[index]))
+        };
+        let total = weight[first] + weight[second];
+        let split = if total == 0 {
+            LANDS / 2
+        } else {
+            LANDS * weight[first] / total
+        };
+        for (count, land) in [(split, basic(first)), (LANDS - split, basic(second))] {
+            let Some(land) = land else { continue };
+            for _ in 0..count {
+                list.push((land.id.clone(), land.name.clone()));
+            }
+        }
+        let mut cards: Vec<crate::db::DeckCard> = Vec::new();
+        for (id, name) in list {
+            if let Some(existing) = cards.iter_mut().find(|c| c.scryfall_id == id) {
+                existing.quantity += 1;
+            } else {
+                cards.push(crate::db::DeckCard {
+                    scryfall_id: id,
+                    name,
+                    quantity: 1,
+                    board: "main".to_string(),
+                });
+            }
+        }
+        cards
+    }
+}
 
 /// Formats that run the full commander machinery: command zone casts, tax,
 /// commander damage, the return-to-command-zone prompt.
@@ -547,6 +920,10 @@ pub struct Room {
     /// last keep).
     #[serde(default)]
     pub first_turn_begun: bool,
+    /// A booster draft running in front of the pre-game lobby. `None` on every
+    /// ordinary table, which is also what pre-draft rooms deserialize to.
+    #[serde(default)]
+    pub draft: Option<Draft>,
     pub players: Vec<Player>, // sorted by seat
     #[serde(skip)]
     pub spectators: Vec<UserRef>,
@@ -769,6 +1146,51 @@ fn card_view(card: &Card, owner_is_viewer: bool, hide_from_owner: bool) -> Value
 }
 
 impl Room {
+    /// The draft as seen by `viewer`, or Null when this table is not drafting.
+    ///
+    /// A draft is hidden information: your pack and your pool are yours, and
+    /// everyone else is a name, a pick count and whether they are still
+    /// thinking. Filtered here for the same reason hands are - it is the one
+    /// place every outbound snapshot passes through.
+    fn draft_view(&self, viewer: Option<&str>) -> Value {
+        let Some(draft) = &self.draft else {
+            return Value::Null;
+        };
+        let seats: Vec<Value> = draft
+            .seats
+            .iter()
+            .map(|s| {
+                let own = viewer == Some(s.user_id.as_str());
+                let mut v = json!({
+                    "userId": s.user_id,
+                    "picked": s.picked,
+                    "built": s.built,
+                    "packCount": s.pack.len(),
+                    "poolCount": s.pool.len(),
+                });
+                if own {
+                    v["pack"] = json!(s.pack);
+                    v["pool"] = json!(s.pool);
+                }
+                v
+            })
+            .collect();
+        json!({
+            "set": draft.set,
+            "setName": draft.set_name,
+            "mode": draft.mode,
+            "rounds": draft.rounds,
+            "phase": draft.phase,
+            "round": draft.round,
+            "pick": draft.pick,
+            "deadlineMs": draft.deadline_ms,
+            "pickSeconds": draft.pick_seconds,
+            "buildSeconds": draft.build_seconds,
+            "lockDecks": draft.lock_decks,
+            "seats": seats,
+        })
+    }
+
     /// RoomState as seen by `viewer` (a seated player's userId), or by a
     /// spectator when `viewer` is None. Hidden information is filtered here:
     /// libraries are never serialized (counts only), hands only for the owner
@@ -884,6 +1306,7 @@ impl Room {
             "combat": self.combat,
             "markers": self.markers,
             "matchResult": self.match_result,
+            "draft": self.draft_view(viewer),
             "players": players,
             "spectators": self.spectators
                 .iter()
@@ -1128,6 +1551,7 @@ pub async fn sweeper(app: Arc<App>) {
         interval.tick().await;
         flush_dirty(&app);
         expire_pending(&app);
+        ws::draft_tick(&app);
         let now = crate::now_ms();
         let mut dead: Vec<String> = Vec::new();
         for room in app.rooms.iter() {

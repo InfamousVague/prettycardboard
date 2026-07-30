@@ -1,0 +1,277 @@
+/* Collection - the binder view. Sets are shelves: a completion bar in the
+   header, the cards you own in the grid, and the ones you are missing as
+   ghosted empty sleeves beside them. First-time pulls glow until looked at. */
+
+.collHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-3) var(--glacier-space-4);
+}
+
+.collNotice {
+  display: grid;
+  justify-items: center;
+  gap: var(--glacier-space-3);
+  padding-block: var(--glacier-space-8);
+}
+
+/* ---- headline figures ---- */
+
+.collStats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
+  gap: var(--glacier-space-3);
+  margin-block: var(--glacier-space-5);
+}
+
+/* ---- filters ---- */
+
+.collToolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-3) var(--glacier-space-4);
+  margin-block-end: var(--glacier-space-5);
+}
+
+.collSearch {
+  flex: 1 1 14rem;
+  min-width: 12rem;
+}
+
+.collSetSelect {
+  min-width: 12rem;
+}
+
+/* ---- set shelves ---- */
+
+.collSets {
+  display: grid;
+  gap: var(--glacier-space-7);
+}
+
+.collSet {
+  display: grid;
+  gap: var(--glacier-space-3);
+}
+
+.collSetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-2) var(--glacier-space-4);
+  padding-block-end: var(--glacier-space-2);
+  border-block-end: var(--glacier-hairline) solid var(--glacier-border-subtle);
+}
+
+.collSetIdent {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  min-width: 0;
+}
+
+/* Set symbols are near-black SVGs; invert so they read on the dark surface. */
+.collSetIcon {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+  filter: invert(1);
+  opacity: 0.85;
+}
+
+.collSetNames {
+  display: grid;
+  min-width: 0;
+}
+
+.collSetName {
+  font-weight: var(--glacier-font-weight-semibold);
+  font-size: var(--glacier-font-size-md);
+  color: var(--glacier-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collSetScore {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  min-width: min(100%, 16rem);
+}
+
+.collSetCount {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-text);
+  white-space: nowrap;
+}
+
+.collSetOf {
+  color: var(--glacier-text-subtle);
+  font-weight: var(--glacier-font-weight-regular);
+}
+
+.collSetBar {
+  flex: 1 1 6rem;
+}
+
+.collPoolPrompt {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-3);
+}
+
+/* ---- the grid ---- */
+
+.collGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-3);
+}
+
+.collTile {
+  position: relative;
+}
+
+.collMore {
+  display: flex;
+  justify-content: center;
+}
+
+/* ---- first-pull treatment ---- */
+
+/* The NEW flag sits proud of the top-left corner, like a sticker on a sleeve,
+   and pulses gently so a fresh pull is findable in a full binder. The chip
+   itself is the kit's solid accent Pill; only placement and pulse are ours. */
+.collNewFlag {
+  position: absolute;
+  inset-block-start: -0.4rem;
+  inset-inline-start: -0.4rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  box-shadow: var(--glacier-shadow-2);
+  /* Decorative: never intercept the click that opens the card. */
+  pointer-events: none;
+  animation: collNewPulse 2.4s var(--glacier-ease-in-out) infinite;
+}
+
+@keyframes collNewPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.06);
+    filter: brightness(1.25);
+  }
+}
+
+/* A halo behind the whole card, so the row reads before any label does. */
+.collTile[data-new]::after {
+  content: '';
+  position: absolute;
+  inset: -0.35rem;
+  border-radius: var(--glacier-radius-lg);
+  box-shadow:
+    0 0 0 var(--glacier-hairline) var(--glacier-accent-solid),
+    0 0 1.25rem -0.25rem var(--glacier-accent-solid);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collNewFlag {
+    animation: none;
+  }
+}
+
+.collDupes,
+.collFoilFlag {
+  position: absolute;
+  inset-block-end: 0.3rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--glacier-bg) 78%, transparent);
+  color: var(--glacier-text-muted);
+  font-size: var(--glacier-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+.collDupes {
+  inset-inline-end: 0.3rem;
+}
+
+.collFoilFlag {
+  inset-inline-start: 0.3rem;
+  color: var(--glacier-text);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+/* ---- missing cards ---- */
+
+/* An unpulled card is an empty sleeve: the kit's proxy face, drained of colour
+   and dashed, so a hole in the set is legible at a glance across the grid. */
+/* The empty sleeve. The FACE is what fades - the border keeps full strength so
+   the rarity ring below stays readable, which is the whole point of showing a
+   hole in the set rather than hiding it. */
+/* Screen-reader only: without it, "missing" is conveyed by dashes and drained
+   colour alone, which is nothing at all to a screen reader. */
+.collGhostSr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.collGhost .gcCard {
+  border-style: dashed;
+  border-width: 1.5px;
+  box-shadow: none;
+}
+
+.collGhost .gcProxy {
+  opacity: 0.4;
+  filter: saturate(0.2);
+  transition: opacity var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+@media (hover: hover) {
+  .collGhost:hover .gcProxy {
+    opacity: 0.72;
+  }
+}
+
+/* Rarity still shows through the ghost - the rares you are missing are the
+   ones worth chasing. */
+.collGhost[data-rarity='rare'] .gcCard {
+  border-color: oklch(0.72 0.12 85);
+}
+
+.collGhost[data-rarity='mythic'] .gcCard {
+  border-color: oklch(0.66 0.18 40);
+}
+
+.collGhost[data-rarity='uncommon'] .gcCard {
+  border-color: oklch(0.72 0.04 220);
+}
+
+@media (max-width: 700px) {
+  .collSetScore {
+    min-width: 100%;
+  }
+
+  .collGrid {
+    gap: var(--glacier-space-2);
+  }
+}

@@ -35,10 +35,15 @@
   margin-inline-end: var(--glacier-space-1);
 }
 
+/* Each tile is a card image plus a caption, so the tiles read as objects
+   rather than rows - they need enough air that two adjacent pieces of card art
+   don't blur into one. Column gap runs wider than row gap because the captions
+   already separate the rows. */
 .deckGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
-  gap: var(--glacier-space-5);
+  column-gap: var(--glacier-space-8);
+  row-gap: var(--glacier-space-6);
 }
 
 /* A tile is a plain button so the whole surface is one target. */
@@ -1350,4 +1355,59 @@
   left: 0.4rem;
   z-index: 2;
   backdrop-filter: blur(6px);
+}
+
+/* The estimated Commander bracket, opposite the game badge: the editor's stat
+   panel squeezed down to a chip - same coloured numeral, same bracket name.
+   Absolutely positioned, so however narrow the tile gets it can never reflow
+   the tile's stack. Its own scrim + blur keep it readable over a deck's
+   playmat art. */
+.deckTileBracket {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.45rem;
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-full, 999px);
+  background: color-mix(in oklch, var(--glacier-surface) 82%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--glacier-shadow-1);
+  line-height: 1.25;
+}
+
+.deckTileBracketNum {
+  font-family: var(--glacier-font-mono);
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  /* Bracket 3 is the unremarkable middle, so it wears the plain accent; 2 reads
+     as "safe" and 4 as "heads up", matching .deckStatBracket in the editor. */
+  color: var(--glacier-accent-text);
+}
+
+.deckTileBracket[data-bracket='2'] .deckTileBracketNum {
+  color: var(--glacier-success-text);
+}
+
+.deckTileBracket[data-bracket='4'] .deckTileBracketNum {
+  color: var(--glacier-warning-text);
+}
+
+/* The only variable-length part of the chip: a long localized bracket name
+   ellipsises here rather than running the chip across the game badge in the
+   opposite corner. The numeral - the part that carries the meaning - is never
+   the thing that gets cut, and the accessible label always says it in full. */
+.deckTileBracketName {
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-medium);
+  color: var(--glacier-text-subtle);
+  max-inline-size: 7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }

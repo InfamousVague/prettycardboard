@@ -1,7 +1,7 @@
 {
   "name": "prettycardboard",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.5.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,6 +13,7 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "sync:catalog": "node scripts/sync-catalog.mjs",
+    "sync:packs": "node scripts/sync-packs.mjs",
     "redeploy": "node scripts/redeploy.mjs",
     "redeploy:web": "node scripts/redeploy.mjs web",
     "redeploy:api": "node scripts/redeploy.mjs api",

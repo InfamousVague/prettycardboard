@@ -16,12 +16,12 @@ import { ArrowLeft, PackageOpen } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { cardImage } from '../data/cards.ts';
 import { cardBackUrl, effectiveCardBack } from '../data/cardBacks.ts';
-import { usePreference } from '../hooks/usePreference.ts';
 import { useCardPopup } from '../components/CardPopup.tsx';
 import { GameCard } from '../components/GameCard.tsx';
 import { EmptyFan } from '../components/Skeletons.tsx';
 import { boosterArtUrl, boosterCardUrl, loadBoosterSets, loadSetPool, type BoosterSet, type SetPool } from '../data/boosterSets.ts';
-import { mythicChance, openPack, specFor, type PackCard } from '../data/boosters.ts';
+import { foilChancePerPack, mythicChance, openPack, specFor, type PackCard } from '../data/boosters.ts';
+import { recordPackSilently } from '../data/packRecord.ts';
 import { useMobileLayout } from '../hooks/useIsPhone.ts';
 import { PackOpening } from './boosters/PackOpening.tsx';
 import './boosters.css';
@@ -118,7 +118,7 @@ export function BoostersPage() {
           value={decade}
           onValueChange={setDecade}
           options={[
-            { value: 'all', label: 'All' },
+            { value: 'all', label: t('boAll') },
             { value: '2020', label: '2020s' },
             { value: '2010', label: '2010s' },
             { value: '2000', label: '2000s' },
@@ -208,7 +208,7 @@ function SetTile({ set, index, onOpen }: { set: BoosterSet; index: number; onOpe
       </span>
       <span className="boSetPills">
         <Pill size="sm" variant="outline" className="boSetSpec">
-          {spec.label}
+          {t(spec.labelKey)}
         </Pill>
         {set.preview && (
           <Pill size="sm" tone="accent" variant="soft">
@@ -233,10 +233,10 @@ function PackOpener({ set, onBack }: { set: BoosterSet; onBack: () => void }) {
   // The fullscreen opening owns the reveal; the page keeps the last pull.
   const [opening, setOpening] = useState(false);
   const spec = useMemo(() => specFor(set.released, set.setType), [set]);
-  // These packs are Magic, so the back is the Magic one regardless of which
-  // game's back the player picked for their own table.
-  const cardBackPref = usePreference('cardBack');
-  const backSrc = cardBackUrl(effectiveCardBack(cardBackPref, 'mtg'));
+  // These packs are Magic, so the back is the REAL Magic one - not the back the
+  // player picked for their own table, and never a placeholder. Passing no
+  // preference is deliberate: a booster's cards are face-down Magic cards.
+  const backSrc = cardBackUrl(effectiveCardBack(undefined, 'mtg'));
   // Keep the latest pool for the deal handler without re-creating it per render.
   const poolRef = useRef<SetPool | null>(null);
   poolRef.current = pool;
@@ -256,12 +256,23 @@ function PackOpener({ set, onBack }: { set: BoosterSet; onBack: () => void }) {
   const deal = () => {
     const current = poolRef.current;
     if (!current) return;
-    setPack(openPack(current, spec, set.released));
+    setPack(recordPackSilently(openPack(current, spec, set.released), set.code, set.released));
     setOpened((n) => n + 1);
     setOpening(true);
   };
 
   const mythicRate = pool ? mythicChance(pool, set.released) : 0;
+  // Classic packs have no unified foil slot, so `foilChance` is 0 for all of
+  // them: they foiled a card of its own RARITY instead, and the pack rate is
+  // the chance any of those three rolls lands - hence the tilde. The era maths
+  // itself lives in data/boosters.ts so the pack dock prints the same number.
+  const foilPerPack = foilChancePerPack(spec);
+  const foilRate =
+    foilPerPack === null
+      ? '—'
+      : foilPerPack >= 1
+        ? `1 ${t('boPerPack')}`
+        : `${spec.perRarityFoil ? '~' : ''}1 in ${(1 / foilPerPack).toFixed(1)}`;
   const poolSize = pool
     ? pool.common.length + pool.uncommon.length + pool.rare.length + pool.mythic.length
     : 0;
@@ -281,11 +292,11 @@ function PackOpener({ set, onBack }: { set: BoosterSet; onBack: () => void }) {
             {set.name}
           </Heading>
           <Pill size="sm" variant="outline">
-            {spec.label}
+            {t(spec.labelKey)}
           </Pill>
         </div>
         <Text size={Size.Small} tone={TextTone.Muted}>
-          {spec.note}
+          {spec.noteKeys.map((key) => t(key)).join(' ')}
         </Text>
         {pool?.partial && (
           <Text size={Size.Small} tone={TextTone.Subtle}>
@@ -300,16 +311,10 @@ function PackOpener({ set, onBack }: { set: BoosterSet; onBack: () => void }) {
       {pool && (
         <div className="boStats">
           <Stat label={t('boMythicRate')} value={mythicRate > 0 ? `1 in ${(1 / mythicRate).toFixed(1)}` : '—'} />
-          <Stat
-            label={t('boFoilRate')}
-            value={
-              spec.era === 'play'
-                ? `1 ${t('boPerPack')}`
-                : spec.foilChance > 0
-                  ? `1 in ${(1 / spec.foilChance).toFixed(1)}`
-                  : '~1 in 4.9'
-            }
-          />
+          {/* `perRarityFoil` tracks whether foils had been printed at all, so
+              pre-1999 sets show nothing rather than contradicting their own
+              "foils did not exist yet" note three lines above. */}
+          <Stat label={t('boFoilRate')} value={foilRate} />
           <Stat label={t('boCards')} value={String(poolSize)} />
           <Stat label={t('boPacksOpened')} value={String(opened)} />
         </div>
@@ -365,6 +370,7 @@ function PackOpener({ set, onBack }: { set: BoosterSet; onBack: () => void }) {
         {opening && pack && (
           <PackOpening
             cards={pack}
+            pool={pool}
             setName={set.name}
             setIcon={set.iconUrl}
             art={art}

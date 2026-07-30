@@ -98,27 +98,58 @@ function queued<T>(job: () => Promise<T>, gapMs: number): Promise<T> {
   return run;
 }
 
+/** Carries the HTTP status so callers can tell "no such thing" (404) apart
+    from "ask again later" (429 lockout, 5xx) - see `searchAll`. */
+class HttpError extends Error {
+  constructor(readonly status: number) {
+    super(`scryfall ${status}`);
+  }
+}
+
 async function getJson(url: string): Promise<Record<string, unknown>> {
   const response = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!response.ok) throw new Error(`scryfall ${response.status}`);
+  if (!response.ok) throw new HttpError(response.status);
   return (await response.json()) as Record<string, unknown>;
 }
 
 // --- set list -------------------------------------------------------------
 
 /**
- * The set types that actually shipped booster packs. Scryfall has no `booster`
- * field on set objects, so the type is the only signal: promos, duel decks,
- * From the Vault, planechase, Alchemy and friends never had packs.
+ * The set types with nothing to open. Everything else on paper is fair game:
+ * boosters first, but also Secret Lair drops (set type `box`), Commander decks,
+ * Un-sets and starter products - if it shipped as sealed cardboard, it belongs
+ * in the picker.
+ *
+ * Only these are excluded, and each for a concrete reason: tokens and
+ * memorabilia are not cards you own, minigames and Vanguard are not the game,
+ * treasure chests are digital-economy artefacts, and `promo` is ~200 one-card
+ * "sets" that would bury everything real under noise.
+ *
+ * Products outside the four true booster types carry no `is:booster` flag, so
+ * `loadSetPool` falls back to every paper printing and marks the pool
+ * `partial` - a Secret Lair opens as a plausible pack, not a collated one.
  */
-const BOOSTER_SET_TYPES = new Set(['core', 'expansion', 'masters', 'draft_innovation']);
+const UNOPENABLE_SET_TYPES = new Set([
+  'token',
+  'memorabilia',
+  'minigame',
+  'treasure_chest',
+  'vanguard',
+  'promo',
+]);
 
-/** The simulator covers the modern era; earlier sets used different collation. */
-export const EARLIEST_SET_DATE = '2003-01-01';
+/**
+ * How far back the simulator goes: Limited Edition Alpha, the first Magic set
+ * ever printed - and the only place (with Beta and Unlimited) that Black Lotus
+ * and the rest of the Power Nine came out of a pack. The classic-era spec in
+ * boosters.ts already models 1993 collation (15 cards, no foils), so the cutoff
+ * was the only thing keeping those sets out of the rotation.
+ */
+export const EARLIEST_SET_DATE = '1993-08-05';
 
 let setsPromise: Promise<BoosterSet[]> | null = null;
 
-/** Every paper set that came in boosters, newest first. Cached per session. */
+/** Every paper product worth opening, newest first. Cached per session. */
 export function loadBoosterSets(): Promise<BoosterSet[]> {
   if (!setsPromise) {
     setsPromise = queued(() => getJson(`${API}/sets`), OTHER_GAP_MS)
@@ -128,7 +159,7 @@ export function loadBoosterSets(): Promise<BoosterSet[]> {
           .filter((set) => {
             const released = String(set.released_at ?? '');
             return (
-              BOOSTER_SET_TYPES.has(String(set.set_type)) &&
+              !UNOPENABLE_SET_TYPES.has(String(set.set_type)) &&
               set.digital !== true &&
               released >= EARLIEST_SET_DATE &&
               // Unreleased sets have a date but no cards to draw yet.
@@ -157,12 +188,30 @@ export function loadBoosterSets(): Promise<BoosterSet[]> {
 
 // --- card pools -----------------------------------------------------------
 
+/** The four bands the pack UI groups by. */
+const RARITY_BANDS = new Set<string>(['common', 'uncommon', 'rare', 'mythic']);
+
+/**
+ * Scryfall's rarity vocabulary is wider than those four bands: it also has
+ * 'special' (timeshifted sheets) and 'bonus'. Every rarity pool below is
+ * fetched with an explicit `rarity:` filter, so the one query that can hand
+ * back an off-band card is the unfiltered basic-land one - and Time Spiral
+ * Remastered's only booster basic, Wastes, is rarity 'special'. The pack views
+ * group strictly over the four bands, so an off-band card is dealt into the
+ * pack and then silently dropped from the display (and sorts as NaN). Fold it
+ * onto the sheet it was collated on instead: a basic land rode the commons.
+ */
+function toRarity(value: unknown): Rarity {
+  const rarity = String(value);
+  return RARITY_BANDS.has(rarity) ? (rarity as Rarity) : 'common';
+}
+
 function toPoolCard(card: Record<string, unknown>): PoolCard {
   const faces = card.card_faces as Record<string, unknown>[] | undefined;
   return {
     id: String(card.id),
     name: String(card.name),
-    rarity: String(card.rarity) as Rarity,
+    rarity: toRarity(card.rarity),
     collectorNumber: String(card.collector_number ?? ''),
     colors: ((card.colors ?? faces?.[0]?.colors ?? []) as string[]).slice(),
     typeLine: String(card.type_line ?? ''),
@@ -179,9 +228,16 @@ async function searchAll(query: string): Promise<PoolCard[]> {
     let page: Record<string, unknown>;
     try {
       page = await queued(() => getJson(next), CARDS_GAP_MS);
-    } catch {
-      // A rarity a set simply does not have (no mythics before 2008) 404s.
-      break;
+    } catch (error) {
+      // A rarity a set simply does not have (no mythics before 2008) 404s -
+      // that is an answer, and an empty list is the right one. Anything else
+      // (429 lockout, 5xx, dropped socket) is a failure and must NOT be cached
+      // as "this set has no rares": `mythicChance` would then divide by an
+      // empty rare sheet and hand out a guaranteed mythic every single pack.
+      // Let it propagate to loadSetPool's catch, which evicts the cache entry
+      // so the next visit can retry.
+      if (error instanceof HttpError && error.status === 404) break;
+      throw error;
     }
     for (const card of (page.data ?? []) as Record<string, unknown>[]) out.push(toPoolCard(card));
     url = page.has_more === true ? String(page.next_page) : null;

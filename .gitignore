@@ -5,6 +5,14 @@ dist-web
 src-tauri/target
 server/target
 
+# ...but the vendored Glacier packages ARE the dependency, not build output of
+# ours. @glacier/react ships only a dist/ (no src/), so the bare `dist` rule
+# above swallowed its entire body and left just the package.json pointing at
+# files that were never committed — CI then failed every build with "Cannot
+# find module '@glacier/react'" while local installs worked fine.
+!vendor/**/dist/
+!vendor/**/dist/**
+
 # secrets — never commit
 .env
 .env.*

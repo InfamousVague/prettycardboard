@@ -1,7 +1,14 @@
 /* GameCard - the premium card treatment. All layers are GPU-composited
    (transform/opacity/background-position only) so a table full of cards stays
-   smooth. Geometry follows the 488x680 print scan ratio; the corner radius is
-   the print's 4.75% of width. */
+   smooth. Geometry follows the 488x680 print scan ratio.
+
+   The corner radius matches the SCAN, not the physical card. A real Magic card
+   is cut with a 1/8" corner - 5.04% of its 63mm width - but Scryfall's 488px
+   JPEGs round harder than that, and being JPEGs they carry no alpha: the corner
+   outside the curve is solid WHITE. Fitting a circle to a scan's corner puts it
+   at ~29px, so 6% of the width (and that same 29px expressed against the 680px
+   height, 4.3%) is what actually clips the white away. The old 4.75%/3.41% was
+   the physical card's radius, and left a white nick at all four corners. */
 
 .gcPerspective {
   perspective: 900px;
@@ -12,9 +19,7 @@
 .gcCard {
   position: absolute;
   inset: 0;
-  border-radius: 4.75cqw;
-  border-radius: calc(100% * 0.0475 * (680 / 488)); /* fallback ratio-derived */
-  border-radius: 4.75%/3.41%;
+  border-radius: 6% / 4.3%;
   overflow: hidden;
   transform-style: preserve-3d;
   background: oklch(0.22 0.01 260);

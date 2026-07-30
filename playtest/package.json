@@ -11,6 +11,8 @@
     "lobby": "node scenarios/lobby-mana.js",
     "chaos": "node scenarios/chaos-monkey.js",
     "locked": "node scenarios/locked-combat.js",
+    "draft": "node scenarios/booster-draft.js",
+    "sealed": "node scenarios/sealed.js",
     "aimatch": "node scenarios/ai-match.js",
     "restart": "node scenarios/restart-resume.js",
     "all": "node run-all.js"

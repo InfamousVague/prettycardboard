@@ -16,6 +16,7 @@ import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
+import { focusFromPointer, handSlinky, paintSlinky, restFocus, slinkyOffsets } from '../../components/slinky.ts';
 import type { CardInst, RoomState, TablePlayer, Zone } from '../../net/types.ts';
 import { formatFor } from '../../data/formats.ts';
 import { useTableUi } from './tableUi.ts';
@@ -410,6 +411,7 @@ export function MulliganOverlay({ room, me }: { room: RoomState; me: TablePlayer
   const act = useGame((state) => state.act);
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const mullRef = useRef<HTMLDivElement>(null);
 
   const mulligan = me.mulligan;
   const hand = me.hand ?? [];
@@ -436,6 +438,11 @@ export function MulliganOverlay({ room, me }: { room: RoomState; me: TablePlayer
   // ~732px); below ~600px let the solve win down to a 72px sliver minimum.
   const cardFloor = vw < 600 ? 72 : 132;
   const cardW = Math.round(Math.min(260, Math.max(cardFloor, (vw * 0.95 - 32) / Math.max(hand.length, 1) + 32)));
+  // The width the fan would like, which the panel caps. The solve above means
+  // it usually gets it; the slinky covers the cases where it does not, and
+  // gives the fan the same edge density and hover-open as the table's hands.
+  const mullSpan = Math.round(cardW + Math.max(0, hand.length - 1) * (cardW - 32));
+  const mullOffsets = slinkyOffsets(hand.length, restFocus(hand.length), handSlinky(hand.length));
 
   useEffect(() => {
     // Fresh hand or fresh decision - reset local picks.
@@ -479,19 +486,38 @@ export function MulliganOverlay({ room, me }: { room: RoomState; me: TablePlayer
             {picking ? `${picked.size} / ${owed}` : `${t('gpMullTake')}: ${mulligan.taken}`}
           </Text>
         </div>
-        <div className="mullFan" data-picking={picking || undefined}>
+        <div
+          className="mullFan"
+          data-picking={picking || undefined}
+          ref={mullRef}
+          style={{
+            ['--mull-w' as string]: `${cardW}px`,
+            ['--mull-span' as string]: `${mullSpan}px`,
+            ['--mull-h' as string]: `${Math.round(cardW * (680 / 488))}px`,
+          }}
+          onPointerMove={(event) => {
+            if (event.pointerType !== 'mouse') return;
+            const rect = event.currentTarget.getBoundingClientRect();
+            paintSlinky(mullRef.current, focusFromPointer(event.clientX, rect, hand.length));
+          }}
+          onPointerLeave={() => paintSlinky(mullRef.current, null)}
+        >
           {hand.map((card, index) => {
-            const spread = index - (hand.length - 1) / 2;
+            // -1 at the near end of the fan, +1 at the far one: the lean and the
+            // bow come from where the card SITS, not from its index, so neither
+            // runs away as the hand grows.
+            const away = ((mullOffsets[index] ?? 0.5) - 0.5) * 2;
             return (
               <motion.div
                 key={card.iid}
                 className="mullCard"
                 data-picked={picked.has(card.iid) || undefined}
+                style={{ ['--slink' as string]: mullOffsets[index] ?? 0.5 }}
                 initial={{ y: 80, opacity: 0, rotate: 0 }}
                 animate={{
-                  y: Math.abs(spread) * 9 + (picked.has(card.iid) ? -26 : 0),
+                  y: Math.abs(away) * 26 + (picked.has(card.iid) ? -26 : 0),
                   opacity: 1,
-                  rotate: spread * 4,
+                  rotate: away * 12,
                 }}
                 transition={{ type: 'spring', stiffness: 300, damping: 24, delay: index * 0.04 }}
                 onClick={() => picking && togglePick(card.iid)}

@@ -1,6 +1,198 @@
 /* Play lobby page: the saved-tables section that sits above the create/join
    grid. Shares .page rhythm and the glassy card look from app.css. */
 
+/* ---- quick start: one card per format ---------------------------------- */
+
+.quickStarts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-3);
+}
+
+.quickStartsHead {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-1) var(--glacier-space-3);
+}
+
+/* Three across, deliberately, rather than as many as will fit: the cards are
+   in a considered order - the everyday formats first, draft next because it is
+   the only table you can join owning nothing - and an auto-fit track would
+   reshuffle which of them share a row at whatever width the window happened to
+   be. minmax(0, 1fr) rather than 1fr so a long blurb cannot push a column
+   wider than its share. */
+.quickGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--glacier-space-3);
+}
+
+/* Two and then one, halving rather than degrading gradually, so the reading
+   order stays predictable as the window narrows. */
+@media (max-width: 62rem) {
+  .quickGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 34rem) {
+  .quickGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.quickCard {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  /* Tight by default so the name and its blurb read as one block; the parts
+     that want air ask for it themselves below. */
+  gap: var(--glacier-space-1);
+  padding: var(--glacier-space-4);
+  border-radius: var(--glacier-radius-xl);
+  /* The card's own tint carries the whole identity - border, wash and glyph -
+     so six cards read as six choices rather than one repeated tile. */
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--qs-tint) 34%, transparent);
+  background:
+    radial-gradient(
+      130% 110% at 0% 0%,
+      color-mix(in oklch, var(--qs-tint) 20%, transparent),
+      transparent 62%
+    ),
+    color-mix(in oklch, var(--glacier-bg) 72%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  -webkit-backdrop-filter: blur(var(--glacier-blur-md));
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.3);
+  color: var(--glacier-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    transform var(--glacier-duration-fast, 140ms) var(--glacier-ease-out, ease),
+    box-shadow var(--glacier-duration-fast, 140ms) var(--glacier-ease-out, ease),
+    border-color var(--glacier-duration-fast, 140ms) var(--glacier-ease-out, ease);
+}
+
+/* A light sweep across the wash on hover - the tile is a button, and it should
+   look like it can be pressed before it is. Painted behind the content by its
+   own z-index rather than by source order, since the content is text nodes. */
+.quickCard::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    color-mix(in oklch, var(--qs-tint) 26%, transparent) 50%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+  opacity: 0;
+  transition:
+    transform var(--glacier-duration-slow, 520ms) var(--glacier-ease-out, ease),
+    opacity var(--glacier-duration-fast, 140ms) var(--glacier-ease-out, ease);
+}
+
+.quickCard:hover:not(:disabled),
+.quickCard:focus-visible {
+  transform: translateY(-3px);
+  border-color: color-mix(in oklch, var(--qs-tint) 62%, transparent);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.4);
+}
+
+.quickCard:hover:not(:disabled)::after,
+.quickCard:focus-visible::after {
+  transform: translateX(120%);
+  opacity: 1;
+}
+
+.quickCard:active:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.quickCard:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.quickCardIcon {
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  margin-block-end: var(--glacier-space-1);
+  border-radius: var(--glacier-radius-lg);
+  background: color-mix(in oklch, var(--qs-tint) 22%, transparent);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--qs-tint) 38%, transparent);
+  color: var(--qs-tint);
+}
+
+.quickCardName {
+  font-size: var(--glacier-font-size-md);
+  font-weight: var(--glacier-font-weight-semibold, 600);
+  line-height: 1.2;
+}
+
+/* The everyday word for the format, next to its printed name. Quieter than the
+   name so it reads as a gloss rather than as part of the title. */
+.quickCardAlias {
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-regular, 400);
+  color: var(--glacier-text-muted);
+}
+
+/* What the evening is like, in a sentence or two. Wraps freely - the cards in
+   a row stretch to the tallest, and the meta below is pinned to the bottom, so
+   an extra line here does not knock the strip out of alignment. */
+.quickCardBlurb {
+  font-size: var(--glacier-font-size-sm);
+  line-height: 1.35;
+  color: var(--glacier-text-muted);
+  text-wrap: pretty;
+}
+
+.quickCardMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  /* Held to the bottom edge so the seat count and life total line up across
+     the strip however long each blurb turns out to be. */
+  margin-block-start: auto;
+  padding-block-start: var(--glacier-space-2);
+}
+
+/* The shape of the table - "1v1", "4 players" - is the thing being chosen, so
+   it outranks the life total below it. */
+.quickCardShape {
+  font-size: var(--glacier-font-size-sm);
+  color: color-mix(in oklch, var(--qs-tint) 72%, var(--glacier-text));
+  font-variant-numeric: tabular-nums;
+}
+
+.quickCardHint {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle, var(--glacier-text-muted));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quickCard,
+  .quickCard::after {
+    transition: none;
+  }
+
+  .quickCard:hover:not(:disabled),
+  .quickCard:focus-visible,
+  .quickCard:active:not(:disabled) {
+    transform: none;
+  }
+}
+
 .myTableList {
   display: flex;
   flex-direction: column;
@@ -120,14 +312,37 @@
 
 /* ================= shared table link — join screen ================= */
 
-.joinPage {
-  min-height: calc(100vh - 8rem);
+/* The invite dims the WHOLE app, not just the content column: it is portalled
+   to <body> and fixed, so nothing behind it stays inviting to click while an
+   invitation is on screen. */
+.joinScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
   display: grid;
   place-items: center;
+  padding: var(--glacier-space-4);
+  overflow-y: auto;
+  background: rgb(4 5 8 / 72%);
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  animation: joinScrimIn 220ms ease-out;
+}
+
+@keyframes joinScrimIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .joinScrim {
+    animation: none;
+  }
 }
 
 .joinCardWrap {
-  width: min(30rem, 100%);
+  width: min(27rem, 100%);
 }
 
 .joinCard {
@@ -135,18 +350,71 @@
   flex-direction: column;
   align-items: center;
   gap: var(--glacier-space-4);
-  padding: var(--glacier-space-7) var(--glacier-space-6);
+  padding: var(--glacier-space-6) var(--glacier-space-5) var(--glacier-space-5);
+  border-radius: var(--glacier-radius-xl);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  background: var(--glacier-surface-raised, #16181d);
+  box-shadow: 0 30px 80px rgb(0 0 0 / 55%);
   text-align: center;
 }
 
-.joinCardIcon {
+/* A draft invite is a different offer, and the top edge says so before any of
+   the copy does. */
+.joinCard[data-draft]::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 0;
+  height: 3px;
+  border-radius: var(--glacier-radius-xl) var(--glacier-radius-xl) 0 0;
+  background: linear-gradient(90deg, transparent, var(--glacier-accent-solid), transparent);
+}
+
+.joinCard {
+  position: relative;
+  overflow: hidden;
+}
+
+.joinState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  padding-block: var(--glacier-space-4);
+}
+
+.joinHead {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  width: 100%;
+}
+
+.joinIcon {
   display: grid;
   place-items: center;
-  width: 3rem;
-  height: 3rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: var(--glacier-radius-full);
-  background: color-mix(in oklch, var(--glacier-accent-solid) 18%, transparent);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 16%, transparent);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-accent-solid) 34%, transparent);
   color: var(--glacier-accent-text);
+}
+
+.joinIcon[data-tone='warn'] {
+  background: color-mix(in oklch, var(--glacier-warning-solid, #d9a441) 16%, transparent);
+  border-color: color-mix(in oklch, var(--glacier-warning-solid, #d9a441) 34%, transparent);
+  color: var(--glacier-warning-text, #f0c273);
+}
+
+.joinEyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.joinName {
+  overflow-wrap: anywhere;
 }
 
 .joinMeta {
@@ -154,19 +422,68 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: var(--glacier-space-2);
+  margin-block-start: var(--glacier-space-1);
 }
 
-.joinPlayers {
+/* One tag treatment for code, seats and status, so the row reads as a single
+   strip of facts rather than three unrelated kit pills. */
+.joinTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.18rem 0.55rem;
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  background: color-mix(in oklch, var(--glacier-text, #fff) 6%, transparent);
+  color: var(--glacier-text-muted);
+  font-size: var(--glacier-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.joinTag[data-tone='warn'] {
+  border-color: color-mix(in oklch, var(--glacier-warning-solid, #d9a441) 40%, transparent);
+  color: var(--glacier-warning-text, #f0c273);
+}
+
+.joinTag[data-tone='live'] {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 40%, transparent);
+  color: var(--glacier-accent-text);
+}
+
+.joinWho {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: var(--glacier-space-3);
+  width: 100%;
+  padding-block: var(--glacier-space-2);
+  border-block: var(--glacier-hairline) solid var(--glacier-glass-border);
 }
 
 .joinPlayer {
   display: inline-flex;
   align-items: center;
   gap: var(--glacier-space-2);
+}
+
+/* What a draft invite says instead of asking for a deck. */
+.joinNote {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  margin: 0;
+  width: 100%;
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border-radius: var(--glacier-radius-lg);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-accent-solid) 28%, transparent);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 10%, transparent);
+  color: var(--glacier-text);
+  text-align: start;
+}
+
+.joinNote svg {
+  flex: none;
+  color: var(--glacier-accent-text);
 }
 
 .joinDeck {

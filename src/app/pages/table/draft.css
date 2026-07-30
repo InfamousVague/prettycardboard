@@ -1,0 +1,814 @@
+/* Booster draft: setup, picking, and building. Prefix .df*.
+   The draft borrows the pack dock's card treatment wholesale (PackFan, SetIcon,
+   GameCard) and only adds the layout those pieces sit in. */
+
+.dfRoot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: min(100%, 76rem);
+  margin: 0 auto;
+  padding: 1.25rem clamp(0.75rem, 3vw, 2rem) 2rem;
+  isolation: isolate;
+  /* The draft owns the whole pre-game, and a sealed pool is far taller than the
+     table frame - which clips. So the draft scrolls ITSELF, exactly like
+     .pregameLobby does, rather than growing the page off the bottom.
+     overflow-x stays hidden so .dfBackdrop's negative inset cannot mint a
+     sideways scrollbar. */
+  flex: 1;
+  min-height: 0;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+}
+
+/* The set's own booster art, pushed far back so it reads as atmosphere and
+   never competes with the cards being picked. */
+.dfBackdrop {
+  position: absolute;
+  inset: -10% -5% auto;
+  height: 22rem;
+  z-index: -1;
+  background-size: cover;
+  background-position: center 30%;
+  opacity: 0.22;
+  filter: saturate(1.1) blur(2px);
+  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 100%), transparent 82%);
+  pointer-events: none;
+}
+
+.dfFoot {
+  margin: 0;
+  text-align: center;
+}
+
+/* --- shared waiting states --- */
+
+.dfWait,
+.dfWaiting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  min-height: 16rem;
+  padding: 2rem 1rem;
+  text-align: center;
+}
+
+.dfRecent {
+  width: min(100%, 44rem);
+  margin-top: 1rem;
+}
+
+.dfLoading {
+  display: flex;
+  justify-content: center;
+  padding: 2rem;
+}
+
+/* --- setup --- */
+
+.dfSetup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.1rem;
+  border: 1px solid var(--gl-border-subtle, rgb(255 255 255 / 10%));
+  border-radius: 1rem;
+  background: var(--gl-surface-raised, rgb(20 20 26 / 72%));
+  backdrop-filter: blur(10px);
+}
+
+.dfSetupHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.dfSets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.35rem;
+  max-height: 17rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.dfSet {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 0.6rem;
+  background: rgb(255 255 255 / 3%);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.dfSet:hover {
+  background: rgb(255 255 255 / 8%);
+}
+
+.dfSet[data-active] {
+  border-color: var(--gl-accent, #7aa2ff);
+  background: rgb(122 162 255 / 14%);
+}
+
+.dfSetIcon {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.dfSetName {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dfSetYear {
+  flex: none;
+  opacity: 0.5;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8em;
+}
+
+.dfOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.dfOption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.dfOptionLabel {
+  opacity: 0.65;
+  font-size: 0.78rem;
+}
+
+.dfToggles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.dfSetupFoot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+/* --- picking --- */
+
+.dfPickRoot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+/* The pack and the roster side by side. The roster is the narrower column and
+   drops UNDER the pack on anything small, because the cards are the thing you
+   came to look at and they get the width first. */
+.dfPickMain {
+  display: grid;
+  gap: 0.9rem;
+  align-items: start;
+}
+
+@media (min-width: 62rem) {
+  .dfPickMain {
+    grid-template-columns: minmax(0, 1fr) 16.5rem;
+  }
+}
+
+/* The rail: what you have taken, then who else is at the table. The pool goes
+   on top because it is consulted every single pick, while the roster is only
+   looked at when a pack is late. */
+.dfRail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.dfStage {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+/* What to do, in one sentence, every pass. */
+.dfCoach {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid rgb(122 162 255 / 22%);
+  border-radius: 0.7rem;
+  background: rgb(122 162 255 / 10%);
+  color: #cfdcff;
+}
+
+/* --- who else is at the table --- */
+
+.dfRoster {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--gl-border-subtle, rgb(255 255 255 / 10%));
+  border-radius: 0.8rem;
+  background: rgb(16 16 22 / 62%);
+  backdrop-filter: blur(8px);
+}
+
+.dfRosterHead {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.dfRosterList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dfRosterRow {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.28rem 0.1rem;
+  font-size: 0.82rem;
+}
+
+.dfRosterState {
+  display: grid;
+  place-items: center;
+  opacity: 0.55;
+}
+
+.dfRosterRow[data-done] .dfRosterState {
+  color: #7fd39b;
+  opacity: 1;
+}
+
+.dfRosterName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dfRosterWhat {
+  font-size: 0.72rem;
+  opacity: 0.6;
+}
+
+/* Cards drafted so far. Public on purpose - a count is not information about
+   WHICH cards, and everyone can see how many picks have happened anyway. */
+.dfRosterCount {
+  min-width: 1.6rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 8%);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.dfRosterWait {
+  margin: 0;
+  font-size: 0.72rem;
+  opacity: 0.6;
+}
+
+/* --- the running pool --- */
+
+.dfTally {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--gl-border-subtle, rgb(255 255 255 / 10%));
+  border-radius: 0.8rem;
+  background: rgb(16 16 22 / 62%);
+  backdrop-filter: blur(8px);
+}
+
+.dfTallyHead {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dfTallyHead .dfRosterCount {
+  margin-inline-start: auto;
+}
+
+.dfStat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.dfStatLabel {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.dfStatNote {
+  margin-inline-start: auto;
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The curve. Seven fixed columns rather than one per value present, because a
+   curve is read by its GAPS - a missing two-drop has to leave a hole. */
+.dfCurve {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dfCurveCol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.dfCurveCount {
+  height: 0.85rem;
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+/* Fixed-height track so every column shares one baseline and one ceiling. */
+.dfCurveTrack {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 2.6rem;
+  border-radius: 0.2rem;
+  background: rgb(255 255 255 / 5%);
+}
+
+.dfCurveBar {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 0.2rem;
+  background: linear-gradient(180deg, #9db8ff, #5f7fd8);
+  transition: height 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dfCurveTick {
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.5;
+}
+
+/* Colours. Every one of WUBRG is always listed, including the zeroes: what you
+   are NOT in is the more useful half of the reading. */
+.dfPips {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dfPip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 0.15rem 0.1rem;
+  border-radius: 0.35rem;
+  background: rgb(255 255 255 / 6%);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dfPip[data-off] {
+  opacity: 0.32;
+}
+
+/* Type split. Bars are shares of the whole pool, so the rows can be compared
+   to each other at a glance without reading any of the numbers. */
+.dfSplit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dfSplitRow {
+  display: grid;
+  grid-template-columns: 4.6rem minmax(0, 1fr) 1.5rem;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+}
+
+.dfSplitName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+
+.dfSplitTrack {
+  height: 0.4rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 6%);
+}
+
+.dfSplitBar {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 999px;
+  background: var(--pc-type, rgb(255 255 255 / 45%));
+  transition: width 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dfSplitBar[data-type='creature'] { --pc-type: oklch(0.72 0.14 145); }
+.dfSplitBar[data-type='land'] { --pc-type: oklch(0.68 0.08 75); }
+.dfSplitBar[data-type='instant'] { --pc-type: oklch(0.74 0.12 225); }
+.dfSplitBar[data-type='sorcery'] { --pc-type: oklch(0.68 0.13 300); }
+.dfSplitBar[data-type='artifact'] { --pc-type: oklch(0.72 0.03 250); }
+.dfSplitBar[data-type='enchantment'] { --pc-type: oklch(0.76 0.10 340); }
+.dfSplitBar[data-type='planeswalker'] { --pc-type: oklch(0.72 0.16 30); }
+.dfSplitBar[data-type='battle'] { --pc-type: oklch(0.68 0.15 15); }
+
+.dfSplitCount {
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  opacity: 0.8;
+}
+
+/* The picks themselves, newest first. Small enough that a whole draft's worth
+   scrolls in the rail, big enough that the art identifies the card. */
+.dfTallyList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(3.1rem, 1fr));
+  gap: 0.25rem;
+  max-height: 16rem;
+  margin: 0;
+  padding: 0.1rem 0.1rem 0.2rem;
+  overflow-y: auto;
+  list-style: none;
+  overscroll-behavior: contain;
+}
+
+.dfTallyCard img {
+  display: block;
+  width: 100%;
+  border-radius: 0.25rem;
+  aspect-ratio: 63 / 88;
+  object-fit: cover;
+  background: rgb(255 255 255 / 6%);
+}
+
+/* Same rarity language as the pack, at a tenth the size. */
+.dfTallyCard[data-rarity='mythic'] { --pc-rarity: oklch(0.72 0.19 48); }
+.dfTallyCard[data-rarity='rare'] { --pc-rarity: oklch(0.78 0.13 92); }
+
+.dfTallyCard[data-rarity='rare'],
+.dfTallyCard[data-rarity='mythic'] {
+  filter: drop-shadow(0 0 5px color-mix(in oklch, var(--pc-rarity) 65%, transparent));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dfCurveBar,
+  .dfSplitBar {
+    transition: none;
+  }
+}
+
+/* The build phase's "you're done" state keeps the roster beside it, so the
+   wait for the last builder has names on it rather than just a number. */
+.dfBuildDone {
+  display: grid;
+  gap: 0.9rem;
+  align-items: start;
+}
+
+@media (min-width: 62rem) {
+  .dfBuildDone {
+    grid-template-columns: minmax(0, 1fr) 15rem;
+  }
+}
+
+.dfBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.9rem;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--gl-border-subtle, rgb(255 255 255 / 10%));
+  border-radius: 0.8rem;
+  background: rgb(16 16 22 / 62%);
+  backdrop-filter: blur(8px);
+}
+
+.dfBarWhere {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.dfPassing {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: rgb(122 162 255 / 16%);
+  color: #b9ccff;
+  font-size: 0.76rem;
+}
+
+.dfPackNote {
+  margin: 0;
+}
+
+.dfClockPill {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 10%);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.dfClockPill[data-low] {
+  background: rgb(224 72 72 / 26%);
+  color: #ffb4b4;
+  animation: dfPulse 1s ease-in-out infinite;
+}
+
+@keyframes dfPulse {
+  50% { opacity: 0.5; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dfClockPill[data-low] { animation: none; }
+}
+
+.dfSeats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.dfSeat {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 9rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 6%);
+  opacity: 0.55;
+  font-size: 0.78rem;
+}
+
+.dfSeat[data-picked] {
+  background: rgb(90 200 130 / 18%);
+  color: #a9e9c2;
+  opacity: 1;
+}
+
+.dfSeatDot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+.dfSeatName {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The pack itself. A pick has to be readable at a glance, so this is a plain
+   grid rather than the dock's fan - fifteen overlapped cards is a flourish, not
+   a decision surface. */
+.dfPack,
+.dfPool {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.7rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dfPick {
+  position: relative;
+  cursor: pointer;
+  transition: transform 140ms ease, filter 140ms ease;
+}
+
+.dfPick:hover {
+  z-index: 2;
+  transform: translateY(-6px) scale(1.03);
+  filter: drop-shadow(0 10px 22px rgb(0 0 0 / 55%));
+}
+
+/* A rare in the pack should announce itself the way it does in the dock: the
+   glow follows the card's own silhouette (drop-shadow reads the alpha channel)
+   rather than sitting behind it as a rectangle, which is what makes it look
+   like the card is lit rather than pasted onto a swatch. */
+.dfPick[data-rarity='mythic'] { --pc-rarity: oklch(0.72 0.19 48); }
+.dfPick[data-rarity='rare'] { --pc-rarity: oklch(0.78 0.13 92); }
+.dfPick[data-rarity='uncommon'] { --pc-rarity: oklch(0.75 0.08 220); }
+
+.dfPick[data-rarity='uncommon'] {
+  filter: drop-shadow(0 0 6px color-mix(in oklch, var(--pc-rarity) 30%, transparent));
+}
+
+.dfPick[data-rarity='rare'],
+.dfPick[data-rarity='mythic'] {
+  filter: drop-shadow(0 0 12px color-mix(in oklch, var(--pc-rarity) 60%, transparent));
+}
+
+/* Hovering a rare keeps its own colour instead of dropping to the neutral lift
+   shadow - one filter wins outright, so the two have to be written together. */
+.dfPick[data-rarity='uncommon']:hover,
+.dfPick[data-rarity='rare']:hover,
+.dfPick[data-rarity='mythic']:hover {
+  filter:
+    drop-shadow(0 0 18px color-mix(in oklch, var(--pc-rarity) 75%, transparent))
+    drop-shadow(0 10px 22px rgb(0 0 0 / 55%));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dfPick:hover { transform: none; }
+}
+
+/* --- building --- */
+
+.dfBuild {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.dfBuildHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--gl-border-subtle, rgb(255 255 255 / 10%));
+  border-radius: 0.8rem;
+  background: rgb(16 16 22 / 88%);
+  backdrop-filter: blur(10px);
+}
+
+.dfName {
+  flex: 1 1 12rem;
+  min-width: 8rem;
+}
+
+.dfCount {
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 8%);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.dfCount[data-ok] {
+  background: rgb(90 200 130 / 20%);
+  color: #a9e9c2;
+}
+
+.dfLands {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dfLandsLabel {
+  opacity: 0.65;
+  font-size: 0.78rem;
+}
+
+.dfLand {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.35rem;
+  border-radius: 0.6rem;
+  background: rgb(255 255 255 / 5%);
+}
+
+.dfLandArt {
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 0.25rem;
+  object-fit: cover;
+  object-position: center 22%;
+}
+
+.dfLandStep {
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 0;
+  border-radius: 0.35rem;
+  background: rgb(255 255 255 / 10%);
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dfLandStep:hover {
+  background: rgb(255 255 255 / 20%);
+}
+
+.dfLandCount {
+  min-width: 1.1rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.dfPoolCard {
+  position: relative;
+  cursor: pointer;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+/* Cards NOT in the deck fade back, so the deck reads out of the pool without a
+   second list to keep in sync. */
+.dfPoolCard:not([data-in]) {
+  opacity: 0.42;
+}
+
+.dfPoolCard:hover {
+  opacity: 1;
+  transform: translateY(-3px);
+}
+
+.dfPoolTick {
+  position: absolute;
+  top: 0.3rem;
+  left: 0.3rem;
+  z-index: 2;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dfPoolCard:hover { transform: none; }
+}

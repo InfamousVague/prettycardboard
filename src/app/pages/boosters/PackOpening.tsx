@@ -7,6 +7,8 @@ import { useT } from '../../i18n.ts';
 import { artCrop, cardImage } from '../../data/cards.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useMobileLayout } from '../../hooks/useIsPhone.ts';
+import { fanKey, fanStack, useFanPhase } from '../../components/packVisuals.tsx';
+import { focusFromPointer, slinkyOffsets } from '../../components/slinky.ts';
 import type { PackCard } from '../../data/boosters.ts';
 import type { SetPool } from '../../data/boosterSets.ts';
 import './packOpening.css';
@@ -46,8 +48,14 @@ function lockBodyScroll(): () => void {
   };
 }
 
-/** How long the rip runs before the cards take over. */
-const TEAR_MS = 900;
+/**
+ * How long the rip runs before the cards take over.
+ *
+ * Must outlast the halves themselves (240ms delay + 780ms flight, see
+ * .poHalfTop / .poHalfBottom) or the cards mount over a wrapper that is still
+ * on screen and slice straight through it.
+ */
+const TEAR_MS = 1040;
 
 /**
  * The seam. Both halves are cut from the SAME list of points, so the top piece
@@ -310,32 +318,57 @@ export function PackOpening({
 /**
  * One arc of cards. Each card pivots around a point below the fan, which is
  * what makes a spread of cards read as a hand rather than a row.
+ *
+ * The cards arrive as a stack and open a beat later - see useFanPhase - into a
+ * FIXED arc, across which they are dealt by weight rather than evenly (see
+ * slinky.ts). The ends stay tucked, the pointer opens whatever it is over, and
+ * a fifteen-card pack takes exactly as much of the screen as a three-card one.
  */
 function Fan({ cards, label, feature }: { cards: PackCard[]; label: string; feature?: boolean }) {
+  const phase = useFanPhase(fanKey(cards));
+  const [hover, setHover] = useState<number | null>(null);
   if (cards.length === 0) return null;
   const count = cards.length;
   // Wide fans need a tighter per-card angle or the ends point at the floor.
   // The pivot sits deep below the cards (see .poFanCard), so even at this
   // spread the arc stays shallow while sweeping most of the screen's width.
   const spread = Math.min(74, count * 10);
-  const step = count > 1 ? spread / (count - 1) : 0;
+  // At rest the fan focuses its own middle, so the density lands at the edges.
+  const focus = phase === 'open' && hover !== null ? hover : (count - 1) / 2;
+  const offsets = slinkyOffsets(count, focus);
 
   return (
     <div className="poFan" data-feature={feature || undefined}>
-      <div className="poFanArc">
+      <div
+        className="poFanArc"
+        data-open={phase === 'open' || undefined}
+        onPointerMove={(event) => {
+          if (event.pointerType !== 'mouse') return;
+          const at = focusFromPointer(event.clientX, event.currentTarget.getBoundingClientRect(), count);
+          // Quantised to a fifth of a card - the transition hides the steps and
+          // a sweep no longer re-renders every card in the fan every frame.
+          setHover(at === null ? null : Math.round(at * 5) / 5);
+        }}
+        onPointerLeave={() => setHover(null)}
+      >
         {cards.map((card, index) => {
-          const angle = count > 1 ? -spread / 2 + step * index : 0;
+          const angle = count > 1 ? -spread / 2 + (offsets[index] ?? 0) * spread : 0;
           return (
             <div
               key={`${card.id}-${index}`}
               className="poFanCard"
               data-rarity={card.rarity}
-              // `rotate` is its own CSS property, so the static fan angle and the
-              // keyframed `transform` entrance compose instead of fighting.
+              data-foil={card.foil || undefined}
+              // `rotate` and `translate` are their own CSS properties, so the
+              // stack-to-arc transition and the keyframed `transform` entrance
+              // compose instead of overwriting each other.
               style={{
-                rotate: `${angle}deg`,
+                ...(phase === 'stacked'
+                  ? fanStack(index, count)
+                  : { rotate: `${angle.toFixed(2)}deg`, translate: '0% 0%' }),
                 zIndex: index,
-                animationDelay: `${0.045 * index + (feature ? 0 : 0.14)}s`,
+                animationDelay: `${0.018 * index + (feature ? 0 : 0.1)}s`,
+                transitionDelay: phase === 'open' ? '0s' : `${0.026 * index}s`,
               }}
             >
               <GameCard name={card.name} imageUrl={cardImage(card.id)} fluid foil={card.foil} tilt={4} />

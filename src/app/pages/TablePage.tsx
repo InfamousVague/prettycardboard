@@ -27,6 +27,7 @@ import {
   LayoutGrid,
   Link2,
   LogOut,
+  PackageOpen,
   Paperclip,
   Play,
   Plus,
@@ -90,6 +91,7 @@ import { LibrarySidebar } from './table/LibrarySidebar.tsx';
 import { PostMatch } from './table/PostMatch.tsx';
 import { PreMatch } from './table/PreMatch.tsx';
 import { PregameLobby } from './table/PregameLobby.tsx';
+import { DraftRoom } from './table/DraftRoom.tsx';
 import { TimelineCard } from './table/TimelineCard.tsx';
 import { TurnCue } from './table/TurnCue.tsx';
 import { flightAnchor, flyCard } from './table/juice.ts';
@@ -599,6 +601,11 @@ export function TablePage() {
       )
     : [];
   const isHost = room.hostUserId === identity?.userId;
+  // The table is drafting until the last deck is built: either a draft is
+  // actually running, or this is a draft room that has not started one yet.
+  const drafting = room.draft
+    ? room.draft.phase !== 'done'
+    : (room.format ?? '').toLowerCase() === 'draft';
   // Online friends not already seated here: invite them straight into this table.
   const onlineFriends = friends.filter(
     (friend) => friend.online && !room.players.some((player) => player.userId === friend.userId),
@@ -761,9 +768,16 @@ export function TablePage() {
       )}
 
       <div className="tableMain" data-lobby={!room.started || undefined}>
-        {!room.started && (
-          <PregameLobby room={room} me={me} spectating={spectating} isHost={isHost} onShare={shareInvite} />
-        )}
+        {/* A draft table spends its whole pre-game in the draft: set-up, packs,
+            deckbuilding. Only once every seat has SAVED its deck does the
+            ordinary lobby take over - and by then everyone is already seated
+            with the deck they just built, so nothing below here changes. */}
+        {!room.started &&
+          (drafting ? (
+            <DraftRoom room={room} me={me} isHost={isHost} spectating={spectating} onShare={shareInvite} />
+          ) : (
+            <PregameLobby room={room} me={me} spectating={spectating} isHost={isHost} onShare={shareInvite} />
+          ))}
 
         {/* ---- grid overview: every seat's playmat at once (desktop only).
              Clicking one stages that board and leaves the grid. ---- */}
@@ -1548,6 +1562,25 @@ function SidePanel({
           onClick={() => window.dispatchEvent(new CustomEvent('pc:open-settings'))}
         >
           <Settings size={16} />
+        </IconButton>
+      </Tooltip>
+      {/* The way back to packs. The dock's own pill can be dismissed from
+          anywhere, and at a table there is no rail and no tab bar to relaunch
+          it from - so it lives here, in the one row every viewer of a table
+          has, seated or spectating, lobby or match. Latched on `window` as
+          well as dispatched because the dock is code-split: a request made
+          while its chunk is still streaming would land on no listener. */}
+      <Tooltip content={t('navBoosters')}>
+        <IconButton
+          size="sm"
+          variant="ghost"
+          aria-label={t('navBoosters')}
+          onClick={() => {
+            (window as { __pcPackDock?: 'open' | 'show' }).__pcPackDock = 'open';
+            window.dispatchEvent(new CustomEvent('pc:open-packdock', { detail: { open: true } }));
+          }}
+        >
+          <PackageOpen size={16} />
         </IconButton>
       </Tooltip>
       {mobile && onInviteFriend && (inviteTargets?.length ?? 0) > 0 && (

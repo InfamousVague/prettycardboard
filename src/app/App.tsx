@@ -15,14 +15,14 @@ import {
 } from '@glacier/react';
 import {
   Compass,
+  History,
   House,
   Library,
   PackageOpen,
   PanelLeft,
   Paintbrush,
-  Plus,
+  Play,
   Settings,
-  Swords,
   User,
   Users,
   WalletCards,
@@ -84,6 +84,20 @@ const CUSTOMIZED_KEY = 'pc.customized';
 
 /** The app version this player last saw the changelog for. */
 const SEEN_VERSION_KEY = 'pc.lastSeenVersion';
+
+/**
+ * Ask the floating pack dock to come back after a dismiss - `open` also pops
+ * its panel, otherwise the pill alone returns.
+ *
+ * The intent is LATCHED on `window` as well as dispatched because PackDock is
+ * code-split: a request made while its chunk is still streaming would land on
+ * no listener at all, and the dock would stay dismissed with nothing to show
+ * for the click. PackDock drains the latch on mount.
+ */
+function requestPackDock(open: boolean): void {
+  (window as { __pcPackDock?: 'open' | 'show' }).__pcPackDock = open ? 'open' : 'show';
+  window.dispatchEvent(new CustomEvent('pc:open-packdock', { detail: { open } }));
+}
 
 // Capture a #/join/CODE deep link before anything renders, so an invite opened
 // cold survives the auth gate (and any reload auth triggers).
@@ -202,14 +216,19 @@ function AppRail({
         active={route === 'home'}
         onClick={() => onNavigate('home')}
       />
+      {/* A play button, not a plus: this route is not "add a thing", it is
+          every way INTO a game - the quick-start strip, the table builder and
+          the join-by-code field. */}
       <NavBarItem
-        icon={<Plus size={20} />}
+        icon={<Play size={20} />}
         label={t('navNew')}
         active={route === 'new'}
         onClick={() => onNavigate('new')}
       />
+      {/* And this one is the tables you have already been at, so it reads as a
+          log rather than as a second way to start a fight. */}
       <NavBarItem
-        icon={<Swords size={20} />}
+        icon={<History size={20} />}
         label={t('navPlay')}
         active={route === 'play'}
         onClick={() => onNavigate('play')}
@@ -240,7 +259,7 @@ function AppRail({
           // event) - so Boosters is always the way back to packs.
           onClick={() => {
             onNavigate('boosters');
-            window.dispatchEvent(new Event('pc:open-packdock'));
+            requestPackDock(true);
           }}
         />
       )}
@@ -353,6 +372,16 @@ function Shell({
       window.removeEventListener('pc:open-settings', openSettings);
     };
   }, []);
+
+  // A dismissed pack dock has to have a way back that does not depend on the
+  // rail: the rail's Boosters entry is behind the WIP flag, and the whole rail
+  // is gone at the table. Landing on the boosters page - from the collection's
+  // empty state, a #/boosters link, anywhere - always returns the pill. Just
+  // the pill: this page opens packs itself, so popping the panel over it would
+  // only be in the way.
+  useEffect(() => {
+    if (route === 'boosters') requestPackDock(false);
+  }, [route]);
 
   const closeSettings = () => {
     localStorage.setItem(CUSTOMIZED_KEY, '1');

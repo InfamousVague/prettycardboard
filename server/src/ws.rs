@@ -43,6 +43,18 @@ enum ClientMsg {
     /// `mat` is the seat whose playmat the position is normalized against -
     /// None when the pointer is off every mat, which hides it for viewers.
     CursorMove { x: f64, y: f64, hover: Option<String>, mat: Option<i64> },
+    /// "I just cracked something good": a notable pack pull, relayed to the
+    /// table so everyone sees it live. Ephemeral - the durable record is the
+    /// REST write to the collection and the pull feed.
+    #[serde(rename = "pull.notify", rename_all = "camelCase")]
+    PullNotify {
+        scryfall_id: String,
+        name: String,
+        set_code: String,
+        rarity: String,
+        #[serde(default)]
+        foil: bool,
+    },
     #[serde(rename = "chat.send")]
     ChatSend { text: String },
     #[serde(rename = "invite.send", rename_all = "camelCase")]
@@ -73,6 +85,33 @@ enum ClientMsg {
     // for the requesting connection.
     #[serde(rename = "replay.seek")]
     ReplaySeek { index: usize },
+    // Limited. The host uploads every pack because the collation data lives in
+    // the browser (see rooms::DraftCard); the server only deals, passes and
+    // enforces. `mode` picks booster draft or sealed.
+    #[serde(rename = "draft.start", rename_all = "camelCase")]
+    DraftStart {
+        set: String,
+        set_name: String,
+        /// "draft" (the default, and what an older client sends) or "sealed".
+        #[serde(default)]
+        mode: String,
+        rounds: usize,
+        #[serde(default)]
+        pick_seconds: u64,
+        #[serde(default)]
+        build_seconds: u64,
+        #[serde(default)]
+        lock_decks: bool,
+        /// The drafted set's basic lands, for filling out a forced build.
+        #[serde(default)]
+        basics: Vec<rooms::DraftCard>,
+        packs: Vec<Vec<rooms::DraftCard>>,
+    },
+    #[serde(rename = "draft.pick")]
+    DraftPick { index: usize, id: String },
+    /// This seat has saved a deck out of its pool and is done building.
+    #[serde(rename = "draft.built")]
+    DraftBuilt,
 }
 
 pub async fn ws_handler(
@@ -205,6 +244,9 @@ fn handle_msg(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
         ClientMsg::RoomPing { target_user_id } => room_ping(app, user, &target_user_id, tx),
         ClientMsg::RoomHandHover { position } => room_hand_hover(app, user, position, tx),
         ClientMsg::CursorMove { x, y, hover, mat } => cursor_move(app, user, x, y, hover, mat, tx),
+        ClientMsg::PullNotify { scryfall_id, name, set_code, rarity, foil } => {
+            pull_notify(app, user, &scryfall_id, &name, &set_code, &rarity, foil, tx)
+        }
         ClientMsg::ChatSend { text } => chat_send(app, user, &text, tx),
         ClientMsg::InviteSend { to_user_id, room_id } => invite_send(app, user, &to_user_id, &room_id),
         ClientMsg::GameAction { action } => game_action(app, user, action, tx),
@@ -214,6 +256,25 @@ fn handle_msg(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
         ClientMsg::DeckMetaSet { meta } => deck_meta_set(app, user, meta),
         ClientMsg::AutoSet { untap, draw } => auto_set(app, user, untap, draw),
         ClientMsg::ReplaySeek { index } => replay_seek(app, user, index, tx),
+        ClientMsg::DraftStart {
+            set,
+            set_name,
+            mode,
+            rounds,
+            pick_seconds,
+            build_seconds,
+            lock_decks,
+            basics,
+            packs,
+        } => draft_start(
+            app,
+            user,
+            rooms::DraftSetup { set, set_name, mode, rounds, pick_seconds, build_seconds, lock_decks, basics },
+            packs,
+            tx,
+        ),
+        ClientMsg::DraftPick { index, id } => draft_pick(app, user, index, &id, tx),
+        ClientMsg::DraftBuilt => draft_built(app, user, tx),
     }
 }
 
@@ -619,6 +680,12 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
         send_err(tx, "already_started", "the game has already started");
         return;
     }
+    // A draft owes every seat a deck it has not built yet; starting now would
+    // deal opening hands from whatever people brought and throw the pools away.
+    if room.draft.as_ref().is_some_and(|d| d.phase != "done") {
+        send_err(tx, "draft_running", "finish the draft before starting the game");
+        return;
+    }
     if room.players.iter().any(|p| !p.online) {
         send_err(tx, "players_offline", "every seated player must be online");
         return;
@@ -777,6 +844,16 @@ fn room_deck_set(app: &Arc<App>, user: &db::User, deck_id: &str, tx: &Tx) {
     };
     if room.started {
         send_err(tx, "already_started", "the game has already started");
+        return;
+    }
+    // A locked draft table plays what it drafted. Enforced here rather than by
+    // hiding the picker, because the picker is not the only way to send this.
+    if room
+        .draft
+        .as_ref()
+        .is_some_and(|d| d.lock_decks && d.seats.iter().any(|s| s.user_id == user.id && s.built))
+    {
+        send_err(tx, "draft_locked", "this table plays the decks it drafted");
         return;
     }
     if deck.game != room.game {
@@ -1004,6 +1081,55 @@ fn cursor_move(
             "y": y.clamp(0.0, 1.0),
             "hover": hover,
             "mat": mat,
+        }),
+    );
+}
+
+/// Notable-pull relay: tell everyone at the table what this player just opened.
+/// Modelled on `cursor_move` - a pure broadcast that never touches game state.
+///
+/// Whether a pull is notable is decided by `collection::is_notable`, the same
+/// rule the REST ingestion and the client use; the server relays what it is
+/// told rather than re-deriving it, because the set release date that rule
+/// needs is not part of this message. Spectators may send it too: someone
+/// cracking packs while watching a game is exactly the moment worth sharing.
+#[allow(clippy::too_many_arguments)]
+fn pull_notify(
+    app: &Arc<App>,
+    user: &db::User,
+    scryfall_id: &str,
+    name: &str,
+    set_code: &str,
+    rarity: &str,
+    foil: bool,
+    tx: &Tx,
+) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        send_err(tx, "not_in_room", "you are not in a room");
+        return;
+    };
+    let Some(room) = app.rooms.get(&rref.room_id) else {
+        return;
+    };
+    let seat = room
+        .players
+        .iter()
+        .find(|p| p.user_id == user.id)
+        .map(|p| p.seat as i64);
+    room_send_all(
+        app,
+        &room,
+        &json!({
+            "type": "pull",
+            "fromUserId": user.id,
+            "username": user.username,
+            "seat": seat,
+            "scryfallId": scryfall_id,
+            "name": name,
+            "setCode": set_code,
+            "rarity": rarity,
+            "foil": foil,
+            "ts": crate::now_ms(),
         }),
     );
 }
@@ -1253,6 +1379,422 @@ pub fn maybe_finish_match(app: &App, room: &mut Room) {
     rooms::touch(app, room);
     room_send_states(app, room);
     room_log(app, room, seq, &format!("{winner_name} wins the match"));
+}
+
+// --- booster draft --------------------------------------------------------
+
+/// Open a draft in a room that has not started yet.
+///
+/// The packs arrive from the HOST's client, already collated: the real sheets
+/// and weights are bundled with the app (public/cache/packs), so generating
+/// them here would mean shipping and refreshing a second copy of MTGJSON
+/// server-side. What is enforced here is everything that actually matters -
+/// who may start one, that the shape is sane, and that nobody can see another
+/// drafter's pack (rooms::Room::draft_view).
+#[allow(clippy::too_many_arguments)]
+fn draft_start(
+    app: &Arc<App>,
+    user: &db::User,
+    setup: rooms::DraftSetup,
+    packs: Vec<Vec<rooms::DraftCard>>,
+    tx: &Tx,
+) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        send_err(tx, "not_in_room", "you are not in a room");
+        return;
+    };
+    if rref.spectating {
+        send_err(tx, "forbidden", "spectators cannot start a draft");
+        return;
+    }
+    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
+        send_err(tx, "room_not_found", "no such room");
+        return;
+    };
+    if room.host != user.id {
+        send_err(tx, "forbidden", "only the host can start the draft");
+        return;
+    }
+    if room.started {
+        send_err(tx, "already_started", "the game has already started");
+        return;
+    }
+    if room.draft.is_some() {
+        send_err(tx, "draft_running", "this table is already drafting");
+        return;
+    }
+    // An empty mode is an older client, which only knew how to draft.
+    let mode = if setup.mode.is_empty() { "draft".to_string() } else { setup.mode.clone() };
+    if mode != "draft" && mode != "sealed" {
+        send_err(tx, "bad_mode", "unknown limited format");
+        return;
+    }
+    let sealed = mode == "sealed";
+    if room.players.iter().any(|p| !p.online) {
+        send_err(tx, "players_offline", "every seated player must be online");
+        return;
+    }
+    // Two is the minimum that can pass a pack to anyone. Sealed passes nothing,
+    // so it is the one limited format a lone player can open - the lobby still
+    // wants a second seat before the game itself can start.
+    if !sealed && room.players.len() < 2 {
+        send_err(tx, "need_players", "a draft needs at least two drafters");
+        return;
+    }
+    if setup.rounds == 0 || setup.rounds > rooms::DRAFT_MAX_ROUNDS {
+        send_err(tx, "bad_rounds", "unreasonable number of packs");
+        return;
+    }
+    let wanted = setup.rounds * room.players.len();
+    if packs.len() != wanted {
+        send_err(tx, "bad_packs", "wrong number of packs for this table");
+        return;
+    }
+    if packs.iter().any(|p| p.is_empty() || p.len() > rooms::DRAFT_MAX_PACK) {
+        send_err(tx, "bad_packs", "a pack is empty or unreasonably large");
+        return;
+    }
+
+    // Seat order follows the table, so "passing left" is the seat to your left.
+    let mut seats: Vec<rooms::DraftSeat> = room
+        .players
+        .iter()
+        .map(|p| rooms::DraftSeat {
+            user_id: p.user_id.clone(),
+            pack: Vec::new(),
+            pool: Vec::new(),
+            picked: false,
+            built: false,
+        })
+        .collect();
+    seats.sort_by_key(|s| {
+        room.players.iter().find(|p| p.user_id == s.user_id).map(|p| p.seat).unwrap_or(0)
+    });
+
+    let now = crate::now_ms();
+    // Clamp rather than reject: an absurd clock is a slider mistake, not an
+    // attack, and a draft with no clock at all is a legitimate choice. Sealed
+    // has no picks to put a clock on at all.
+    let pick_seconds = if sealed || setup.pick_seconds == 0 {
+        0
+    } else {
+        setup.pick_seconds.clamp(10, 600)
+    };
+    let build_seconds = if setup.build_seconds == 0 { 0 } else { setup.build_seconds.clamp(60, 3600) };
+    let mut basics = setup.basics;
+    basics.truncate(rooms::DRAFT_MAX_BASICS);
+    let mut draft = rooms::Draft {
+        set: setup.set,
+        set_name: setup.set_name,
+        mode,
+        rounds: setup.rounds,
+        phase: "picking".to_string(),
+        round: 1,
+        pick: 1,
+        seats,
+        reserve: packs,
+        deadline_ms: 0,
+        pick_seconds,
+        build_seconds,
+        lock_decks: setup.lock_decks,
+        basics,
+    };
+    // Sealed comes out of this already in its building phase - there is
+    // nothing to pick, so the pool is dealt and the build clock starts.
+    draft.begin(now);
+    let round_note = if sealed {
+        format!("Sealed started: {} packs each from {}", draft.rounds, draft.set_name)
+    } else {
+        format!("Draft started: {} packs of {}", draft.rounds, draft.set_name)
+    };
+    room.draft = Some(draft);
+    // A draft replaces whatever decks people brought: the seat plays what it
+    // drafts, and a stale deck would otherwise let someone skip building.
+    for p in room.players.iter_mut() {
+        p.ready = false;
+    }
+    room.seq += 1;
+    let seq = room.seq;
+    rooms::touch(app, &mut room);
+    room_send_states(app, &room);
+    room_log(app, &room, seq, &round_note);
+}
+
+fn draft_pick(app: &Arc<App>, user: &db::User, index: usize, id: &str, tx: &Tx) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        send_err(tx, "not_in_room", "you are not in a room");
+        return;
+    };
+    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
+        send_err(tx, "room_not_found", "no such room");
+        return;
+    };
+    let Some(draft) = room.draft.as_mut() else {
+        send_err(tx, "no_draft", "this table is not drafting");
+        return;
+    };
+    if draft.phase != "picking" {
+        send_err(tx, "not_picking", "the picking rounds are over");
+        return;
+    }
+    let Some(seat) = draft.seats.iter().position(|s| s.user_id == user.id) else {
+        send_err(tx, "not_drafting", "you are not in this draft");
+        return;
+    };
+    if !draft.take(seat, index, id) {
+        // Stale pack, double click, or a card that is not there any more.
+        send_err(tx, "bad_pick", "that card is not in your pack");
+        return;
+    }
+    let now = crate::now_ms();
+    let advanced = draft.pass_complete();
+    if advanced {
+        draft.advance(now);
+    }
+    let building = draft.phase == "building";
+    let round = draft.round;
+    let pick = draft.pick;
+    room.seq += 1;
+    let seq = room.seq;
+    rooms::touch(app, &mut room);
+    room_send_states(app, &room);
+    if building {
+        room_log(app, &room, seq, "Draft complete: build your deck from the pool");
+    } else if advanced {
+        room_log(app, &room, seq, &format!("Pack {round}, pick {pick}"));
+    }
+}
+
+/// One seat finished building. The deck itself went through the normal
+/// `room.deck.set` path, so this only records that the seat is done - and once
+/// every seat is, the draft steps aside and the ordinary pre-game lobby (with
+/// everyone's freshly built deck already seated) takes over.
+fn draft_built(app: &Arc<App>, user: &db::User, tx: &Tx) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        send_err(tx, "not_in_room", "you are not in a room");
+        return;
+    };
+    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
+        send_err(tx, "room_not_found", "no such room");
+        return;
+    };
+    let has_deck = room.players.iter().any(|p| p.user_id == user.id && p.deck_id.is_some());
+    if !has_deck {
+        send_err(tx, "deck_required", "save a deck before finishing");
+        return;
+    }
+    let Some(draft) = room.draft.as_mut() else {
+        send_err(tx, "no_draft", "this table is not drafting");
+        return;
+    };
+    if draft.phase != "building" {
+        send_err(tx, "not_building", "the draft is not in its building phase");
+        return;
+    }
+    let Some(seat) = draft.seats.iter_mut().find(|s| s.user_id == user.id) else {
+        send_err(tx, "not_drafting", "you are not in this draft");
+        return;
+    };
+    if seat.built {
+        return;
+    }
+    seat.built = true;
+    let done = draft.seats.iter().all(|s| s.built);
+    if done {
+        draft.phase = "done".to_string();
+    }
+    room.seq += 1;
+    let seq = room.seq;
+    rooms::touch(app, &mut room);
+    room_send_states(app, &room);
+    if done {
+        room_log(app, &room, seq, "Every deck is built - the table is ready");
+    }
+}
+
+/// Called from the room sweeper: take the pick for anyone who cannot make it.
+///
+/// Two ways a seat stops answering, and both stall the whole table because a
+/// pass only completes when every seat has picked:
+///
+///   the clock  they are there and thinking too long (if a clock was set)
+///   absent     they closed the tab, so no clock will ever save the table
+///
+/// The second is why this does not simply key off `deadline_ms`: an untimed
+/// draft is a legitimate choice, and it must still survive someone leaving.
+pub fn draft_tick(app: &App) {
+    let now = crate::now_ms();
+    let mut wake: Vec<String> = Vec::new();
+    for room in app.rooms.iter() {
+        let Some(draft) = room.draft.as_ref() else { continue };
+        if draft.phase != "picking" {
+            continue;
+        }
+        let lapsed = draft.deadline_ms > 0 && now >= draft.deadline_ms;
+        let absent = draft.seats.iter().any(|s| {
+            !s.picked
+                && !s.pack.is_empty()
+                && !room.players.iter().any(|p| p.user_id == s.user_id && p.online)
+        });
+        if lapsed || absent {
+            wake.push(room.id.clone());
+        }
+    }
+    for id in wake {
+        let Some(mut room) = app.rooms.get_mut(&id) else { continue };
+        // Who is here, read before the draft is borrowed mutably.
+        let online: Vec<String> = room
+            .players
+            .iter()
+            .filter(|p| p.online)
+            .map(|p| p.user_id.clone())
+            .collect();
+        let Some(draft) = room.draft.as_mut() else { continue };
+        // Re-check under the write lock: a pick may have landed in between and
+        // already moved the table on.
+        if draft.phase != "picking" {
+            continue;
+        }
+        let lapsed = draft.deadline_ms > 0 && now >= draft.deadline_ms;
+        let mut forced = 0usize;
+        for seat in 0..draft.seats.len() {
+            let here = online.contains(&draft.seats[seat].user_id);
+            // The clock takes a card off anyone; absence only off the absent.
+            if (lapsed || !here) && draft.force_seat(seat) {
+                forced += 1;
+            }
+        }
+        if forced == 0 || !draft.pass_complete() {
+            continue;
+        }
+        draft.advance(now);
+        let building = draft.phase == "building";
+        room.seq += 1;
+        let seq = room.seq;
+        rooms::touch(app, &mut room);
+        room_send_states(app, &room);
+        let note = if lapsed {
+            "Pick clock expired - the first card was taken"
+        } else {
+            "A drafter left - their pick was taken for them"
+        };
+        room_log(app, &room, seq, note);
+        if building {
+            room_log(app, &room, seq, "Draft complete: build your deck from the pool");
+        }
+    }
+    draft_build_tick(app, now);
+}
+
+/// The other half of the sweeper: the OPTIONAL build clock.
+///
+/// Picking is not the only phase that can stall - the table also waits for the
+/// last deck to be saved, and someone who wanders off after their final pick
+/// wedges it just as thoroughly. When the host set a build clock, anyone still
+/// unbuilt when it lapses gets a deck assembled from their own pool.
+fn draft_build_tick(app: &App, now: i64) {
+    let mut wake: Vec<String> = Vec::new();
+    for room in app.rooms.iter() {
+        let Some(draft) = room.draft.as_ref() else { continue };
+        if draft.phase != "building" || draft.deadline_ms == 0 || now < draft.deadline_ms {
+            continue;
+        }
+        if draft.seats.iter().any(|s| !s.built) {
+            wake.push(room.id.clone());
+        }
+    }
+    for id in wake {
+        // Three passes, and the split matters: the deck rows have to be written
+        // while NO room lock is held. Everything else in this file takes the db
+        // lock before the room lock, and inverting that order here would be a
+        // deadlock waiting for a busy night.
+        let plans: Vec<(String, String, Vec<db::DeckCard>)> = {
+            let Some(room) = app.rooms.get(&id) else { continue };
+            let Some(draft) = room.draft.as_ref() else { continue };
+            draft
+                .seats
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| !s.built)
+                .map(|(seat, s)| {
+                    let what = if draft.sealed() { "sealed" } else { "draft" };
+                    (s.user_id.clone(), format!("{} {}", draft.set_name, what), draft.auto_deck(seat))
+                })
+                .filter(|(_, _, cards)| !cards.is_empty())
+                .collect()
+        };
+        if plans.is_empty() {
+            continue;
+        }
+        let mut saved: Vec<(String, db::DeckRow)> = Vec::new();
+        for (user_id, name, cards) in plans {
+            let row = db::DeckRow {
+                id: crate::hex_id(8),
+                user_id: user_id.clone(),
+                name,
+                format: "draft".to_string(),
+                cards_json: serde_json::to_string(&cards).unwrap_or_else(|_| "[]".to_string()),
+                updated_at: now,
+                header: cards.first().map(|c| c.scryfall_id.clone()),
+                game: "mtg".to_string(),
+                playmat: None,
+                card_back: None,
+            };
+            db::deck_insert(&app.db.lock().unwrap(), &row);
+            saved.push((user_id, row));
+        }
+        let Some(mut room) = app.rooms.get_mut(&id) else { continue };
+        let has_commander = rooms::format_has_commander(&room.format);
+        let game = room.game.clone();
+        let mut applied = 0usize;
+        for (user_id, row) in saved {
+            // Re-check: a deck may have landed in the moment the lock was down.
+            let still_open = room
+                .draft
+                .as_ref()
+                .is_some_and(|d| d.seats.iter().any(|s| s.user_id == user_id && !s.built));
+            if !still_open {
+                continue;
+            }
+            let (command, library) = rooms::build_zones(&row.cards(), has_commander, &game);
+            if let Some(player) = room.players.iter_mut().find(|p| p.user_id == user_id) {
+                player.deck_id = Some(row.id.clone());
+                player.deck_name = Some(row.name.clone());
+                player.deck_meta = None;
+                player.command = command;
+                player.library = library;
+                player.hand.clear();
+                player.battlefield.clear();
+                player.graveyard.clear();
+                player.exile.clear();
+                player.ready = false;
+            }
+            if let Some(draft) = room.draft.as_mut() {
+                if let Some(seat) = draft.seats.iter_mut().find(|s| s.user_id == user_id) {
+                    seat.built = true;
+                }
+            }
+            send_user(app, &user_id, &json!({"type": "decks.changed"}));
+            applied += 1;
+        }
+        if applied == 0 {
+            continue;
+        }
+        let done = room.draft.as_ref().is_some_and(|d| d.seats.iter().all(|s| s.built));
+        if done {
+            if let Some(draft) = room.draft.as_mut() {
+                draft.phase = "done".to_string();
+            }
+        }
+        room.seq += 1;
+        let seq = room.seq;
+        rooms::touch(app, &mut room);
+        room_send_states(app, &room);
+        room_log(app, &room, seq, "Build clock expired - a deck was built from the pool");
+        if done {
+            room_log(app, &room, seq, "Every deck is built - the table is ready");
+        }
+    }
 }
 
 /// The bundled playmat ids (client's src/app/data/playmats.ts); a player's

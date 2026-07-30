@@ -1,5 +1,6 @@
 import { memo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
 import { motion, useMotionValue, useSpring, useTransform } from 'motion/react';
+import { useT } from '../i18n.ts';
 import './gamecard.css';
 
 /**
@@ -35,6 +36,16 @@ export interface GameCardProps {
 
 const RATIO = 680 / 488;
 
+/** :focus-visible is unsupported on a few old WebKits; showing the ring is the
+    safe failure there. */
+function isKeyboardFocus(element: Element): boolean {
+  try {
+    return element.matches(':focus-visible');
+  } catch {
+    return true;
+  }
+}
+
 /**
  * Memoized: GameCard is the app's heaviest leaf (springs + transforms + foil +
  * glare) and is rendered per card across the whole board, so it re-renders on
@@ -62,6 +73,8 @@ export const GameCard = memo(function GameCard({
 }: GameCardProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [hovering, setHovering] = useState(false);
+  const [ringing, setRinging] = useState(false);
+  const t = useT();
 
   // Pointer position within the card, 0..1. Springs carry the tilt so the
   // card eases back to rest instead of snapping.
@@ -94,12 +107,53 @@ export const GameCard = memo(function GameCard({
     ? { width: '100%', aspectRatio: `488 / 680` }
     : { width, height };
 
+  // A face-down card must never leak its name.
+  const label = faceDown ? t('gcFaceDown') : name;
+  // Only a card that actually does something on click becomes a control (and a
+  // tab stop); the rest stay pictures, so the board is not one long tab order.
+  const interactive = onClick != null;
+
   return (
     <div
       className={`gcPerspective${className ? ` ${className}` : ''}`}
-      style={{ ...sizing, ...style }}
+      style={{
+        ...sizing,
+        ...style,
+        // The focus ring lives here rather than in CSS because the outline must
+        // sit on the element that is actually focusable and unclipped.
+        ...(ringing
+          ? {
+              outline: '2px solid var(--glacier-focus-ring)',
+              outlineOffset: 3,
+              borderRadius: '6%/4.3%',
+            }
+          : null),
+      }}
       onClick={onClick}
       onContextMenu={onContextMenu}
+      // Interactive semantics belong on the element that owns activation - the
+      // role used to sit on the inner face, which is not what handles the click
+      // and is not focusable, so the card was mouse-only.
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-label={interactive ? label || undefined : undefined}
+      onKeyDown={
+        interactive
+          ? (event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return;
+              // Overlay badges can carry their own controls; never eat their keys.
+              if (event.target !== event.currentTarget) return;
+              event.preventDefault();
+              // The table's global shortcuts only step aside for a real <button>
+              // (TablePage's Space guard), so a focused card must consume the key
+              // itself or Space would both activate the card and pass the turn.
+              event.stopPropagation();
+              onClick?.();
+            }
+          : undefined
+      }
+      onFocus={interactive ? (event) => setRinging(isKeyboardFocus(event.currentTarget)) : undefined}
+      onBlur={interactive ? () => setRinging(false) : undefined}
       // Front-facing cards opt into the global hover-zoom (HoverCardLayer):
       // resting the pointer on the card floats a larger copy above it.
       data-preview-src={!faceDown && imageUrl ? imageUrl : undefined}
@@ -117,8 +171,11 @@ export const GameCard = memo(function GameCard({
         onPointerMove={onPointerMove}
         onPointerEnter={() => setHovering(true)}
         onPointerLeave={reset}
-        role={onClick ? 'button' : undefined}
-        aria-label={faceDown ? 'Face-down card' : name}
+        // A non-interactive card is a picture, not a button: role="img" is what
+        // makes this label reach AT at all (a bare <div> drops aria-label) and
+        // it adds no tab stop. Interactive cards are named by the outer button.
+        role={!interactive && label ? 'img' : undefined}
+        aria-label={!interactive && label ? label : undefined}
       >
         {faceDown ? (
           <div className="gcArt gcBackFace" aria-hidden />

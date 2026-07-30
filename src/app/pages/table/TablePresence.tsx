@@ -12,6 +12,8 @@ import { send, onMessage } from '../../net/ws.ts';
 interface RemoteCursor {
   username: string;
   seat: number;
+  /** Which seat's playmat the position is relative to (null = not over one). */
+  mat: number | null;
   x: number;
   y: number;
   hover: string | null;
@@ -40,6 +42,9 @@ export function TablePresence({ meId, active }: { meId: string | undefined; acti
   // the hover moves on. The outline lives on the card element itself so it
   // rotates with the card's tilt/tap transform instead of a detached box.
   const outlined = useRef(new Set<HTMLElement>());
+  /** True once we've told the table the pointer left every mat, so leaving does
+   *  not spam one message per move. */
+  const offMat = useRef(false);
 
   const syncIds = () => {
     const next = [...cursors.current.keys()];
@@ -56,6 +61,7 @@ export function TablePresence({ meId, active }: { meId: string | undefined; acti
       cursors.current.set(message.fromUserId, {
         username: message.username,
         seat: message.seat,
+        mat: message.mat ?? null,
         x: message.x,
         y: message.y,
         hover: message.hover,
@@ -70,18 +76,30 @@ export function TablePresence({ meId, active }: { meId: string | undefined; acti
     if (!active) return;
     let last = 0;
     const onMove = (event: PointerEvent) => {
-      const table = document.querySelector('.table');
-      if (!table) return;
-      const rect = table.getBoundingClientRect();
-      const x = (event.clientX - rect.left) / rect.width;
-      const y = (event.clientY - rect.top) / rect.height;
-      if (x < 0 || x > 1 || y < 0 || y > 1) return;
+      const el = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
+      // Only a playmat carries a cursor. Anywhere else - the rail, the header,
+      // the hand strip, off the board entirely - reports "no mat" so viewers
+      // hide the pointer instead of parking it somewhere meaningless.
+      const mat = el?.closest<HTMLElement>('[data-mat-seat]') ?? null;
       const now = Date.now();
       if (now - last < SEND_INTERVAL) return;
       last = now;
-      const el = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
+      if (!mat) {
+        if (!offMat.current) {
+          offMat.current = true;
+          send({ type: 'cursor.move', x: 0, y: 0, hover: null, mat: null });
+        }
+        return;
+      }
+      offMat.current = false;
+      // Normalized WITHIN that mat, so the viewer can replay it on their own
+      // copy of the same mat whatever size or place it has in their layout.
+      const rect = mat.getBoundingClientRect();
+      const x = (event.clientX - rect.left) / rect.width;
+      const y = (event.clientY - rect.top) / rect.height;
+      const seat = Number(mat.getAttribute('data-mat-seat'));
       const hover = el?.closest('.fieldCard')?.getAttribute('data-iid') ?? null;
-      send({ type: 'cursor.move', x, y, hover });
+      send({ type: 'cursor.move', x, y, hover, mat: Number.isFinite(seat) ? seat : null });
     };
     window.addEventListener('pointermove', onMove);
     return () => window.removeEventListener('pointermove', onMove);
@@ -104,10 +122,25 @@ export function TablePresence({ meId, active }: { meId: string | undefined; acti
           continue;
         }
         const pointer = nodes.current.get(id);
-        if (pointer && rect) {
-          const px = rect.left + cursor.x * rect.width;
-          const py = rect.top + cursor.y * rect.height;
-          pointer.style.transform = `translate3d(${px}px, ${py}px, 0)`;
+        if (pointer) {
+          // Their mat, located in MY layout - so the pointer lands on exactly
+          // the card they are hovering even though our boards are arranged
+          // differently (staged, grid, mirrored).
+          const mat =
+            cursor.mat != null
+              ? document.querySelector<HTMLElement>(`[data-mat-seat="${cursor.mat}"]`)
+              : null;
+          const box = mat?.getBoundingClientRect() ?? null;
+          if (!box) {
+            // Off-mat, or that mat is not on screen right now: hide rather than
+            // guess a position.
+            pointer.style.visibility = 'hidden';
+          } else {
+            pointer.style.visibility = '';
+            const px = box.left + cursor.x * box.width;
+            const py = box.top + cursor.y * box.height;
+            pointer.style.transform = `translate3d(${px}px, ${py}px, 0)`;
+          }
         }
         if (cursor.hover) wanted.set(cursor.hover, seatColor(cursor.seat, 0.5));
       }

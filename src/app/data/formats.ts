@@ -31,6 +31,10 @@ export const FORMATS: DeckFormat[] = [
   { id: 'legacy', name: 'Legacy', exactSize: null, minSize: 60, maxCopies: 4, hasCommander: false, brackets: false, startingLife: 20 },
   { id: 'vintage', name: 'Vintage', exactSize: null, minSize: 60, maxCopies: 4, hasCommander: false, brackets: false, startingLife: 20 },
   { id: 'pauper', name: 'Pauper', exactSize: null, minSize: 60, maxCopies: 4, hasCommander: false, brackets: false, startingLife: 20 },
+  // Limited: a drafted or sealed pool. Forty cards, and no copy limit at all -
+  // whatever you opened is legal, including the eight Lightning Bolts a pod
+  // could not stop you from wheeling.
+  { id: 'draft', name: 'Limited', exactSize: null, minSize: 40, maxCopies: null, hasCommander: false, brackets: false, startingLife: 20 },
   { id: 'freeform', name: 'Freeform', exactSize: null, minSize: null, maxCopies: null, hasCommander: false, brackets: false, startingLife: 20 },
 ];
 

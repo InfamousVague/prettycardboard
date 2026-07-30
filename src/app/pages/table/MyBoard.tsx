@@ -29,6 +29,7 @@ import { faceImage, getFaces, useFacesVersion } from '../../data/faces.ts';
 import { primePrintedPT, usePrintedPtVersion } from '../../data/printedPt.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
+import { handSlinky, paintSlinky, restFocus, slinkyOffsets } from '../../components/slinky.ts';
 import type { CardInst, MatPos, MatZone, RoomState, TablePlayer, Zone } from '../../net/types.ts';
 import { selectCardScale, useTableUi } from './tableUi.ts';
 import { AttackBadge, BlockCluster, CounterBadges, DEFAULT_MAT_LAYOUT, MAT_ZONES, ZonePiles, groupAttachments, splitPile } from './bits.tsx';
@@ -185,6 +186,16 @@ export function MyBoard({
         Math.min(168 * cardScale, Math.max(64, (window.innerWidth * 0.96 - 24) / handCount + 34))
       : 132 * cardScale,
   );
+  // How wide the fan would like to be: the old fixed overlap, one card per
+  // step. CSS caps it at the strip, and past that cap the slinky takes over -
+  // which is what stops a forty-card hand running off both edges of the screen.
+  const handSpan = Math.round(
+    handCardWidth + (handCount - 1) * Math.max(18, handCardWidth - 44 * cardScale),
+  );
+  // The fan's resting shape. Hover repaints the same property in place rather
+  // than re-rendering (see paintSlinky), so these are what it returns to.
+  const handSize = me.hand?.length ?? 0;
+  const handOffsets = slinkyOffsets(handSize, restFocus(handSize), handSlinky(handSize));
   const blockerIid = useTableUi((state) => state.blockerIid);
   const setBlocker = useTableUi((state) => state.setBlocker);
   // Perfectly-upright cards vs the natural slight per-card tilt (Settings ->
@@ -1314,9 +1325,13 @@ export function MyBoard({
       // clear of the (scalable) pile stacks. The hand's real height rides along
       // so chrome that must clear the fan (the scrub preview) tracks the actual
       // cards rather than a fixed guess that only holds at one card size.
+      // --pc-hand-span is the width the fan WANTS; the strip caps it, and the
+      // slinky redistributes the cards inside whatever it actually gets.
       style={{
         ['--card-scale' as string]: cardScale,
         ['--pc-hand-h' as string]: `${Math.round(handCardWidth * (680 / 488))}px`,
+        ['--pc-hand-w' as string]: `${handCardWidth}px`,
+        ['--pc-hand-span' as string]: `${handSpan}px`,
       }}
       onPointerMove={moveDrag}
       onPointerUp={endDrag}
@@ -1374,6 +1389,10 @@ export function MyBoard({
           setFlightAnchor('field:mine', el);
         }}
         className="myField"
+        /* Marks this element as seat N's playmat: live cursors normalize against
+           the mat they are over, so a viewer places them on the SAME mat in
+           their own layout rather than somewhere in their table. */
+        data-mat-seat={me.seat}
         style={me.playmat ? { ['--pc-board-mat' as string]: playmatBackground(me.playmat) } : undefined}
         data-mode={boardMode}
         data-game={room.game || 'mtg'}
@@ -1632,10 +1651,15 @@ export function MyBoard({
               if (event.pointerType !== 'mouse' || drag) return;
               handX.set(event.clientX);
               const rect = event.currentTarget.getBoundingClientRect();
-              shareHandHover(Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))));
+              const along = Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width)));
+              // Open the fan where the pointer is, and let the rest of it
+              // bunch up on the far side.
+              paintSlinky(handRef.current, along * Math.max(0, (me.hand?.length ?? 1) - 1));
+              shareHandHover(along);
             }}
             onPointerLeave={() => {
               handX.set(Number.POSITIVE_INFINITY);
+              paintSlinky(handRef.current, null);
               shareHandHover(null);
             }}
           >
@@ -1645,7 +1669,8 @@ export function MyBoard({
                 card={card}
                 dataIid={card.iid}
                 width={handCardWidth}
-                spread={index - (hand.length - 1) / 2}
+                offset={handOffsets[index] ?? 0.5}
+                count={hand.length}
                 dimmed={drag?.iid === card.iid && dragOrigin.current.armed}
                 handX={handX}
                 onPointerDown={(event) => {

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import * as ws from '../net/ws.ts';
-import type { CardInst, GameAction, GameActionV2, ManaPool, RoomState, ServerMessage, TablePlayer, TimelineEntry, Zone } from '../net/types.ts';
+import type { CardInst, DraftCard, GameAction, GameActionV2, LimitedMode, ManaPool, RoomState, ServerMessage, TablePlayer, TimelineEntry, Zone } from '../net/types.ts';
 import { playSound } from '../sounds.ts';
 
 /**
@@ -90,6 +90,22 @@ interface GameState {
   spectate: (roomId: string) => void;
   leave: () => void;
   start: () => void;
+  /** Host: open a draft or a sealed pool with packs this client collated. */
+  draftStart: (draft: {
+    set: string;
+    setName: string;
+    mode: LimitedMode;
+    rounds: number;
+    pickSeconds: number;
+    buildSeconds: number;
+    lockDecks: boolean;
+    basics: DraftCard[];
+    packs: DraftCard[][];
+  }) => void;
+  /** Take a card out of the pack in front of me. */
+  draftPick: (index: number, id: string) => void;
+  /** My deck is saved; I am done building. */
+  draftBuilt: () => void;
   act: (action: GameAction | GameActionV2) => void;
   redo: () => void;
   rewindTo: (index: number) => void;
@@ -390,6 +406,13 @@ export const useGame = create<GameState>((set, get) => {
       set({ room: null, spectating: false, chat: [], log: [], joinedRoomId: null, replay: { active: false, index: 0, head: 0, frame: null }, undoState: { canUndo: false, canRedo: false, cursor: 0, head: 0, isHost: false }, timeline: [] });
     },
     start: () => ws.send({ type: 'room.start' }),
+
+draftStart: ({ set, setName, mode, rounds, pickSeconds, buildSeconds, lockDecks, basics, packs }) =>
+    ws.send({ type: 'draft.start', set, setName, mode, rounds, pickSeconds, buildSeconds, lockDecks, basics, packs }),
+
+    draftPick: (index, id) => ws.send({ type: 'draft.pick', index, id }),
+
+    draftBuilt: () => ws.send({ type: 'draft.built' }),
     // Actions are frozen while scrubbing a replay - the board is a past frame.
     act: (action) => {
       if (get().replay.active) return;

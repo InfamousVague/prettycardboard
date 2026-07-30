@@ -1,57 +1,83 @@
 /* The floating pack dock: a booster to rip from anywhere in the app.
-   It lives on the inline-START edge at mid-height on purpose - the phone
-   table already owns both bottom corners (End turn at bottom-inline-end, the
-   zone piles at bottom-inline-start), and the middle of that edge is the one
-   run of screen no gameplay control reaches for. */
+   It parks in the bottom-inline-END corner, the usual home for a launcher, and
+   is draggable from there to anywhere on screen. Note for the phone table:
+   that corner is also where End turn sits, so the pill lands on top of it
+   until dragged - the trade the corner buys is that everywhere ELSE in the app
+   the dock is exactly where a floating action is looked for. */
 
 .pdDock {
+  /* The margin the panel's clamp keeps between itself and the viewport edges -
+     PANEL_EDGE in PackDock.tsx, mirrored here because the panel's width caps
+     below subtract BOTH gutters, so a fully-on-screen placement always exists
+     at any window size. Change one and change the other; if they ever drift
+     apart the clamp gives the margin up rather than the screen edge. */
+  --pd-panel-edge: 12px;
+  /* A real Magic card is 63mm x 88mm. Every card-shaped box in the dock is cut
+     to this so nothing has to be cropped to look right. */
+  --pd-card-ratio: 63 / 88;
+  /* How tall the product shot at the top of the rail is allowed to get. The
+     rail's own width cap is 4:3 of this, so the two cannot drift apart - see
+     .pdShowcaseArt and .pdControls. */
+  --pd-showcase-h: 32vh;
   position: fixed;
-  inset-inline-start: calc(var(--glacier-space-2) + env(safe-area-inset-left, 0px));
-  top: 50%;
-  translate: 0 -50%;
+  inset-inline-end: calc(var(--glacier-space-2) + env(safe-area-inset-right, 0px));
+  inset-block-end: calc(var(--glacier-space-2) + env(safe-area-inset-bottom, 0px));
   /* Under the command palette (110), card popup (120) and pickers (130): the
      dock is a pastime, so anything the player deliberately opened wins. */
   z-index: 95;
   display: flex;
-  align-items: center;
-  /* INERT: dragging the pill moves it by transform, so this container's box
-     stays behind at the edge. An empty transparent box is still a hit target,
-     and the strip the player just cleared must go back to the board. */
+  align-items: flex-end;
+  justify-content: flex-end;
+  /* INERT: a transparent container box is still a hit target. Dismissed it is
+     empty, and mid-drag the pill leads it by a transform - either way the
+     strip of board underneath it must stay tappable. */
   pointer-events: none;
 }
 
-/* Only the two things you can actually touch take pointers back. NOT
-   `.pdDock > *`: that would re-arm the untransformed drag wrapper, which is
-   exactly the box left behind at the old position. */
+/* Only the two things you can actually touch take pointers back - not
+   `.pdDock > *`, which would re-arm the drag wrapper's whole box. */
 .pdPanel,
 .pdPill {
   pointer-events: auto;
 }
 
-/* RTL: the same logical edge, mirrored - the inset property flips for us, but
-   the safe-area env() does not, so the right inset is read there. */
+/* RTL: the same logical corner, mirrored - the inset property flips for us, but
+   the safe-area env() does not, so the left inset is read there. */
 :root[dir='rtl'] .pdDock {
-  inset-inline-start: calc(var(--glacier-space-2) + env(safe-area-inset-right, 0px));
+  inset-inline-end: calc(var(--glacier-space-2) + env(safe-area-inset-left, 0px));
 }
 
 /* --- collapsed: a draggable, labelled pill ------------------------------- */
 
-/* The whole pill is the drag handle, so the padding here is not decoration:
-   it is the surface you can grab without pressing either button. */
+/* The pill IS the surface: ONE translucent capsule holding both controls,
+   rather than two kit-glass buttons on an invisible strip. That is why the
+   buttons inside are `ghost` - a `glass` button in here would stack a second
+   pane behind this one and double the hairline and the blur.
+
+   Deliberately the kit's THINNEST glass. The dock floats over the board and
+   over card art, and the point of it being see-through is that it costs you
+   nothing to leave it up; the backdrop blur is what keeps the label readable
+   through that transparency, so the two go together. */
 .pdPill {
   display: inline-flex;
   align-items: center;
-  gap: var(--glacier-space-1);
-  padding: 0.2rem 0.25rem;
-  border-radius: var(--glacier-radius-full);
-  border: var(--glacier-hairline) solid var(--glacier-glass-border);
-  background: var(--glacier-glass-regular);
-  backdrop-filter: blur(var(--glacier-blur-sm)) saturate(var(--glacier-glass-saturate));
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  gap: 2px;
+  padding: 0.2rem 0.3rem;
   cursor: grab;
-  /* Present, not loud: it fades in when reached for. `:focus-within` rather
-     than `:focus-visible` now that the pill wraps two focusable buttons. */
-  opacity: 0.62;
+  /* The whole pill is a drag handle, so the browser must not claim the gesture
+     for panning first. */
+  touch-action: none;
+  border-radius: var(--glacier-radius-full);
+  background: var(--glacier-glass-thin);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  backdrop-filter: blur(var(--glacier-blur-md, 12px)) saturate(var(--glacier-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glacier-blur-md, 12px)) saturate(var(--glacier-glass-saturate));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.3);
+  /* Present, not loud - but legible at rest, which the old 0.62 was not once
+     the capsule stopped being painted by the buttons themselves.
+     `:focus-within` rather than `:focus-visible` now that the pill wraps two
+     focusable buttons. */
+  opacity: 0.88;
   transition: opacity var(--glacier-duration-fast, 120ms) ease;
 }
 
@@ -60,38 +86,19 @@
   opacity: 1;
 }
 
-.pdPillMain,
-.pdPillClose {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--glacier-space-1);
-  padding: 0.25rem 0.4rem;
-  border: 0;
-  border-radius: var(--glacier-radius-full);
-  background: transparent;
-  color: var(--glacier-text);
-  font: inherit;
-  font-size: var(--glacier-font-size-sm);
-  line-height: 1;
-  cursor: pointer;
-}
-
-/* The unread dot hangs off THIS button, so this button has to be its
-   containing block - otherwise it anchors to `.pdDock` and lands at the
-   screen edge instead of on the pill the player dragged away. */
+/* The two controls are ghost buttons and paint no surface of their own, so the
+   capsule above is the only glass - the unread dot hangs off the main one, and
+   THAT is what needs a containing block: without it the dot anchors to
+   `.pdDock` and lands at the screen edge instead of on the pill. */
 .pdPillMain {
   position: relative;
-}
-
-.pdPillMain:hover,
-.pdPillClose:hover {
-  background: var(--glacier-hover);
 }
 
 .pdPillLabel {
   white-space: nowrap;
 }
 
+/* Dismiss is the quieter of the two - it should not read as an equal action. */
 .pdPillClose {
   opacity: 0.7;
 }
@@ -101,7 +108,9 @@
   opacity: 1;
 }
 
-/* Something was pulled while the dock was shut. */
+/* Something was pulled while the dock was shut. Ringed in the pill's own glass
+   rather than the opaque page surface, which would punch a solid disc through
+   a capsule whose whole point is being see-through. */
 .pdPillDot {
   position: absolute;
   top: -1px;
@@ -110,17 +119,28 @@
   height: 0.5rem;
   border-radius: var(--glacier-radius-full);
   background: var(--glacier-accent-solid);
-  box-shadow: 0 0 0 2px var(--glacier-surface);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent);
 }
 
 /* --- expanded: the panel ------------------------------------------------ */
 
 .pdPanel {
-  /* Roomy enough to actually read a pack: about a third of the viewport, and
-     never so tall it swallows the screen. */
-  width: min(33vw, 34rem, calc(100vw - 1.5rem));
-  min-width: min(21rem, calc(100vw - 1.5rem));
-  max-height: min(38rem, 78vh);
+  /* A left-hand window rather than a popover: most of the viewport by default,
+     because there are three columns in it now and the middle one is showing a
+     pack at a size worth looking at. The phone rule further down still
+     overrides width, min-width and height, so small screens keep the old
+     sheet. */
+  width: min(88vw, calc(100vw - 2 * var(--pd-panel-edge)));
+  min-width: min(21rem, calc(100vw - 2 * var(--pd-panel-edge)));
+  height: 92vh;
+  /* Drag the corner to resize. `resize` is inert unless overflow is clipped,
+     and the panel's own children each scroll, so hiding it here costs nothing.
+     The max rules keep a dragged size on screen. */
+  resize: both;
+  overflow: hidden;
+  min-height: 20rem;
+  max-width: calc(100vw - 2 * var(--pd-panel-edge));
+  max-height: calc(100vh - 2 * var(--pd-panel-edge));
   display: flex;
   flex-direction: column;
   gap: var(--glacier-space-2);
@@ -148,6 +168,10 @@
 }
 
 .pdBody {
+  /* Takes the whole panel below the header. The split pane sizes itself from
+     its container, so without this it would collapse to its content height and
+     leave the bottom of the panel empty. */
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: var(--glacier-space-2);
@@ -160,6 +184,1055 @@
   display: flex;
   flex-direction: column;
   gap: var(--glacier-space-2);
+  /* Owns the slack in the rail so the result list grows with the panel. The
+     Open button below is pinned by its own auto margin, which still wins when
+     there is nothing to give away. */
+  flex: 1;
+  min-height: 0;
+}
+
+.pdPickerHead {
+  flex: none;
+  font-size: var(--glacier-font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--glacier-text-subtle, var(--glacier-text-muted));
+}
+
+/* The results, always visible. This is a list of products, so it scrolls on its
+   own rather than pushing the Open button off the bottom of the rail. The cap
+   tracks the viewport rather than a fixed height so a taller panel actually
+   shows more of the list instead of leaving a gap above the button. */
+.pdResults {
+  flex: 1;
+  min-height: 6rem;
+  max-height: 44vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pdResult {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-1) var(--glacier-space-2);
+  border: 0;
+  border-radius: var(--glacier-radius-md);
+  background: transparent;
+  color: var(--glacier-text-muted);
+  font: inherit;
+  font-size: var(--glacier-font-size-sm);
+  text-align: start;
+  cursor: pointer;
+}
+
+.pdResult:hover {
+  background: color-mix(in oklch, var(--glacier-text) 8%, transparent);
+  color: var(--glacier-text);
+}
+
+.pdResult:focus-visible {
+  outline: 2px solid var(--glacier-accent-solid);
+  outline-offset: -2px;
+}
+
+.pdResult[data-active] {
+  background: color-mix(in oklch, var(--glacier-accent-solid) 22%, transparent);
+  color: var(--glacier-text);
+  font-weight: var(--glacier-font-weight-semibold, 600);
+}
+
+.pdResultIcon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.pdResultName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdResultYear {
+  flex: none;
+  font-size: var(--glacier-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--glacier-text-subtle, var(--glacier-text-muted));
+}
+
+/* The kit's ResizableSplitPane owns the divider and the ratio; all this has to
+   do is let both panes fill the height they are given and drop the pane's own
+   opaque surface - the panel behind it is glass, and a solid fill on top of it
+   defeats the blur entirely. */
+.pdSplit {
+  flex: 1;
+  min-height: 0;
+  background: transparent;
+  border-radius: 0;
+}
+
+/* Left column: the two odds cards, and nothing else. It does not scroll as a
+   whole - the per-card list inside it does, so the aggregate card above stays
+   put while you run down three hundred commons. */
+.pdOddsPane {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  overflow: hidden;
+  padding-inline-end: var(--glacier-space-2);
+}
+
+.pdStage {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  /* A size container, so the fans below can measure themselves against the
+     pane the divider actually gave them rather than against the viewport. */
+  container-type: size;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--glacier-space-3);
+  overflow: hidden;
+  padding-inline-end: var(--glacier-space-2);
+}
+
+/* With an odds column to its left the stage is a middle pane, so it needs
+   clearance on both sides rather than just the one. */
+.pdSplitOdds .pdStage {
+  padding-inline-start: var(--glacier-space-2);
+}
+
+/* --- the stage answers the pull ----------------------------------------- */
+
+/* A glow on one card tells you WHICH card is the mythic. This tells you the
+   PACK was a mythic pack, before you have read a name or a symbol - the beat
+   you actually react to. Rares get a warm wash that settles and stays; mythics
+   get a brighter one that keeps moving; a foil mythic, the rarest thing a
+   booster can produce, gets the light sweeping across the whole stage.
+ *
+ * Behind everything and inert: the stage is where the cards are, and none of
+ * this may catch a pointer meant for one. */
+.pdStage[data-best='rare']::before,
+.pdStage[data-best='mythic']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse 70% 55% at 50% 58%,
+    color-mix(in oklch, var(--pc-best) 32%, transparent),
+    transparent 70%
+  );
+  animation: pcStageFlare 1.4s cubic-bezier(0.22, 1, 0.36, 1) 300ms forwards;
+}
+
+.pdStage[data-best='rare'] {
+  --pc-best: oklch(0.78 0.13 92);
+}
+
+.pdStage[data-best='mythic'] {
+  --pc-best: oklch(0.72 0.19 48);
+}
+
+.pdStage[data-best='mythic']::before {
+  animation:
+    pcStageFlare 1.4s cubic-bezier(0.22, 1, 0.36, 1) 300ms forwards,
+    pcStagePulse 3.6s ease-in-out 1.7s infinite;
+}
+
+/* Foil mythic: a slow band of light crossing the stage, on top of the wash. */
+.pdStage[data-best-foil][data-best='mythic']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 38%,
+    color-mix(in oklch, white 16%, transparent) 48%,
+    color-mix(in oklch, var(--pc-best) 22%, transparent) 52%,
+    transparent 62%
+  );
+  animation: pcStageSweep 4.2s ease-in-out 900ms infinite;
+}
+
+@keyframes pcStageFlare {
+  0% {
+    opacity: 0;
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes pcStagePulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes pcStageSweep {
+  0% {
+    transform: translateX(-115%);
+  }
+  55%,
+  100% {
+    transform: translateX(115%);
+  }
+}
+
+/* The stage's own children have to sit above the wash. */
+.pdStageHead,
+.pdFans {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdStage[data-best='rare']::before,
+  .pdStage[data-best='mythic']::before {
+    animation: none;
+    opacity: 0.55;
+  }
+
+  .pdStage[data-best-foil][data-best='mythic']::after {
+    display: none;
+  }
+}
+
+.pdControls {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  /* The rail never needs to be wider than the product shot at the top of it.
+     The art caps its own height, so 4:3 of that cap is the widest it can ever
+     draw - and the search field, the set list and the open button all read
+     fine at that width or under it. Drag the divider past this and the extra
+     goes to the stage, where a bigger fan is actually worth something. */
+  max-width: calc(var(--pd-showcase-h) * 4 / 3);
+  /* The slack falls beside the divider rather than at the panel edge, so the
+     rail stays where the eye looks for it and the gap merges with the stage. */
+  margin-inline-start: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-inline-start: var(--glacier-space-2);
+}
+
+/* margin-block-start: auto is what pins this to the bottom of the rail - the
+   rail is a flex column, so the auto margin eats every spare pixel above. */
+.pdControlsFoot {
+  margin-block-start: auto;
+  padding-block-start: var(--glacier-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+}
+
+/* --- the shelf box ------------------------------------------------------- */
+
+.pdShowcase {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  min-width: 0;
+}
+
+/* The box art, unblurred and given real size - this is the thing being opened,
+   so it gets to be seen. Cropped to the panel rather than squashed into it:
+   this is photography, and a stretched product shot reads as a mistake. */
+.pdShowcaseArt {
+  flex: none;
+  position: relative;
+  aspect-ratio: 4 / 3;
+  /* A ceiling on the crop, not on the width. The rail is now the widest of the
+     two, and 4:3 of that is tall enough to push the search field and the set
+     list off the bottom of the panel - which is the wrong trade, since the
+     picker is what the rail is FOR. Past this height the art simply crops
+     wider instead of growing. */
+  max-height: var(--pd-showcase-h);
+  overflow: hidden;
+  border-radius: var(--glacier-radius-lg);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
+  box-shadow: 0 14px 34px rgb(0 0 0 / 0.45);
+}
+
+.pdShowcaseArt > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+/* No poster art for this set. An empty shelf with the set's own symbol on it,
+   which is honest about having nothing to show. */
+.pdShowcaseArt[data-empty] {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(
+    160deg,
+    color-mix(in oklch, var(--glacier-surface) 88%, transparent),
+    color-mix(in oklch, var(--glacier-surface-raised, var(--glacier-surface)) 92%, transparent)
+  );
+}
+
+.pdShowcaseGlyph {
+  width: 38%;
+  height: 38%;
+  opacity: 0.75;
+}
+
+.pdShowcaseInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  min-width: 0;
+}
+
+.pdShowcaseIcon {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+.pdShowcaseName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-semibold, 600);
+  color: var(--glacier-text);
+}
+
+.pdShowcaseSpec {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-1);
+}
+
+/* --- pull rates ---------------------------------------------------------- */
+
+/* What the product actually pulls, in the rail beside the pack. Boxed rather
+   than loose so the four figures read as one panel of the same kind of thing,
+   and the era note below them is visibly a footnote to that panel rather than
+   more of the dock's own copy. */
+.pdRates {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-3);
+  border-radius: var(--glacier-radius-lg);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
+  background: color-mix(in oklch, var(--glacier-surface) 62%, transparent);
+  min-width: 0;
+}
+
+.pdRatesHead {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold, 600);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--glacier-text-muted);
+}
+
+/* Two columns at rest, more only if the divider is dragged wide enough for a
+   third to hold a whole "1 in 7.4" without wrapping mid-number. `auto-fit`
+   rather than a fixed count so this tracks the pane the reader chose rather
+   than a width guessed here. */
+.pdRateGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+  gap: var(--glacier-space-2) var(--glacier-space-3);
+}
+
+.pdRate {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.pdRateValue {
+  font-size: var(--glacier-font-size-lg);
+  font-weight: var(--glacier-font-weight-semibold, 600);
+  line-height: 1.15;
+  color: var(--glacier-text);
+  /* Rates tick between widths as the pool resolves and packs are opened;
+     tabular figures keep the two columns from shuffling under each other. */
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdRateLabel {
+  font-size: var(--glacier-font-size-xs);
+  line-height: 1.25;
+  color: var(--glacier-text-subtle);
+}
+
+/* --- per-card odds ------------------------------------------------------- */
+
+/* The second card in the odds column, and the one that has to stretch: it
+   holds every card in the set, so it takes whatever height is left and scrolls
+   its list rather than the pane. */
+.pdOdds {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-3);
+  border-radius: var(--glacier-radius-lg);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
+  background: color-mix(in oklch, var(--glacier-surface) 62%, transparent);
+}
+
+.pdOddsList {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Folded into the controls rail on a phone, the card has no pane to stretch
+   into and `flex: 1` would let a three-hundred-card list swallow the sheet.
+   A capped list keeps the open button reachable without a scroll marathon. */
+.pdControls > .pdOdds {
+  flex: none;
+}
+
+.pdControls .pdOddsList {
+  max-height: 14rem;
+}
+
+.pdOddsRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--glacier-space-2);
+  padding-block: 2px;
+  /* The rarity stripe: the only thing separating three hundred otherwise
+     identical rows into the groups a reader is actually scanning for. */
+  padding-inline-start: var(--glacier-space-2);
+  border-inline-start: 2px solid var(--pc-rarity, transparent);
+  font-size: var(--glacier-font-size-xs);
+  line-height: 1.5;
+}
+
+.pdOddsRow[data-rarity='mythic'] { --pc-rarity: oklch(0.72 0.19 48); }
+.pdOddsRow[data-rarity='rare'] { --pc-rarity: oklch(0.78 0.13 92); }
+.pdOddsRow[data-rarity='uncommon'] { --pc-rarity: oklch(0.75 0.08 220); }
+.pdOddsRow[data-rarity='common'] { --pc-rarity: oklch(0.62 0.01 260); }
+
+.pdOddsName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--glacier-text-muted);
+}
+
+.pdOddsPct {
+  flex: none;
+  /* Right-aligned tabular figures so the decimal points line up down the
+     column and the eye can compare two rows without reading either. */
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--glacier-font-weight-semibold, 600);
+  color: var(--glacier-text);
+}
+
+/* --- the stage: sealed, torn, then fanned -------------------------------- */
+
+.pdOpen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--glacier-space-3);
+}
+
+.pdOpenPack {
+  position: relative;
+  width: clamp(8rem, 17vw, 13rem);
+  aspect-ratio: var(--pd-card-ratio);
+}
+
+/* Grounds the pack on the dock's stage instead of leaving it floating in a
+   flat plane. */
+.pdOpenPack::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  inset-block-end: -6%;
+  inset-inline: 10%;
+  height: 7%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgb(0 0 0 / 0.55), transparent 70%);
+  filter: blur(7px);
+}
+
+.pdOpenPack[data-tearing] {
+  animation: pdPackShake 320ms ease-in-out 1;
+}
+
+@keyframes pdPackShake {
+  0%, 100% { transform: perspective(900px) translateX(0) rotate(0); }
+  25% { transform: perspective(900px) translateX(-2%) rotateY(-5deg) rotate(-1.4deg); }
+  75% { transform: perspective(900px) translateX(2%) rotateY(5deg) rotate(1.4deg); }
+}
+
+/* Curvature, on top of the art both halves carry: a foil bag bulges over the
+   stack inside and folds away dark at both edges. Same treatment as the
+   fullscreen opener, at the dock's scale. */
+.pdOpenTop::after,
+.pdOpenBody::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      rgb(0 0 0 / 0.5) 0%,
+      rgb(0 0 0 / 0.16) 7%,
+      rgb(255 255 255 / 0.06) 24%,
+      rgb(255 255 255 / 0.14) 38%,
+      rgb(255 255 255 / 0.02) 54%,
+      rgb(0 0 0 / 0.14) 74%,
+      rgb(0 0 0 / 0.55) 100%
+    ),
+    linear-gradient(96deg, transparent 44%, rgb(255 255 255 / 0.07) 47%, transparent 50%);
+}
+
+/* The wrapper is one picture cut in two along the crimp. Each piece carries a
+   copy of the art sized to the WHOLE pack and offset to its own share, so the
+   image runs continuously across the join until the top actually tears free. */
+.pdOpenTop,
+.pdOpenBody {
+  position: absolute;
+  inset-inline: 0;
+  overflow: hidden;
+  background: linear-gradient(
+    155deg,
+    color-mix(in oklch, var(--glacier-accent-solid) 26%, var(--glacier-surface-raised, #1a1c20)),
+    color-mix(in oklch, var(--glacier-accent-solid) 6%, var(--glacier-surface-sunken, #101114)) 70%
+  );
+}
+
+.pdOpenTop {
+  top: 0;
+  height: 16%;
+  z-index: 3;
+  border-radius: 6px 6px 2px 2px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.2),
+    inset 1px 0 0 rgb(255 255 255 / 0.08),
+    inset -1px 0 0 rgb(0 0 0 / 0.45);
+}
+
+.pdOpenBody {
+  top: 16%;
+  bottom: 0;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  align-content: end;
+  gap: 0.2rem;
+  padding-block-end: 0.5rem;
+  border-radius: 2px 2px 6px 6px;
+  box-shadow:
+    inset 0 -1.9rem 1.5rem -1.2rem rgb(0 0 0 / 0.8),
+    inset 1px 0 0 rgb(255 255 255 / 0.08),
+    inset -1px 0 0 rgb(0 0 0 / 0.45),
+    inset 0 -1px 0 rgb(0 0 0 / 0.4),
+    0 8px 18px rgb(0 0 0 / 0.45);
+}
+
+.pdOpenArt {
+  position: absolute;
+  inset-inline-start: 0;
+  width: 100%;
+  /* Cropped, not squashed: this is the set's own product art, and stretching
+     it is immediately visible. Both halves size their copy to the SAME box
+     (full pack width by full pack height), so cover crops both identically and
+     the picture still runs continuously across the crimp. */
+  object-fit: cover;
+  object-position: center;
+}
+
+/* 100 / 16: the strip is 16% of the pack, so its copy of the art has to be
+   6.25x the strip's own height to equal the full pack. */
+.pdOpenTop .pdOpenArt {
+  top: 0;
+  height: 625%;
+}
+
+/* 100 / 84 and -16 / 84: same picture, shifted up by exactly the strip. */
+.pdOpenBody .pdOpenArt {
+  top: -19.048%;
+  height: 119.048%;
+}
+
+.pdOpenCrimp {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 3px;
+  background: repeating-linear-gradient(
+    90deg,
+    rgb(255 255 255 / 0.45) 0 3px,
+    rgb(255 255 255 / 0.05) 3px 6px
+  );
+}
+
+.pdOpenIcon {
+  position: relative;
+  z-index: 1;
+  width: 1.3rem;
+  height: 1.3rem;
+  filter: invert(1) brightness(1.7) drop-shadow(0 1px 3px rgb(0 0 0 / 0.7));
+}
+
+.pdOpenName {
+  position: relative;
+  z-index: 1;
+  max-width: 92%;
+  font-size: 0.6rem;
+  font-weight: var(--glacier-font-weight-bold, 700);
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.8);
+}
+
+/* The stack inside. It sits BEHIND the wrapper body and above nothing else, so
+   it is hidden until it rises past the torn edge - which is what sells the
+   cards as coming out of the pack rather than appearing beside it. */
+.pdOpenSlide {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: end center;
+}
+
+.pdOpenCard {
+  grid-area: 1 / 1;
+  width: 74%;
+  aspect-ratio: var(--pd-card-ratio);
+  border-radius: 4px;
+  /* Stretched, not cropped: card backs and set art arrive at whatever ratio
+     the source happened to be, and `cover` was slicing the top and bottom off
+     the artwork. A card is a fixed shape, so fitting the image to it is the
+     honest result. */
+  background-size: 100% 100%;
+  background-position: center;
+  box-shadow: 0 8px 18px rgb(0 0 0 / 0.55);
+  opacity: 0;
+}
+
+.pdOpenPack[data-tearing] .pdOpenCard {
+  animation: pdSlideOut 900ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@keyframes pdSlideOut {
+  0% {
+    opacity: 0;
+    transform: translate(0, 6%) rotate(0deg);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translate(var(--pd-slide-x, 0), -76%) rotate(var(--pd-slide-r, 0deg));
+  }
+}
+
+.pdOpenPack[data-tearing] .pdOpenTop {
+  animation: pdTearOff 700ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes pdTearOff {
+  0% { transform: none; }
+  20% { transform: translateY(-3%) rotate(-1.5deg); }
+  34% { transform: translateY(1%) rotate(1.5deg); }
+  100% { transform: translate(38%, -190%) rotate(26deg); opacity: 0; }
+}
+
+/* The set's own cards, propped beside the sealed pack. */
+.pdOpenShots {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.pdOpenShot {
+  width: clamp(2.4rem, 5vw, 4rem);
+  aspect-ratio: var(--pd-card-ratio);
+  /* Same deal as .pdOpenCard - these render as either an <img> or a <span>
+     with a background, so both fit properties have to be set. */
+  object-fit: fill;
+  background-size: 100% 100%;
+  background-position: center;
+  border-radius: 4px;
+  box-shadow: 0 6px 14px rgb(0 0 0 / 0.45);
+}
+
+.pdOpenShots > :first-child { rotate: -8deg; }
+.pdOpenShots > :last-child { rotate: 8deg; }
+
+.pdStageTag {
+  font-size: var(--glacier-font-size-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--glacier-text-subtle);
+}
+
+/* --- the fan ------------------------------------------------------------- */
+
+/* What was opened, sitting above the arcs. flex:none so it keeps its line
+   while the fans below take whatever is left. */
+.pdStageHead {
+  flex: none;
+  display: grid;
+  justify-items: center;
+  gap: var(--glacier-space-1);
+  width: 100%;
+  text-align: center;
+}
+
+.pdStageName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  font-size: var(--glacier-font-size-md);
+  font-weight: var(--glacier-font-weight-semibold, 600);
+  color: var(--glacier-text);
+}
+
+/* Every set symbol in the dock is a MASK, not an image: Scryfall draws them as
+   black SVGs for white paper, so painted straight they vanish on glass and
+   inverted they all flatten to the same white. The colour comes from the
+   element's background, which SetIcon hashes from the set code. */
+.pdStageIcon,
+.pdShowcaseIcon,
+.pdShowcaseGlyph,
+.pdResultIcon {
+  display: block;
+  flex: none;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+}
+
+.pdStageIcon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.pdStageStats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--glacier-space-1);
+}
+
+.pdStat b {
+  /* The rarity hue rides on the number, not the whole chip: a row of fully
+     coloured labels competes with the cards it is describing. */
+  color: var(--pc-rarity, var(--glacier-text));
+  font-weight: var(--glacier-font-weight-semibold, 600);
+}
+
+.pdStat[data-rarity='mythic'] { --pc-rarity: oklch(0.72 0.19 48); }
+.pdStat[data-rarity='rare'] { --pc-rarity: oklch(0.78 0.13 92); }
+.pdStat[data-rarity='uncommon'] { --pc-rarity: oklch(0.75 0.08 220); }
+.pdStat[data-rarity='common'] { --pc-rarity: oklch(0.62 0.01 260); }
+.pdStat[data-new] { --pc-rarity: var(--glacier-accent-text); }
+
+/* Two arcs stacked, the good stuff over the rest - side by side halves the
+   width each fan gets, and a fan is much wider than it is tall. */
+.pdFans {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--glacier-space-1);
+  width: 100%;
+  /* Takes the stage minus the status line under it, rather than all of it. */
+  flex: 1;
+  min-height: 0;
+}
+
+.pdFan {
+  display: grid;
+  justify-items: center;
+  gap: var(--glacier-space-1);
+  width: 100%;
+}
+
+/* Card size comes from the stage box, so the pack scales with the divider and
+   the window instead of overflowing. The cqh term is what normally wins; the
+   cqw term catches a short, narrow pane where a wide arc would run off the
+   sides. The rest fan is deliberately the smaller of the two. */
+.pdFan[data-feature] {
+  --pd-card-w: min(21cqh, 20cqw);
+}
+
+.pdFan:not([data-feature]) {
+  --pd-card-w: min(14cqh, 16cqw);
+}
+
+/* The arc reserves its own height: the cards inside are absolutely placed, so
+   without this the fan collapses onto its label. --pd-arc-h is the fan's real
+   bounding height in card-heights, measured from the spread it was given (see
+   arcHeight in PackDock.tsx) - the fallback only covers a missing var. */
+.pdFanArc {
+  position: relative;
+  width: 100%;
+  --pd-card-h: calc(var(--pd-card-w) * 88 / 63);
+  height: calc(var(--pd-card-h) * var(--pd-arc-h, 1.4));
+}
+
+.pdFanCard {
+  position: absolute;
+  /* Anchored at the top: the centre card's top edge is the highest point of
+     any fan, so everything below it is accounted for by --pd-arc-h. */
+  inset-block-start: 0;
+  inset-inline-start: 50%;
+  width: var(--pd-card-w);
+  margin-inline-start: calc(var(--pd-card-w) / -2);
+  /* Pivot well below the card, so a rotation sweeps it into an arc like a held
+     hand rather than spinning it in place. Change this and change FAN_PIVOT. */
+  transform-origin: 50% 320%;
+  animation: pdFanIn 460ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  /* Cards leave the wrapper as a stack and open into the arc from there - see
+     useFanSpread. `rotate`/`translate` carry the pose, `transform` carries the
+     entrance, so the transition and the keyframes do not fight. */
+  transition:
+    rotate 620ms cubic-bezier(0.22, 1, 0.36, 1),
+    translate 620ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Once the arc has finished opening, the same rotation is being driven by the
+   pointer rather than by the reveal, and the long eased sweep above would trail
+   a whole card behind the cursor. Short enough to feel attached to the pointer,
+   long enough to smooth over the quantised focus steps. */
+.pdFanArc[data-open] .pdFanCard {
+  transition:
+    rotate 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    translate 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes pdFanIn {
+  from {
+    opacity: 0;
+    transform: translateY(90px) scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.pdFanLabel {
+  font-size: var(--glacier-font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--glacier-text-subtle);
+}
+
+.pdFanCard[data-rarity='mythic'] { --pc-rarity: oklch(0.72 0.19 48); }
+.pdFanCard[data-rarity='rare'] { --pc-rarity: oklch(0.78 0.13 92); }
+.pdFanCard[data-rarity='uncommon'] { --pc-rarity: oklch(0.75 0.08 220); }
+.pdFanCard[data-rarity='common'] { --pc-rarity: oklch(0.62 0.01 260); }
+
+/* --- rarity auras ------------------------------------------------------- */
+
+/* A rare gets a halo; a mythic gets a LIVE one. The three tiers have to be
+   told apart from across the room, before anyone has read a symbol or a name,
+   so they differ in KIND rather than in degree: nothing, a steady glow, and
+   something that moves. A foil mythic - the rarest thing a pack can hold -
+   drifts through the whole spectrum on top of that, because at that point the
+   pack has earned the fuss.
+ *
+ * The glow is a pseudo-element rather than a filter on the card, so it can
+ * pulse and spin without dragging the card's own art through a blur every
+ * frame, and so the burst ring below has something to sit in front of.
+ *
+ * PackOpening's .poFanCard reuses these keyframes - it always loads this file
+ * (packVisuals imports it) - so the dock and the fullscreen opener celebrate
+ * the same pull in the same way. */
+
+.pdFanCard[data-rarity='rare'] {
+  filter: drop-shadow(0 0 10px color-mix(in oklch, var(--pc-rarity) 55%, transparent));
+}
+
+.pdFanCard[data-rarity='mythic']::before {
+  content: '';
+  position: absolute;
+  inset: -18%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklch, var(--pc-rarity) 85%, transparent),
+    transparent 72%
+  );
+  filter: blur(12px);
+  opacity: 0;
+  pointer-events: none;
+  /* Fades in behind the card as it lands, then never stops breathing. The
+     breathe waits for the fade so the two are not fighting over opacity. */
+  animation:
+    pcHaloIn 700ms ease-out 420ms forwards,
+    pcHaloBreathe 2.8s ease-in-out 1.12s infinite;
+}
+
+/* One ring, once, as the card arrives: the moment of the pull, rather than a
+   permanent decoration. It sits IN FRONT of the card so it reads as light
+   coming off it and not as a border it was printed with. */
+.pdFanCard[data-rarity='mythic']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: 5%;
+  border: 2px solid color-mix(in oklch, var(--pc-rarity) 85%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  animation: pcMythicBurst 1s cubic-bezier(0.16, 1, 0.3, 1) 480ms 1;
+}
+
+/* Foil mythic: the halo stops being one colour and becomes all of them. The
+   spin rides `rotate` while the breathe rides `transform`, so both run at once
+   instead of the later one silently winning. */
+.pdFanCard[data-rarity='mythic'][data-foil]::before {
+  background: conic-gradient(
+    from 0deg,
+    oklch(0.76 0.2 20),
+    oklch(0.84 0.19 95),
+    oklch(0.8 0.18 165),
+    oklch(0.74 0.2 265),
+    oklch(0.76 0.2 20)
+  );
+  filter: blur(16px);
+  animation:
+    pcHaloIn 700ms ease-out 420ms forwards,
+    pcHaloBreathe 2.8s ease-in-out 1.12s infinite,
+    pcHaloSpin 7s linear 1.12s infinite;
+}
+
+@keyframes pcHaloIn {
+  to {
+    opacity: 0.85;
+  }
+}
+
+@keyframes pcHaloBreathe {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.07);
+  }
+}
+
+@keyframes pcHaloSpin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@keyframes pcMythicBurst {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  22% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdOpenPack[data-tearing],
+  .pdOpenPack[data-tearing] .pdOpenTop,
+  .pdOpenPack[data-tearing] .pdOpenCard,
+  .pdFanCard {
+    animation-duration: 1ms;
+  }
+
+  .pdFanCard {
+    transition: none;
+  }
+
+  .pdFanArc[data-open] .pdFanCard {
+    transition: none;
+  }
+
+  /* Keep the rarity glow - it is information, not decoration - but stop it
+     moving: a permanent pulse in the corner of the eye is exactly what this
+     setting exists to turn off. */
+  .pdFanCard[data-rarity='mythic']::before {
+    animation: none;
+    opacity: 0.85;
+  }
+
+  .pdFanCard[data-rarity='mythic']::after {
+    animation: none;
+    opacity: 0;
+  }
 }
 
 .pdEmpty {
@@ -185,7 +1258,9 @@
 
 .pdCards {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* The wide panel is the point: let a band flow into as many columns as it
+     fits rather than pinning every pack to three. */
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
   gap: var(--glacier-space-2);
 }
 
@@ -211,20 +1286,12 @@
   filter: drop-shadow(0 0 8px color-mix(in oklch, orangered 55%, transparent));
 }
 
-/* Never owned before - the whole point of ripping a pack. */
+/* Never owned before - the whole point of ripping a pack. The kit's solid
+   accent Pill; we only pin it to the card's corner. */
 .pdCardNew {
   position: absolute;
   top: 0.25rem;
   inset-inline-start: 0.25rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.15rem;
-  padding: 0.1rem 0.3rem;
-  border-radius: var(--glacier-radius-sm);
-  background: var(--glacier-accent-solid);
-  color: var(--glacier-accent-contrast);
-  font-size: 0.6rem;
-  font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   pointer-events: none;
@@ -319,12 +1386,43 @@
   box-shadow: 0 12px 34px rgb(0 0 0 / 0.4);
 }
 
+/* Someone else's pull, and the tier it was. A rare tints the edge; a mythic
+   lights the whole card up and keeps doing it until the notice leaves, so it
+   is worth glancing at from the far side of a busy board. */
 .pdNotice[data-rarity='mythic'] {
-  border-color: color-mix(in oklch, orangered 45%, var(--glacier-glass-border));
+  --pc-rarity: oklch(0.72 0.19 48);
+  border-color: color-mix(in oklch, var(--pc-rarity) 55%, var(--glacier-glass-border));
+  animation: pcNoticeMythic 2.6s ease-in-out infinite;
 }
 
 .pdNotice[data-rarity='rare'] {
-  border-color: color-mix(in oklch, gold 40%, var(--glacier-glass-border));
+  --pc-rarity: oklch(0.78 0.13 92);
+  border-color: color-mix(in oklch, var(--pc-rarity) 45%, var(--glacier-glass-border));
+  box-shadow:
+    0 12px 34px rgb(0 0 0 / 0.4),
+    0 0 18px color-mix(in oklch, var(--pc-rarity) 28%, transparent);
+}
+
+@keyframes pcNoticeMythic {
+  0%, 100% {
+    box-shadow:
+      0 12px 34px rgb(0 0 0 / 0.4),
+      0 0 20px color-mix(in oklch, var(--pc-rarity) 35%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 12px 34px rgb(0 0 0 / 0.4),
+      0 0 40px color-mix(in oklch, var(--pc-rarity) 70%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdNotice[data-rarity='mythic'] {
+    animation: none;
+    box-shadow:
+      0 12px 34px rgb(0 0 0 / 0.4),
+      0 0 24px color-mix(in oklch, var(--pc-rarity) 45%, transparent);
+  }
 }
 
 .pdNoticeArt {
@@ -353,19 +1451,44 @@
 
 /* The button stays on the edge; the PANEL moves to the top of the screen.
    Opening it must not bury the hand, the piles or the turn button, and on a
-   phone a mid-height panel would cover all three. */
+   phone a mid-height panel would cover all three.
+
+   `position: fixed` here means "anchored to the VIEWPORT", and that only holds
+   while no ancestor is transformed - a transformed ancestor becomes the
+   containing block for fixed descendants. So PackDock.tsx drops the dock's
+   translate entirely while the panel is up at these widths (`anchored`).
+   Without that pair, these insets resolve against the dock's own zero-width,
+   mid-height box: the panel hangs off the screen edge and slides around with a
+   drag offset that belongs to the pill. */
 @media (max-width: 700px), (max-height: 480px) {
   .pdPanel {
     position: fixed;
     top: calc(var(--glacier-space-3) + env(safe-area-inset-top, 0px) + 2.75rem);
     inset-inline: calc(var(--glacier-space-2) + env(safe-area-inset-left, 0px))
       calc(var(--glacier-space-2) + env(safe-area-inset-right, 0px));
+    /* Both insets and NO width: the panel spans exactly the gutters, so it
+       cannot be wider than the screen it is pinned to. A width here would win
+       over the end inset and put that edge back off screen. */
     width: auto;
+    min-width: 0;
+    height: auto;
+    min-height: 0;
+    max-width: none;
     max-height: min(26rem, 58vh);
+    /* No corner grip on touch: it would sit under the thumb during a scroll,
+       and the sheet is pinned to both gutters anyway. */
+    resize: none;
   }
 
   .pdNotices {
     bottom: calc(50% + 2.25rem);
+  }
+
+  /* No divider to share with on a phone: the rail is the whole width of a
+     stacked band, so the desktop cap would just strand it in a corner. */
+  .pdControls {
+    max-width: none;
+    margin-inline-start: 0;
   }
 
   .pdNotice {
@@ -434,22 +1557,43 @@
   animation: pdFoilPulse 2.4s ease-in-out infinite;
 }
 
+/* A mythic is not merely a brighter rare - it MOVES, on a slower and deeper
+   cycle than a foil's, so a pack that produces both still reads as two
+   different kinds of good rather than one glow at two brightnesses. */
+.pdCard[data-rarity='mythic'] {
+  animation: pcCardMythic 3.2s ease-in-out infinite;
+}
+
+/* Foil mythic - the rarest thing a booster can produce. It stops brightening
+   and starts changing colour, which nothing else in the grid does. Written as
+   explicit stops rather than a hue-rotate filter, because a filter would drag
+   the card's own art round the colour wheel with it. */
+.pdCard[data-rarity='mythic'][data-foil] {
+  animation: pcCardSpectrum 6s linear infinite;
+}
+
 @keyframes pdFoilPulse {
   0%, 100% { box-shadow: 0 0 0 1px color-mix(in oklch, var(--pc-rarity) 55%, transparent), 0 0 14px color-mix(in oklch, var(--pc-rarity) 40%, transparent); }
   50% { box-shadow: 0 0 0 1px color-mix(in oklch, var(--pc-rarity) 80%, transparent), 0 0 26px color-mix(in oklch, var(--pc-rarity) 65%, transparent); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .pdCard[data-foil] { animation: none; }
+@keyframes pcCardMythic {
+  0%, 100% { box-shadow: 0 0 0 1px color-mix(in oklch, var(--pc-rarity) 60%, transparent), 0 0 16px color-mix(in oklch, var(--pc-rarity) 45%, transparent); }
+  50% { box-shadow: 0 0 0 2px color-mix(in oklch, var(--pc-rarity) 95%, transparent), 0 0 34px color-mix(in oklch, var(--pc-rarity) 75%, transparent); }
 }
 
-/* Phones: the third-of-viewport rule would leave a sliver, so the panel keeps
-   its own width there (see the phone block above). */
-@media (max-width: 700px), (max-height: 480px) {
-  .pdPanel {
-    width: min(20rem, calc(100vw - 1.5rem));
-    min-width: 0;
-  }
+@keyframes pcCardSpectrum {
+  0% { box-shadow: 0 0 0 2px oklch(0.76 0.2 20 / 0.85), 0 0 28px oklch(0.76 0.2 20 / 0.6); }
+  25% { box-shadow: 0 0 0 2px oklch(0.84 0.19 95 / 0.85), 0 0 28px oklch(0.84 0.19 95 / 0.6); }
+  50% { box-shadow: 0 0 0 2px oklch(0.8 0.18 165 / 0.85), 0 0 28px oklch(0.8 0.18 165 / 0.6); }
+  75% { box-shadow: 0 0 0 2px oklch(0.74 0.2 265 / 0.85), 0 0 28px oklch(0.74 0.2 265 / 0.6); }
+  100% { box-shadow: 0 0 0 2px oklch(0.76 0.2 20 / 0.85), 0 0 28px oklch(0.76 0.2 20 / 0.6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdCard[data-foil],
+  .pdCard[data-rarity='mythic'],
+  .pdCard[data-rarity='mythic'][data-foil] { animation: none; }
 }
 
 /* --- the set on the shelf -------------------------------------------------
@@ -715,19 +1859,3 @@
   }
 }
 
-/* The floating pill: kit Button + IconButton in a draggable row. The wrapper
-   only positions and drags - the buttons bring their own look, which is what
-   makes it match every other control in the app. */
-.pdPill {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  cursor: grab;
-  /* The whole pill is a drag handle, so the browser must not claim the gesture
-     for panning first. */
-  touch-action: none;
-}
-
-.pdPill .pdPillLabel {
-  white-space: nowrap;
-}

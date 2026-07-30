@@ -16,6 +16,8 @@ const STEPS = [
   ['standard-duel', join(HERE, 'scenarios', 'standard-duel.js')],
   ['chaos-monkey', join(HERE, 'scenarios', 'chaos-monkey.js')],
   ['locked-combat', join(HERE, 'scenarios', 'locked-combat.js')],
+  ['booster-draft', join(HERE, 'scenarios', 'booster-draft.js')],
+  ['sealed', join(HERE, 'scenarios', 'sealed.js')],
 ];
 
 function runStep(name, script) {

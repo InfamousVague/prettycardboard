@@ -1,3 +1,4 @@
+import type { MessageKey } from '../i18n.ts';
 import type { PoolCard, Rarity, SetPool } from './boosterSets.ts';
 
 /**
@@ -27,10 +28,14 @@ export interface SlotOdds {
 
 export interface BoosterSpec {
   era: BoosterEra;
-  /** Booster product name, as players know it. */
-  label: string;
-  /** One line explaining what is being simulated, shown under the pack. */
-  note: string;
+  /** Booster product name, as players know it. Message keys rather than
+   *  English: these are rendered straight onto the boosters page, so a literal
+   *  here would stay English in es/fr/ar next to translated copy. */
+  labelKey: MessageKey;
+  /** What is being simulated, shown under the pack. A LIST because the classic
+   *  branch varies structure and foils independently - joined with a space at
+   *  the one place it is rendered, so no locale has to own the seam. */
+  noteKeys: MessageKey[];
   /** Playable cards per pack (the marketing/token card is not counted). */
   size: number;
   commons: number;
@@ -49,6 +54,7 @@ export interface BoosterSpec {
 }
 
 // Era boundaries, by the set that introduced each change.
+const URZAS_LEGACY = '1999-02-15'; // foils debut at all: before this, packs had none
 const COLDSNAP = '2006-07-21'; // unified foil sheet: the foil replaces a common
 const SHARDS = '2008-10-03'; // mythic rare debuts
 const M20 = '2019-07-12'; // foil rate 1 in 67 cards -> 1 in 45
@@ -88,8 +94,8 @@ export function specFor(released: string, setType: string): BoosterSpec {
   if (released >= KARLOV_MANOR) {
     return {
       era: 'play',
-      label: 'Play Booster',
-      note: '14 cards: 7 commons, 3 uncommons, a rare or mythic, two wildcards (one always foil) and a land.',
+      labelKey: 'boSpecPlay',
+      noteKeys: ['boNotePlay'],
       size: 14,
       // Seven, not six: the last common slot is the one Wizards gives over to a
       // Special Guest 1.5% of the time. Those cards are not part of the set, so
@@ -107,8 +113,8 @@ export function specFor(released: string, setType: string): BoosterSpec {
   if (released >= ZENDIKAR_RISING) {
     return {
       era: 'late-draft',
-      label: 'Draft Booster',
-      note: '15 cards: 10 commons, 3 uncommons, a rare or mythic and a land. A foil replaces a common in 1 pack in 3.',
+      labelKey: 'boSpecDraft',
+      noteKeys: ['boNoteLateDraft'],
       size: 15,
       commons: 10,
       uncommons: 3,
@@ -121,8 +127,8 @@ export function specFor(released: string, setType: string): BoosterSpec {
   if (released >= M20) {
     return {
       era: 'modern-foil',
-      label: 'Draft Booster',
-      note: '15 cards: 10 commons, 3 uncommons, a rare or mythic and a land. From Core Set 2020 the foil rate rose to 1 in 3 packs.',
+      labelKey: 'boSpecDraft',
+      noteKeys: ['boNoteModernFoil'],
       size: 15,
       commons: 10,
       uncommons: 3,
@@ -135,8 +141,8 @@ export function specFor(released: string, setType: string): BoosterSpec {
   if (released >= SHARDS) {
     return {
       era: 'mythic',
-      label: 'Draft Booster',
-      note: '15 cards: 10 commons, 3 uncommons, a rare or mythic and a land. A foil replaces a common in 1 pack in 4.4.',
+      labelKey: 'boSpecDraft',
+      noteKeys: ['boNoteMythic'],
       size: 15,
       commons: 10,
       uncommons: 3,
@@ -149,8 +155,8 @@ export function specFor(released: string, setType: string): BoosterSpec {
   if (released >= COLDSNAP) {
     return {
       era: 'unified-foil',
-      label: 'Booster Pack',
-      note: '15 cards: 10 commons, 3 uncommons, a rare and a land. Mythic rares did not exist yet.',
+      labelKey: 'boSpecPack',
+      noteKeys: ['boNoteUnified'],
       size: 15,
       commons: 10,
       uncommons: 3,
@@ -163,21 +169,59 @@ export function specFor(released: string, setType: string): BoosterSpec {
   // Pre-Coldsnap: no unified foil sheet, and expansions had no land slot -
   // core sets did, which is why the common count differs between them.
   const core = setType === 'core';
+  // The separate basic-land slot is a later invention. In 1993-94 (Alpha
+  // through Revised) basics rode the common sheet, so those packs are 11
+  // commons like an expansion rather than 10 + a land.
+  const landSlot = core && released >= '1995-01-01';
+  // Foils are a 1999 invention: Urza's Legacy printed the first ones. Alpha
+  // through Urza's Saga could not produce one, so the per-rarity foil roll is
+  // gated on the debut rather than on the classic era as a whole.
+  const foils = released >= URZAS_LEGACY;
   return {
     era: 'classic',
-    label: 'Booster Pack',
-    note: core
-      ? '15 cards: 10 commons, 3 uncommons, a rare and a land. A foil replaced a card of its own rarity, about 1 card in 70.'
-      : '15 cards: 11 commons, 3 uncommons and a rare. A foil replaced a card of its own rarity, about 1 card in 70.',
+    labelKey: 'boSpecPack',
+    // Two independent axes - whether the pack had a land slot, and whether
+    // foils had been invented - so they are two separate sentences rather than
+    // one string per combination.
+    noteKeys: [
+      landSlot ? 'boNoteClassicLand' : 'boNoteClassicNoLand',
+      foils ? 'boNoteFoilsPerRarity' : 'boNoteNoFoils',
+    ],
     size: 15,
-    commons: core ? 10 : 11,
+    commons: landSlot ? 10 : 11,
     uncommons: 3,
     rares: 1,
-    land: core,
+    land: landSlot,
     foilChance: 0,
     foilOdds: FOIL_SHEET,
-    perRarityFoil: true,
+    perRarityFoil: foils,
   };
+}
+
+/**
+ * How often a pack contains a foil at all, as a probability - `null` when the
+ * era predates foils entirely.
+ *
+ * Three eras, three different questions:
+ *
+ *   play    the wildcard slot is ALWAYS foil, so the answer is one per pack
+ *   unified a single foil slot with its own published rate: read it off
+ *   classic no foil slot at all. A foil replaced the card of its OWN rarity,
+ *           one roll per rarity slot at the sheet rate of 1 in 70, so the pack
+ *           rate is the chance ANY of those rolls lands - which is why this is
+ *           a complement of three misses rather than a sum.
+ *
+ * Shared rather than derived per surface: the dock and the boosters page print
+ * the same number, and a "1 in 3.6" that disagreed with itself across two
+ * screens would be read as a bug in the simulator rather than in the label.
+ */
+export function foilChancePerPack(spec: BoosterSpec): number | null {
+  if (spec.era === 'play') return 1;
+  if (spec.foilChance > 0) return spec.foilChance;
+  if (spec.perRarityFoil) {
+    return 1 - (1 - spec.commons / 70) * (1 - spec.uncommons / 70) * (1 - spec.rares / 70);
+  }
+  return null;
 }
 
 /** The foil/wildcard sheet's rare share, split into rare vs mythic for a set. */
@@ -277,13 +321,20 @@ export function openPack(pool: SetPool, spec: BoosterSpec, released: string): Pa
 
   // The unified foil slot replaces a common, so it is rolled first.
   const hasFoil = spec.foilChance > 0 && Math.random() < spec.foilChance;
-  const commonCount = Math.max(0, spec.commons - (hasFoil ? 1 : 0));
+  // Masters and Conspiracy sets are modern enough to get a land slot from the
+  // spec, but shipped no basics in their boosters at all - so the slot has
+  // nothing to draw. Those packs were still full size, and dropping the slot
+  // outright deals a pack one card short of the 15 `spec.size` and the note
+  // both promise, so the empty land slot becomes another common instead.
+  const hasLand = spec.land && pool.basic.length > 0;
+  const landFallback = spec.land && !hasLand ? 1 : 0;
+  const commonCount = Math.max(0, spec.commons + landFallback - (hasFoil ? 1 : 0));
 
   for (const card of drawCommons(pool, commonCount, used)) {
     out.push({ ...card, foil: false, slot: 'common' });
   }
 
-  if (spec.land && pool.basic.length > 0) {
+  if (hasLand) {
     const card = pool.basic[Math.floor(Math.random() * pool.basic.length)]!;
     // Play Boosters foil the land slot 1 time in 5.
     const foil = spec.era === 'play' && Math.random() < 0.2;
@@ -337,3 +388,83 @@ export function openPack(pool: SetPool, spec: BoosterSpec, released: string): Pa
 
 /** Rarity ordering for the "best card last" reveal and for sorting a pool. */
 export const RARITY_RANK: Record<Rarity, number> = { common: 0, uncommon: 1, rare: 2, mythic: 3 };
+
+/** One row of the per-card odds table. */
+export interface CardOdds {
+  card: PoolCard;
+  /** Chance this exact card is somewhere in a pack, 0-1. */
+  chance: number;
+  /** True for the basic land slot, whose odds come from a different pool. */
+  basic: boolean;
+}
+
+/**
+ * The chance of pulling each individual card in a set, one row per card.
+ *
+ * The trick is that slots, not cards, are what a pack deals - so this counts
+ * how many slots land on each rarity in an average pack, then divides by how
+ * many cards share that rarity. Slot counts are expectations rather than whole
+ * numbers because several slots are themselves a roll: the unified foil slot
+ * only exists `foilChance` of the time and eats a common when it does, the
+ * rare slot turns mythic at `mythicChance`, and a Play Booster's two wildcards
+ * can come out at any rarity at all.
+ *
+ * Dividing by the pool size is exact rather than an approximation, which is
+ * the one genuinely nice thing about `draw` refusing to repeat a card: drawing
+ * k distinct cards from N gives any particular one of them exactly k/N,
+ * whatever order they come out in. The commons are colour-balanced rather than
+ * uniform, so their row is the pack average across colours rather than a
+ * promise about any one card - a mono-white common in a set light on white is
+ * a little likelier than this says, and vice versa.
+ */
+export function cardOdds(pool: SetPool, spec: BoosterSpec, released: string): CardOdds[] {
+  const mythicRate = mythicChance(pool, released);
+  const hasLand = spec.land && pool.basic.length > 0;
+  // Same fallback `openPack` uses: a spec with a land slot but no basics in
+  // the pool spends that slot on another common instead.
+  const landFallback = spec.land && !hasLand ? 1 : 0;
+
+  const slots: Record<Rarity, number> = {
+    common: spec.commons + landFallback - spec.foilChance,
+    uncommon: spec.uncommons,
+    rare: spec.rares * (1 - mythicRate),
+    mythic: spec.rares * mythicRate,
+  };
+
+  /** Fold a rolled slot's rarity spread into the running slot counts. */
+  const addSlot = (odds: SlotOdds, weight: number) => {
+    const spread = resolveFoilOdds(odds, mythicRate);
+    for (const rarity of ['common', 'uncommon', 'rare', 'mythic'] as const) {
+      // A set with no mythics still has specs that name a mythic share; those
+      // rolls fall back to rares in `draw`, so they are counted there.
+      const target = rarity === 'mythic' && pool.mythic.length === 0 ? 'rare' : rarity;
+      slots[target] += spread[rarity] * weight;
+    }
+  };
+
+  if (spec.wildcard) addSlot(spec.wildcard, 1);
+  // Play Boosters always deal their foil; everything since Coldsnap rolls for
+  // one; before that there was no unified foil slot to roll for.
+  addSlot(spec.foilOdds, spec.era === 'play' ? 1 : spec.foilChance);
+
+  const rows: CardOdds[] = [];
+  for (const rarity of ['mythic', 'rare', 'uncommon', 'common'] as const) {
+    const cards = poolFor(pool, rarity);
+    if (cards.length === 0) continue;
+    const chance = Math.min(1, slots[rarity] / cards.length);
+    for (const card of cards) rows.push({ card, chance, basic: false });
+  }
+  if (hasLand) {
+    const chance = 1 / pool.basic.length;
+    for (const card of pool.basic) rows.push({ card, chance, basic: true });
+  }
+
+  // Rarest first - the cards worth knowing the odds of are the ones you are
+  // unlikely to see - then alphabetical, so a named card is findable by eye.
+  return rows.sort(
+    (a, b) =>
+      Number(a.basic) - Number(b.basic) ||
+      RARITY_RANK[b.card.rarity] - RARITY_RANK[a.card.rarity] ||
+      a.card.name.localeCompare(b.card.name),
+  );
+}

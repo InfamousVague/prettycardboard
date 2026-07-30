@@ -5,6 +5,7 @@ import {
   Dices,
   Hand as HandIcon,
   Minus,
+  PackageOpen,
   Paintbrush,
   Plus,
   RefreshCw,
@@ -124,6 +125,20 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
           </MenuItem>
           <MenuItem onSelect={() => window.dispatchEvent(new Event('pc:open-settings'))}>
             <Settings size={14} /> {t('navSettings')}
+          </MenuItem>
+          {/* The pack dock's own launcher can be hidden, and at a table there
+              is no rail to bring it back - so the way back to packs lives here,
+              in the one menu a seated player always has. */}
+          <MenuItem
+            onSelect={() => {
+              // Latched as well as dispatched, the same way App.tsx asks: the
+              // dock is code-split, so a request made while its chunk is still
+              // streaming would land on no listener and be lost.
+              (window as { __pcPackDock?: 'open' | 'show' }).__pcPackDock = 'open';
+              window.dispatchEvent(new CustomEvent('pc:open-packdock', { detail: { open: true } }));
+            }}
+          >
+            <PackageOpen size={14} /> {t('navBoosters')}
           </MenuItem>
         </Menu>
       </div>

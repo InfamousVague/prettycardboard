@@ -1,5 +1,5 @@
 import { SERVER_URL } from './api.ts';
-import type { DeckMeta, GameAction, GameActionV2, GameSettings, MatPos, MatZone, ServerMessage } from './types.ts';
+import type { DeckMeta, DraftCard, GameAction, GameActionV2, GameSettings, LimitedMode, MatPos, MatZone, ServerMessage } from './types.ts';
 
 /**
  * The realtime channel: one WebSocket for presence, invites, chat, and the
@@ -17,7 +17,7 @@ export type ClientMessage =
   | { type: 'room.settings'; settings: GameSettings }
   | { type: 'room.ping'; targetUserId: string }
   | { type: 'room.hand.hover'; position: number | null }
-  | { type: 'cursor.move'; x: number; y: number; hover: string | null }
+  | { type: 'cursor.move'; x: number; y: number; hover: string | null; mat: number | null }
   | { type: 'playmat.set'; id?: string }
   | { type: 'matlayout.set'; layout: Partial<Record<MatZone, MatPos>> }
   | { type: 'cardback.set'; id?: string }
@@ -26,7 +26,31 @@ export type ClientMessage =
   | { type: 'chat.send'; text: string }
   | { type: 'invite.send'; toUserId: string; roomId: string }
   | { type: 'game.action'; action: GameAction | GameActionV2 }
-  | { type: 'replay.seek'; index: number };
+  // "Look what I just cracked": a notable pull from the pack dock, relayed to
+  // everyone at the table. Ignored by the server unless you are in a room.
+  | { type: 'pull.notify'; scryfallId: string; name: string; setCode: string; rarity: string; foil: boolean }
+  | { type: 'replay.seek'; index: number }
+  // Limited. The HOST uploads every pack, because the real collation data
+  // (public/cache/packs) is bundled with the app rather than known to the
+  // server - see the note on rooms::DraftCard.
+  | {
+      type: 'draft.start';
+      set: string;
+      setName: string;
+      /** 'draft' passes packs round the table; 'sealed' opens them all at once. */
+      mode: LimitedMode;
+      rounds: number;
+      pickSeconds: number;
+      buildSeconds: number;
+      lockDecks: boolean;
+      /** The set's basic lands, used only to fill out a forced build. */
+      basics: DraftCard[];
+      packs: DraftCard[][];
+    }
+  // Both the position and the card, so a pick made against a stale pack is
+  // rejected rather than silently taking whatever moved into that slot.
+  | { type: 'draft.pick'; index: number; id: string }
+  | { type: 'draft.built' };
 
 type Listener = (message: ServerMessage) => void;
 type StatusListener = (connected: boolean) => void;
