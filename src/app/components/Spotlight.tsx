@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Avatar, Kbd, SearchField, Size, StatusDot, Text, TextTone, useToast } from '@glacier/react';
 import { Package, Swords, User } from '@glacier/icons';
-import { PlayingCardDeck } from '../icons/cards.ts';
+import { PlayingCardStack } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
 import * as api from '../net/api.ts';
 import { useApp } from '../state/appStore.ts';
@@ -210,7 +210,7 @@ export function Spotlight() {
   const GROUP_LABEL = { match: t('spMatch'), decks: t('spDecks'), catalog: t('spCatalog'), cards: t('spCards'), friends: t('spFriends') };
   const GROUP_ICON = {
     match: <Swords size={13} />,
-    decks: <PlayingCardDeck size={13} />,
+    decks: <PlayingCardStack size={13} />,
     catalog: <Package size={13} />,
     cards: null,
     friends: <User size={13} />,

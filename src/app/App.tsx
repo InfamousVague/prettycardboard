@@ -15,8 +15,8 @@ import {
 } from '@glacier/react';
 import {
   Compass,
-  History,
   House,
+  Library,
   PanelLeft,
   Paintbrush,
   Play,
@@ -24,7 +24,7 @@ import {
   User,
   Users,
 } from '@glacier/icons';
-import { PlayingCardDeck, PlayingCardPack, PlayingCardStack } from './icons/cards.ts';
+import { PlayingCardPack, PlayingCardStack, PlayingCardSwap } from './icons/cards.ts';
 import {
   applyPreferences,
   loadPreferences,
@@ -223,16 +223,17 @@ function AppRail({
         active={route === 'new'}
         onClick={() => onNavigate('new')}
       />
-      {/* And this one is the tables you have already been at, so it reads as a
-          log rather than as a second way to start a fight. */}
+      {/* And this one is the tables you have already been at - "Matches", with
+          two cards trading places, so it reads as a log rather than as a second
+          way to start a fight. */}
       <NavBarItem
-        icon={<History size={20} />}
+        icon={<PlayingCardSwap size={20} />}
         label={t('navPlay')}
         active={route === 'play'}
         onClick={() => onNavigate('play')}
       />
       <NavBarItem
-        icon={<PlayingCardDeck size={20} />}
+        icon={<PlayingCardStack size={20} />}
         label={t('navDecks')}
         active={route === 'decks'}
         onClick={() => onNavigate('decks')}
@@ -262,7 +263,7 @@ function AppRail({
         />
       )}
       <NavBarItem
-        icon={<PlayingCardStack size={20} />}
+        icon={<Library size={20} />}
         label={t('navCollection')}
         active={route === 'collection'}
         onClick={() => onNavigate('collection')}
