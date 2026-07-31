@@ -25,7 +25,6 @@ import {
   GraduationCap,
   Heart,
   LayoutGrid,
-  Link2,
   LogOut,
   MessageSquare,
   PanelRightClose,
@@ -96,6 +95,7 @@ import { CyberpunkDicePanel } from './table/CyberpunkDicePanel.tsx';
 import { CombatPreviewCard, PhaseRibbon } from './table/PhaseRibbon.tsx';
 import { StackTray } from './table/StackTray.tsx';
 import { CmdChoiceDialog, DiscardPrompts, LibraryViewer, MulliganOverlay, PileViewer, RevealTray, RollBanner, TargetPicker, TriggerPrompts } from './table/overlays.tsx';
+import { EventToasts } from './table/EventToasts.tsx';
 import { TablePresence } from './table/TablePresence.tsx';
 import { AimLayer } from './table/AimLayer.tsx';
 import { MARK_KINDS, markIcon } from './table/bits.tsx';
@@ -638,11 +638,6 @@ export function TablePage() {
   if (!room) return null;
 
   const me = room.players.find((player) => player.userId === identity?.userId);
-  const pingTargets = me
-    ? room.players.filter(
-        (player) => player.userId !== me.userId && player.online !== false && !player.conceded,
-      )
-    : [];
   const isHost = room.hostUserId === identity?.userId;
   // The table is drafting until the last deck is built: either a draft is
   // actually running, or this is a draft room that has not started one yet.
@@ -956,10 +951,8 @@ export function TablePage() {
         spectating={spectating}
         meId={identity?.userId}
         onFocusSeat={setPinnedSeat}
-        pingTargets={pingTargets}
         onPingPlayer={pingPlayer}
         pingCooling={pingCooling}
-        onShare={shareInvite}
         onLeave={leave}
         onConcede={
           room.started && me && !spectating && !me.conceded && !room.matchResult
@@ -1086,6 +1079,9 @@ export function TablePage() {
       {/* Spectators see the result too; controls inside are gated to players. */}
       <PostMatch room={room} meId={identity?.userId} spectating={spectating} onLeave={leave} />
       <RollBanner />
+      {/* Match events + engine resolutions as toasts, spectators included -
+          replay scrubbing excepted (its log is history, not news). */}
+      {!replay.active && <EventToasts />}
       <TablePresence meId={identity?.userId} active={room.started && !spectating} />
       {/* Drawn pointing arrows. Spectators watch them too - a spectator who
           cannot see who is pointing where is missing half the table talk. */}
@@ -1626,10 +1622,8 @@ function SidePanel({
   spectating,
   meId,
   onFocusSeat,
-  pingTargets,
   onPingPlayer,
   pingCooling,
-  onShare,
   onLeave,
   onConcede,
   inviteTargets,
@@ -1641,10 +1635,8 @@ function SidePanel({
   spectating?: boolean;
   meId?: string;
   onFocusSeat?: (seat: number) => void;
-  pingTargets: TablePlayer[];
   onPingPlayer?: (player: TablePlayer) => void;
   pingCooling?: boolean;
-  onShare: () => void;
   onLeave: () => void;
   /** Present while conceding is possible; the phone sheet nav surfaces it
       because the header (and its Concede button) is hidden mid-match there. */
@@ -1855,33 +1847,8 @@ function SidePanel({
           </span>
         </Tooltip>
       )}
-      <Tooltip content={t('tblPingHint')}>
-        <Menu
-          aria-label={t('tblPing')}
-          placement="top-end"
-          trigger={
-            <IconButton
-              size="sm"
-              variant="ghost"
-              disabled={pingCooling || pingTargets.length === 0}
-              aria-label={t('tblPing')}
-            >
-              <BellRing size={16} />
-            </IconButton>
-          }
-        >
-          {pingTargets.map((player) => (
-            <MenuItem key={player.userId} onSelect={() => onPingPlayer?.(player)}>
-              <BellRing size={14} /> {player.username}
-            </MenuItem>
-          ))}
-        </Menu>
-      </Tooltip>
-      <Tooltip content={t('tblShareHint')}>
-        <IconButton size="sm" variant="ghost" aria-label={t('tblShare')} onClick={onShare}>
-          <Link2 size={16} />
-        </IconButton>
-      </Tooltip>
+      {/* Pings live on the player rows (each name carries its own bell), and
+          sharing lives in the pregame lobby - neither earns nav chrome. */}
       <Tooltip content={t('setTitle')}>
         <IconButton
           size="sm"

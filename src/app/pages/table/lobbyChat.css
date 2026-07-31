@@ -1,12 +1,17 @@
-/* Basic lobby chat, built from Glacier primitives. A titled card with a
-   scrolling message list and a composer row; consecutive same-author lines tuck
-   under the first line's avatar. Every value is a Glacier token. */
+/* Lobby chat, built from Glacier primitives: a frosted-glass panel with a
+   scrolling bubble transcript and a composer row. Messages render as bubbles
+   (yours trailing in the accent, others leading on a raised surface);
+   consecutive same-author lines tuck under the first line's avatar, and the
+   table's event narration threads through as centered system lines. Every
+   value is a Glacier token. */
 .lobbyChat {
   display: flex;
   flex-direction: column;
   gap: var(--glacier-space-3);
   padding: var(--glacier-space-4);
-  background: var(--glacier-surface);
+  /* Glass: the felt (or lobby art) reads through a heavy frost. */
+  background: color-mix(in oklch, var(--glacier-surface) 72%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-lg, 24px));
   border: var(--glacier-hairline) solid var(--glacier-glass-border);
   border-radius: var(--glacier-radius-xl);
   min-height: 0;
@@ -49,6 +54,21 @@
   align-items: start;
 }
 
+/* My messages hug the trailing edge, messenger style: no avatar column, the
+   bubble and heading right-aligned. */
+.lobbyChatMsg[data-mine] {
+  grid-template-columns: 1fr;
+}
+
+.lobbyChatMsg[data-mine] .lobbyChatAvatar {
+  display: none;
+}
+
+.lobbyChatMsg[data-mine] .lobbyChatBody {
+  grid-column: 1;
+  align-items: flex-end;
+}
+
 /* Grouped lines drop the avatar/heading and snug up under the previous one. */
 .lobbyChatMsg[data-grouped] {
   margin-block-start: calc(-1 * var(--glacier-space-1));
@@ -65,6 +85,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 0.1rem;
 }
 
@@ -89,12 +110,61 @@
   color: var(--glacier-text-subtle);
 }
 
-.lobbyChatText {
+/* The message bubble: a rounded pill on a raised surface, with the corner
+   toward its author's edge squared off as the tail. Mine wears the accent. */
+.lobbyChatBubble {
+  display: inline-block;
+  max-width: min(85%, 26rem);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border-radius: var(--glacier-radius-lg);
+  border-start-start-radius: var(--glacier-radius-sm);
+  background: var(--glacier-surface-raised);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
   font-size: var(--glacier-font-size-sm);
   color: var(--glacier-text);
   line-height: 1.4;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.lobbyChatMsg[data-mine] .lobbyChatBubble {
+  border-start-start-radius: var(--glacier-radius-lg);
+  border-start-end-radius: var(--glacier-radius-sm);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 26%, var(--glacier-surface-raised));
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-glass-border));
+}
+
+/* Grouped follow-ups round the tail corner back off. */
+.lobbyChatMsg[data-grouped] .lobbyChatBubble {
+  border-start-start-radius: var(--glacier-radius-lg);
+  border-start-end-radius: var(--glacier-radius-lg);
+}
+
+/* ---------- system lines ----------
+   The table's narration (the same lines that toast): centered, quiet, and
+   tone-tinted, so the transcript reads as the match's story between the
+   things people actually said. */
+.lobbyChatEvent {
+  display: grid;
+  justify-content: center;
+  padding-block: 2px;
+}
+
+.lobbyChatEventText {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle);
+  text-align: center;
+  overflow-wrap: anywhere;
+  padding: 1px var(--glacier-space-2);
+  border-radius: var(--glacier-radius-full, 999px);
+}
+
+.lobbyChatEvent[data-tone='success'] .lobbyChatEventText {
+  color: color-mix(in oklch, var(--glacier-success-solid) 75%, var(--glacier-text-subtle));
+}
+
+.lobbyChatEvent[data-tone='info'] .lobbyChatEventText {
+  color: var(--glacier-text-muted);
 }
 
 /* ---------- pulled cards ----------

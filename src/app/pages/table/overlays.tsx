@@ -958,7 +958,9 @@ export function DiscardPrompts({ room, me }: { room: RoomState; me: TablePlayer 
 /* ------------------------------------------------------------------------ */
 
 // Dice results and combat damage both deserve the center-stage banner.
-const ROLLISH = /\broll(s|ed)?\b|\bHeads\b|\bTails\b|loses \d+ life|commander damage/i;
+// "deals N damage to" covers combat player damage and manual life-deals,
+// which previously surfaced on no overlay at all.
+const ROLLISH = /\broll(s|ed)?\b|\bHeads\b|\bTails\b|loses \d+ life|deals \d+ damage to|commander damage/i;
 // A dice/coin result: hold the banner until the 3D dice have settled so the
 // number isn't spoiled mid-tumble. Non-dice banners (life, combat) show at once.
 const DICE_RESULT = /\broll(s|ed)?\b|\bHeads\b|\bTails\b/i;

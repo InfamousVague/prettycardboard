@@ -35,6 +35,11 @@ export interface LogLine {
   seq: number;
   text: string;
   ts: number;
+  /** Client-side monotonic arrival id, stamped by appendLog. Server seqs are
+   * NOT unique per line (one action's main + extra log lines share a seq, and
+   * coach notes use negative ids), so consumers that need a "new since"
+   * cursor (EventToasts) key on this instead. */
+  uid?: number;
   /** Set on rules-coach advice: the Comprehensive Rules id the note is about.
    * Only ever present on lines the local player alone can see. */
   coach?: string;
@@ -55,6 +60,10 @@ function lifeSigned(match: RegExpMatchArray): number {
   return match[2] === 'gains' ? amount : -amount;
 }
 
+/** Arrival counter behind LogLine.uid - unique and increasing per line, which
+ * server seqs are not. */
+let logUid = 0;
+
 function appendLog(log: LogLine[], next: LogLine): LogLine[] {
   const prev = log[log.length - 1];
   const nextMatch = next.text.match(LIFE_LOG);
@@ -70,10 +79,10 @@ function appendLog(log: LogLine[], next: LogLine): LogLine[] {
           : net < 0
             ? `${name} loses ${-net} life (${total})`
             : `${name}'s life returns to ${total}`;
-      return [...log.slice(0, -1), { seq: next.seq, text, ts: next.ts }];
+      return [...log.slice(0, -1), { seq: next.seq, text, ts: next.ts, uid: ++logUid }];
     }
   }
-  return [...log.slice(-299), next];
+  return [...log.slice(-299), { ...next, uid: ++logUid }];
 }
 
 interface GameState {

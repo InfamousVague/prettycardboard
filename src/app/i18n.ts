@@ -24,7 +24,10 @@ type Entry = Record<AppLocale, string>;
 
 export const messages = {
   // nav rail (labels double as tooltips in the vertical rail)
-  navPlay: { en: 'Play', es: 'Jugar', fr: 'Jouer', ar: 'اللعب' },
+  // The `play` route is the log of tables you have already sat at, so it is
+  // labelled for what it lists. The play BUTTON above it (`navNew`) is the way
+  // into a game and is the one that reads "Play".
+  navPlay: { en: 'Matches', es: 'Partidas', fr: 'Parties', ar: 'المباريات' },
   navDecks: { en: 'Decks', es: 'Mazos', fr: 'Decks', ar: 'المجموعات' },
   navBrowse: { en: 'Browse', es: 'Explorar', fr: 'Parcourir', ar: 'تصفح' },
   navBoosters: { en: 'Boosters', es: 'Sobres', fr: 'Boosters', ar: 'العبوات' },
@@ -1102,7 +1105,7 @@ export const messages = {
   },
   setMullUnlimited: { en: 'Unlimited', es: 'Ilimitadas', fr: 'Illimitées', ar: 'غير محدودة' },
   custDeleteMat: { en: 'Delete this playmat', es: 'Eliminar este tapete', fr: 'Supprimer ce tapis', ar: 'حذف هذه السجادة' },
-  navNew: { en: 'New game', es: 'Nueva partida', fr: 'Nouvelle partie', ar: 'مباراة جديدة' },
+  navNew: { en: 'Play', es: 'Jugar', fr: 'Jouer', ar: 'اللعب' },
   plTablesLede: {
     en: 'Tables you are already at, and everything you have played.',
     es: 'Las mesas en las que ya estás y todo lo que has jugado.',
@@ -1219,6 +1222,74 @@ export const messages = {
   // settings modal — general tab
   setReduceMotion: { en: 'Reduce motion', es: 'Reducir movimiento', fr: 'Réduire les animations', ar: 'تقليل الحركة' },
   setDeveloper: { en: 'Developer', es: 'Desarrollador', fr: 'Développeur', ar: 'المطور' },
+  setBots: { en: 'Bots', es: 'Bots', fr: 'Bots', ar: 'روبوتات' },
+  setBotsUnlocked: {
+    en: 'A Bots section is now available in Settings for launching bot matches.',
+    es: 'La sección Bots está ahora disponible en Ajustes para lanzar partidas de bots.',
+    fr: 'Une section Bots est maintenant disponible dans les Réglages pour lancer des parties de bots.',
+    ar: 'أصبح قسم الروبوتات متاحًا الآن في الإعدادات لبدء مباريات الروبوتات.',
+  },
+  botsOffline: {
+    en: 'Not connected right now — try again in a moment.',
+    es: 'Sin conexión ahora mismo: inténtalo de nuevo en un momento.',
+    fr: 'Pas de connexion pour le moment — réessayez dans un instant.',
+    ar: 'غير متصل حاليًا — حاول مرة أخرى بعد قليل.',
+  },
+  botsConcedeWarn: {
+    en: 'You are seated in a live match — launching will concede it. Press the launch button again to continue.',
+    es: 'Estás en una partida en curso: lanzar la hará conceder. Pulsa de nuevo el botón para continuar.',
+    fr: 'Vous êtes dans une partie en cours — lancer vous fera concéder. Appuyez à nouveau pour continuer.',
+    ar: 'أنت في مباراة جارية — سيؤدي البدء إلى الاستسلام فيها. اضغط زر البدء مرة أخرى للمتابعة.',
+  },
+  botsWatchNeedsTwo: {
+    en: 'Watching needs at least two bots — one bot has nobody to play.',
+    es: 'Para ver hacen falta al menos dos bots: uno solo no tiene rival.',
+    fr: 'Regarder demande au moins deux bots — un bot seul n’a pas d’adversaire.',
+    ar: 'المشاهدة تحتاج روبوتين على الأقل — روبوت واحد لا يجد من يلاعبه.',
+  },
+  botsRoomName: { en: 'Bot exhibition', es: 'Exhibición de bots', fr: 'Exhibition de bots', ar: 'عرض الروبوتات' },
+  botsPresets: { en: 'Quick launches', es: 'Lanzamientos rápidos', fr: 'Lancements rapides', ar: 'تشغيل سريع' },
+  botsPresetsHint: {
+    en: 'One click builds the table, seats the bots, and starts the match for you to watch.',
+    es: 'Un clic crea la mesa, sienta a los bots e inicia la partida para que la veas.',
+    fr: 'Un clic crée la table, installe les bots et lance la partie à regarder.',
+    ar: 'نقرة واحدة تنشئ الطاولة وتجلس الروبوتات وتبدأ المباراة لمشاهدتها.',
+  },
+  botsPresetPod: { en: 'Watch a 4-bot pod', es: 'Ver un grupo de 4 bots', fr: 'Regarder un pod de 4 bots', ar: 'شاهد مجموعة من 4 روبوتات' },
+  botsPresetBrawl: { en: 'Enforced brawl (4 hard)', es: 'Riña con reglas (4 difíciles)', fr: 'Rixe avec règles (4 difficiles)', ar: 'عراك بالقواعد (4 صعبة)' },
+  botsCustom: { en: 'Custom match', es: 'Partida personalizada', fr: 'Partie personnalisée', ar: 'مباراة مخصصة' },
+  botsCustomHint: {
+    en: 'Shape the table yourself: how many bots, how sharp, what style, and whether the engine enforces the rules.',
+    es: 'Da forma a la mesa: cuántos bots, qué nivel, qué estilo y si el motor aplica las reglas.',
+    fr: 'Composez la table : combien de bots, quel niveau, quel style, et si le moteur applique les règles.',
+    ar: 'شكّل الطاولة بنفسك: عدد الروبوتات ومستواها وأسلوبها وما إذا كان المحرك يطبق القواعد.',
+  },
+  botsCount: { en: 'Bots', es: 'Bots', fr: 'Bots', ar: 'روبوتات' },
+  botsDifficulty: { en: 'Difficulty', es: 'Dificultad', fr: 'Difficulté', ar: 'الصعوبة' },
+  botsEasy: { en: 'Easy', es: 'Fácil', fr: 'Facile', ar: 'سهل' },
+  botsNormal: { en: 'Normal', es: 'Normal', fr: 'Normal', ar: 'عادي' },
+  botsHard: { en: 'Hard', es: 'Difícil', fr: 'Difficile', ar: 'صعب' },
+  botsStyle: { en: 'Style', es: 'Estilo', fr: 'Style', ar: 'الأسلوب' },
+  botsMixed: { en: 'Mixed', es: 'Mixto', fr: 'Mixte', ar: 'متنوع' },
+  botsCasual: { en: 'Casual', es: 'Casual', fr: 'Décontracté', ar: 'عادي' },
+  botsAggro: { en: 'Aggro', es: 'Agresivo', fr: 'Agressif', ar: 'هجومي' },
+  botsDefensive: { en: 'Defensive', es: 'Defensivo', fr: 'Défensif', ar: 'دفاعي' },
+  botsFormat: { en: 'Format', es: 'Formato', fr: 'Format', ar: 'الصيغة' },
+  botsEnforced: { en: 'Enforced rules', es: 'Reglas aplicadas', fr: 'Règles appliquées', ar: 'قواعد مطبقة' },
+  botsEnforcedHint: {
+    en: 'The engine gates casting costs, combat legality, and applies parsed card text (triggers, discards, scry).',
+    es: 'El motor controla costes, legalidad del combate y aplica el texto interpretado (disparos, descartes, scry).',
+    fr: 'Le moteur contrôle les coûts, la légalité du combat et applique le texte interprété (déclencheurs, défausses, scry).',
+    ar: 'يتحكم المحرك في التكاليف وشرعية القتال ويطبق نص البطاقات المفسّر (المشغّلات، الرمي، الاستكشاف).',
+  },
+  botsSeatMe: { en: 'Take a seat vs bots', es: 'Sentarme contra bots', fr: "S'asseoir contre les bots", ar: 'اجلس ضد الروبوتات' },
+  botsWatch: { en: 'Watch them play', es: 'Verlos jugar', fr: 'Les regarder jouer', ar: 'شاهدها تلعب' },
+  botsSeatHint: {
+    en: 'Taking a seat opens the pregame lobby - pick your deck there, then start when ready.',
+    es: 'Al sentarte se abre la sala previa: elige tu mazo allí y empieza cuando quieras.',
+    fr: "S'asseoir ouvre le salon d'avant-partie - choisissez-y votre deck, puis lancez quand vous êtes prêt.",
+    ar: 'الجلوس يفتح ردهة ما قبل المباراة - اختر مجموعتك هناك ثم ابدأ عندما تكون جاهزًا.',
+  },
   setBotDuel: { en: 'Start a bot 1v1', es: 'Iniciar 1v1 de bots', fr: 'Lancer un 1v1 de bots', ar: 'بدء 1 ضد 1 بين روبوتين' },
   setBotDuelHint: {
     en: 'Two bots play each other while you spectate.',
