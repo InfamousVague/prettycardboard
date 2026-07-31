@@ -1798,7 +1798,11 @@ function SidePanel({
   );
   const navEl = (
     <nav className="tableSideNav" aria-label={t('tblTableNav')}>
-      {!mobile && room.started && (
+      {/* The lobby's chat lives here too, so there is one chat button in the
+          app instead of a nav toggle at the table and a floating chip in the
+          lobby stacked on the same corner. Mid-match on a phone the chat is a
+          sheet tab instead, so the button would be a second door to it. */}
+      {(!mobile || !room.started) && (
         <Tooltip content={chatOpen ? t('tblChatClose') : t('tblChatOpen')}>
           <span className="chatNavWrap">
             <IconButton
@@ -1884,14 +1888,25 @@ function SidePanel({
     </nav>
   );
 
+  // The slide-over the nav's chat button opens, at the table and in the lobby
+  // alike. Only its title and density differ between the two.
+  const chatAsideEl = chatOpen && (
+    <div className="chatAside" role="dialog" aria-label={room.started ? t('tblChat') : t('chatTitle')}>
+      <LobbyChat variant={room.started ? 'table' : 'lobby'} onClose={() => setChatOpen(false)} />
+    </div>
+  );
+
   if (mobile) {
     // Pregame mirrors the desktop rail: nav only. Vitals/players/log describe a
     // match in progress, and the lobby already lists the seats itself.
     if (!room.started) {
       return (
-        <div className="mobileDock" data-nav-only>
-          {navEl}
-        </div>
+        <>
+          <div className="mobileDock" data-nav-only>
+            {navEl}
+          </div>
+          {chatAsideEl}
+        </>
       );
     }
     const openDefault = seated ? 'vitals' : 'players';
@@ -1965,11 +1980,7 @@ function SidePanel({
         )}
         {navEl}
       </aside>
-      {room.started && chatOpen && (
-        <div className="chatAside" role="dialog" aria-label={t('tblChat')}>
-          <LobbyChat variant="table" onClose={() => setChatOpen(false)} />
-        </div>
-      )}
+      {chatAsideEl}
     </>
   );
 }
