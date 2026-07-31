@@ -43,6 +43,14 @@ body:has(.tableSideNav) .pdDock {
   --pd-corner-clear: calc(2.75rem + var(--glacier-space-3));
 }
 
+/* In the lobby that corner is the whole launch bar, not a bare nav pill: the
+   deck picker, Start and the nav all live in it. The bar's height changes as it
+   wraps, so PregameLobby measures it into --pc-launch-h and the dock clears
+   exactly that - a breakpoint guess was 28px short of the wrapped bar. */
+body:has(.pregameLaunch) .pdDock {
+  --pd-corner-clear: calc(var(--pc-launch-h, 6.5rem) + var(--glacier-space-3));
+}
+
 /* Only the two things you can actually touch take pointers back - not
    `.pdDock > *`, which would re-arm the drag wrapper's whole box. */
 .pdPanel,

@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Avatar, Sidebar, SidebarItem, SidebarSection, StatusDot } from '@glacier/react';
-import { Compass, Layers, Plus, Swords, User, UserPlus, Users } from '@glacier/icons';
+import { Compass, Plus, Swords, User, UserPlus, Users } from '@glacier/icons';
+import { PlayingCardDeck } from './icons/cards.ts';
 import { useT } from './i18n.ts';
 import type { Route } from './router.ts';
 import { useApp } from './state/appStore.ts';
@@ -106,7 +107,7 @@ export function RouteSidebar({ route, desktop }: { route: Route; desktop: boolea
           {decks.map((deck) => (
             <SidebarItem
               key={deck.id}
-              icon={<Layers size={17} />}
+              icon={<PlayingCardDeck size={17} />}
               active={deck.id === selectedDeckId}
               onClick={() => selectDeck(deck.id)}
             >
@@ -142,7 +143,7 @@ export function RouteSidebar({ route, desktop }: { route: Route; desktop: boolea
           <SidebarItem icon={<User size={17} />} active>
             {t('pfTitle')}
           </SidebarItem>
-          <SidebarItem icon={<Layers size={17} />} onClick={() => go('decks')}>
+          <SidebarItem icon={<PlayingCardDeck size={17} />} onClick={() => go('decks')}>
             {decks.length} {t('decksTitle')}
           </SidebarItem>
           <SidebarItem icon={<Swords size={17} />} onClick={() => go('play')}>

@@ -161,6 +161,29 @@ export function saveGridView(userId: string | undefined, on: boolean): void {
   }
 }
 
+/* The right rail collapses to its nav pill on demand, handing ~18.5rem back to
+   the mats. Off by default - the life/roster/log cards are the table's HUD, and
+   a player who has not asked to hide them should not have to find them. */
+
+const railHiddenKey = (userId: string | undefined) => `pc.railhidden.${userId ?? 'anon'}`;
+
+export function loadRailHidden(userId: string | undefined): boolean {
+  try {
+    return localStorage.getItem(railHiddenKey(userId)) === 'on';
+  } catch {
+    /* storage unavailable - default */
+  }
+  return false;
+}
+
+export function saveRailHidden(userId: string | undefined, on: boolean): void {
+  try {
+    localStorage.setItem(railHiddenKey(userId), on ? 'on' : 'off');
+  } catch {
+    /* ignore */
+  }
+}
+
 /* ------------------------------------------------------------------------ */
 /* Card classification (best effort - bundled precon type lines plus name    */
 /* heuristics; the server never cares, this only steers assisted drops).     */

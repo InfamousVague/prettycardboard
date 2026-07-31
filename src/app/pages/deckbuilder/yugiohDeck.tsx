@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Layers, ScrollText, Shapes, Shield, Swords } from '@glacier/icons';
+import { ScrollText, Shapes, Shield, Swords } from '@glacier/icons';
+import { PlayingCardDeck } from '../../icons/cards.ts';
 import type { Deck, DeckCard } from '../../net/types.ts';
 import { isExtraDeckCard, yugiohCard, yugiohKind } from '../../data/yugioh.ts';
 
@@ -42,7 +43,7 @@ export const YUGIOH_KIND_ICON: Record<YugiohGroupKind | 'extra', ReactNode> = {
   monster: <Swords size={13} />,
   spell: <ScrollText size={13} />,
   trap: <Shield size={13} />,
-  extra: <Layers size={13} />,
+  extra: <PlayingCardDeck size={13} />,
   other: <Shapes size={13} />,
 };
 

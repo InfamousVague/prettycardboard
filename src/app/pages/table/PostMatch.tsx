@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Avatar, Button, Text, Size, TextTone, Tooltip } from '@glacier/react';
-import { Crown, Download, Grid3X3, Layers, LogOut, Play, Skull, ThumbsUp, Timer, Trophy } from '@glacier/icons';
+import { Crown, Download, Grid3X3, LogOut, Play, Skull, ThumbsUp, Timer, Trophy } from '@glacier/icons';
+import { PlayingCard } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import * as api from '../../net/api.ts';
 import { SaltPile } from '../../components/SaltPile.tsx';
@@ -213,7 +214,7 @@ export function PostMatch({
                       </span>
                     )}
                     <span className="pmStat" title={t('pmCardsPlayed')}>
-                      <Layers size={12} /> {p.cardsPlayed}
+                      <PlayingCard size={12} /> {p.cardsPlayed}
                     </span>
                     <span className="pmStat" title={t('pmCardsDrawn')}>
                       <Download size={12} /> {p.cardsDrawn}
@@ -244,7 +245,7 @@ export function PostMatch({
                     )}
                     {s?.deck && s.deck.avgCardsPerTurn > 0 && (
                       <span className="pmStat" title={t('pmDeckCardsPerTurn')}>
-                        <Layers size={12} /> {s.deck.avgCardsPerTurn.toFixed(1)}
+                        <PlayingCard size={12} /> {s.deck.avgCardsPerTurn.toFixed(1)}
                         {t('pmPerTurn')}
                       </span>
                     )}

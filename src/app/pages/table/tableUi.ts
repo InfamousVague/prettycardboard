@@ -11,10 +11,12 @@ import {
   loadGridZoom,
   saveGridView,
   loadMobileScale,
+  loadRailHidden,
   saveBoardMode,
   saveCardScale,
   saveGridZoom,
   saveMobileScale,
+  saveRailHidden,
   type BoardMode,
 } from './boardModes.ts';
 
@@ -60,6 +62,12 @@ interface TableUiState {
   gridZoom: number;
   hydrateGridZoom: (userId: string | undefined) => void;
   setGridZoom: (zoom: number, userId: string | undefined) => void;
+  /** Collapse the right rail to its floating nav pill, giving the width back
+   * to the mats. The pill stays - it is where the toggle lives, so there is
+   * always a way back. Persisted per user. */
+  railHidden: boolean;
+  hydrateRailHidden: (userId: string | undefined) => void;
+  setRailHidden: (on: boolean, userId: string | undefined) => void;
 
   /** My selected blocker awaiting an attacker click (or vice versa). */
   blockerIid: string | null;
@@ -117,6 +125,12 @@ export const useTableUi = create<TableUiState>((set) => ({
     const clamped = clampGridZoom(zoom);
     saveGridZoom(userId, clamped);
     set({ gridZoom: clamped });
+  },
+  railHidden: false,
+  hydrateRailHidden: (userId) => set({ railHidden: loadRailHidden(userId) }),
+  setRailHidden: (on, userId) => {
+    saveRailHidden(userId, on);
+    set({ railHidden: on });
   },
 
   blockerIid: null,

@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertDialog, Avatar, Button, Drawer, IconButton, Input, Kbd, Menu, MenuItem, MenuSub, Pill, Text, Size, StatusDot, TextTone, Tooltip, useToast } from '@glacier/react';
 import {
   ArrowDownToLine,
@@ -22,20 +23,18 @@ import {
   EyeOff,
   Flag,
   GraduationCap,
-  Hand,
   Heart,
-  Layers,
   LayoutGrid,
   Link2,
   LogOut,
   MessageSquare,
-  PackageOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Paperclip,
   Play,
   Plus,
   Repeat,
   RotateCw,
-  Rows3,
   ScrollText,
   Send,
   Settings,
@@ -52,6 +51,7 @@ import {
   Minus,
   Trash2,
 } from '@glacier/icons';
+import { PlayingCardBlank, PlayingCardHand, PlayingCardStack } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
@@ -95,7 +95,7 @@ import { OpponentHand } from './table/OpponentHand.tsx';
 import { CyberpunkDicePanel } from './table/CyberpunkDicePanel.tsx';
 import { CombatPreviewCard, PhaseRibbon } from './table/PhaseRibbon.tsx';
 import { StackTray } from './table/StackTray.tsx';
-import { CmdChoiceDialog, LibraryViewer, MulliganOverlay, PileViewer, RevealTray, RollBanner, TargetPicker, TriggerPrompts } from './table/overlays.tsx';
+import { CmdChoiceDialog, DiscardPrompts, LibraryViewer, MulliganOverlay, PileViewer, RevealTray, RollBanner, TargetPicker, TriggerPrompts } from './table/overlays.tsx';
 import { TablePresence } from './table/TablePresence.tsx';
 import { AimLayer } from './table/AimLayer.tsx';
 import { MARK_KINDS, markIcon } from './table/bits.tsx';
@@ -104,7 +104,7 @@ import { seatColor } from './table/seatColors.ts';
 import { LibrarySidebar } from './table/LibrarySidebar.tsx';
 import { PostMatch } from './table/PostMatch.tsx';
 import { PreMatch } from './table/PreMatch.tsx';
-import { PregameLobby } from './table/PregameLobby.tsx';
+import { LOBBY_NAV_DOCK_ID, PregameLobby } from './table/PregameLobby.tsx';
 import { LobbyChat } from './table/LobbyChat.tsx';
 import { DraftRoom } from './table/DraftRoom.tsx';
 import { TimelineCard } from './table/TimelineCard.tsx';
@@ -227,6 +227,10 @@ export function TablePage() {
   const setGridZoom = useTableUi((state) => state.setGridZoom);
   // The grid needs the room's width; phones stage one board at a time.
   const gridActive = gridView && !mobile && room != null && room.started;
+  // The right rail, collapsed to its nav pill so the mats get its width. Phones
+  // have no rail to collapse (it is already a bottom sheet there).
+  const railHidden = useTableUi((state) => state.railHidden);
+  const railCollapsed = railHidden && !mobile;
   // The matchup splash: only for the false->true start transition witnessed
   // live (a reload into a running game skips straight to the table).
   const [preMatch, setPreMatch] = useState(false);
@@ -262,6 +266,7 @@ export function TablePage() {
     useTableUi.getState().hydrateMobileScale(identity?.userId);
     useTableUi.getState().hydrateGridZoom(identity?.userId);
     useTableUi.getState().hydrateGridView(identity?.userId);
+    useTableUi.getState().hydrateRailHidden(identity?.userId);
   }, [identity?.userId]);
 
   // Combat selections cannot outlive combat.
@@ -671,6 +676,9 @@ export function TablePage() {
       className="table"
       data-replay={replay.active || undefined}
       data-mobile={mobile || undefined}
+      /* Zeroes the rail's width and the gutter every board clears for it, in
+         one place - see --pc-rail-w / --pc-rail-clear. */
+      data-rail={railCollapsed ? 'hidden' : undefined}
       style={{
         ['--pc-card-back' as string]: tableCardBack,
         ['--pc-card-back-edge' as string]: cardBackEdge,
@@ -824,6 +832,9 @@ export function TablePage() {
           <div
             className="playerGrid"
             data-seats={room.players.length}
+            /* Magic's duel is the one seat count whose best arrangement is a
+               face-off rather than a stack; the other games keep the stack. */
+            data-game={room.game || 'mtg'}
             style={{ '--pc-grid-user-zoom': gridZoom } as CSSProperties}
           >
             {[...room.players]
@@ -1068,6 +1079,7 @@ export function TablePage() {
       {me && !spectating && !preMatch && !replay.active && <MulliganOverlay room={room} me={me} />}
       {me && !spectating && !replay.active && <CmdChoiceDialog me={me} />}
       {me && !spectating && !replay.active && <TriggerPrompts room={room} me={me} />}
+      {me && !spectating && !replay.active && <DiscardPrompts room={room} me={me} />}
       {me && !spectating && !replay.active && <TargetPicker room={room} me={me} />}
       {preMatch && <PreMatch room={room} onClose={() => setPreMatch(false)} />}
       {/* Combat v3: target picker, defender response, resolved breakdown. */}
@@ -1240,7 +1252,7 @@ function CardMenu({
         {cardArt ? (
           <img className="menuCardThumb" src={cardArt} alt="" draggable={false} />
         ) : (
-          <span className="menuCardThumb menuCardThumbFallback" aria-hidden><Layers size={16} /></span>
+          <span className="menuCardThumb menuCardThumbFallback" aria-hidden><PlayingCardBlank size={16} /></span>
         )}
         <span className="menuCardIdentity">
           <span className="menuCardName">{card?.name || 'Card'}</span>
@@ -1338,7 +1350,7 @@ function CardMenu({
           )}
           {card.attachedTo && !card.piled &&
             item('Detach', <Unlink size={15} />, { kind: 'card.attach', iid: menu.iid, hostIid: null })}
-          {hosts.length > 0 && expander(t('gpPileOnto'), <Rows3 size={15} />, 'pileOnto')}
+          {hosts.length > 0 && expander(t('gpPileOnto'), <PlayingCardStack size={15} />, 'pileOnto')}
           {sub === 'pileOnto' && (
             <div className="menuInset menuScroll">
               {hosts.map((host) => (
@@ -1355,19 +1367,19 @@ function CardMenu({
                     onAction({ kind: 'card.attach', iid: menu.iid, hostIid: host.iid, piled: true });
                   }}
                 >
-                  <span className="menuItemIcon" aria-hidden><Rows3 size={14} /></span>
+                  <span className="menuItemIcon" aria-hidden><PlayingCardStack size={14} /></span>
                   <span>{host.name}</span>
                 </button>
               ))}
             </div>
           )}
           {pileTop &&
-            item(t('gpPileTake'), <Rows3 size={15} />, {
+            item(t('gpPileTake'), <PlayingCardStack size={15} />, {
               kind: 'card.attach',
               iid: pileTop.iid,
               hostIid: null,
             })}
-          {pile.length > 0 && expander(`${t('gpPile')} (${pile.length + 1})`, <Rows3 size={15} />, 'pile')}
+          {pile.length > 0 && expander(`${t('gpPile')} (${pile.length + 1})`, <PlayingCardStack size={15} />, 'pile')}
           {sub === 'pile' && (
             <div className="menuInset menuScroll">
               {/* Top of the pile first - that is the order you would lift them. */}
@@ -1380,7 +1392,7 @@ function CardMenu({
                   onPointerDown={(event) => event.stopPropagation()}
                   onClick={() => onAction({ kind: 'card.attach', iid: member.iid, hostIid: null })}
                 >
-                  <span className="menuItemIcon" aria-hidden><Rows3 size={14} /></span>
+                  <span className="menuItemIcon" aria-hidden><PlayingCardStack size={14} /></span>
                   <span>{member.name}</span>
                 </button>
               ))}
@@ -1388,7 +1400,7 @@ function CardMenu({
           )}
           {card.piled &&
             item(t('gpPileLeave'), <Unlink size={15} />, { kind: 'card.attach', iid: menu.iid, hostIid: null })}
-          {item(t('gpStack'), <Layers size={15} />, { kind: 'stack.push', iid: menu.iid }, 'stack')}
+          {item(t('gpStack'), <PlayingCardStack size={15} />, { kind: 'stack.push', iid: menu.iid }, 'stack')}
           {(() => {
             // Activated abilities read off the card's oracle text. Effects stay
             // manual (the freeform contract), so activating pays what the
@@ -1467,7 +1479,7 @@ function CardMenu({
           {expander('Move to', <ArrowRight size={15} />, 'move')}
           {sub === 'move' && (
             <div className="menuInset">
-              {item(t('tblHand'), <Hand size={14} />, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
+              {item(t('tblHand'), <PlayingCardHand size={14} />, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
               {item(t('tblGraveyard'), <Skull size={14} />, { kind: 'card.move', iid: menu.iid, to: 'graveyard' }, `grave:${me.userId}`)}
               {item(t('tblExile'), <Ban size={14} />, { kind: 'card.move', iid: menu.iid, to: 'exile' }, `exile:${me.userId}`)}
               {item(cmdLabel, <Crown size={14} />, { kind: 'card.move', iid: menu.iid, to: 'command' }, `cmd:${me.userId}`)}
@@ -1530,7 +1542,7 @@ function CardMenu({
           ) : (
             item('Play face down', <EyeOff size={15} />, { kind: 'card.face', iid: menu.iid, faceDown: true })
           )}
-          {item(t('gpStack'), <Layers size={15} />, { kind: 'stack.push', iid: menu.iid }, 'stack')}
+          {item(t('gpStack'), <PlayingCardStack size={15} />, { kind: 'stack.push', iid: menu.iid }, 'stack')}
           {expander('Move to', <ArrowRight size={15} />, 'move')}
           {sub === 'move' && (
             <div className="menuInset">
@@ -1544,15 +1556,15 @@ function CardMenu({
       )}
       {menu.zone === 'graveyard' && (
         <>
-          {item(t('tblHand'), <Hand size={15} />, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
+          {item(t('tblHand'), <PlayingCardHand size={15} />, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
           {item('Battlefield', <Play size={15} />, { kind: 'card.move', iid: menu.iid, to: 'battlefield', x: 0.5, y: 0.55 }, 'field:mine')}
           {item(t('tblExile'), <Ban size={15} />, { kind: 'card.move', iid: menu.iid, to: 'exile' }, `exile:${me.userId}`)}
-          {item(t('gpStack'), <Layers size={15} />, { kind: 'stack.push', iid: menu.iid }, 'stack')}
+          {item(t('gpStack'), <PlayingCardStack size={15} />, { kind: 'stack.push', iid: menu.iid }, 'stack')}
         </>
       )}
       {menu.zone === 'exile' && (
         <>
-          {item(t('tblHand'), <Hand size={15} />, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
+          {item(t('tblHand'), <PlayingCardHand size={15} />, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
           {item('Battlefield', <Play size={15} />, { kind: 'card.move', iid: menu.iid, to: 'battlefield', x: 0.5, y: 0.55 }, 'field:mine')}
           {item(t('tblGraveyard'), <Skull size={15} />, { kind: 'card.move', iid: menu.iid, to: 'graveyard' }, `grave:${me.userId}`)}
         </>
@@ -1569,7 +1581,7 @@ function CardMenu({
               { kind: 'card.transform', iid: menu.iid, transformed: !card.transformed },
             )}
           {item(`${cmdLabel} → Battlefield`, <Play size={15} />, { kind: 'cmd.cast', iid: menu.iid, x: 0.55, y: 0.55 }, 'field:mine')}
-          {item(t('tblHand'), <Hand size={15} />, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
+          {item(t('tblHand'), <PlayingCardHand size={15} />, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
           {/* Manual tax control: +2 always (the server creates the entry), -2
               once any tax exists. Commander formats only - Cyberpunk Legends
               share this zone but have no tax. */}
@@ -1647,9 +1659,18 @@ function SidePanel({
   const t = useT();
   const log = useGame((state) => state.log);
   const chat = useGame((state) => state.chat);
+  const railHidden = useTableUi((state) => state.railHidden);
+  const setRailHidden = useTableUi((state) => state.setRailHidden);
   const scrollRef = useRef<HTMLDivElement>(null);
   // The phone sheet: which tab is open (null = collapsed to the handle chip).
   const [sheet, setSheet] = useState<'vitals' | 'players' | 'log' | 'chat' | null>(null);
+  // The lobby's nav slot (see PregameLobby). Resolved in an effect because the
+  // slot is rendered by a sibling: effects run after the whole tree commits, so
+  // the node is there on the first pass.
+  const [lobbyDock, setLobbyDock] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setLobbyDock(room.started ? null : document.getElementById(LOBBY_NAV_DOCK_ID));
+  }, [room.started]);
   // Desktop: the chat aside slides over the board edge when opened from the
   // nav row. Messages that arrive while it is closed light an unread dot.
   const [chatOpen, setChatOpen] = useState(false);
@@ -1798,6 +1819,23 @@ function SidePanel({
   );
   const navEl = (
     <nav className="tableSideNav" aria-label={t('tblTableNav')}>
+      {/* Collapse the rail's card stack, handing its width to the mats. Only
+          while there IS a stack: the lobby's rail is already nav-only, and a
+          phone's rail is a bottom sheet. The pill itself never hides - it is
+          what this button lives in, so there is always a way back. */}
+      {!mobile && room.started && (
+        <Tooltip content={railHidden ? t('tblRailShow') : t('tblRailHide')}>
+          <IconButton
+            size="sm"
+            variant="ghost"
+            aria-pressed={railHidden}
+            aria-label={railHidden ? t('tblRailShow') : t('tblRailHide')}
+            onClick={() => setRailHidden(!railHidden, meId)}
+          >
+            {railHidden ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
+          </IconButton>
+        </Tooltip>
+      )}
       {/* The lobby's chat lives here too, so there is one chat button in the
           app instead of a nav toggle at the table and a floating chip in the
           lobby stacked on the same corner. Mid-match on a phone the chat is a
@@ -1968,10 +2006,23 @@ function SidePanel({
     );
   }
 
+  // In the lobby the nav is not a floating rail: it belongs to the page, docked
+  // into the launch bar's corner where the layout has reserved room for it.
+  // PregameLobby renders the slot; both mount in the same commit, so the node
+  // exists by the time this effect runs.
+  if (!room.started) {
+    return (
+      <>
+        {lobbyDock ? createPortal(navEl, lobbyDock) : null}
+        {chatAsideEl}
+      </>
+    );
+  }
+
   return (
     <>
-      <aside className="tableSide" data-nav-only={!room.started || undefined}>
-        {room.started && (
+      <aside className="tableSide" data-nav-only={railHidden || undefined}>
+        {!railHidden && (
           <div className="tableSideScroll">
             {vitalsEl}
             {playersEl}

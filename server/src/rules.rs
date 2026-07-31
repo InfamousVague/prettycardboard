@@ -15,7 +15,7 @@
 //! data) are treated permissively rather than bricking a deck.
 
 use crate::oracle::{self, OracleCard, TriggerEffect, TriggerWhen};
-use crate::rooms::{Card, Combat, CombatPreview, PendingTrigger, Player, PreviewRow, Room};
+use crate::rooms::{Card, Combat, CombatPreview, PendingDiscard, PendingTrigger, Player, PreviewRow, Room};
 use crate::App;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -719,6 +719,16 @@ pub fn apply_enters_replacements(app: &App, room: &mut Room, iid: &str) -> Vec<S
             };
             logs.push(format!("{} enters with {what}", card.name));
         }
+        // A planeswalker arrives with its printed loyalty - the one number a
+        // walker cannot function without, and the one everyone forgets to set.
+        if f.type_line.contains("Planeswalker") {
+            if let Some(loyalty) = f.loyalty {
+                if loyalty > 0 && !card.counters.contains_key("loyalty") {
+                    card.counters.insert("loyalty".to_string(), loyalty);
+                    logs.push(format!("{} enters with {loyalty} loyalty", card.name));
+                }
+            }
+        }
         break;
     }
     logs
@@ -904,6 +914,22 @@ pub fn effects_summary(effects: &[TriggerEffect]) -> String {
             TriggerEffect::Token { name, power, toughness, count, .. } => {
                 format!("create {count} {power}/{toughness} {name} tokens")
             }
+            TriggerEffect::Discard { n, random } => {
+                let what = if *n == 1 { "a card".to_string() } else { format!("{n} cards") };
+                if *random { format!("discard {what} at random") } else { format!("discard {what}") }
+            }
+            TriggerEffect::EachOpponentDiscards { n, random } => {
+                let what = if *n == 1 { "a card".to_string() } else { format!("{n} cards") };
+                if *random {
+                    format!("each opponent discards {what} at random")
+                } else {
+                    format!("each opponent discards {what}")
+                }
+            }
+            TriggerEffect::Scry { n } => format!("scry {n}"),
+            TriggerEffect::Mill { n } => {
+                if *n == 1 { "mill a card".to_string() } else { format!("mill {n} cards") }
+            }
             TriggerEffect::Manual => "resolve by hand".to_string(),
         }
     };
@@ -914,12 +940,54 @@ pub fn effects_summary(effects: &[TriggerEffect]) -> String {
 /// Effects apply best-effort against CURRENT state: a source that left the
 /// battlefield just skips its counters, an empty library stops a draw.
 pub fn apply_trigger_effects(room: &mut Room, t: &PendingTrigger) -> Vec<String> {
+    apply_effects(room, &t.owner, &t.source_iid, &t.source_name, &t.effects)
+}
+
+/// A resolving instant or sorcery whose text the oracle parser understood
+/// applies its effects the moment it leaves the stack: draws for the caster,
+/// discards for each opponent, a scry for the caster. Text the parser did not
+/// fully understand stays manual, exactly like triggers - never half-applied.
+pub fn apply_spell_intent(app: &App, room: &mut Room, caster_id: &str, card: &Card) -> Vec<String> {
+    if !enforced(room) {
+        return Vec::new();
+    }
+    let Some(f) = facts(app, card) else {
+        return Vec::new();
+    };
+    if !(f.type_line.contains("Instant") || f.type_line.contains("Sorcery")) {
+        return Vec::new();
+    }
+    let mut effects: Vec<TriggerEffect> = Vec::new();
+    if let Some(n) = f.draws_spell {
+        effects.push(TriggerEffect::Draw { n });
+    }
+    if let Some(n) = f.opp_discards {
+        effects.push(TriggerEffect::EachOpponentDiscards { n, random: f.opp_discards_random });
+    }
+    if let Some(n) = f.scry_spell {
+        effects.push(TriggerEffect::Scry { n });
+    }
+    if effects.is_empty() {
+        return Vec::new();
+    }
+    apply_effects(room, caster_id, &card.iid, &card.name, &effects)
+}
+
+/// The shared muscle behind triggers and spell intent: apply a list of parsed
+/// effects for `owner`, narrating every one of them into the room log.
+fn apply_effects(
+    room: &mut Room,
+    owner: &str,
+    source_iid: &str,
+    source_name: &str,
+    effects: &[TriggerEffect],
+) -> Vec<String> {
     let mut logs = Vec::new();
-    let Some(pi) = room.players.iter().position(|p| p.user_id == t.owner) else {
+    let Some(pi) = room.players.iter().position(|p| p.user_id == owner) else {
         return logs;
     };
     let turn = room.turn_number;
-    for effect in &t.effects {
+    for effect in effects {
         match effect {
             TriggerEffect::Draw { n } => {
                 let p = &mut room.players[pi];
@@ -938,18 +1006,18 @@ pub fn apply_trigger_effects(room: &mut Room, t: &PendingTrigger) -> Vec<String>
                     p.peeked.clear();
                     let plural =
                         if drew == 1 { "a card".to_string() } else { format!("{drew} cards") };
-                    logs.push(format!("{} draws {plural} ({})", p.username, t.source_name));
+                    logs.push(format!("{} draws {plural} ({})", p.username, source_name));
                 }
             }
             TriggerEffect::GainLife { n } => {
                 let p = &mut room.players[pi];
                 p.life += n;
-                logs.push(format!("{} gains {n} life ({})", p.username, t.source_name));
+                logs.push(format!("{} gains {n} life ({})", p.username, source_name));
             }
             TriggerEffect::LoseLife { n } => {
                 let p = &mut room.players[pi];
                 p.life -= n;
-                logs.push(format!("{} loses {n} life ({})", p.username, t.source_name));
+                logs.push(format!("{} loses {n} life ({})", p.username, source_name));
             }
             TriggerEffect::EachOpponentLoses { n } => {
                 let owner_seat = room.players[pi].seat;
@@ -958,18 +1026,18 @@ pub fn apply_trigger_effects(room: &mut Room, t: &PendingTrigger) -> Vec<String>
                         p.life -= n;
                     }
                 }
-                logs.push(format!("each opponent loses {n} life ({})", t.source_name));
+                logs.push(format!("each opponent loses {n} life ({})", source_name));
             }
             TriggerEffect::SelfCounters { counter, n } => {
                 let p = &mut room.players[pi];
-                if let Some(card) = p.battlefield.iter_mut().find(|c| c.iid == t.source_iid) {
+                if let Some(card) = p.battlefield.iter_mut().find(|c| c.iid == source_iid) {
                     *card.counters.entry(counter.clone()).or_insert(0) += n;
                     let plural = if *n == 1 {
                         format!("a {counter} counter")
                     } else {
                         format!("{n} {counter} counters")
                     };
-                    logs.push(format!("{} gets {plural}", t.source_name));
+                    logs.push(format!("{} gets {plural}", source_name));
                 }
             }
             TriggerEffect::Token { name, power, toughness, count, tapped } => {
@@ -977,7 +1045,7 @@ pub fn apply_trigger_effects(room: &mut Room, t: &PendingTrigger) -> Vec<String>
                 let (sx, sy) = room.players[pi]
                     .battlefield
                     .iter()
-                    .find(|c| c.iid == t.source_iid)
+                    .find(|c| c.iid == source_iid)
                     .map(|c| (c.x, c.y))
                     .unwrap_or((0.4, 0.55));
                 let p = &mut room.players[pi];
@@ -1009,12 +1077,234 @@ pub fn apply_trigger_effects(room: &mut Room, t: &PendingTrigger) -> Vec<String>
                 } else {
                     format!("{count} {power}/{toughness} {name} tokens")
                 };
-                logs.push(format!("{} creates {what} ({})", p.username, t.source_name));
+                logs.push(format!("{} creates {what} ({})", p.username, source_name));
+            }
+            TriggerEffect::Discard { n, random } => {
+                // The owner pressed "apply": they are consenting to the engine
+                // choosing for them. Random when the card says so; otherwise
+                // the engine sheds the highest mana value - the same call the
+                // bot would make. "Resolve by hand" remains the way to pick.
+                let source = source_name.to_string();
+                logs.extend(discard_from_hand(room, pi, *n, *random, &source, None));
+            }
+            TriggerEffect::EachOpponentDiscards { n, random } => {
+                let owner_seat = room.players[pi].seat;
+                let source = source_name.to_string();
+                // Snapshot the top of the stack once: every prompt this effect
+                // creates answers the same moment.
+                let in_response_to = room.stack.last().map(|e| e.card.name.clone());
+                let opponents: Vec<usize> = room
+                    .players
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, p)| p.seat != owner_seat && !p.conceded)
+                    .map(|(i, _)| i)
+                    .collect();
+                for oi in opponents {
+                    if *random || room.players[oi].is_bot {
+                        // Random resolves instantly; a bot's pick lands on its
+                        // next tick, but choosing here keeps state simple and
+                        // the choice (highest mv) is exactly what it would do.
+                        logs.extend(discard_from_hand(
+                            room,
+                            oi,
+                            *n,
+                            *random,
+                            &source,
+                            in_response_to.as_deref(),
+                        ));
+                    } else {
+                        let p = &room.players[oi];
+                        room.pending_discards.push(PendingDiscard {
+                            id: crate::hex_id(6),
+                            owner: p.user_id.clone(),
+                            seat: p.seat,
+                            n: *n,
+                            source_name: source.clone(),
+                            in_response_to: in_response_to.clone(),
+                            random: false,
+                            deadline: crate::now_ms() + crate::game::TRIGGER_CHOICE_MS,
+                        });
+                        logs.push(format!(
+                            "{} must discard {} ({source})",
+                            p.username,
+                            if *n == 1 { "a card".to_string() } else { format!("{n} cards") },
+                        ));
+                    }
+                }
+            }
+            TriggerEffect::Scry { n } => {
+                let p = &room.players[pi];
+                if p.is_bot {
+                    logs.extend(bot_scry(room, pi, *n, source_name));
+                } else {
+                    // For a human, "apply" performs the LOOK: the top N arrive
+                    // as a private peek and the existing library viewer's
+                    // reorder/bottom verbs finish the scry. No new UI.
+                    let count = (*n).min(p.library.len() as i64) as usize;
+                    if count > 0 {
+                        let p = &mut room.players[pi];
+                        p.peeked = p.library[..count].iter().map(|c| c.iid.clone()).collect();
+                        logs.push(format!("{} scries {n} ({})", p.username, source_name));
+                    }
+                }
+            }
+            TriggerEffect::Mill { n } => {
+                logs.extend(mill_cards(room, pi, *n, source_name));
             }
             TriggerEffect::Manual => {}
         }
     }
     logs
+}
+
+/// Move `n` chosen-or-random cards from a player's hand to their graveyard,
+/// naming them in the log. `random` picks blind; otherwise the engine sheds
+/// the highest mana value first (facts when known, embedded attrs otherwise).
+/// The line reads "... in response to X" when the discard answered a live
+/// stack, which is exactly the sentence a table wants to hear.
+pub fn discard_from_hand(
+    room: &mut Room,
+    pi: usize,
+    n: i64,
+    random: bool,
+    source: &str,
+    in_response_to: Option<&str>,
+) -> Vec<String> {
+    let count = n.clamp(0, room.players[pi].hand.len() as i64) as usize;
+    if count == 0 {
+        return Vec::new();
+    }
+    let mut picked: Vec<usize> = Vec::new();
+    if random {
+        while picked.len() < count {
+            let at = rand::random_range(0..room.players[pi].hand.len());
+            if !picked.contains(&at) {
+                picked.push(at);
+            }
+        }
+    } else {
+        // Highest mana value goes first - the universal "least usable now".
+        let mut ranked: Vec<(usize, f64)> = room.players[pi]
+            .hand
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (i, card_mv(c)))
+            .collect();
+        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        picked = ranked.into_iter().take(count).map(|(i, _)| i).collect();
+    }
+    picked.sort_unstable_by(|a, b| b.cmp(a)); // remove back-to-front
+    let mut names = Vec::new();
+    for at in picked {
+        let mut card = room.players[pi].hand.remove(at);
+        names.push(card.name.clone());
+        card.tapped = false;
+        card.face_down = false;
+        card.revealed = false;
+        card.attached_to = None;
+        card.piled = false;
+        card.counters.clear();
+        room.players[pi].graveyard.push(card);
+    }
+    names.reverse();
+    let p = &room.players[pi];
+    let what = if names.len() == 1 {
+        names[0].clone()
+    } else {
+        format!("{} cards ({})", names.len(), names.join(", "))
+    };
+    let random_note = if random { " at random" } else { "" };
+    let line = match in_response_to {
+        Some(spell) => {
+            format!("{} discards {what}{random_note} to {source} in response to {spell}", p.username)
+        }
+        None => format!("{} discards {what}{random_note} to {source}", p.username),
+    };
+    vec![line]
+}
+
+/// Mana value of a card instance for discard ranking: oracle facts are not
+/// always cached synchronously here, so fall back to the embedded bot table,
+/// then to 0 (unknown cards keep their place in hand longest).
+fn card_mv(card: &Card) -> f64 {
+    card.scryfall_id
+        .as_deref()
+        .and_then(|sid| crate::bot::data().attrs.get(sid).map(|a| a.mv))
+        .unwrap_or(0.0)
+}
+
+/// Mill: the top N cards go to the graveyard, named - the whole point of the
+/// line is that everyone at the table learns what fell.
+pub fn mill_cards(room: &mut Room, pi: usize, n: i64, source: &str) -> Vec<String> {
+    let count = n.clamp(0, room.players[pi].library.len() as i64) as usize;
+    if count == 0 {
+        return Vec::new();
+    }
+    let mut names = Vec::new();
+    {
+        let p = &mut room.players[pi];
+        for _ in 0..count {
+            let mut card = p.library.remove(0);
+            names.push(card.name.clone());
+            card.face_down = false;
+            card.revealed = false;
+            p.graveyard.push(card);
+        }
+        p.peeked.clear();
+    }
+    let p = &room.players[pi];
+    let what = if names.len() == 1 {
+        format!("a card ({})", names[0])
+    } else {
+        format!("{} cards ({})", names.len(), names.join(", "))
+    };
+    vec![format!("{} mills {what} ({source})", p.username)]
+}
+
+/// A bot's scry, applied instantly with the lands-first policy: while short on
+/// lands keep lands on top, otherwise send expensive spells to the bottom. The
+/// log names counts, never cards - scry information stays private even for a
+/// bot, so a human learns exactly what they would at a paper table.
+pub fn bot_scry(room: &mut Room, pi: usize, n: i64, source: &str) -> Vec<String> {
+    let count = n.clamp(0, room.players[pi].library.len() as i64) as usize;
+    if count == 0 {
+        return Vec::new();
+    }
+    let lands_out = room.players[pi]
+        .battlefield
+        .iter()
+        .filter(|c| {
+            c.scryfall_id
+                .as_deref()
+                .and_then(|sid| crate::bot::data().attrs.get(sid))
+                .map(|a| a.t.contains('L'))
+                .unwrap_or(false)
+        })
+        .count();
+    let wants_lands = lands_out < 4;
+    let p = &mut room.players[pi];
+    let looked: Vec<Card> = p.library.drain(..count).collect();
+    let mut keep: Vec<Card> = Vec::new();
+    let mut bottom: Vec<Card> = Vec::new();
+    for card in looked {
+        let attr = card.scryfall_id.as_deref().and_then(|sid| crate::bot::data().attrs.get(sid));
+        let is_land = attr.map(|a| a.t.contains('L')).unwrap_or(false);
+        let mv = attr.map(|a| a.mv).unwrap_or(0.0);
+        let keep_it = if wants_lands { is_land || mv <= 3.0 } else { !is_land && mv <= 4.0 };
+        if keep_it { keep.push(card) } else { bottom.push(card) }
+    }
+    let kept = keep.len();
+    let bottomed = bottom.len();
+    for card in keep.into_iter().rev() {
+        p.library.insert(0, card);
+    }
+    p.library.extend(bottom);
+    p.peeked.clear();
+    vec![format!(
+        "{} scries {n}: keeps {kept} on top, {bottomed} to the bottom ({source})",
+        p.username
+    )]
 }
 
 // ------------------------------------------------------------ combat math

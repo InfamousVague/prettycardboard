@@ -455,6 +455,52 @@ pub struct CardMark {
 }
 
 /// A triggered ability that fired and awaits its controller's answer
+/// What a board grant hands over.
+///
+/// `Board` is the ordinary one: every PUBLIC zone (battlefield, graveyard,
+/// exile, command) plus blind library operations - cutting and shuffling a
+/// deck has never required seeing it, which is exactly why the paper gesture
+/// works. It deliberately does NOT let the grantee take a card out of a hand;
+/// that would leak the hand one card at a time.
+///
+/// `Hand` is asked for separately and is the only scope that hands over hidden
+/// information, so it is always its own decision.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum GrantScope {
+    Board,
+    Hand,
+}
+
+/// Live permission for `grantee` to act on `owner`'s board. Public state: a
+/// table has every right to see who is handling whose cards.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardGrant {
+    pub owner: String,
+    pub grantee: String,
+    pub grantee_name: String,
+    pub scope: GrantScope,
+    /// None = until either side revokes. Some(unix ms) = auto-expires, swept
+    /// by `expire_pending` alongside the other deadline-bearing state.
+    pub deadline: Option<i64>,
+}
+
+/// An unanswered ask. Sent only to the two parties (see `state_for`) - a
+/// request nobody has agreed to yet is not the table's business.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardRequest {
+    pub owner: String,
+    pub requester: String,
+    pub requester_name: String,
+    pub scope: GrantScope,
+    /// Minutes asked for; None = "until you revoke it".
+    pub minutes: Option<i64>,
+    /// When the unanswered request itself lapses (unix ms).
+    pub deadline: i64,
+}
+
 /// (enforced rooms, rules roadmap pass A). Fully public - the trigger is
 /// printed card text and its source is visible. `auto` = the engine can apply
 /// the parsed effects itself; otherwise the prompt is an acknowledgment and
@@ -471,6 +517,29 @@ pub struct PendingTrigger {
     pub effects: Vec<crate::oracle::TriggerEffect>,
     pub text: String,
     pub auto: bool,
+    pub deadline: i64, // unix ms
+}
+
+/// A forced discard awaiting its owner's choice: a resolved trigger (or a
+/// bot-honored spell) said "discard N", and which N is the owner's to pick.
+/// Bots answer on their next tick; humans answer `discard.resolve`; the
+/// deadline discards at random so one absent player cannot stall the table.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingDiscard {
+    pub id: String,
+    pub owner: String, // user_id of the player who must discard
+    pub seat: usize,
+    /// How many cards (clamped to hand size at resolution time).
+    pub n: i64,
+    /// The card or ability that forced this, for prompts and the log line.
+    pub source_name: String,
+    /// The spell this discard answers when the stack was live at fire time -
+    /// what makes the log read "... in response to X".
+    pub in_response_to: Option<String>,
+    /// "At random": the server picks the cards; the prompt is a heads-up
+    /// rather than a choice, and answers ignore the requested iids.
+    pub random: bool,
     pub deadline: i64, // unix ms
 }
 
@@ -1052,6 +1121,15 @@ pub struct Room {
     /// Fired triggered abilities awaiting their controller (enforced rooms).
     #[serde(default)]
     pub pending_triggers: Vec<PendingTrigger>,
+    /// Forced discards awaiting their owners' picks (see PendingDiscard).
+    #[serde(default)]
+    pub pending_discards: Vec<PendingDiscard>,
+    /// Live cross-board permissions (see `BoardGrant`).
+    #[serde(default)]
+    pub board_grants: Vec<BoardGrant>,
+    /// Board access asked for but not yet answered (see `BoardRequest`).
+    #[serde(default)]
+    pub board_requests: Vec<BoardRequest>,
     /// (turn number, seat) whose end-step triggers already fired. Guards
     /// against firing twice when a player visits the end phase and then
     /// passes the turn.
@@ -1312,6 +1390,22 @@ fn card_view(card: &Card, owner_is_viewer: bool, hide_from_owner: bool) -> Value
 }
 
 impl Room {
+    /// Does `grantee` currently hold `scope` over `owner`'s board?
+    ///
+    /// A Hand grant implies a Board grant: someone you trusted with your hand
+    /// is not then blocked from straightening your battlefield. Expiry is
+    /// checked here as well as in the sweeper, so a grant is never usable in
+    /// the gap between lapsing and the next tick.
+    pub fn has_grant(&self, grantee: &str, owner: &str, scope: GrantScope) -> bool {
+        let now = crate::now_ms();
+        self.board_grants.iter().any(|g| {
+            g.grantee == grantee
+                && g.owner == owner
+                && (g.scope == scope || g.scope == GrantScope::Hand)
+                && g.deadline.map(|d| d > now).unwrap_or(true)
+        })
+    }
+
     /// The draft as seen by `viewer`, or Null when this table is not drafting.
     ///
     /// A draft is hidden information: your pack and your pool are yours, and
@@ -1431,7 +1525,14 @@ impl Room {
                 if own {
                     pv["deckId"] = json!(p.deck_id);
                 }
-                if own || (p.hand_revealed && viewer.is_some()) {
+                // A live Hand grant is the third way a hand opens up, alongside
+                // owning it and the owner revealing it to the table. Unlike a
+                // reveal it is one-to-one: only the grantee's snapshot carries
+                // the cards.
+                let hand_granted = viewer
+                    .map(|v| self.has_grant(v, &p.user_id, GrantScope::Hand))
+                    .unwrap_or(false);
+                if own || hand_granted || (p.hand_revealed && viewer.is_some()) {
                     pv["hand"] = Value::Array(
                         p.hand.iter().map(|c| serde_json::to_value(c).unwrap()).collect(),
                     );
@@ -1493,6 +1594,15 @@ impl Room {
             "combat": self.combat,
             "stackPassed": self.stack_passed,
             "pendingTriggers": self.pending_triggers,
+            "pendingDiscards": self.pending_discards,
+            // Grants are public - who is handling whose cards is exactly the
+            // kind of thing a table needs to see. Unanswered REQUESTS are not:
+            // they go to the two people the question is between.
+            "boardGrants": self.board_grants,
+            "boardRequests": self.board_requests
+                .iter()
+                .filter(|r| viewer == Some(r.owner.as_str()) || viewer == Some(r.requester.as_str()))
+                .collect::<Vec<_>>(),
             "markers": self.markers,
             "marks": self.marks,
             "matchResult": self.match_result,
@@ -1712,6 +1822,9 @@ pub fn expire_pending(app: &App) {
         .filter(|r| {
             r.pending_cmd.iter().any(|p| p.deadline <= now)
                 || r.pending_triggers.iter().any(|p| p.deadline <= now)
+                || r.pending_discards.iter().any(|p| p.deadline <= now)
+                || r.board_grants.iter().any(|g| g.deadline.map(|d| d <= now).unwrap_or(false))
+                || r.board_requests.iter().any(|q| q.deadline <= now)
         })
         .map(|r| r.id.clone())
         .collect();
@@ -1728,8 +1841,55 @@ pub fn expire_pending(app: &App) {
                 .into_iter()
                 .partition(|p| p.deadline <= now);
         room.pending_triggers = alive;
-        if due.is_empty() && lapsed.is_empty() {
+        let (owed, waiting): (Vec<PendingDiscard>, Vec<PendingDiscard>) =
+            std::mem::take(&mut room.pending_discards)
+                .into_iter()
+                .partition(|p| p.deadline <= now);
+        room.pending_discards = waiting;
+        // Grants that ran out their clock, and asks nobody answered. Both are
+        // logged: access quietly appearing or disappearing is exactly the kind
+        // of thing a table should not have to guess at.
+        let (done, live): (Vec<BoardGrant>, Vec<BoardGrant>) = std::mem::take(&mut room.board_grants)
+            .into_iter()
+            .partition(|g| g.deadline.map(|d| d <= now).unwrap_or(false));
+        room.board_grants = live;
+        let (ignored, asking): (Vec<BoardRequest>, Vec<BoardRequest>) =
+            std::mem::take(&mut room.board_requests)
+                .into_iter()
+                .partition(|q| q.deadline <= now);
+        room.board_requests = asking;
+        if due.is_empty()
+            && lapsed.is_empty()
+            && owed.is_empty()
+            && done.is_empty()
+            && ignored.is_empty()
+        {
             continue;
+        }
+        for grant in done {
+            let owner = room
+                .players
+                .iter()
+                .find(|p| p.user_id == grant.owner)
+                .map(|p| p.username.clone())
+                .unwrap_or_default();
+            room.seq += 1;
+            let seq = room.seq;
+            let what = if grant.scope == GrantScope::Hand { "hand" } else { "board" };
+            let line = format!("{}'s access to {owner}'s {what} runs out", grant.grantee_name);
+            ws::room_log(app, &room, seq, &line);
+        }
+        for req in ignored {
+            let owner = room
+                .players
+                .iter()
+                .find(|p| p.user_id == req.owner)
+                .map(|p| p.username.clone())
+                .unwrap_or_default();
+            room.seq += 1;
+            let seq = room.seq;
+            let line = format!("{}'s request for {owner}'s board goes unanswered", req.requester_name);
+            ws::room_log(app, &room, seq, &line);
         }
         for pending in due {
             let log = crate::game::complete_pending(&mut room, pending);
@@ -1745,6 +1905,27 @@ pub fn expire_pending(app: &App) {
                 trigger.source_name, trigger.text
             );
             ws::room_log(app, &room, seq, &line);
+        }
+        // A forced discard nobody answered discards AT RANDOM - the table
+        // cannot wait on an absent player, and random is the one choice the
+        // server can make without playing their hand for them.
+        for pending in owed {
+            let Some(pi) = room.players.iter().position(|p| p.user_id == pending.owner) else {
+                continue;
+            };
+            let lines = crate::rules::discard_from_hand(
+                &mut room,
+                pi,
+                pending.n,
+                true,
+                &pending.source_name,
+                pending.in_response_to.as_deref(),
+            );
+            for line in lines {
+                room.seq += 1;
+                let seq = room.seq;
+                ws::room_log(app, &room, seq, &line);
+            }
         }
         touch(app, &mut room);
         ws::room_send_states(app, &room);

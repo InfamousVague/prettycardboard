@@ -296,6 +296,11 @@ pub enum Action {
     /// resolve by hand.
     #[serde(rename = "trigger.answer", rename_all = "camelCase")]
     TriggerAnswer { id: String, apply: bool },
+    /// Answer a forced discard (see rooms::PendingDiscard) by naming the hand
+    /// cards to shed. Empty `iids` = let the engine choose (highest mana
+    /// value), which is also what the deadline does.
+    #[serde(rename = "discard.resolve", rename_all = "camelCase")]
+    DiscardResolve { id: String, iids: Vec<String> },
     /// Cascade for `n` (enforced rooms): the server reveals from the top of
     /// your library until a nonland card with mana value < n, puts the hit
     /// on the stack revealed and free to cast, and bottoms the rest in a
@@ -1113,7 +1118,16 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                             }
                         },
                         Zone::Graveyard => match from {
-                            Zone::Hand => format!("{username} discards {display}"),
+                            // A discard while something is on the stack IS a
+                            // response - say so, it is the sentence the table
+                            // actually wants ("... in response to Wheel").
+                            Zone::Hand => match room.stack.last() {
+                                Some(top) => format!(
+                                    "{username} discards {display} in response to {}",
+                                    top.card.name
+                                ),
+                                None => format!("{username} discards {display}"),
+                            },
                             _ => format!("{username} puts {display}{origin} into their graveyard"),
                         },
                         Zone::Exile => format!("{username} exiles {display}{origin}"),
@@ -1981,6 +1995,14 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
         }
 
         Action::StackResolve { ref iid, to, x, y } => {
+            // Snapshot caster + card before resolution moves them: a resolving
+            // instant/sorcery applies its parsed intent (draw / each-opponent
+            // discard / scry) the moment it leaves the stack.
+            let spell = room
+                .stack
+                .iter()
+                .find(|e| e.card.iid == *iid)
+                .map(|e| (e.owner.clone(), e.card.clone()));
             log = resolve_from_stack(room, &username, iid, to, x, y, false, now, &mut private)?;
             if to == Zone::Battlefield {
                 extra_logs.extend(crate::rules::apply_enters_replacements(app, room, iid));
@@ -1990,6 +2012,8 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                     crate::oracle::TriggerWhen::Etb,
                     iid,
                 ));
+            } else if let Some((caster, card)) = spell {
+                extra_logs.extend(crate::rules::apply_spell_intent(app, room, &caster, &card));
             }
             stack_changed(room);
             refresh_combat_preview(app, room);
@@ -1997,7 +2021,25 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
         }
 
         Action::StackCounter { ref iid, to } => {
-            log = resolve_from_stack(room, &username, iid, to, None, None, true, now, &mut private)?;
+            // "counters X with Y": Y is knowable when the actor has their own
+            // spell sitting above X on the stack - the counterspell they just
+            // cast. Anything else stays the bare verb, which is still true.
+            let with = room
+                .stack
+                .iter()
+                .position(|e| e.card.iid == *iid)
+                .and_then(|at| {
+                    room.stack[at + 1..]
+                        .iter()
+                        .rev()
+                        .find(|e| e.owner == actor_id)
+                        .map(|e| e.card.name.clone())
+                });
+            let base = resolve_from_stack(room, &username, iid, to, None, None, true, now, &mut private)?;
+            log = match with {
+                Some(counterspell) => format!("{base} with {counterspell}"),
+                None => base,
+            };
             stack_changed(room);
             refresh_combat_preview(app, room);
             resync = true;
@@ -2030,6 +2072,65 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                 room.stack_passed.push(actor_seat);
             }
             log = format!("{username} passes");
+            resync = true;
+        }
+
+        Action::DiscardResolve { ref id, ref iids } => {
+            let Some(pos) = room.pending_discards.iter().position(|d| d.id == *id) else {
+                return Err(("no_discard", "that discard prompt is gone".to_string()));
+            };
+            if room.pending_discards[pos].owner != actor_id {
+                return Err(("forbidden", "that discard is not yours to make".to_string()));
+            }
+            let pending = room.pending_discards.remove(pos);
+            let want = pending.n.clamp(0, room.players[pi].hand.len() as i64) as usize;
+            if iids.is_empty() {
+                // "You choose" - same policy as the deadline, without the wait.
+                extra_logs = crate::rules::discard_from_hand(
+                    room,
+                    pi,
+                    pending.n,
+                    false,
+                    &pending.source_name,
+                    pending.in_response_to.as_deref(),
+                );
+            } else {
+                let distinct: std::collections::BTreeSet<&str> =
+                    iids.iter().map(String::as_str).collect();
+                if iids.len() != want || distinct.len() != want {
+                    return Err(("bad_discard", format!("name exactly {want} distinct cards")));
+                }
+                if !iids.iter().all(|iid| room.players[pi].hand.iter().any(|c| c.iid == *iid)) {
+                    return Err(("bad_discard", "cards must be in your hand".to_string()));
+                }
+                let mut names = Vec::new();
+                for iid in iids {
+                    let at = room.players[pi].hand.iter().position(|c| c.iid == *iid).unwrap();
+                    let mut card = room.players[pi].hand.remove(at);
+                    names.push(card.name.clone());
+                    card.tapped = false;
+                    card.face_down = false;
+                    card.revealed = false;
+                    card.attached_to = None;
+                    card.piled = false;
+                    card.counters.clear();
+                    room.players[pi].graveyard.push(card);
+                }
+                let what = if names.len() == 1 {
+                    names[0].clone()
+                } else {
+                    format!("{} cards ({})", names.len(), names.join(", "))
+                };
+                let line = match pending.in_response_to.as_deref() {
+                    Some(spell) => format!(
+                        "{username} discards {what} to {} in response to {spell}",
+                        pending.source_name
+                    ),
+                    None => format!("{username} discards {what} to {}", pending.source_name),
+                };
+                extra_logs = vec![line];
+            }
+            log = String::new();
             resync = true;
         }
 

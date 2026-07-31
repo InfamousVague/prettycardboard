@@ -3,9 +3,7 @@ import { Button, IconButton, Input, Menu, MenuItem, Pill, Tooltip } from '@glaci
 import {
   Cpu,
   Dices,
-  Hand as HandIcon,
   Minus,
-  PackageOpen,
   Paintbrush,
   Plus,
   RefreshCw,
@@ -15,6 +13,7 @@ import {
   Sparkles,
   Swords,
 } from '@glacier/icons';
+import { PlayingCardHand, PlayingCardPack } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { getGame } from '../../data/games.ts';
@@ -107,7 +106,7 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
       <div className="convenience">
         <Tooltip content={`${t('tblDraw')} 1`}>
           <IconButton size="sm" variant="soft" aria-label={t('tblDraw')} onClick={() => act({ kind: 'draw', count: 1 })}>
-            <HandIcon size={15} />
+            <PlayingCardHand size={15} />
           </IconButton>
         </Tooltip>
         <Tooltip content={t('tblUntapAll')}>
@@ -161,7 +160,7 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
               window.dispatchEvent(new CustomEvent('pc:open-packdock', { detail: { open: true } }));
             }}
           >
-            <PackageOpen size={14} /> {t('navBoosters')}
+            <PlayingCardPack size={14} /> {t('navBoosters')}
           </MenuItem>
         </Menu>
       </div>

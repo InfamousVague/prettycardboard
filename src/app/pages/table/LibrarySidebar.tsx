@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Button, IconButton, ScrollArea, SearchField, Select, Text, Size, TextTone } from '@glacier/react';
-import { Hand as HandIcon, X } from '@glacier/icons';
+import { X } from '@glacier/icons';
+import { PlayingCardHand } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
@@ -180,7 +181,7 @@ export function LibrarySidebar() {
                     pull(card.iid);
                   }}
                 >
-                  <HandIcon size={13} /> {t('tblHand')}
+                  <PlayingCardHand size={13} /> {t('tblHand')}
                 </Button>
               </div>
             ))}

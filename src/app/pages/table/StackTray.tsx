@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { Button, MenuItem, SplitButton, Text, Size, TextTone } from '@glacier/react';
-import { Check, Crosshair, Layers, X } from '@glacier/icons';
+import { Check, Crosshair, X } from '@glacier/icons';
+import { PlayingCardStack } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import { useApp } from '../../state/appStore.ts';
 import { useGame } from '../../state/gameStore.ts';
@@ -59,7 +60,7 @@ export function StackTray({ room, canAct }: { room: RoomState; canAct: boolean }
           transition={{ type: 'spring', stiffness: 320, damping: 26 }}
         >
           <div className="stackTrayHead">
-            <Layers size={13} />
+            <PlayingCardStack size={13} />
             <Text as="span" size={Size.XSmall} weight="semibold">
               {t('gpStack')}
             </Text>

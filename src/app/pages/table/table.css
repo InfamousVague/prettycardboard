@@ -12,6 +12,7 @@
      Tokenized so the phone layout can zero both in one place. */
   --pc-rail-w: 18.5rem;
   --pc-rail-clear: 19.5rem;
+
   /* The floating nav pill's resting height. Anything that shares its corner
      (the chat aside) stacks on top of it rather than under it. */
   --pc-nav-h: 2.75rem;
@@ -34,6 +35,14 @@
   flex-direction: column;
   overflow: hidden;
   color: var(--glacier-text);
+}
+
+/* Rail collapsed to its nav pill: every board, ribbon and hand strip clears the
+   gutter through these two tokens, so zeroing them here is the whole change -
+   the mats reclaim 19.5rem without a single layout rule knowing about it. */
+.table[data-rail='hidden'] {
+  --pc-rail-w: 0px;
+  --pc-rail-clear: 0px;
 }
 
 .tableFelt {
@@ -854,6 +863,47 @@
   display: flex;
   align-items: center;
   gap: var(--glacier-space-2);
+}
+
+/* The table nav, docked into the launch bar's trailing corner. It is a real
+   child of the bar (portalled in by SidePanel), so the flex row reserves its
+   width and nothing underneath it is ever covered - the lobby's rail used to
+   float over the roster and the start button. */
+.pregameNavDock {
+  flex: none;
+  display: flex;
+  align-items: center;
+  /* A separator, so the nav reads as table-level chrome rather than another
+     lobby control sitting beside Start. */
+  margin-inline-start: var(--glacier-space-2);
+  padding-inline-start: var(--glacier-space-2);
+  border-inline-start: var(--glacier-hairline) solid
+    color-mix(in oklch, var(--glacier-border) 55%, transparent);
+}
+
+/* Inside the bar the nav is already on a surface: drop the floating pill's
+   own chrome so it does not read as a card within a card. */
+.pregameNavDock .tableSideNav {
+  border: none;
+  border-radius: 0;
+  background: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  padding: 0;
+  min-height: 0;
+  flex-wrap: nowrap;
+}
+
+/* Narrow lobbies: the bar stacks, and the nav keeps the trailing corner with
+   its separator turned into a top rule. */
+@media (max-width: 60rem) {
+  .pregameLaunch {
+    flex-wrap: wrap;
+  }
+
+  .pregameNavDock {
+    margin-inline-start: auto;
+  }
 }
 
 .pregameLaunchGo > span {
@@ -3455,6 +3505,51 @@
   flex-shrink: 0;
 }
 
+/* An owed discard: centered so the hand strip reads at full size. */
+.discardPrompt {
+  position: fixed;
+  bottom: 24%;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  z-index: 67;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-width: min(560px, 92vw);
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--glacier-radius-lg);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border));
+  background: color-mix(in oklch, oklch(0.17 0.02 265) 92%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+.discardPromptHand {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding: 0.15rem;
+}
+
+.discardPick {
+  border: 2px solid transparent;
+  border-radius: calc(var(--glacier-radius-md) + 2px);
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform var(--glacier-motion-fast) ease, border-color var(--glacier-motion-fast) ease;
+}
+
+.discardPick:hover {
+  transform: translateY(-3px);
+}
+
+.discardPickOn {
+  border-color: var(--glacier-accent-solid);
+  transform: translateY(-6px);
+}
+
 /* ---- flight clones (appended to body) ---- */
 
 .pcFlight {
@@ -3495,6 +3590,16 @@
   top: auto;
 }
 
+/* Collapsed, the rail is only its pill, and --pc-rail-w has gone to 0 - so it
+   takes its width from the pill's content instead of vanishing. Scoped to the
+   collapsed state on purpose: the LOBBY's rail is also nav-only, but the lobby
+   still reserves the full gutter, and shrinking it there would leave a dead
+   19.5rem stripe beside the seats. */
+.table[data-rail='hidden'] .tableSide {
+  width: auto;
+  align-items: flex-end;
+}
+
 .tableSideScroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -3530,10 +3635,11 @@
   backdrop-filter: blur(var(--glacier-blur-md));
   box-shadow: 0 10px 28px rgb(0 0 0 / 0.38);
   pointer-events: auto;
-  /* The table's own chrome outranks floating extras (the pack dock pill sits
-     at z 95): the nav must never be buried under a pastime. */
+  /* The table's own chrome outranks every floating extra (the pack dock pill
+     sits at z 95, the stack tray and card menus higher still): the nav must
+     never be buried under a pastime, in the lobby or mid-match. */
   position: relative;
-  z-index: 96;
+  z-index: 140;
 }
 
 /* The log card fills whatever height the life + players cards leave. */
@@ -5460,6 +5566,26 @@
 .playerGrid[data-seats='2'] {
   grid-template-columns: minmax(0, 1fr);
   --pc-grid-zoom: 1;
+}
+
+/* ...except Magic, where a duel is a face-off: two mats side by side, mine on
+   the end edge. The other games keep the stack.
+
+   Zoom stays 1, as it is for the stacked duel. `zoom` scales the preview's own
+   box, so the board always fills its cell either way - the number only decides
+   how big a layout viewport it lays out against, and so how big the cards are
+   painted. 0.5 here would give a true half-scale miniature of the staged view;
+   1 keeps the cards at the size they already read at, against a viewport that
+   is now half as wide and twice as tall. Card size is what the stacked duel
+   optimised for, so the face-off keeps it. */
+.playerGrid[data-game='mtg'][data-seats='2'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
+  --pc-grid-zoom: 1;
+}
+
+.playerGrid[data-game='mtg'][data-seats='2'] .playerGridCell[data-mine] {
+  grid-column: auto;
 }
 
 .playerGrid[data-seats='3'] {

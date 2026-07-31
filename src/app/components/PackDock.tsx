@@ -14,7 +14,8 @@ import {
   Text,
   TextTone,
 } from '@glacier/react';
-import { PackageOpen, Percent, Sparkles, X } from '@glacier/icons';
+import { Percent, Sparkles, X } from '@glacier/icons';
+import { PlayingCardPack } from '../icons/cards.ts';
 import { useT, type MessageKey } from '../i18n.ts';
 import { cardImage } from '../data/cards.ts';
 import { GameCard } from './GameCard.tsx';
@@ -1416,7 +1417,7 @@ export default function PackDock() {
             >
               <div className="pdHead">
                 <span className="pdHeadTitle">
-                  <PackageOpen size={16} aria-hidden />
+                  <PlayingCardPack size={16} aria-hidden />
                   <Text as="span" size={Size.Small}>
                     {t('pdTitle')}
                   </Text>
@@ -1778,7 +1779,7 @@ export default function PackDock() {
                                 reveal by however long the server takes to record
                                 the pack; the tearing label belongs to the part
                                 BEFORE the cards land. */}
-                            {!busy && <PackageOpen size={18} aria-hidden />}
+                            {!busy && <PlayingCardPack size={18} aria-hidden />}
                             {ripping ? t('pdTearing') : pack ? t('boOpenAnother') : t('boOpenPack')}
                           </Button>
 
@@ -1861,7 +1862,7 @@ export default function PackDock() {
                   aria-label={t('pdOpenDock')}
                   onClick={() => setOpen(true)}
                 >
-                  <PackageOpen size={16} aria-hidden />
+                  <PlayingCardPack size={16} aria-hidden />
                   <span className="pdPillLabel">{t('pdOpenPacks')}</span>
                   {unread > 0 && <span className="pdPillDot" aria-hidden />}
                 </Button>

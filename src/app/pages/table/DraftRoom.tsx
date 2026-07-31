@@ -14,7 +14,8 @@ import {
   TextTone,
   useToast,
 } from '@glacier/react';
-import { ArrowLeft, ArrowRight, Check, Hourglass, PackageOpen, Share2, Sparkles } from '@glacier/icons';
+import { ArrowLeft, ArrowRight, Check, Hourglass, Share2, Sparkles } from '@glacier/icons';
+import { PlayingCardPack } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import { cardImage, COLOR_ORDER } from '../../data/cards.ts';
 import { GameCard } from '../../components/GameCard.tsx';
@@ -271,7 +272,7 @@ function DraftSetup({ room, isHost, onShare }: { room: RoomState; isHost: boolea
   if (!isHost) {
     return (
       <div className="dfWait">
-        <PackageOpen size={30} aria-hidden />
+        <PlayingCardPack size={30} aria-hidden />
         <Text size={Size.Medium}>{t('dfWaitHost')}</Text>
         <Text size={Size.Small} tone={TextTone.Muted}>
           {`${drafters} / ${room.seats}`}
@@ -402,7 +403,7 @@ function DraftSetup({ room, isHost, onShare }: { room: RoomState; isHost: boolea
 
           <div className="dfSetupFoot">
             <Button size="lg" fullWidth loading={busy} disabled={!chosen || !enough} onClick={() => void begin()}>
-              <PackageOpen size={18} aria-hidden />
+              <PlayingCardPack size={18} aria-hidden />
               {busy ? t('dfCollating') : sealed ? t('dfStartSealed') : t('dfStart')}
             </Button>
             {!enough && (

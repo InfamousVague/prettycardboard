@@ -20,7 +20,8 @@ import {
   TextTone,
   useToast,
 } from '@glacier/react';
-import { Compass, Heart, Layers, Play, Plus, Sparkles, Swords, Ticket, Trophy } from '@glacier/icons';
+import { Compass, Heart, Play, Plus, Sparkles, Swords, Ticket, Trophy } from '@glacier/icons';
+import { PlayingCardDeck } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
@@ -255,7 +256,7 @@ function StatStrip({ stats, order }: { stats: UserStats | null; order: number })
       />
       <StatTile glass icon={<Swords size={18} />} value={played} label={t('hmGames')} />
       <StatTile glass icon={<Heart size={18} />} value={stats?.endorsements ?? 0} label={t('hmEndorse')} />
-      <StatTile glass icon={<Layers size={18} />} value={decks.length} label={t('decksTitle')} />
+      <StatTile glass icon={<PlayingCardDeck size={18} />} value={decks.length} label={t('decksTitle')} />
     </Section>
   );
 }

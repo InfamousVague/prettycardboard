@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   Avatar,
   Button,
@@ -28,7 +28,6 @@ import {
   Eye,
   Flame,
   Gauge,
-  Layers,
   Link2,
   Mountain,
   Play,
@@ -44,6 +43,7 @@ import {
   WifiOff,
   X,
 } from '@glacier/icons';
+import { PlayingCardDeck } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import { useApp } from '../../state/appStore.ts';
 import { useGame } from '../../state/gameStore.ts';
@@ -84,6 +84,10 @@ const DEFAULT_SETTINGS: GameSettings = {
  * turn pace, deck composition - lives one click deep in a seat's popover, so
  * the stage stays readable at a glance and the detail is still all there.
  */
+/** The lobby's own slot for the table nav; TablePage portals it in here so the
+ *  nav is a child of the launch bar rather than a rail floating over the page. */
+export const LOBBY_NAV_DOCK_ID = 'pregame-nav-dock';
+
 export function PregameLobby({
   room,
   me,
@@ -212,6 +216,25 @@ export function PregameLobby({
   const missingDeck = room.players.some((player) => !player.deckName);
   const waitingReady = room.players.some((player) => !player.ready);
   const canStart = room.players.length > 0 && !offline && !missingDeck && !waitingReady;
+
+  // The launch bar owns the lobby's bottom edge, and its height changes when it
+  // wraps (88px in one row, 213px in two). Floating chrome — the pack dock —
+  // has to clear whatever it currently is, so publish the measured height
+  // rather than let anyone guess at a breakpoint.
+  const launchRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const bar = launchRef.current;
+    if (!bar || typeof ResizeObserver === 'undefined') return;
+    const root = document.documentElement;
+    const publish = () => root.style.setProperty('--pc-launch-h', `${Math.round(bar.getBoundingClientRect().height)}px`);
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(bar);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty('--pc-launch-h');
+    };
+  }, []);
   const status = offline
     ? t('preWaitingOffline')
     : missingDeck
@@ -575,7 +598,7 @@ export function PregameLobby({
       </ul>
 
       {/* ---- the floor: which deck, and go ---- */}
-      <footer className="pregameLaunch" data-ready={canStart || undefined}>
+      <footer ref={launchRef} className="pregameLaunch" data-ready={canStart || undefined}>
         {me && !spectating ? (
           <div
             className="pregameLaunchSetup"
@@ -601,7 +624,7 @@ export function PregameLobby({
               />
             ) : (
               <Button variant="soft" onClick={() => { window.location.hash = '/decks'; }}>
-                <Layers size={15} /> {t('preBuildDeck')}
+                <PlayingCardDeck size={15} /> {t('preBuildDeck')}
               </Button>
             )}
             <Button
@@ -646,10 +669,17 @@ export function PregameLobby({
             </Text>
           )}
         </div>
+
+        {/* The table nav lands here (portalled by SidePanel): part of the
+            launch bar's flow, so it takes its own corner instead of covering
+            the roster or the start button. */}
+        <div className="pregameNavDock" id={LOBBY_NAV_DOCK_ID} />
       </footer>
 
-      {/* Chat is not the lobby's to render: the table's floating nav owns the
-          button and the slide-over, in the lobby and mid-match alike. */}
+      {/* Chat is not the lobby's to render: the table's nav owns the button and
+          the slide-over, in the lobby and mid-match alike. The nav itself is
+          portalled into the slot below (TablePage's SidePanel), so in the lobby
+          it sits in the page's own bottom corner instead of floating over it. */}
 
       {room.spectators.length > 0 && (
         <div className="pregameSpectators">
@@ -713,7 +743,7 @@ function StageTile({ room, player, you }: { room: RoomState; player: TablePlayer
         </span>
       </div>
       <span className="pregameDeck" data-empty={!player.deckName || undefined}>
-        <Layers size={14} /> {player.deckName || t('preNoDeck')}
+        <PlayingCardDeck size={14} /> {player.deckName || t('preNoDeck')}
       </span>
       <span className="pregameReady" data-ready={player.ready || undefined}>
         {player.online === false ? (
@@ -818,7 +848,7 @@ function ScoutCard({
       )}
 
       <span className="pregameDeck" data-empty={!player.deckName || undefined}>
-        <Layers size={14} /> {player.deckName || t('preNoDeck')}
+        <PlayingCardDeck size={14} /> {player.deckName || t('preNoDeck')}
       </span>
 
       {player.deckMeta && (
@@ -831,7 +861,7 @@ function ScoutCard({
             </span>
           )}
           <span className="pregameStat" title={t('preDeckSize')}>
-            <Layers size={11} /> {player.deckMeta.size}
+            <PlayingCardDeck size={11} /> {player.deckMeta.size}
           </span>
           {player.deckMeta.avgMv != null && player.deckMeta.avgMv > 0 && (
             <span className="pregameStat" title={t('preAvgMv')}>

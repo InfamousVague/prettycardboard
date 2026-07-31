@@ -17,16 +17,14 @@ import {
   Compass,
   History,
   House,
-  Library,
-  PackageOpen,
   PanelLeft,
   Paintbrush,
   Play,
   Settings,
   User,
   Users,
-  WalletCards,
 } from '@glacier/icons';
+import { PlayingCardDeck, PlayingCardPack, PlayingCardStack } from './icons/cards.ts';
 import {
   applyPreferences,
   loadPreferences,
@@ -234,7 +232,7 @@ function AppRail({
         onClick={() => onNavigate('play')}
       />
       <NavBarItem
-        icon={<WalletCards size={20} />}
+        icon={<PlayingCardDeck size={20} />}
         label={t('navDecks')}
         active={route === 'decks'}
         onClick={() => onNavigate('decks')}
@@ -251,7 +249,7 @@ function AppRail({
           still building it. */}
       {wip && (
         <NavBarItem
-          icon={<PackageOpen size={20} />}
+          icon={<PlayingCardPack size={20} />}
           label={t('navBoosters')}
           active={route === 'boosters'}
           // Additive: still navigates, and ALSO brings the floating pack dock
@@ -264,7 +262,7 @@ function AppRail({
         />
       )}
       <NavBarItem
-        icon={<Library size={20} />}
+        icon={<PlayingCardStack size={20} />}
         label={t('navCollection')}
         active={route === 'collection'}
         onClick={() => onNavigate('collection')}

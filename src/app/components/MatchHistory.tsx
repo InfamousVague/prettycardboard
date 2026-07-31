@@ -1,5 +1,6 @@
 import { IconButton, Size, Text, TextTone, Tooltip, useLocale } from '@glacier/react';
-import { Crown, Layers, Play } from '@glacier/icons';
+import { Crown, Play } from '@glacier/icons';
+import { PlayingCard } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
 import type { MatchRow } from '../net/types.ts';
 import { GameTag } from './GameTag.tsx';
@@ -88,7 +89,7 @@ export function MatchHistory({
                   {match.durationMs != null && <span className="matchStat">{fmtDuration(match.durationMs)}</span>}
                   {match.cardsPlayed != null && (
                     <span className="matchStat">
-                      <Layers size={11} /> {match.cardsPlayed}
+                      <PlayingCard size={11} /> {match.cardsPlayed}
                     </span>
                   )}
                 </span>

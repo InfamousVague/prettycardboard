@@ -25,8 +25,6 @@ import {
   Eye,
   Flag,
   Landmark,
-  Layers,
-  PackageOpen,
   Shield,
   Swords,
   Ticket,
@@ -34,6 +32,7 @@ import {
   Zap,
 } from '@glacier/icons';
 import type { IconProps } from '@glacier/icons';
+import { PlayingCardPack } from '../icons/cards.ts';
 import { useT, type MessageKey } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
@@ -111,7 +110,7 @@ const QUICK_STARTS: QuickStart[] = [
     // The plain way in: two people, a few packs and nothing else needed. The
     // pod below is the same format with a deeper pool, not a different idea.
     id: 'draftDuel',
-    Icon: Layers,
+    Icon: PlayingCardPack,
     game: 'mtg',
     format: 'draft',
     seats: 2,
@@ -120,7 +119,7 @@ const QUICK_STARTS: QuickStart[] = [
   },
   {
     id: 'draftPod',
-    Icon: PackageOpen,
+    Icon: PlayingCardPack,
     game: 'mtg',
     format: 'draft',
     seats: 6,

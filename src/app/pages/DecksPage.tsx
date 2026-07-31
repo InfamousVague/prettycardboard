@@ -1,7 +1,8 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { motion } from 'motion/react';
 import { Button, EmptyState, Heading, Pill, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
-import { Download, Layers, Plus } from '@glacier/icons';
+import { Download, Plus } from '@glacier/icons';
+import { PlayingCardDeck } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useUi } from '../state/uiStore.ts';
@@ -98,7 +99,7 @@ function DeckLibrary() {
 
       {decks.length === 0 ? (
         <EmptyState
-          icon={<Layers size={22} />}
+          icon={<PlayingCardDeck size={22} />}
           title={t('decksTitle')}
           description={t('decksEmpty')}
           action={
@@ -109,7 +110,7 @@ function DeckLibrary() {
           }
         />
       ) : shown.length === 0 ? (
-        <EmptyState icon={<Layers size={22} />} title={t('decksTitle')} description={t('playNoDecksForGame')} />
+        <EmptyState icon={<PlayingCardDeck size={22} />} title={t('decksTitle')} description={t('playNoDecksForGame')} />
       ) : (
         <div className="deckGrid">
           {shown.map((deck, index) => (

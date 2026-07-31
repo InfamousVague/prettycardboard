@@ -20,7 +20,7 @@ use std::sync::Arc;
 /// Bumped whenever the parse below learns something new: cached rows stamped
 /// with an older version are treated as missing and refetched, so a deploy
 /// never leaves half the oracle table without the new fields.
-pub const ORACLE_VERSION: u32 = 6;
+pub const ORACLE_VERSION: u32 = 7;
 
 /// A characteristic-defining ability that sets power (and sometimes toughness)
 /// to a count of permanents - "...is equal to the number of artifacts you
@@ -80,6 +80,18 @@ pub enum TriggerEffect {
     SelfCounters { counter: String, n: i64 },
     /// `count` stub tokens (name + printed P/T; riders are not modeled).
     Token { name: String, power: i64, toughness: i64, count: i64, tapped: bool },
+    /// The controller discards N. On "apply" the engine chooses (highest mana
+    /// value; truly random when `random`) - a player who wants a specific card
+    /// answers "resolve by hand" instead, which is the existing button.
+    Discard { n: i64, random: bool },
+    /// Every opponent discards N: bots choose immediately, humans get a
+    /// PendingDiscard prompt with a lapse-to-random deadline.
+    EachOpponentDiscards { n: i64, random: bool },
+    /// Scry N. Bots apply a keep-lands-when-short heuristic; a human gets the
+    /// top N as a private peek (the existing library viewer finishes the job).
+    Scry { n: i64 },
+    /// The controller mills N: top of library to the graveyard, cards named.
+    Mill { n: i64 },
     Manual,
 }
 
@@ -165,6 +177,28 @@ pub struct OracleCard {
     /// Set when the printed power is `*`: what the defining ability counts.
     #[serde(default)]
     pub cda: Option<CountCda>,
+    /// A planeswalker's printed starting loyalty; it enters with this many
+    /// loyalty counters under enforcement.
+    #[serde(default)]
+    pub loyalty: Option<i64>,
+    /// Spell intent for instants/sorceries, parsed so a bot can cast them ON
+    /// PURPOSE and the table can be told what resolved. All None/false for
+    /// permanents and for texts outside the closed patterns.
+    /// "Counter target spell."
+    #[serde(default)]
+    pub counters_spell: bool,
+    /// "Draw N cards" somewhere in the spell's own text.
+    #[serde(default)]
+    pub draws_spell: Option<i64>,
+    /// "Each opponent/target player/target opponent discards N card(s)".
+    #[serde(default)]
+    pub opp_discards: Option<i64>,
+    /// That discard is "at random".
+    #[serde(default)]
+    pub opp_discards_random: bool,
+    /// "Scry N" in the spell's own text.
+    #[serde(default)]
+    pub scry_spell: Option<i64>,
     /// Parse-schema version this row was written with (see ORACLE_VERSION).
     #[serde(default)]
     pub v: u32,
@@ -332,6 +366,53 @@ fn parse_effect_part(part: &str, name_lower: &str, short_lower: &str) -> Option<
         }
         return None;
     }
+    // "discard a card" / "discard two cards( at random)"
+    if let Some(rest) = p.strip_prefix("discard ") {
+        let (body, random) = match rest.strip_suffix(" at random") {
+            Some(head) => (head, true),
+            None => (rest, false),
+        };
+        let mut words = body.split_whitespace();
+        let n = word_number(words.next()?)?;
+        let noun = words.next()?;
+        if (noun == "card" || noun == "cards") && words.next().is_none() {
+            return Some(TriggerEffect::Discard { n, random });
+        }
+        return None;
+    }
+    // "each opponent discards a card( at random)"
+    if let Some(rest) = p.strip_prefix("each opponent discards ") {
+        let (body, random) = match rest.strip_suffix(" at random") {
+            Some(head) => (head, true),
+            None => (rest, false),
+        };
+        let mut words = body.split_whitespace();
+        let n = word_number(words.next()?)?;
+        let noun = words.next()?;
+        if (noun == "card" || noun == "cards") && words.next().is_none() {
+            return Some(TriggerEffect::EachOpponentDiscards { n, random });
+        }
+        return None;
+    }
+    // "scry 1" / "scry 2"
+    if let Some(rest) = p.strip_prefix("scry ") {
+        let mut words = rest.split_whitespace();
+        let n = word_number(words.next()?)?;
+        if words.next().is_none() && n > 0 {
+            return Some(TriggerEffect::Scry { n });
+        }
+        return None;
+    }
+    // "mill a card" / "mill three cards"
+    if let Some(rest) = p.strip_prefix("mill ") {
+        let mut words = rest.split_whitespace();
+        let n = word_number(words.next()?)?;
+        let noun = words.next()?;
+        if (noun == "card" || noun == "cards") && words.next().is_none() {
+            return Some(TriggerEffect::Mill { n });
+        }
+        return None;
+    }
     // "create a 2/2 black Zombie creature token" (optionally "a tapped ...",
     // "N ... tokens", "artifact creature token"). Riders after "token" or
     // unknown descriptor words fall out of the closed set.
@@ -390,18 +471,33 @@ fn parse_effect_part(part: &str, name_lower: &str, short_lower: &str) -> Option<
 /// the engine must never half-apply a trigger.
 fn parse_effects(clause: &str, name_lower: &str, short_lower: &str) -> Vec<TriggerEffect> {
     let c = clause.trim().trim_end_matches('.').trim();
-    if c.contains(". ") || c.is_empty() {
+    if c.is_empty() {
         return vec![TriggerEffect::Manual];
     }
-    // "you may X": the prompt itself models the choice; parse X.
-    let c = c.strip_prefix("you may ").unwrap_or(c);
-    let parts: Vec<&str> = c.split(" and ").collect();
+    // Sentences apply in order ("...each opponent loses 1 life. Scry 1."), and
+    // within one sentence parts join with " and " / ", then " / "then ". The
+    // closed-set rule is unchanged: ANY part outside it makes the whole
+    // trigger Manual - the engine must never half-apply.
     let mut effects = Vec::new();
-    for part in parts {
-        match parse_effect_part(part, name_lower, short_lower) {
-            Some(e) => effects.push(e),
-            None => return vec![TriggerEffect::Manual],
+    for sentence in c.split(". ") {
+        let sentence = sentence.trim().trim_end_matches('.').trim();
+        if sentence.is_empty() {
+            continue;
         }
+        // "you may X": the prompt itself models the choice; parse X.
+        let sentence = sentence.strip_prefix("you may ").unwrap_or(sentence);
+        for part in sentence.split(" and ") {
+            for step in part.split(", then ") {
+                let step = step.trim().trim_start_matches("then ").trim();
+                match parse_effect_part(step, name_lower, short_lower) {
+                    Some(e) => effects.push(e),
+                    None => return vec![TriggerEffect::Manual],
+                }
+            }
+        }
+    }
+    if effects.is_empty() {
+        return vec![TriggerEffect::Manual];
     }
     effects
 }
@@ -757,6 +853,54 @@ fn parse_cda(text: &str) -> Option<CountCda> {
     })
 }
 
+/// Spell-intent classification: what an instant/sorcery DOES, coarsely, so a
+/// bot can pick spells for a reason and announcements can say what happened.
+/// Closed patterns like everything else here - unknown text classifies as
+/// nothing rather than wrongly.
+fn parse_spell_intent(text: &str) -> (bool, Option<i64>, Option<i64>, bool, Option<i64>) {
+    let t = strip_asides(&text.replace('\n', " ")).to_lowercase();
+    // Free-text scanning runs into sentence punctuation ("scry 1."), which
+    // the clause-level parsers never see; shed it before reading a number.
+    let number = |word: &str| word_number(word.trim_matches(|c: char| ".,;:".contains(c)));
+    let counters_spell = t.contains("counter target spell");
+    // "draw two cards" / "draws three cards" as a spell effect.
+    let draws = ["draw ", "draws "].iter().find_map(|verb| {
+        let start = t.find(verb)? + verb.len();
+        let mut words = t[start..].split_whitespace();
+        let n = number(words.next()?)?;
+        let noun = words.next()?;
+        (noun.starts_with("card")).then_some(n)
+    });
+    // "each opponent discards N" / "target player discards N" /
+    // "target opponent discards N".
+    let mut discards = None;
+    let mut discards_random = false;
+    for prefix in ["each opponent discards ", "target player discards ", "target opponent discards "] {
+        if let Some(start) = t.find(prefix) {
+            let tail = &t[start + prefix.len()..];
+            let mut words = tail.split_whitespace();
+            if let Some(n) = words.next().and_then(&number) {
+                if words.next().map(|w| w.starts_with("card")).unwrap_or(false) {
+                    discards = Some(n);
+                    // The random rider follows the noun: "...two cards at random".
+                    discards_random = tail
+                        .split(". ")
+                        .next()
+                        .map(|sentence| sentence.contains("at random"))
+                        .unwrap_or(false);
+                    break;
+                }
+            }
+        }
+    }
+    // "scry N" anywhere in the text.
+    let scry = t.find("scry ").and_then(|at| {
+        let mut words = t[at + "scry ".len()..].split_whitespace();
+        number(words.next()?)
+    });
+    (counters_spell, draws, discards, discards_random, scry)
+}
+
 /// Does this text read as removal or burn aimed at creatures? Feeds the
 /// bot's threat table; deliberately coarse.
 fn parse_threat(text: &str) -> bool {
@@ -789,6 +933,8 @@ struct ScryCard {
     #[serde(default)]
     produced_mana: Vec<String>,
     #[serde(default)]
+    loyalty: Option<String>,
+    #[serde(default)]
     card_faces: Vec<ScryFace>,
 }
 
@@ -798,6 +944,8 @@ struct ScryFace {
     mana_cost: Option<String>,
     power: Option<String>,
     toughness: Option<String>,
+    #[serde(default)]
+    loyalty: Option<String>,
     #[serde(default)]
     oracle_text: Option<String>,
     #[serde(default)]
@@ -879,6 +1027,13 @@ fn parse_card(raw: &ScryCard) -> Option<OracleCard> {
         .or_else(|| face.and_then(|f| f.power.as_deref()))
         .map(|p| p.contains('*'))
         .unwrap_or(false);
+    let (counters_spell, draws_spell, opp_discards, opp_discards_random, scry_spell) =
+        parse_spell_intent(&oracle_text);
+    let loyalty = raw
+        .loyalty
+        .as_deref()
+        .or_else(|| face.and_then(|f| f.loyalty.as_deref()))
+        .and_then(|l| l.parse::<i64>().ok());
     Some(OracleCard {
         name,
         type_line,
@@ -905,6 +1060,12 @@ fn parse_card(raw: &ScryCard) -> Option<OracleCard> {
         prevent_combat_by: repl.prevent_by,
         discover: parse_discover(&oracle_text),
         cda: if starred { parse_cda(&oracle_text) } else { None },
+        loyalty,
+        counters_spell,
+        draws_spell,
+        opp_discards,
+        opp_discards_random,
+        scry_spell,
         colors,
         oracle_text,
         triggers,
@@ -943,7 +1104,11 @@ pub async fn ensure(app: &Arc<App>, ids: Vec<String>) {
                     // colors + keywords): upgrade locally instead of asking
                     // Scryfall again. Anything older is missing raw facts
                     // (v3 had no colors) and falls through to a refetch.
-                    if card.v >= 4 && !card.oracle_text.is_empty() {
+                    // Exception: loyalty (new in v7) is a RAW fact no reparse
+                    // can recover, so a cached planeswalker refetches once.
+                    let walker_needs_loyalty =
+                        card.type_line.contains("Planeswalker") && card.loyalty.is_none();
+                    if card.v >= 4 && !card.oracle_text.is_empty() && !walker_needs_loyalty {
                         card.triggers = parse_triggers(&card.name, &card.oracle_text);
                         card.threat = parse_threat(&card.oracle_text);
                         card.statics = parse_statics(&card.oracle_text);
@@ -961,6 +1126,13 @@ pub async fn ensure(app: &Arc<App>, ids: Vec<String>) {
                         card.prevent_combat_to = repl.prevent_to;
                         card.prevent_combat_by = repl.prevent_by;
                         card.discover = parse_discover(&card.oracle_text);
+                        let (counters_spell, draws_spell, opp_discards, opp_discards_random, scry_spell) =
+                            parse_spell_intent(&card.oracle_text);
+                        card.counters_spell = counters_spell;
+                        card.draws_spell = draws_spell;
+                        card.opp_discards = opp_discards;
+                        card.opp_discards_random = opp_discards_random;
+                        card.scry_spell = scry_spell;
                         card.v = ORACLE_VERSION;
                         if let Ok(fresh) = serde_json::to_string(&card) {
                             crate::db::oracle_store(&conn, &id, &fresh);
@@ -1325,13 +1497,92 @@ mod tests {
     }
 
     #[test]
-    fn trailing_sentence_is_manual() {
+    fn trailing_scry_sentence_parses() {
+        // Once collapsed the whole trigger to Manual; sentences now apply in
+        // order as long as every one stays inside the closed set.
         let t = triggers(
             "Dream Beavers",
             "Flying\nWhen this creature enters, each opponent loses 1 life and you gain 1 life. Scry 1.",
         );
         assert_eq!(t.len(), 1);
+        assert_eq!(
+            t[0].effects,
+            vec![
+                TriggerEffect::EachOpponentLoses { n: 1 },
+                TriggerEffect::GainLife { n: 1 },
+                TriggerEffect::Scry { n: 1 },
+            ]
+        );
+    }
+
+    #[test]
+    fn trailing_unknown_sentence_is_still_manual() {
+        let t = triggers(
+            "Test Beast",
+            "When this creature enters, draw a card. Proliferate.",
+        );
+        assert_eq!(t.len(), 1);
         assert_eq!(t[0].effects, vec![TriggerEffect::Manual]);
+    }
+
+    #[test]
+    fn discard_effects_parse() {
+        let t = triggers("Raving Oni-Slave", "When this creature enters, discard a card.");
+        assert_eq!(t[0].effects, vec![TriggerEffect::Discard { n: 1, random: false }]);
+        let t = triggers(
+            "Burglar Rat",
+            "When this creature enters, each opponent discards a card.",
+        );
+        assert_eq!(
+            t[0].effects,
+            vec![TriggerEffect::EachOpponentDiscards { n: 1, random: false }]
+        );
+        let t = triggers(
+            "Chaos Imp",
+            "When this creature enters, each opponent discards two cards at random.",
+        );
+        assert_eq!(
+            t[0].effects,
+            vec![TriggerEffect::EachOpponentDiscards { n: 2, random: true }]
+        );
+    }
+
+    #[test]
+    fn scry_mill_and_then_chains_parse() {
+        let t = triggers("Sage Owl", "When this creature enters, scry 2.");
+        assert_eq!(t[0].effects, vec![TriggerEffect::Scry { n: 2 }]);
+        let t = triggers("Codex Shredder Beast", "When this creature enters, mill three cards.");
+        assert_eq!(t[0].effects, vec![TriggerEffect::Mill { n: 3 }]);
+        let t = triggers(
+            "Sea Gate Oracle Kin",
+            "When this creature enters, draw a card, then discard a card.",
+        );
+        assert_eq!(
+            t[0].effects,
+            vec![
+                TriggerEffect::Draw { n: 1 },
+                TriggerEffect::Discard { n: 1, random: false },
+            ]
+        );
+    }
+
+    #[test]
+    fn spell_intent_classifies() {
+        let (counters, draws, discards, random, scry) =
+            parse_spell_intent("Counter target spell.");
+        assert!(counters);
+        assert_eq!((draws, discards, random, scry), (None, None, false, None));
+        let (_, draws, _, _, scry) = parse_spell_intent("Draw two cards, then scry 1.");
+        assert_eq!(draws, Some(2));
+        assert_eq!(scry, Some(1));
+        let (_, _, discards, random, _) =
+            parse_spell_intent("Target player discards two cards at random.");
+        assert_eq!(discards, Some(2));
+        assert!(random);
+        let (_, _, discards, random, _) =
+            parse_spell_intent("Each opponent discards a card.");
+        assert_eq!(discards, Some(1));
+        assert!(!random);
     }
 
     #[test]

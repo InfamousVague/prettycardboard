@@ -497,6 +497,8 @@ export interface RoomState {
   stackPassed?: number[];
   /** Enforced rooms: fired triggered abilities awaiting their controller. */
   pendingTriggers?: PendingTrigger[];
+  /** Enforced rooms: owed discards awaiting a choice of cards (rules pass D). */
+  pendingDiscards?: PendingDiscard[];
   /** Table markers parked on cards, by card iid. Fully public. */
   marks?: Record<string, CardMarkState>;
   combat?: CombatState | null;
@@ -527,6 +529,10 @@ export type TriggerEffect =
   | { kind: 'eachOpponentLoses'; n: number }
   | { kind: 'selfCounters'; counter: string; n: number }
   | { kind: 'token'; name: string; power: number; toughness: number; count: number; tapped: boolean }
+  | { kind: 'discard'; n: number; random: boolean }
+  | { kind: 'eachOpponentDiscards'; n: number; random: boolean }
+  | { kind: 'scry'; n: number }
+  | { kind: 'mill'; n: number }
   | { kind: 'manual' };
 
 /** A fired triggered ability waiting on its controller (fully public). */
@@ -541,6 +547,22 @@ export interface PendingTrigger {
   text: string;
   /** True = the engine can apply the parsed effects itself. */
   auto: boolean;
+  deadline: number;
+}
+
+/** An owed discard waiting on its owner's choice of cards (fully public;
+ *  the chosen cards are named in the log like any tabletop discard). It
+ *  lapses into a random discard at `deadline`. */
+export interface PendingDiscard {
+  id: string;
+  owner: string;
+  seat: number;
+  n: number;
+  sourceName: string;
+  /** The spell still on the stack beneath the one that forced this, when
+   *  there is one - "in response to X" in the eventual log line. */
+  inResponseTo?: string | null;
+  random: boolean;
   deadline: number;
 }
 
@@ -733,6 +755,9 @@ export type GameActionV2 =
   | { kind: 'stack.pass' }
   | { kind: 'stack.target'; iid: string; targetIid: string | null }
   | { kind: 'trigger.answer'; id: string; apply: boolean }
+  /** Answer an owed discard: exactly `n` distinct in-hand iids, or `[]` to
+   *  let the engine choose (highest mana value first). */
+  | { kind: 'discard.resolve'; id: string; iids: string[] }
   | { kind: 'cascade'; n: number }
   | { kind: 'undo' }
   | { kind: 'redo' }

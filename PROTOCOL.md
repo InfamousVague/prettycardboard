@@ -819,3 +819,68 @@ cascade keyword, and `discover N`.
 - Bots resolve their own stack permanents (cascade hits) to the
   battlefield, instants and sorceries to the graveyard, and answer the ETB
   prompts that follow.
+
+### Discard, scry, mill, spell intent, and loyalty (rules pass D, 2026-07-31)
+
+The trigger parser's closed effect set grows: `discard N card(s) (at
+random)`, `each opponent discards N card(s) (at random)`, `scry N`, and
+`mill N card(s)`, including "then"/";" chains where every part parses
+(anything unknown still makes the whole trigger `manual`). The oracle row
+also stores a planeswalker's printed loyalty and a whole-spell intent read
+for instants and sorceries: counterspells (`counter target spell`), draw
+spells, symmetric/each-opponent discard spells (Hymn, wheels), and scry
+spells.
+
+- A planeswalker arriving on the battlefield in an enforced room gets its
+  printed loyalty in `loyalty` counters automatically ("enters with N
+  loyalty"). Activating abilities stays manual, like all card text.
+- When an instant or sorcery RESOLVES off the stack in an enforced room, its
+  parsed intent applies engine-side and is narrated: the caster draws
+  ("draws 2 cards (Divination)"), scries (below), and each opponent
+  discards. Unparsed text stays the caster's to perform, exactly like
+  manual triggers.
+- Discards: random ones (and bot seats) resolve instantly, named cards in
+  the log - "Bob discards 2 cards (Island, Opt) at random to Wheel of
+  Fortune in response to Hymn to Tourach" (the "in response to" clause
+  appears whenever a spell is still on the stack beneath the resolving
+  one). A human choosing gets `room.state.pendingDiscards: [{id, owner,
+  seat, n, sourceName, inResponseTo, random, deadline}]` and answers with
+  `{kind: "discard.resolve", id, iids}` - exactly `n` distinct in-hand
+  iids, or `iids: []` to consent to the engine's choice (highest mana value
+  first). An unanswered prompt lapses after 30s into a random discard, so
+  an absent player never stalls the table. A manual hand->graveyard
+  `card.move` while a spell is on the stack also logs the "in response to"
+  clause.
+- Scry N: a bot applies a keep-lands-when-short heuristic silently (the log
+  says only "scries N"); a human gets the top N as a private `peeked` view -
+  the existing library viewer's reorder/bottom verbs finish the scry.
+- Mill N: top N to the graveyard, every card named in the log.
+- `stack.counter` now logs "counters X with Y" when the countering player's
+  own spell sits above the countered one on the stack.
+
+### Bot brain (refactor, 2026-07-31)
+
+`server/src/bot.rs` became `server/src/bot/`: `knowledge.rs` (embedded
+precon data, card reads, style/tier), `lines.rs` (all table talk),
+`decide.rs` (the priority ladder + the bot's own turn), `combat.rs`
+(legality, freeform settling, blocks, attacks), `casting.rs`, `upkeep.rs`
+(mulligans), with the scheduler and mind types in `mod.rs`. Scheduler
+behavior is unchanged (800ms tick, fast-chains, one action per tick).
+
+Behavior upgrades, all through the same public actions a human would send:
+
+- A bot casting a recognized removal/burn spell (`threat`) declares its
+  victim with `stack.target` before resolving - the table sees "targets X
+  with Y" and the owner settles it (bots already honored spells resolved
+  on their permanents).
+- A bot holding a parsed counterspell answers a scary opposing spell
+  (threat over its board, or mana value >= 5) by casting it, then
+  `stack.counter`s the newest opposing spell beneath when it resolves.
+- Bot instant-speed responses are no longer random spare instants: only
+  counterspells, instant-speed removal, or value spells whose parsed
+  intent actually resolves (draw/scry/discard) get cast in response.
+- Freeform combat settling reads effective stats (counters, anthems, `*`
+  powers) and honors first strike, deathtouch, trample, and lifelink for
+  the bot's own creatures and life total.
+- Attack planning and threat scoring read oracle facts for cards outside
+  the embedded precon data (human decks), instead of scoring them 0.

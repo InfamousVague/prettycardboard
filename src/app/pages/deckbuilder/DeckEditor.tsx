@@ -22,7 +22,6 @@ import {
   Crown,
   Flame,
   Image,
-  Layers,
   Minus,
   Mountain,
   Plus,
@@ -36,6 +35,7 @@ import {
   X,
   Zap,
 } from '@glacier/icons';
+import { PlayingCardBlank, PlayingCardDeck } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import * as api from '../../net/api.ts';
 import type { Deck, DeckCard } from '../../net/types.ts';
@@ -710,7 +710,7 @@ export function DeckEditor({ deckId }: { deckId: string }) {
                 {deck.playmat ? (PLAYMATS.find((mat) => mat.id === deck.playmat)?.name ?? deck.playmat) : t('dbMatDefault')}
               </Button>
               <Button size="sm" variant="soft" className="deckMatButton" onClick={() => setBackPicking(true)}>
-                <Layers size={14} aria-hidden />
+                <PlayingCardBlank size={14} aria-hidden />
                 {deck.cardBack
                   ? (CARD_BACKS.find((back) => back.id === deck.cardBack)?.name ?? t('custUploadYours'))
                   : t('dbSleevesDefault')}
@@ -1686,7 +1686,7 @@ function CardCell({
                 setMenu(null);
               }}
             >
-              <Layers size={14} /> {t('dbToMain')}
+              <PlayingCardDeck size={14} /> {t('dbToMain')}
             </button>
           )}
           <button

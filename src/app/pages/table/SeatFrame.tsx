@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Avatar, Button, Menu, MenuItem, Pill, Text, Size, TextTone, Tooltip } from '@glacier/react';
-import { BookCopy, Bot as BotIcon, Check, Cpu, Crown, Hand as HandIcon, Shield, Skull, Zap } from '@glacier/icons';
+import { Bot as BotIcon, Check, Cpu, Crown, Shield, Skull, Zap } from '@glacier/icons';
+import { PlayingCardHand, PlayingCardStack } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { send } from '../../net/ws.ts';
@@ -347,10 +348,10 @@ export function SeatFrame({
         )}
         {mtg && <ManaPoolReadout mana={player.mana} />}
         <span className="oppHandCount" title={t('tblHand')}>
-          <HandIcon size={11} /> {player.handCount}
+          <PlayingCardHand size={11} /> {player.handCount}
         </span>
         <span className="oppHandCount" title={mtg ? t('tblLibrary') : zoneLabel(room.game, 'library')}>
-          <BookCopy size={11} /> {player.libraryCount}
+          <PlayingCardStack size={11} /> {player.libraryCount}
         </span>
       </header>
       {/* Their hand renders at the screen level (OpponentHand, mounted by

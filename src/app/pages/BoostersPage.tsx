@@ -12,7 +12,8 @@ import {
   Text,
   TextTone,
 } from '@glacier/react';
-import { ArrowLeft, PackageOpen } from '@glacier/icons';
+import { ArrowLeft } from '@glacier/icons';
+import { PlayingCardPack } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
 import { cardImage } from '../data/cards.ts';
 import { cardBackUrl, effectiveCardBack } from '../data/cardBacks.ts';
@@ -335,7 +336,7 @@ function PackOpener({ set, onBack }: { set: BoosterSet; onBack: () => void }) {
         <>
           <div className="boActions">
             <Button size="lg" onClick={deal}>
-              <PackageOpen size={18} aria-hidden />
+              <PlayingCardPack size={18} aria-hidden />
               {t('boOpenPack')}
             </Button>
           </div>

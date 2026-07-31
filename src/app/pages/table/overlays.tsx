@@ -10,7 +10,8 @@ import {
   Size,
   TextTone,
 } from '@glacier/react';
-import { ArrowDownToLine, ArrowUpToLine, Crosshair, Dices, Hand as HandIcon, Shuffle, Sparkles } from '@glacier/icons';
+import { ArrowDownToLine, ArrowUpToLine, Crosshair, Dices, Shuffle, Sparkles } from '@glacier/icons';
+import { PlayingCardHand } from '../../icons/cards.ts';
 import { send } from '../../net/ws.ts';
 import { matchesTargetKind, stackTargetKinds, targetsPlayers } from './enforce.ts';
 import { useT } from '../../i18n.ts';
@@ -222,7 +223,7 @@ export function LibraryViewer() {
                       setOrder((prev) => prev.filter((c) => c.iid !== card.iid));
                     }}
                   >
-                    <HandIcon size={13} /> {t('tblHand')}
+                    <PlayingCardHand size={13} /> {t('tblHand')}
                   </Button>
                 </div>
               ))}
@@ -862,6 +863,92 @@ export function TriggerPrompts({ room, me }: { room: RoomState; me: TablePlayer 
           </motion.div>
         ))}
       </AnimatePresence>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------------ */
+/* Discard prompts (enforced rooms, rules pass D)                            */
+/* ------------------------------------------------------------------------ */
+
+/** An owed discard (Hymn, wheels, discard triggers): pick exactly `n` cards
+ * from hand, or let the engine choose (highest mana value first). Lapses into
+ * a random discard at the server's deadline, so no urgency theater needed. */
+export function DiscardPrompts({ room, me }: { room: RoomState; me: TablePlayer | undefined }) {
+  const t = useT();
+  const act = useGame((state) => state.act);
+  const mine = useMemo(
+    () => (room.pendingDiscards ?? []).filter((p) => p.owner === me?.userId),
+    [room.pendingDiscards, me?.userId],
+  );
+  const [picked, setPicked] = useState<string[]>([]);
+  // A fresh prompt (or a hand change consuming picked cards) resets the pick.
+  const promptId = mine[0]?.id;
+  useEffect(() => setPicked([]), [promptId]);
+  const p = mine[0];
+  if (!me || !p) return null;
+  const hand = me.hand ?? [];
+  const want = Math.min(p.n, hand.length);
+  const toggle = (iid: string) =>
+    setPicked((prev) =>
+      prev.includes(iid)
+        ? prev.filter((x) => x !== iid)
+        : prev.length < want
+          ? [...prev, iid]
+          : prev,
+    );
+  return (
+    <div className="discardPrompt">
+      <div className="triggerPromptText">
+        <Text size={Size.Small} weight="semibold">
+          {t('gpDiscardN')} {p.n} — {p.sourceName}
+        </Text>
+        {p.inResponseTo ? (
+          <Text size={Size.XSmall} tone={TextTone.Subtle}>
+            {t('gpInResponseTo')} {p.inResponseTo}
+          </Text>
+        ) : null}
+      </div>
+      <div className="discardPromptHand">
+        {hand.map((c) => (
+          <button
+            key={c.iid}
+            type="button"
+            className={picked.includes(c.iid) ? 'discardPick discardPickOn' : 'discardPick'}
+            onClick={() => toggle(c.iid)}
+          >
+            <GameCard
+              name={c.name}
+              imageUrl={c.imageUrl || cardImage(c.scryfallId)}
+              width={64}
+              tilt={0}
+            />
+          </button>
+        ))}
+      </div>
+      <div className="triggerPromptActions">
+        <Button
+          size="sm"
+          variant="soft"
+          disabled={picked.length !== want}
+          onClick={() => {
+            act({ kind: 'discard.resolve', id: p.id, iids: picked });
+            setPicked([]);
+          }}
+        >
+          {t('gpDiscardConfirm')} ({picked.length}/{want})
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            act({ kind: 'discard.resolve', id: p.id, iids: [] });
+            setPicked([]);
+          }}
+        >
+          {t('gpDiscardEngine')}
+        </Button>
+      </div>
     </div>
   );
 }

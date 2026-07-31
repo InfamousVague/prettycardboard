@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import { Button, Size, Text, TextTone } from '@glacier/react';
-import { PackageOpen, X } from '@glacier/icons';
+import { X } from '@glacier/icons';
+import { PlayingCardPack } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import { artCrop, cardImage } from '../../data/cards.ts';
 import { GameCard } from '../../components/GameCard.tsx';
@@ -294,14 +295,14 @@ export function PackOpening({
       <div className="poFoot" onClick={(event) => event.stopPropagation()}>
         {phase === 'sealed' && (
           <Button size="lg" onClick={tear}>
-            <PackageOpen size={18} aria-hidden />
+            <PlayingCardPack size={18} aria-hidden />
             {t('boOpenPack')}
           </Button>
         )}
         {phase === 'fanned' && (
           <>
             <Button size="lg" onClick={onOpenAnother}>
-              <PackageOpen size={18} aria-hidden />
+              <PlayingCardPack size={18} aria-hidden />
               {t('boOpenAnother')}
             </Button>
             <Button size="lg" variant="soft" onClick={onClose}>

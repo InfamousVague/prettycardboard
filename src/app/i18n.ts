@@ -203,6 +203,18 @@ export const messages = {
     fr: 'Revenir à un seul plateau',
     ar: 'العودة إلى لوحة واحدة',
   },
+  tblRailHide: {
+    en: 'Hide the side panel',
+    es: 'Ocultar el panel lateral',
+    fr: 'Masquer le panneau latéral',
+    ar: 'إخفاء اللوحة الجانبية',
+  },
+  tblRailShow: {
+    en: 'Show the side panel',
+    es: 'Mostrar el panel lateral',
+    fr: 'Afficher le panneau latéral',
+    ar: 'إظهار اللوحة الجانبية',
+  },
   tblGridOut: {
     en: 'Zoom the grid out',
     es: 'Alejar la cuadrícula',
@@ -2037,6 +2049,10 @@ export const messages = {
   gpCascadeFor: { en: 'Cascade for…', es: 'Cascada por…', fr: 'Cascade pour…', ar: 'تتالي لـ…' },
   gpTriggerSkip: { en: 'Skip', es: 'Omitir', fr: 'Ignorer', ar: 'تخطي' },
   gpTriggerOk: { en: 'Got it', es: 'Entendido', fr: 'Compris', ar: 'فهمت' },
+  gpDiscardN: { en: 'Discard', es: 'Descarta', fr: 'Défaussez', ar: 'ارمِ' },
+  gpInResponseTo: { en: 'in response to', es: 'en respuesta a', fr: 'en réponse à', ar: 'ردًا على' },
+  gpDiscardConfirm: { en: 'Discard these', es: 'Descartar estas', fr: 'Défausser celles-ci', ar: 'ارمِ هذه' },
+  gpDiscardEngine: { en: 'Choose for me', es: 'Elige por mí', fr: 'Choisis pour moi', ar: 'اختر عني' },
   gpMullBottom: {
     en: 'Choose cards to put on the bottom',
     es: 'Elige cartas para poner en el fondo',

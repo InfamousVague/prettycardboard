@@ -13,7 +13,8 @@ import {
   TextTone,
   useToast,
 } from '@glacier/react';
-import { Eye, Hash, LogIn, Package, Play, Sparkles, Users } from '@glacier/icons';
+import { Eye, Hash, LogIn, Play, Sparkles, Users } from '@glacier/icons';
+import { PlayingCardPack } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
@@ -163,7 +164,7 @@ export function JoinTablePage({ code }: { code: string }) {
             <>
               <header className="joinHead">
                 <div className="joinIcon" aria-hidden>
-                  {drafting ? <Package size={22} /> : <Users size={22} />}
+                  {drafting ? <PlayingCardPack size={22} /> : <Users size={22} />}
                 </div>
                 <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="joinEyebrow">
                   {drafting ? t('joinInvitedDraft') : t('joinInvited')}
@@ -231,7 +232,7 @@ export function JoinTablePage({ code }: { code: string }) {
 
               <div className="joinActions">
                 <Button onClick={takeSeat} loading={busy} disabled={needsDeck || full}>
-                  {drafting ? <Package size={16} aria-hidden /> : <LogIn size={16} aria-hidden />}
+                  {drafting ? <PlayingCardPack size={16} aria-hidden /> : <LogIn size={16} aria-hidden />}
                   {seated ? t('joinResumeSeat') : drafting ? t('joinJoinDraft') : t('joinTakeSeat')}
                 </Button>
                 <Button variant="soft" onClick={watch}>

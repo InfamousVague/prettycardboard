@@ -15,7 +15,8 @@ import {
   Text,
   TextTone,
 } from '@glacier/react';
-import { Gem, Library, PackageOpen, Sparkles, Star } from '@glacier/icons';
+import { Gem, Sparkles, Star } from '@glacier/icons';
+import { PlayingCardPack, PlayingCardStack } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
 import { cardImage } from '../data/cards.ts';
 import { useCardPopup } from '../components/CardPopup.tsx';
@@ -198,12 +199,12 @@ export function CollectionPage({ onOpenBoosters }: { onOpenBoosters?: () => void
           </Text>
         </div>
         <EmptyState
-          icon={<Library size={22} />}
+          icon={<PlayingCardStack size={22} />}
           title={t('collEmptyTitle')}
           description={t('collEmptyBody')}
           action={
             <Button onClick={() => (onOpenBoosters ? onOpenBoosters() : (window.location.hash = '/boosters'))}>
-              <PackageOpen size={16} aria-hidden />
+              <PlayingCardPack size={16} aria-hidden />
               {t('collEmptyAction')}
             </Button>
           }
@@ -233,8 +234,8 @@ export function CollectionPage({ onOpenBoosters }: { onOpenBoosters?: () => void
         {/* Distinct printings, by the same rule the completion bars use - the
             server's total counts a foil as its own row, which would put a
             bigger number here than the bars below can ever add up to. */}
-        <StatTile icon={<Library size={18} />} value={ownedIndex.total} label={t('collUnique')} />
-        <StatTile icon={<PackageOpen size={18} />} value={totalPulls} label={t('collTotalPulls')} />
+        <StatTile icon={<PlayingCardStack size={18} />} value={ownedIndex.total} label={t('collUnique')} />
+        <StatTile icon={<PlayingCardPack size={18} />} value={totalPulls} label={t('collTotalPulls')} />
         <StatTile icon={<Star size={18} />} value={groups.length} label={t('collSetsSeen')} />
         <StatTile icon={<Gem size={18} />} value={foilCount} label={t('collFoils')} />
         <StatTile
