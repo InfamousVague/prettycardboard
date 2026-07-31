@@ -132,6 +132,37 @@
   color: var(--qs-tint);
 }
 
+/* Top row of a card: the format glyph on the left, the game's identity tag on
+   the right - the strip mixes games now, so each card says whose table it
+   opens before its name does. */
+.quickCardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--glacier-space-2);
+  align-self: stretch;
+  margin-block-end: var(--glacier-space-1);
+}
+
+/* The row carries the spacing the glyph used to. */
+.quickCardTop .quickCardIcon {
+  margin-block-end: 0;
+}
+
+/* The tag wears the game's full name, which for Magic is a long one: on a
+   narrow card it truncates rather than wrapping or shoving the glyph aside. */
+.quickCardGame {
+  min-inline-size: 0;
+  max-inline-size: 70%;
+}
+
+.quickCardGame .gameTagName {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .quickCardName {
   font-size: var(--glacier-font-size-md);
   font-weight: var(--glacier-font-weight-semibold, 600);

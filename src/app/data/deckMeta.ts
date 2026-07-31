@@ -1,6 +1,8 @@
 import { getCardMeta, hydrateCardMeta } from './scryfall.ts';
 import { typeBucket } from '../pages/deckbuilder/shared.tsx';
 import { cyberDeckStats } from '../pages/deckbuilder/cyberDeck.tsx';
+import { yugiohDeckStats } from '../pages/deckbuilder/yugiohDeck.tsx';
+import { loadYugiohCatalog } from './yugioh.ts';
 import type { Deck, DeckMeta } from '../net/types.ts';
 
 /**
@@ -19,6 +21,20 @@ export async function computeDeckMeta(deck: Deck, game: string): Promise<DeckMet
       cover,
       ram: stats.ramBudget.reduce((sum, entry) => sum + entry.ram, 0),
       avgCost: round1(stats.avgCost),
+    };
+  }
+  if (game === 'yugioh') {
+    // Counts need the catalog (kind lookups); offline still reports sizes.
+    await loadYugiohCatalog().catch(() => {});
+    const stats = yugiohDeckStats(deck);
+    return {
+      size: stats.mainCount,
+      cover,
+      monsters: stats.monsterCount,
+      spells: stats.spellCount,
+      traps: stats.trapCount,
+      extra: stats.extraCount,
+      avgAtk: Math.round(stats.avgAtk),
     };
   }
   await hydrateCardMeta(deck.cards.map((card) => card.scryfallId));

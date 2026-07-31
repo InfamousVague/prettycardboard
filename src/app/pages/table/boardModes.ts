@@ -1,5 +1,6 @@
 import { PRECONS } from '../../data/precons.ts';
-import { printedPT } from '../../data/printedPt.ts';
+import { printedPT, printedTypeLine } from '../../data/printedPt.ts';
+import { isYugiohId, yugiohCard } from '../../data/yugioh.ts';
 import type { CardInst } from '../../net/types.ts';
 
 /**
@@ -104,7 +105,9 @@ export function saveCardScale(userId: string | undefined, scale: number): void {
    in it is painted smaller and the mat breathes. Default sits a notch out -
    fit-to-cell alone reads as too tight once four boards are on screen. */
 export const GRID_ZOOM_MIN = 0.5;
-export const GRID_ZOOM_MAX = 1.2;
+/** Well past 1: stacked duel cells lay out against their own width, so pushing
+ *  the zoom up genuinely enlarges the cards rather than just cropping. */
+export const GRID_ZOOM_MAX = 2;
 export const GRID_ZOOM_STEP = 0.1;
 export const GRID_ZOOM_DEFAULT = 0.8;
 
@@ -133,6 +136,31 @@ export function saveGridZoom(userId: string | undefined, zoom: number): void {
   }
 }
 
+/* The grid is the DEFAULT way to watch a table: every seat laid out at once,
+   opponents across from you and your own board along the bottom. Staging a
+   single board is the opt-out, and the choice is remembered per user. */
+
+const gridViewKey = (userId: string | undefined) => `pc.gridview.${userId ?? 'anon'}`;
+
+export function loadGridView(userId: string | undefined): boolean {
+  try {
+    const raw = localStorage.getItem(gridViewKey(userId));
+    if (raw === 'off') return false;
+    if (raw === 'on') return true;
+  } catch {
+    /* storage unavailable - default */
+  }
+  return true;
+}
+
+export function saveGridView(userId: string | undefined, on: boolean): void {
+  try {
+    localStorage.setItem(gridViewKey(userId), on ? 'on' : 'off');
+  } catch {
+    /* ignore */
+  }
+}
+
 /* ------------------------------------------------------------------------ */
 /* Card classification (best effort - bundled precon type lines plus name    */
 /* heuristics; the server never cares, this only steers assisted drops).     */
@@ -147,7 +175,11 @@ const BASIC_LANDS = /^(snow-covered )?(plains|island|swamp|mountain|forest|waste
 const LANDISH_NAME = /\b(land|temple|tower|grove|cavern|citadel|sanctum|wilds|expanse|estuary|frontier|command tower)\b/i;
 
 export function typeLineOf(card: CardInst): string | undefined {
-  return card.scryfallId ? TYPE_LINES.get(card.scryfallId) : undefined;
+  if (!card.scryfallId) return undefined;
+  // Bundled precon lines first (free), then whatever the lazy printed-P/T
+  // lookups have learned - that is what classifies cards from decks the user
+  // built themselves, where the precon map knows nothing.
+  return TYPE_LINES.get(card.scryfallId) ?? printedTypeLine(card.scryfallId);
 }
 
 export function isLand(card: CardInst): boolean {
@@ -204,7 +236,18 @@ export const FACE_DOWN_PT = { power: '2', toughness: '2' };
  * anywhere in its card frame.
  */
 export function basePT(card: CardInst, mtg = true): { power: string; toughness: string } | null | undefined {
-  if (!mtg) return null;
+  if (!mtg) {
+    // Yu-Gi-Oh monsters have a printed stat pair too (ATK/DEF, or ATK/LINK):
+    // resolve it from the catalog so the chip reads 2500/2100. A Set card
+    // reveals nothing — not even to its owner's chip row.
+    if (card.scryfallId && isYugiohId(card.scryfallId) && !card.faceDown) {
+      const ygo = yugiohCard(card.scryfallId);
+      if (!ygo || ygo.atk == null) return null;
+      const def = ygo.frameType.startsWith('link') ? (ygo.linkval ?? 0) : (ygo.def ?? 0);
+      return { power: String(ygo.atk), toughness: String(def) };
+    }
+    return null;
+  }
   // Tokens included: a face-down card is a 2/2 to every seat, and reading a
   // token's authored P/T here would show the owner a number nobody else has.
   if (card.faceDown) return FACE_DOWN_PT;

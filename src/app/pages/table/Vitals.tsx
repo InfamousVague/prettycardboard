@@ -46,22 +46,27 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
     : [];
 
   // Vitals are game-driven. MTG's `life`/`poison` slots are relabeled per the
-  // registry: Cyberpunk shows Net (primary) + RAM (secondary), no poison-lethal.
+  // registry: Cyberpunk shows Net (primary) + RAM (secondary), no poison-lethal;
+  // Yu-Gi-Oh shows LP only (no secondary resource) and steps in LP-sized bites.
   const cyber = room.game === 'cyberpunk';
+  const yugioh = room.game === 'yugioh';
   const gdef = getGame(room.game);
   const primaryLabel = gdef.resources.find((r) => r.primary)?.label ?? t('tblLife');
-  const secondaryLabel = gdef.resources.find((r) => !r.primary)?.label ?? t('tblPoison');
+  const secondary = gdef.resources.find((r) => !r.primary);
+  const secondaryLabel = secondary?.label ?? t('tblPoison');
+  // Yu-Gi-Oh life moves in hundreds; a ±1 stepper would be 30 clicks per attack.
+  const lifeStep = yugioh ? 100 : 1;
 
   return (
     <div className="myVitals" data-game={room.game || 'mtg'}>
-      {cyber && <div className="vitalCaption">{primaryLabel}</div>}
+      {(cyber || yugioh) && <div className="vitalCaption">{primaryLabel}</div>}
       <div className="lifeBlock">
         <IconButton
           size="sm"
           variant="ghost"
-          aria-label="-1"
+          aria-label={`-${lifeStep}`}
           onClick={() => {
-            act({ kind: 'life.add', delta: -1 });
+            act({ kind: 'life.add', delta: -lifeStep });
             juicePulse(lifeRef.current, 0.8);
           }}
         >
@@ -73,15 +78,32 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
         <IconButton
           size="sm"
           variant="ghost"
-          aria-label="+1"
+          aria-label={`+${lifeStep}`}
           onClick={() => {
-            act({ kind: 'life.add', delta: 1 });
+            act({ kind: 'life.add', delta: lifeStep });
             juicePulse(lifeRef.current, 0.8);
           }}
         >
           <Plus size={14} />
         </IconButton>
       </div>
+      {yugioh && (
+        <div className="lifeQuick" role="group" aria-label={primaryLabel}>
+          {[-1000, -500, 500, 1000].map((delta) => (
+            <button
+              key={delta}
+              type="button"
+              className="lifeQuickBtn"
+              onClick={() => {
+                act({ kind: 'life.add', delta });
+                juicePulse(lifeRef.current, 0.8);
+              }}
+            >
+              {delta > 0 ? `+${delta}` : delta}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="convenience">
         <Tooltip content={`${t('tblDraw')} 1`}>
           <IconButton size="sm" variant="soft" aria-label={t('tblDraw')} onClick={() => act({ kind: 'draw', count: 1 })}>
@@ -103,9 +125,10 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
             size="sm"
             variant={tokenOpen ? 'solid' : 'soft'}
             aria-label={t('tblToken')}
-            // MTG opens the full token picker (search + deck tokens); Cyberpunk
-            // has no token catalogue, so it keeps the plain custom-name form.
-            onClick={() => (cyber ? setTokenOpen(!tokenOpen) : window.dispatchEvent(new Event('pc:create-token')))}
+            // MTG opens the full token picker (search + deck tokens); the other
+            // games have no token catalogue, so they keep the plain name form
+            // (Yu-Gi-Oh's Sheep/Kuriboh tokens are freeform names + stats).
+            onClick={() => (cyber || yugioh ? setTokenOpen(!tokenOpen) : window.dispatchEvent(new Event('pc:create-token')))}
           >
             <Sparkles size={15} />
           </IconButton>
@@ -237,28 +260,31 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
             </div>
           );
         })}
-        <div className="dmgRow" data-lethal={(!cyber && me.poison >= 10) || undefined}>
-          <span className="dmgLabel" title={secondaryLabel}>
-            {cyber ? <Cpu size={11} /> : <Skull size={11} />} {secondaryLabel}
-          </span>
-          <IconButton
-            size="sm"
-            variant="ghost"
-            aria-label={`-1 ${secondaryLabel}`}
-            onClick={() => act({ kind: 'poison.add', delta: -1 })}
-          >
-            <Minus size={12} />
-          </IconButton>
-          <span className="dmgVal">{me.poison}</span>
-          <IconButton
-            size="sm"
-            variant="ghost"
-            aria-label={`+1 ${secondaryLabel}`}
-            onClick={() => act({ kind: 'poison.add', delta: 1 })}
-          >
-            <Plus size={12} />
-          </IconButton>
-        </div>
+        {/* Games without a secondary resource (Yu-Gi-Oh) skip the row entirely. */}
+        {secondary && (
+          <div className="dmgRow" data-lethal={(!cyber && me.poison >= 10) || undefined}>
+            <span className="dmgLabel" title={secondaryLabel}>
+              {cyber ? <Cpu size={11} /> : <Skull size={11} />} {secondaryLabel}
+            </span>
+            <IconButton
+              size="sm"
+              variant="ghost"
+              aria-label={`-1 ${secondaryLabel}`}
+              onClick={() => act({ kind: 'poison.add', delta: -1 })}
+            >
+              <Minus size={12} />
+            </IconButton>
+            <span className="dmgVal">{me.poison}</span>
+            <IconButton
+              size="sm"
+              variant="ghost"
+              aria-label={`+1 ${secondaryLabel}`}
+              onClick={() => act({ kind: 'poison.add', delta: 1 })}
+            >
+              <Plus size={12} />
+            </IconButton>
+          </div>
+        )}
       </div>
     </div>
   );

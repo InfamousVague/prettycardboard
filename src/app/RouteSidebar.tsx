@@ -29,10 +29,9 @@ export function RouteSidebar({ route, desktop }: { route: Route; desktop: boolea
   const t = useT();
   const identity = useApp((state) => state.identity);
   const allDecks = useApp((state) => state.decks);
-  // Cyberpunk is a WIP game — its decks are hidden from the library unless the dev
-  // toggle is on.
-  const showCyber = useVisibleGames().some((g) => g.id === 'cyberpunk');
-  const decks = showCyber ? allDecks : allDecks.filter((d) => (d.game || 'mtg') !== 'cyberpunk');
+  // WIP games' decks are hidden from the library unless the dev toggle is on.
+  const visibleGames = useVisibleGames();
+  const decks = allDecks.filter((d) => visibleGames.some((g) => g.id === (d.game || 'mtg')));
   const friends = useApp((state) => state.friends);
   const selectedDeckId = useUi((state) => state.selectedDeckId);
   const selectDeck = useUi((state) => state.selectDeck);

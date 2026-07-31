@@ -32,7 +32,7 @@ import { useCardPopup } from '../../components/CardPopup.tsx';
 import { handSlinky, paintSlinky, restFocus, slinkyOffsets } from '../../components/slinky.ts';
 import type { CardInst, MatPos, MatZone, RoomState, TablePlayer, Zone } from '../../net/types.ts';
 import { selectCardScale, useTableUi } from './tableUi.ts';
-import { AttackBadge, BlockCluster, CounterBadges, DEFAULT_MAT_LAYOUT, MAT_ZONES, ZonePiles, groupAttachments, splitPile } from './bits.tsx';
+import { AttackBadge, BlockCluster, CounterBadges, DEFAULT_MAT_LAYOUT, MAT_ZONES, ZonePiles, groupAttachments, splitPile, CardMark } from './bits.tsx';
 import {
   CARD_SCALE_MAX,
   CARD_SCALE_MIN,
@@ -50,13 +50,18 @@ import {
   snapDrop,
   tidyPositions,
   type BoardMode,
+  typeLineOf,
 } from './boardModes.ts';
+import { canDeclareAttacker, enforcedRoom, handPlayability, matchesTargetKind, stackTargetKinds } from './enforce.ts';
+import { oracleFacts } from '../../data/printedPt.ts';
 import { SETTLE_EASE, dragTilt, flightAnchor, juicePulse, prefersReducedMotion, restTilt, setFlightAnchor, ambientDelay } from './juice.ts';
 import { zoneLabel } from '../../data/games.ts';
 import { playmatBackground } from '../../data/playmats.ts';
 import { usePreference } from '../../hooks/usePreference.ts';
 import { useMobileLayout } from '../../hooks/useIsPhone.ts';
 import { MobileZones } from './MobileZones.tsx';
+import { YUGIOH_PILE_LAYOUT, YugiohZoneGrid, nearestYugiohCell, snapToYugiohCell } from './yugiohZones.tsx';
+import { isYugiohTrap } from '../../data/yugioh.ts';
 import { TokenPicker } from './TokenPicker.tsx';
 import { HandCard, HAND_PEEK_ZONE } from './HandCard.tsx';
 import { DiceRoll3D } from './DiceRoll3D.tsx';
@@ -143,6 +148,14 @@ export function MyBoard({
 }) {
   const t = useT();
   const act = useGame((state) => state.act);
+  const aim = useGame((state) => state.aim);
+  const marks = useGame((state) => state.marks);
+  // My targeting spell on top of the stack invites a target click.
+  const topSpell = (room.stack ?? [])[(room.stack ?? []).length - 1] as
+    | (CardInst & { ownerSeat?: number })
+    | undefined;
+  const aimingKinds =
+    topSpell && topSpell.ownerSeat === me.seat ? stackTargetKinds(topSpell) : [];
   const leaveTable = useGame((state) => state.leave);
   const { toast } = useToast();
   const haptics = useHaptics();
@@ -236,8 +249,14 @@ export function MyBoard({
   const [handPeek, setHandPeek] = useState(false);
   // Manually tucked ~95% off-screen via the Hide-hand tab, to clear the board.
   const [handHidden, setHandHidden] = useState(false);
-  // Tokens/counters are an MTG concept; Cyberpunk keeps the plain custom form.
-  const mtg = room.game !== 'cyberpunk';
+  // "Is Magic", not "is not cyberpunk": the token picker, felt menu, markers
+  // and mat editor are MTG concepts, and Yu-Gi-Oh (which lays its zones out on
+  // a printed grid like Cyberpunk does its quadrants) must not inherit them.
+  const mtg = (room.game ?? 'mtg') === 'mtg';
+  const cyber = room.game === 'cyberpunk';
+  // A Yu-Gi-Oh field is a printed 7x3 lattice, so the board draws its zones and
+  // snaps drops into them - the piles ride the same grid (see yugiohZones.tsx).
+  const ygoField = room.game === 'yugioh' && !hideField;
   // Right-click on the empty felt: a small board menu (create token / counter),
   // and the token picker it opens. `bx`/`by` are 0-1 board coords for placement.
   const [boardMenu, setBoardMenu] = useState<{ x: number; y: number; bx: number; by: number } | null>(null);
@@ -352,14 +371,18 @@ export function MyBoard({
   const started = room.started;
   const combat = room.combat;
   const myTurn = room.activeSeat === me.seat;
-  const attackMode = started && combat != null && myTurn;
+  const enforced = enforcedRoom(room);
+  // Enforced machine: attacker picks stop at the lock; blocks only open after
+  // it and close at ready. Freeform keeps the loose overlay behavior.
+  const attackMode = started && combat != null && myTurn && (!enforced || !combat.locked);
   const attackersTargetMe =
     combat != null &&
     combat.attackers.length > 0 &&
     !myTurn &&
     (room.players.length === 2 ||
       combat.attackers.some((entry) => entry.defenderSeat === me.seat || entry.defenderSeat == null));
-  const blockMode = started && attackersTargetMe;
+  const blockMode =
+    started && attackersTargetMe && (!enforced || (Boolean(combat?.locked) && !combat?.blocksReady));
   // Unblocked power aimed at me: the one-click "take damage" helper subtracts
   // this from my life. Creature deaths stay manual (drag to the graveyard).
   const incomingUnblocked = (combat?.attackers ?? [])
@@ -482,6 +505,11 @@ export function MyBoard({
   // hand/deck band. Kept above 0.55 so tiny boards keep a play area.
   const maxDropY = (rect: DOMRect) => {
     if (rect.height <= 0) return 0.92;
+    // Yu-Gi-Oh's Spell & Trap row IS the bottom of the mat, so the band the
+    // hand normally reserves would make the entire backrow undroppable. The
+    // hand's own rect (inHandZone) still catches releases meant for it, which
+    // is the guard that actually matters.
+    if (ygoField) return 0.92;
     // The band is reserved *for the hand*. Tucked away, it is just playmat, so
     // the whole mat opens up - which is the point of hiding the hand.
     if (handHidden) return 0.97;
@@ -736,7 +764,12 @@ export function MyBoard({
     const rawPos = fieldPos(event.clientX, event.clientY, drag.grabX, drag.grabY);
     const overHand = inHandZone(event.clientX, event.clientY);
     const card = cardOf(from, iid);
-    const pos = snapDrop(boardMode, rawPos, card, rect);
+    // A Yu-Gi-Oh card belongs IN a zone, so the printed grid wins over the
+    // board-mode snapping every other game uses — and it takes a FREE zone, so
+    // a second trap does not land on top of the first.
+    const pos = ygoField
+      ? snapToYugiohCell(rawPos, rect, me.battlefield, iid)
+      : snapDrop(boardMode, rawPos, card, rect);
     const pile = pileUnderPoint(event.clientX, event.clientY);
     let moved = false;
 
@@ -773,7 +806,42 @@ export function MyBoard({
             ? resolveDropTarget(me.battlefield, hostUnderPoint(me.battlefield, rawPos, rect, iid), iid)
             : null;
         const wantPile = !!host && wantsPile(host, card, event.shiftKey);
-        act({ kind: 'card.move', iid, to: 'battlefield', ...(host ? rawPos : pos) });
+        const facts = enforced ? oracleFacts(card.scryfallId) : undefined;
+        if (facts && facts.typeLine.includes('Land') && (me.landsThisTurn ?? 0) >= 1) {
+          // One land per turn: refuse locally, no round trip needed.
+          toast({ tone: 'neutral', message: t('efOneLand') });
+          playSound('cardReturn');
+          justDragged.current = true;
+          setTimeout(() => {
+            justDragged.current = false;
+          }, 0);
+          setDrag(null);
+          return;
+        }
+        if (facts && !facts.typeLine.includes('Land')) {
+          // Enforced: the drop is a CAST - the server pays the real cost (or
+          // rejects with the reason). Attach gestures come after it resolves.
+          act({ kind: 'cast', iid, ...(host ? rawPos : pos) });
+          bumpZ(iid);
+          moved = true;
+          playSound(moved ? 'cardPlace' : 'cardReturn');
+          justDragged.current = true;
+          setTimeout(() => {
+            justDragged.current = false;
+          }, 0);
+          setDrag(null);
+          return;
+        }
+        // A Trap cannot be played from the hand face-up, so dragging one onto
+        // the field IS setting it — done in the move itself, which keeps the
+        // card's identity off the wire (see the faceDown contract on card.move).
+        act({
+          kind: 'card.move',
+          iid,
+          to: 'battlefield',
+          ...(host ? rawPos : pos),
+          ...(ygoField && isYugiohTrap(card.scryfallId) ? { faceDown: true } : {}),
+        });
         if (host) {
           act({ kind: 'card.attach', iid, hostIid: host.iid, ...(wantPile ? { piled: true } : {}) });
           // Same announcement as attaching a card already on the board: an
@@ -892,6 +960,28 @@ export function MyBoard({
       heldFired.current = false;
       return;
     }
+    // Enforced rooms: a glowing card plays on click, Arena style. The server
+    // re-validates; anything else still opens the preview.
+    const play = handPlayability(room, me, card);
+    if (play === 'cast') {
+      const k = me.battlefield.filter((c) => !c.tapped || c.tapped).length;
+      act({ kind: 'cast', iid: card.iid, x: Math.min(0.15 + 0.11 * (k % 7), 0.9), y: 0.5 });
+      juicePulse(cardEls.current.get(card.iid));
+      playSound('cardPlace');
+      return;
+    }
+    if (play === 'land') {
+      const lands = me.battlefield.filter((c) => typeLineOf(c)?.includes('Land')).length;
+      act({
+        kind: 'card.move',
+        iid: card.iid,
+        to: 'battlefield',
+        x: Math.min(0.05 + 0.085 * (lands % 11), 0.95),
+        y: 0.78,
+      });
+      playSound('cardPlace');
+      return;
+    }
     popup.open({ scryfallId: card.scryfallId, name: card.name, imageUrl: card.imageUrl });
   };
 
@@ -904,6 +994,16 @@ export function MyBoard({
       heldFired.current = false;
       return;
     }
+    // My spell is on top of the stack: this click POINTS at its target, and
+    // the whole table sees the ring (works in freeform and enforced alike).
+    const top = (room.stack ?? [])[(room.stack ?? []).length - 1] as
+      | (CardInst & { ownerSeat?: number })
+      | undefined;
+    if (top && top.ownerSeat === me.seat && top.iid !== card.iid) {
+      send({ type: 'aim', fromIid: top.iid, toIid: card.iid });
+      juicePulse(cardEls.current.get(card.iid));
+      return;
+    }
     if (attackMode) {
       if (attackerEntry(card.iid)) {
         // Re-click un-declares.
@@ -911,7 +1011,7 @@ export function MyBoard({
         juicePulse(cardEls.current.get(card.iid));
         return;
       }
-      if (isCreature(card) && !card.tapped) {
+      if (isCreature(card) && !card.tapped && canDeclareAttacker(room, me, card)) {
         // Declare it attacking right on the board - no modal. With one
         // opponent it aims at them; multiplayer is an open swing everyone sees.
         event.stopPropagation();
@@ -997,7 +1097,12 @@ export function MyBoard({
     const z = zOrder[card.iid];
     const cardZ = z != null ? 10 + z : 5;
     const attacker = attackerEntry(card.iid);
-    const affordance = attackMode && !card.tapped && isCreature(card) ? 'attack' : blockMode && !card.tapped && isCreature(card) ? 'block' : undefined;
+    const affordance =
+      attackMode && !card.tapped && isCreature(card) && canDeclareAttacker(room, me, card)
+        ? 'attack'
+        : blockMode && !card.tapped && isCreature(card)
+          ? 'block'
+          : undefined;
     // The .fieldCard::after hitbox (inset -8px, for a generous grab target) paints
     // over the GameCard inside, so elementFromPoint lands on .fieldCard - which
     // lacks GameCard's data-preview-src, breaking the hover preview. Mirror the
@@ -1007,7 +1112,10 @@ export function MyBoard({
     // The running total: printed base plus every P/T counter. Ask for the
     // printed half if we have not seen this card yet - the lookup is deduped
     // and throttled, and the badge simply stays empty until it lands.
-    if (cardTotals && mtg) primePrintedPT(card);
+    // Always primed for MTG (not just when the P/T chip preference is on):
+    // the lookup also learns the card's type line, which is what makes this
+    // card a click target for attacks/blocks and steers assisted drops.
+    if (mtg) primePrintedPT(card);
     const ptTotal = cardTotals ? ptTotalLabel(card, mtg) : '';
     // Which face shows is decided by `transformed`, not by whichever of a
     // two-faced card's arts the deck happens to store (see faceImage).
@@ -1038,6 +1146,8 @@ export function MyBoard({
             : undefined
         }
         data-affordance={affordance}
+        data-aimed={aim?.toIid === card.iid || undefined}
+        data-targetable={(aimingKinds.length > 0 && matchesTargetKind(aimingKinds, card)) || undefined}
         data-blocking={blockerIid === card.iid || undefined}
         data-ambient={ambientCards && !dragging ? '' : undefined}
         style={{
@@ -1071,6 +1181,7 @@ export function MyBoard({
         }}
         onClick={(event) => clickFieldCard(event, card)}
       >
+        {marks[card.iid] != null && <CardMark kind={marks[card.iid]!} />}
         <div className="fieldCardShell">
           <GameCard
             name={displayName}
@@ -1120,6 +1231,12 @@ export function MyBoard({
     drag != null && dragOrigin.current.armed && drag.from === 'battlefield' && inHandZone(drag.clientX, drag.clientY);
   // Which pile the dragged card is currently over (drop-target highlight).
   const dropPile = drag != null && dragOrigin.current.armed ? pileUnderPoint(drag.clientX, drag.clientY) : null;
+  // Yu-Gi-Oh: light the zone the card would land in, so the snap is visible
+  // BEFORE the release rather than a surprise afterwards.
+  const dropCell =
+    ygoField && drag != null && dragOrigin.current.armed && dropPile == null
+      ? nearestYugiohCell(drag, fieldRef.current?.getBoundingClientRect() ?? null).id
+      : null;
 
   // Resting a dragged card on the gathered deck deals the rest of the zones out,
   // so graveyard/exile/command become reachable without breaking the drag to go
@@ -1301,14 +1418,17 @@ export function MyBoard({
     <ZonePiles
       player={me}
       mine
-      mat={!mtg}
+      // Cyberpunk lays its piles out with a CSS grid; Yu-Gi-Oh free-places them
+      // into its printed cells, which is the same mechanism a custom MTG mat
+      // layout uses.
+      mat={cyber}
       canAct
       onMenu={onMenu}
       onHover={onHover}
       onDragOut={(event, card, zone) => beginDrag(event, card, zone, { menu: false })}
       dragSuppressed={() => justDragged.current || heldFired.current}
       dropHint={dropPile}
-      layout={matActive ? matLayout : undefined}
+      layout={ygoField ? YUGIOH_PILE_LAYOUT : matActive ? matLayout : undefined}
       editing={matEdit}
       onPileGrab={grabPile}
     />
@@ -1372,7 +1492,7 @@ export function MyBoard({
               <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="combatHint">
                 {t('gpBlockHint')}
               </Text>
-              {incomingUnblocked > 0 && (
+              {incomingUnblocked > 0 && !enforced && (
                 <Button size="sm" variant="solid" onClick={() => act({ kind: 'life.add', delta: -incomingUnblocked })}>
                   {t('cbTakeDamage')} · {incomingUnblocked}
                 </Button>
@@ -1440,6 +1560,12 @@ export function MyBoard({
           clearHold();
         }}
       >
+        {/* The printed zone grid, under the cards. Inside the field, so its
+            0..1 box IS the space card positions are stored in. */}
+        {ygoField && <YugiohZoneGrid cardWidth={fieldCardWidth} activeId={dropCell} />}
+        {/* …and the four zone piles, in their own printed cells. */}
+        {ygoField && <div className="matZones">{zonePilesEl}</div>}
+
         {hosts.map((card) => {
           // The base is the TOP of its pile: members shingle underneath, so the
           // first-stacked (deepest) takes the largest offset and paints first.
@@ -1563,6 +1689,7 @@ export function MyBoard({
               {t('tblCoin')}
             </MenuItem>
           </Menu>
+          {mtg && (
           <Menu
             aria-label={t('gpMarkers')}
             placement="top-end"
@@ -1605,6 +1732,7 @@ export function MyBoard({
               </MenuItem>
             )}
           </Menu>
+          )}
         </div>
       </div>
 
@@ -1612,8 +1740,10 @@ export function MyBoard({
 
       {/* Cyberpunk: the zones live in the mat quadrants (a board overlay), not
           the bottom strip. Magic keeps them floating over the strip - unless a
-          custom mat layout (or the mat editor) lifts them into free placement. */}
-      {(!mtg || matActive) && !hideField && <div className="matZones">{zonePilesEl}</div>}
+          custom mat layout (or the mat editor) lifts them into free placement.
+          Yu-Gi-Oh renders its piles INSIDE the field instead (above), since they
+          sit in printed cells of the same grid the cards snap to. */}
+      {(cyber || matActive) && !hideField && <div className="matZones">{zonePilesEl}</div>}
 
       {/* Real polyhedral WebGL dice roll over the mat — Cyberpunk's Fixer dice and
           Magic's sidebar dice both land here on the server-chosen value. Falls
@@ -1629,7 +1759,9 @@ export function MyBoard({
 
       {/* bottom strip: zones | hand | vitals */}
       <div className="myStrip">
-        {mtg && !matActive && (!mobile || hideField) && zonePilesEl}
+        {/* Yu-Gi-Oh joins Magic here only when its field is hidden (strip-only
+            mode), where there is no printed grid to sit in. */}
+        {(mtg || (room.game === 'yugioh' && !ygoField)) && !matActive && (!mobile || hideField) && zonePilesEl}
 
         {/* .myHand is a non-transforming frame; only the inner .myFan slides
             (rest/peek/hidden), so the tab below can centre on the hand and stay
@@ -1672,6 +1804,7 @@ export function MyBoard({
                 offset={handOffsets[index] ?? 0.5}
                 count={hand.length}
                 dimmed={drag?.iid === card.iid && dragOrigin.current.armed}
+                playable={handPlayability(room, me, card) != null}
                 handX={handX}
                 onPointerDown={(event) => {
                   shareHandHover(null);

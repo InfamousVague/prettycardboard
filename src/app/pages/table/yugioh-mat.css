@@ -1,0 +1,110 @@
+/*
+ * The Yu-Gi-Oh playmat: the printed zone grid drawn on the felt, plus the four
+ * zone piles sitting in their own printed cells (Banished / Graveyard / Deck up
+ * the right column, Extra Deck front-left).
+ *
+ * Geometry is NOT here — every position comes from yugiohZones.tsx in
+ * field-normalized coordinates, so the outlines, the snapping, and the piles
+ * cannot drift apart. This file only styles what that geometry places, which is
+ * why (unlike cyberpunk-mat.css) it declares no grid of its own.
+ */
+
+/* Both overlays live inside .myField / .oppField, so their 0..1 coordinate
+   space IS the space CardInst.x/y is expressed in - no inset bookkeeping. */
+.ygoZones,
+.myBoard[data-game='yugioh'] .myField > .matZones,
+.oppBoard[data-game='yugioh'] .oppField > .matZones {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Under the cards (.fieldCard sits at z-index 4/5), above the felt. */
+.ygoZones {
+  z-index: 0;
+}
+
+.myBoard[data-game='yugioh'] .myField > .matZones,
+.oppBoard[data-game='yugioh'] .oppField > .matZones {
+  z-index: 6;
+}
+
+/* Only the PILES themselves take the pointer. The .zonePiles container fills
+   the whole field, so re-enabling events on it (rather than on its slots)
+   silently swallows every click and drag meant for a card on the mat. */
+.myBoard[data-game='yugioh'] .myField > .matZones .zonePiles,
+.oppBoard[data-game='yugioh'] .oppField > .matZones .zonePiles {
+  pointer-events: none;
+}
+
+.myBoard[data-game='yugioh'] .myField > .matZones .pileSlot,
+.oppBoard[data-game='yugioh'] .oppField > .matZones .pileSlot {
+  pointer-events: auto;
+}
+
+/* One zone outline, at exactly the size a card lands at - an empty cell should
+   read as the slot it is, not as a decorative box. */
+.ygoZone {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: var(--ygo-cell-w, 120px);
+  aspect-ratio: 488 / 680;
+  border: 1px solid color-mix(in oklch, var(--glacier-border) 70%, transparent);
+  border-radius: var(--glacier-radius-sm);
+  display: grid;
+  place-content: center;
+  text-align: center;
+  padding: 0.2rem;
+  transition:
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    background-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    box-shadow var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+/* The zone kinds read apart at a glance the way the printed colours do:
+   monsters warm, backrow cool, the singular Field/Extra Monster zones dashed
+   because they are the exceptional slots. */
+.ygoZone[data-kind='monster'] {
+  border-color: color-mix(in oklch, #d99123 42%, transparent);
+  background: color-mix(in oklch, #d99123 5%, transparent);
+}
+
+.ygoZone[data-kind='spell'] {
+  border-color: color-mix(in oklch, #3f9ce2 34%, transparent);
+  background: color-mix(in oklch, #3f9ce2 5%, transparent);
+}
+
+.ygoZone[data-kind='extraMonster'],
+.ygoZone[data-kind='field'] {
+  border-style: dashed;
+  border-color: color-mix(in oklch, var(--glacier-border) 85%, transparent);
+}
+
+/* The cell a dragged card would drop into. */
+.ygoZone[data-active] {
+  border-color: var(--glacier-accent-solid);
+  border-style: solid;
+  background: color-mix(in oklch, var(--glacier-accent-solid) 14%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--glacier-accent-solid) 22%, transparent);
+}
+
+.ygoZoneCaption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1em;
+  font-size: clamp(0.42rem, calc(var(--ygo-cell-w, 120px) * 0.075), 0.62rem);
+  line-height: 1.15;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in oklch, var(--glacier-text-muted) 70%, transparent);
+  user-select: none;
+}
+
+.ygoZoneSub {
+  color: color-mix(in oklch, var(--glacier-text-muted) 46%, transparent);
+}
+
+/* A lit cell says what it is properly. */
+.ygoZone[data-active] .ygoZoneCaption {
+  color: var(--glacier-text);
+}

@@ -3,7 +3,7 @@ import { Button, Fieldset, IconButton, Kbd, SegmentedControl, Size, Text, TextTo
 import { RotateCcw, X } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import type { Preferences } from '../preferences.ts';
-import { getGame, type GameId } from '../data/games.ts';
+import { GAME_LIST, getGame, type GameId } from '../data/games.ts';
 import { useGame } from '../state/gameStore.ts';
 import {
   KEYBIND_DEFS,
@@ -36,11 +36,11 @@ export function KeybindsTab({
   const [listening, setListening] = useState<ActionId | null>(null);
 
   const binds = preferences.keybinds;
-  // Cyberpunk is WIP-gated: only offer editing a game you can actually play.
-  const gameOptions = [
-    { value: 'mtg', label: 'Magic' },
-    ...(preferences.enableWip ? [{ value: 'cyberpunk', label: 'Cyberpunk' }] : []),
-  ];
+  // WIP games are gated: only offer editing a game you can actually play.
+  const gameOptions = GAME_LIST.filter((g) => preferences.enableWip || !g.wip).map((g) => ({
+    value: g.id,
+    label: g.name.replace('Magic: The Gathering', 'Magic').replace(' TCG', ''),
+  }));
 
   const defs = useMemo(() => KEYBIND_DEFS.filter((d) => d.games.includes(game)), [game]);
 

@@ -1,0 +1,391 @@
+{
+  "starters": [
+    {
+      "id": "ygo-white-dragon",
+      "name": "Legend of the White Dragon",
+      "cover": "89631139",
+      "cards": [
+        {
+          "id": "89631139",
+          "name": "Blue-Eyes White Dragon",
+          "qty": 3,
+          "board": "main"
+        },
+        {
+          "id": "79814787",
+          "name": "The White Stone of Legend",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "17985575",
+          "name": "Lord of D.",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "43096270",
+          "name": "Alexandrite Dragon",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "11091375",
+          "name": "Luster Dragon",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "14898066",
+          "name": "Vorse Raider",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "17444133",
+          "name": "Kaiser Sea Horse",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "70781052",
+          "name": "Summoned Skull",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "34627841",
+          "name": "Kaibaman",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "24094653",
+          "name": "Polymerization",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "83764719",
+          "name": "Monster Reborn",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "53129443",
+          "name": "Dark Hole",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "5318639",
+          "name": "Mystical Space Typhoon",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "72302403",
+          "name": "Swords of Revealing Light",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "17655904",
+          "name": "Burst Stream of Destruction",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "87025064",
+          "name": "Silver's Cry",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "38120068",
+          "name": "Trade-In",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "44095762",
+          "name": "Mirror Force",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "97077563",
+          "name": "Call of the Haunted",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "12607053",
+          "name": "Waboku",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "94192409",
+          "name": "Compulsory Evacuation Device",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "60082869",
+          "name": "Dust Tornado",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "14315573",
+          "name": "Negate Attack",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "23995346",
+          "name": "Blue-Eyes Ultimate Dragon",
+          "qty": 1,
+          "board": "commander"
+        },
+        {
+          "id": "2129638",
+          "name": "Blue-Eyes Twin Burst Dragon",
+          "qty": 1,
+          "board": "commander"
+        },
+        {
+          "id": "40908371",
+          "name": "Azure-Eyes Silver Dragon",
+          "qty": 1,
+          "board": "commander"
+        }
+      ]
+    },
+    {
+      "id": "ygo-dark-magic",
+      "name": "Spellbound Shadows",
+      "cover": "46986414",
+      "cards": [
+        {
+          "id": "46986414",
+          "name": "Dark Magician",
+          "qty": 3,
+          "board": "main"
+        },
+        {
+          "id": "38033121",
+          "name": "Dark Magician Girl",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "73752131",
+          "name": "Skilled Dark Magician",
+          "qty": 3,
+          "board": "main"
+        },
+        {
+          "id": "7084129",
+          "name": "Magician's Rod",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "71413901",
+          "name": "Breaker the Magical Warrior",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "30603688",
+          "name": "Apprentice Illusion Magician",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "35191415",
+          "name": "Magician of Dark Illusion",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "70781052",
+          "name": "Summoned Skull",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "78193831",
+          "name": "Buster Blader",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "45141844",
+          "name": "Old Vindictive Magician",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "47222536",
+          "name": "Dark Magical Circle",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "63391643",
+          "name": "Thousand Knives",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "2314238",
+          "name": "Dark Magic Attack",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "13604200",
+          "name": "Sage's Stone",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "99789342",
+          "name": "Dark Magic Curtain",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "24094653",
+          "name": "Polymerization",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "83764719",
+          "name": "Monster Reborn",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "53129443",
+          "name": "Dark Hole",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "5318639",
+          "name": "Mystical Space Typhoon",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "7922915",
+          "name": "Magician Navigation",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "48680970",
+          "name": "Eternal Soul",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "44095762",
+          "name": "Mirror Force",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "62279055",
+          "name": "Magic Cylinder",
+          "qty": 2,
+          "board": "main"
+        },
+        {
+          "id": "97077563",
+          "name": "Call of the Haunted",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "4206964",
+          "name": "Trap Hole",
+          "qty": 1,
+          "board": "main"
+        },
+        {
+          "id": "98502113",
+          "name": "Dark Paladin",
+          "qty": 1,
+          "board": "commander"
+        },
+        {
+          "id": "50237654",
+          "name": "The Dark Magicians",
+          "qty": 1,
+          "board": "commander"
+        },
+        {
+          "id": "96471335",
+          "name": "Ebon Illusion Magician",
+          "qty": 1,
+          "board": "commander"
+        }
+      ]
+    }
+  ],
+  "bundledIds": [
+    "11091375",
+    "12607053",
+    "13604200",
+    "14315573",
+    "14898066",
+    "17444133",
+    "17655904",
+    "17985575",
+    "2129638",
+    "2314238",
+    "23995346",
+    "24094653",
+    "30603688",
+    "34627841",
+    "35191415",
+    "38033121",
+    "38120068",
+    "40908371",
+    "4206964",
+    "43096270",
+    "44095762",
+    "45141844",
+    "46986414",
+    "47222536",
+    "48680970",
+    "50237654",
+    "53129443",
+    "5318639",
+    "60082869",
+    "62279055",
+    "63391643",
+    "70781052",
+    "7084129",
+    "71413901",
+    "72302403",
+    "73752131",
+    "78193831",
+    "7922915",
+    "79814787",
+    "83764719",
+    "87025064",
+    "89631139",
+    "94192409",
+    "96471335",
+    "97077563",
+    "98502113",
+    "99789342"
+  ]
+}

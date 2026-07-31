@@ -312,6 +312,14 @@ export function SettingsModal({
         </div>
       </Fieldset>
 
+      <Fieldset legend={t('setCoach')} description={t('setCoachHint')}>
+        <Switch
+          label={t('setCoachOn')}
+          checked={preferences.rulesCoach}
+          onCheckedChange={(checked) => onChange({ rulesCoach: checked })}
+        />
+      </Fieldset>
+
       <Fieldset legend={t('setMirror')} description={t('setMirrorHint')}>
         <Switch
           label={t('setMirror')}

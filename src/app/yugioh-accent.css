@@ -1,0 +1,57 @@
+/*
+ * The Yu-Gi-Oh millennium-gold accent ramp: the cyberpunk-accent.css pattern
+ * retinted to hue 75 — the hue of the game accent #d99123 (a deeper, warmer
+ * gold than Cyberpunk's neon lemon at 94.5). Applied on the root while in a
+ * Yu-Gi-Oh match (see accent.ts applyAccentRamp / the TablePage effect);
+ * restored on leave. Dark ink reads on gold, so accent-contrast stays dark.
+ */
+
+[data-accent='yugioh'] {
+  --glacier-accent-1: oklch(0.993 0.009 75);
+  --glacier-accent-2: oklch(0.981 0.018 75);
+  --glacier-accent-3: oklch(0.96 0.0375 75);
+  --glacier-accent-4: oklch(0.936 0.06 75);
+  --glacier-accent-5: oklch(0.906 0.0825 75);
+  --glacier-accent-6: oklch(0.87 0.105 75);
+  --glacier-accent-7: oklch(0.822 0.1275 75);
+  --glacier-accent-8: oklch(0.755 0.15 75);
+  --glacier-accent-9: oklch(0.627 0.15 75);
+  --glacier-accent-10: oklch(0.578 0.15 75);
+  --glacier-accent-11: oklch(0.498 0.1275 75);
+  --glacier-accent-12: oklch(0.303 0.0825 75);
+  --glacier-accent-contrast: oklch(0.22 0.015 260);
+}
+
+[data-theme='dark'][data-accent='yugioh'] {
+  --glacier-accent-1: oklch(0.14 0.021 75);
+  --glacier-accent-2: oklch(0.17 0.03 75);
+  --glacier-accent-3: oklch(0.21 0.048 75);
+  --glacier-accent-4: oklch(0.248 0.0675 75);
+  --glacier-accent-5: oklch(0.285 0.087 75);
+  --glacier-accent-6: oklch(0.33 0.105 75);
+  --glacier-accent-7: oklch(0.39 0.1275 75);
+  --glacier-accent-8: oklch(0.485 0.15 75);
+  --glacier-accent-9: oklch(0.64 0.162 75);
+  --glacier-accent-10: oklch(0.7 0.162 75);
+  --glacier-accent-11: oklch(0.805 0.1275 75);
+  --glacier-accent-12: oklch(0.935 0.063 75);
+  --glacier-accent-contrast: oklch(0.22 0.015 260);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light'])[data-accent='yugioh'] {
+    --glacier-accent-1: oklch(0.14 0.021 75);
+    --glacier-accent-2: oklch(0.17 0.03 75);
+    --glacier-accent-3: oklch(0.21 0.048 75);
+    --glacier-accent-4: oklch(0.248 0.0675 75);
+    --glacier-accent-5: oklch(0.285 0.087 75);
+    --glacier-accent-6: oklch(0.33 0.105 75);
+    --glacier-accent-7: oklch(0.39 0.1275 75);
+    --glacier-accent-8: oklch(0.485 0.15 75);
+    --glacier-accent-9: oklch(0.64 0.162 75);
+    --glacier-accent-10: oklch(0.7 0.162 75);
+    --glacier-accent-11: oklch(0.805 0.1275 75);
+    --glacier-accent-12: oklch(0.935 0.063 75);
+    --glacier-accent-contrast: oklch(0.22 0.015 260);
+  }
+}

@@ -1,17 +1,39 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { Avatar, Button, Input, Kbd, Pill, SegmentedControl, Select, Size, StatusDot, Text, TextTone } from '@glacier/react';
 import {
+  Avatar,
+  Button,
+  IconButton,
+  Input,
+  Kbd,
+  Menu,
+  MenuItem,
+  MenuSeparator,
+  Pill,
+  SegmentedControl,
+  Select,
+  Size,
+  StatusDot,
+  Switch,
+  Text,
+  TextTone,
+  Tooltip,
+} from '@glacier/react';
+import {
+  Bot,
+  MessageSquare,
   Check,
   Circle,
   Cpu,
   Crown,
   Eye,
+  Flame,
   Gauge,
   Layers,
   Link2,
   Mountain,
   Play,
   Settings2,
+  Shield,
   Sparkles,
   Swords,
   ThumbsUp,
@@ -19,6 +41,7 @@ import {
   Trophy,
   UserPlus,
   WifiOff,
+  X,
 } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import { useApp } from '../../state/appStore.ts';
@@ -31,7 +54,7 @@ import { GameTag } from '../../components/GameTag.tsx';
 import { GameCard } from '../../components/GameCard.tsx';
 import { SaltPile } from '../../components/SaltPile.tsx';
 import { playmatBackground } from '../../data/playmats.ts';
-import { resolveCardImage } from '../../data/games.ts';
+import { getGame, resolveCardImage } from '../../data/games.ts';
 import { formatFor } from '../../data/formats.ts';
 import { LobbyChat } from './LobbyChat.tsx';
 import type { GameSettings, RoomState, TablePlayer, UserStats } from '../../net/types.ts';
@@ -67,6 +90,7 @@ export function PregameLobby({
   onShare: () => void;
 }) {
   const t = useT();
+  const [chatOpen, setChatOpen] = useState(true);
   const decks = useApp((state) => state.decks);
   const start = useGame((state) => state.start);
   const game = room.game || 'mtg';
@@ -83,19 +107,21 @@ export function PregameLobby({
 
   // Every seated player's all-time record, so the roster reads as a scouting
   // board. Refetched when the seat set changes; failures just leave a card
-  // statless rather than blocking the lobby.
+  // statless rather than blocking the lobby. Bots have no account to look up.
   const [records, setRecords] = useState<Record<string, UserStats>>({});
   const rosterKey = room.players.map((player) => player.userId).sort().join(',');
   useEffect(() => {
     let alive = true;
     void Promise.all(
-      room.players.map(async (player) => {
-        try {
-          return [player.userId, await userStats(player.userId)] as const;
-        } catch {
-          return null;
-        }
-      }),
+      room.players
+        .filter((player) => !player.isBot)
+        .map(async (player) => {
+          try {
+            return [player.userId, await userStats(player.userId)] as const;
+          } catch {
+            return null;
+          }
+        }),
     ).then((entries) => {
       if (alive) setRecords(Object.fromEntries(entries.filter((e): e is [string, UserStats] => e !== null)));
     });
@@ -106,10 +132,14 @@ export function PregameLobby({
   }, [rosterKey]);
 
   // Pre-game rule settings (host-editable in the lobby; read-only for others).
+  // Defaults come from the game registry: Cyberpunk 0/6, Yu-Gi-Oh 8000/5, MTG
+  // by format — mirroring the server's own seat defaults.
   const cyber = game === 'cyberpunk';
+  const yugioh = game === 'yugioh';
   const settings = room.settings ?? DEFAULT_SETTINGS;
-  const lifeDefault = cyber ? 0 : formatFor(room.format).startingLife;
-  const handDefault = cyber ? 6 : 7;
+  const primaryStart = getGame(game).resources.find((r) => r.primary)?.start ?? 20;
+  const lifeDefault = typeof primaryStart === 'function' ? primaryStart(room.format ?? '') : primaryStart;
+  const handDefault = getGame(game).deck.startingHand;
   // The numeric rule fields buffer locally and commit on blur: patching per
   // keystroke races the server echo (typing "25" could land as "2") and
   // broadcasts a full room state per key.
@@ -141,20 +171,28 @@ export function PregameLobby({
   const summary: { label: string; value: string }[] = [
     ...(cyber ? [] : [{ label: t('setStartLife'), value: String(settings.startingLife ?? lifeDefault) }]),
     { label: t('setStartHand'), value: String(settings.startingHand ?? handDefault) },
-    {
-      label: t('setMullRule'),
-      value: settings.mulliganRule === 'vancouver' ? t('setMullVancouver') : t('setMullLondon'),
-    },
-    {
-      label: t('setFreeMulls'),
-      value: settings.unlimitedMulligans
-        ? t('setMullUnlimited')
-        : settings.freeMulligans == null
-          ? t('setDefault')
-          : String(settings.freeMulligans),
-    },
+    // Yu-Gi-Oh has no mulligans — the rows would only invite confusion.
+    ...(yugioh
+      ? []
+      : [
+          {
+            label: t('setMullRule'),
+            value: settings.mulliganRule === 'vancouver' ? t('setMullVancouver') : t('setMullLondon'),
+          },
+          {
+            label: t('setFreeMulls'),
+            value: settings.unlimitedMulligans
+              ? t('setMullUnlimited')
+              : settings.freeMulligans == null
+                ? t('setDefault')
+                : String(settings.freeMulligans),
+          },
+        ]),
     { label: t('setFirstPlayer'), value: firstLabel },
     { label: t('setSkipDraw'), value: skipDrawLabel },
+    ...(game === 'mtg'
+      ? [{ label: t('setEnforced'), value: settings.enforced ? t('setOn') : t('setOff') }]
+      : []),
   ];
 
   const offline = room.players.some((player) => player.online === false);
@@ -230,12 +268,35 @@ export function PregameLobby({
                         {t('tblHost')}
                       </Pill>
                     )}
+                    {player.isBot && (
+                      <Pill size="sm" variant="soft" icon={<Bot size={11} />}>
+                        {t('preBotBadge')}
+                      </Pill>
+                    )}
                     {player.userId === me?.userId && <span className="playerYou">{t('tblYou')}</span>}
                   </span>
                 </div>
                 <StatusDot size="sm" tone={player.online === false ? 'neutral' : 'success'} />
+                {player.isBot && isHost && !spectating && (
+                  <Tooltip content={t('preRemoveBot')}>
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      aria-label={t('preRemoveBot')}
+                      onClick={() => send({ type: 'bot.remove', seat: player.seat })}
+                    >
+                      <X size={14} />
+                    </IconButton>
+                  </Tooltip>
+                )}
               </div>
-              {(() => {
+              {player.isBot ? (
+                <div className="pregameStats">
+                  <span className="pregameStat pregameRank">
+                    <Bot size={11} /> {t('preBotTagline')}
+                  </span>
+                </div>
+              ) : (() => {
                 const stats = records[player.userId];
                 const rank = rankFor(stats?.played ?? 0);
                 const rate = stats ? winRate(stats) : null;
@@ -332,6 +393,57 @@ export function PregameLobby({
                 )}
               </span>
             </article>
+          ) : isHost && !spectating && game === 'mtg' ? (
+            // The host's empty seat offers both fills: a friend via the share
+            // link, or one of the server's AI opponents with a play style.
+            <div key={seat} className="pregameSeat pregameSeatEmpty pregameSeatChoices">
+              <span className="pregameSeatNumber">{t('preSeat')} {seat + 1}</span>
+              <button type="button" className="pregameSeatAction" onClick={onShare}>
+                <UserPlus size={18} />
+                <span>{t('preOpenSeat')}</span>
+              </button>
+              <Menu
+                aria-label={t('preAddBot')}
+                trigger={
+                  <button type="button" className="pregameSeatAction">
+                    <Bot size={18} />
+                    <span>{t('preAddBot')}</span>
+                  </button>
+                }
+              >
+                <MenuItem
+                  icon={<Bot size={14} />}
+                  onSelect={() => send({ type: 'bot.add', style: 'casual' })}
+                >
+                  {t('preBotStyleCasual')}
+                </MenuItem>
+                <MenuItem
+                  icon={<Flame size={14} />}
+                  onSelect={() => send({ type: 'bot.add', style: 'aggro' })}
+                >
+                  {t('preBotStyleAggro')}
+                </MenuItem>
+                <MenuItem
+                  icon={<Shield size={14} />}
+                  onSelect={() => send({ type: 'bot.add', style: 'defensive' })}
+                >
+                  {t('preBotStyleDefensive')}
+                </MenuItem>
+                <MenuSeparator />
+                <MenuItem
+                  icon={<Circle size={14} />}
+                  onSelect={() => send({ type: 'bot.add', style: 'casual', difficulty: 'easy' })}
+                >
+                  {t('preBotEasy')}
+                </MenuItem>
+                <MenuItem
+                  icon={<Swords size={14} />}
+                  onSelect={() => send({ type: 'bot.add', style: 'aggro', difficulty: 'hard' })}
+                >
+                  {t('preBotHard')}
+                </MenuItem>
+              </Menu>
+            </div>
           ) : (
             <button key={seat} type="button" className="pregameSeat pregameSeatEmpty" onClick={onShare}>
               <span className="pregameSeatNumber">{t('preSeat')} {seat + 1}</span>
@@ -389,6 +501,7 @@ export function PregameLobby({
                 }}
               />
             </label>
+            {!yugioh && (
             <label className="pregameSetting">
               <span className="pregameSettingLabel">{t('setMullRule')}</span>
               <SegmentedControl
@@ -403,6 +516,8 @@ export function PregameLobby({
                 ]}
               />
             </label>
+            )}
+            {!yugioh && (
             <label className="pregameSetting">
               <span className="pregameSettingLabel">{t('setFreeMulls')}</span>
               <Select
@@ -431,6 +546,7 @@ export function PregameLobby({
                 ]}
               />
             </label>
+            )}
             <label className="pregameSetting">
               <span className="pregameSettingLabel">{t('setFirstPlayer')}</span>
               <Select
@@ -444,6 +560,21 @@ export function PregameLobby({
                 ]}
               />
             </label>
+            {game === 'mtg' && (
+              <label className="pregameSetting pregameSettingWide">
+                <span className="pregameSettingLabel">{t('setEnforced')}</span>
+                <div className="pregameEnforcedRow">
+                  <Switch
+                    checked={Boolean(settings.enforced)}
+                    onCheckedChange={(on) => patchSettings({ enforced: on })}
+                    aria-label={t('setEnforced')}
+                  />
+                  <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+                    {t('setEnforcedHint')}
+                  </Text>
+                </div>
+              </label>
+            )}
             <label className="pregameSetting">
               <span className="pregameSettingLabel">{t('setSkipDraw')}</span>
               <Select
@@ -524,10 +655,25 @@ export function PregameLobby({
             {canStart ? <Check size={16} /> : <Circle size={13} />}
             {status}
           </span>
-          {isHost && !spectating ? (
+          {isHost && spectating && room.players.length >= 2 && room.players.every((p) => p.isBot) ? (
             <Button disabled={!canStart} onClick={start}>
               <Play size={16} /> {t('tblStart')}
             </Button>
+          ) : isHost && !spectating ? (
+            <span className="pregameHostActions">
+              <Button disabled={!canStart} onClick={start}>
+                <Play size={16} /> {t('tblStart')}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  send({ type: 'room.leave' });
+                  window.setTimeout(() => send({ type: 'room.spectate', roomId: room.roomId }), 250);
+                }}
+              >
+                <Eye size={15} /> {t('preWatchOnly')}
+              </Button>
+            </span>
           ) : (
             <Text as="span" size={Size.Small} tone={TextTone.Muted}>
               <Crown size={13} /> {t('preHostStarts')}
@@ -536,7 +682,20 @@ export function PregameLobby({
         </div>
       </div>
 
-      <LobbyChat />
+      {chatOpen ? (
+        <div className="chatAside" role="dialog" aria-label={t('chatTitle')}>
+          <LobbyChat onClose={() => setChatOpen(false)} />
+        </div>
+      ) : (
+        <IconButton
+          className="lobbyChatFab"
+          variant="solid"
+          aria-label={t('chatTitle')}
+          onClick={() => setChatOpen(true)}
+        >
+          <MessageSquare size={17} />
+        </IconButton>
+      )}
 
       {room.spectators.length > 0 && (
         <div className="pregameSpectators">

@@ -6,7 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
-import { AlertDialog, Avatar, Button, Drawer, IconButton, Input, Kbd, Menu, MenuItem, Pill, Text, Size, StatusDot, TextTone, Tooltip, useToast } from '@glacier/react';
+import { AlertDialog, Avatar, Button, Drawer, IconButton, Input, Kbd, Menu, MenuItem, MenuSub, Pill, Text, Size, StatusDot, TextTone, Tooltip, useToast } from '@glacier/react';
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -21,12 +21,14 @@ import {
   Eye,
   EyeOff,
   Flag,
+  GraduationCap,
   Hand,
   Heart,
   Layers,
   LayoutGrid,
   Link2,
   LogOut,
+  MessageSquare,
   PackageOpen,
   Paperclip,
   Play,
@@ -59,8 +61,12 @@ import { usePreference } from '../hooks/usePreference.ts';
 import { useMobileLayout, usePortrait } from '../hooks/useIsPhone.ts';
 import { RotateOverlay } from './table/RotateOverlay.tsx';
 import { resolveKeybinds, KEYBIND_DEF, type ActionId } from '../data/keybinds.ts';
+import { zoneLabel } from '../data/games.ts';
 import { getDeck } from '../net/api.ts';
 import { computeDeckMeta } from '../data/deckMeta.ts';
+import { primeYugiohCatalog } from '../data/yugioh.ts';
+import { placeInYugiohField, type YugiohCellKind } from './table/yugiohZones.tsx';
+import { isYugiohFieldSpell } from '../data/yugioh.ts';
 import type { GameId } from '../data/games.ts';
 import { GameCard } from '../components/GameCard.tsx';
 import { ManaPoolReadout } from '../components/Mana.tsx';
@@ -83,7 +89,7 @@ import { Vitals } from './table/Vitals.tsx';
 import { SeatFrame } from './table/SeatFrame.tsx';
 import { OpponentHand } from './table/OpponentHand.tsx';
 import { CyberpunkDicePanel } from './table/CyberpunkDicePanel.tsx';
-import { PhaseRibbon } from './table/PhaseRibbon.tsx';
+import { CombatPreviewCard, PhaseRibbon } from './table/PhaseRibbon.tsx';
 import { StackTray } from './table/StackTray.tsx';
 import { CmdChoiceDialog, LibraryViewer, MulliganOverlay, PileViewer, RevealTray, RollBanner } from './table/overlays.tsx';
 import { TablePresence } from './table/TablePresence.tsx';
@@ -91,6 +97,7 @@ import { LibrarySidebar } from './table/LibrarySidebar.tsx';
 import { PostMatch } from './table/PostMatch.tsx';
 import { PreMatch } from './table/PreMatch.tsx';
 import { PregameLobby } from './table/PregameLobby.tsx';
+import { LobbyChat } from './table/LobbyChat.tsx';
 import { DraftRoom } from './table/DraftRoom.tsx';
 import { TimelineCard } from './table/TimelineCard.tsx';
 import { TurnCue } from './table/TurnCue.tsx';
@@ -103,6 +110,7 @@ import { applyAccentRamp, clearDeckTint } from '../state/accent.ts';
 import { installTableShims } from './table/shims.ts';
 import './table/table.css';
 import './table/cyberpunk-mat.css';
+import './table/yugioh-mat.css';
 
 /**
  * The live table. Freeform, server-authoritative, 2-6 seats: your board runs
@@ -127,6 +135,19 @@ interface Menu {
 export function TablePage() {
   const t = useT();
   const { toast } = useToast();
+
+  // Enforced-room rejections (and any action error) surface as toasts; the
+  // store relays them via a window event because it has no toast context.
+  useEffect(() => {
+    const onError = (event: Event) => {
+      const detail = (event as CustomEvent<{ code: string; message: string }>).detail;
+      if (!detail?.message) return;
+      toast({ tone: 'warning', message: detail.message });
+    };
+    window.addEventListener('pc:action-error', onError);
+    return () => window.removeEventListener('pc:action-error', onError);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const identity = useApp((state) => state.identity);
   const liveRoom = useGame((state) => state.room);
   const replay = useGame((state) => state.replay);
@@ -232,6 +253,7 @@ export function TablePage() {
     useTableUi.getState().hydrateCardScale(identity?.userId);
     useTableUi.getState().hydrateMobileScale(identity?.userId);
     useTableUi.getState().hydrateGridZoom(identity?.userId);
+    useTableUi.getState().hydrateGridView(identity?.userId);
   }, [identity?.userId]);
 
   // Combat selections cannot outlive combat.
@@ -351,6 +373,7 @@ export function TablePage() {
       if (back != null) send({ type: 'cardback.set', id: back });
       sentBack.current = prefs.cardBack;
       send({ type: 'auto.set', untap: prefs.autoUntap, draw: prefs.autoDraw });
+      send({ type: 'coach.set', on: prefs.rulesCoach });
     };
     sentMat.current = null;
     sentBack.current = null;
@@ -395,13 +418,19 @@ export function TablePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, spectating, myDeckId, myMetaMissing]);
 
-  // In a Cyberpunk match, repaint the whole app's primary from Glacier blue to
-  // the Cyberpunk yellow; restore the user's configured accent on leave.
+  // In a Cyberpunk or Yu-Gi-Oh match, repaint the whole app's primary from
+  // Glacier blue to that game's accent; restore the user's accent on leave.
   const roomGame = room?.game;
   useEffect(() => {
-    if (roomGame !== 'cyberpunk') return;
-    applyAccentRamp('cyberpunk');
+    if (roomGame !== 'cyberpunk' && roomGame !== 'yugioh') return;
+    applyAccentRamp(roomGame);
     return () => clearDeckTint(loadPreferences().accent, DEFAULT_PREFERENCES.accent);
+  }, [roomGame]);
+
+  // Warm the Yu-Gi-Oh catalog at the table: ATK/DEF chips, card details and
+  // pile viewers all read it synchronously once loaded.
+  useEffect(() => {
+    if (roomGame === 'yugioh') primeYugiohCatalog();
   }, [roomGame]);
 
   // A manual board pin lasts until the turn moves on.
@@ -541,10 +570,11 @@ export function TablePage() {
           state.act({ kind: 'dice.roll', sides: 20 });
           break;
         case 'lifeUp':
-          state.act({ kind: 'life.add', delta: 1 });
+          // Yu-Gi-Oh life moves in hundreds (the vitals steppers agree).
+          state.act({ kind: 'life.add', delta: current.game === 'yugioh' ? 100 : 1 });
           break;
         case 'lifeDown':
-          state.act({ kind: 'life.add', delta: -1 });
+          state.act({ kind: 'life.add', delta: current.game === 'yugioh' ? -100 : -1 });
           break;
         case 'secondaryUp':
           state.act({ kind: 'poison.add', delta: 1 });
@@ -676,6 +706,7 @@ export function TablePage() {
           )}
         </div>
         {room.started && !mobile && <PhaseRibbon room={room} me={me} canAct={canAct} />}
+        {room.started && <CombatPreviewCard room={room} />}
         <div className="tableTopActions">
           {!spectating && onlineFriends.length > 0 && (
             <Menu
@@ -705,7 +736,7 @@ export function TablePage() {
                 size="sm"
                 variant={gridView ? 'solid' : 'soft'}
                 aria-pressed={gridView}
-                onClick={() => setGridView(!gridView)}
+                onClick={() => setGridView(!gridView, identity?.userId)}
               >
                 <LayoutGrid size={15} /> <span className="ttActionLabel">{t('tblGrid')}</span>
               </Button>
@@ -815,10 +846,14 @@ export function TablePage() {
                        for READING other boards, so hovering a card previews it
                        and clicking blows it up in the lightbox. Clicking a mat
                        no longer throws you into that seat's fullscreen view.
-                       SeatFrame is read-only (no move actions), so nothing here
-                       can mutate another player's board. */
+                       SeatFrame can never move another player's cards; canAct
+                       is live so COMBAT responses (choosing blockers, taking
+                       damage) still work while playing from the grid. */
                     <div className="playerGridPreview">
-                      <SeatFrame room={room} player={player} me={me} canAct={false} onHover={handleHover} stage />
+                      {/* Grid cells draw every board upright, Arena style:
+                          the 180° table-mirror is a staged-view illusion and
+                          reads upside-down in a grid of small boards. */}
+                      <SeatFrame room={room} player={player} me={me} canAct={canAct} onHover={handleHover} stage mirror={false} />
                     </div>
                   )}
                 </div>
@@ -1063,6 +1098,20 @@ function CardMenu({
   const { toast } = useToast();
   const [sub, setSub] = useState<'counter' | 'attach' | 'move' | 'give' | 'pile' | 'pileOnto' | null>(null);
   const [customCounter, setCustomCounter] = useState('');
+  // Yu-Gi-Oh renames the shared gestures in its own vocabulary: tapping is
+  // battle position, playing face-down is Setting.
+  const menuGame = useGame((state) => state.room?.game) ?? 'mtg';
+  const yugioh = menuGame === 'yugioh';
+  // The command slot is the Extra Deck in Yu-Gi-Oh (and the Legend tray in
+  // Cyberpunk): name it whatever this game calls it.
+  const cmdLabel = menuGame === 'mtg' ? t('tblCommand') : zoneLabel(menuGame, 'command');
+  // Yu-Gi-Oh placements take the next EMPTY zone of the right kind, so a second
+  // trap lands beside the first instead of on top of it. Field Spells have
+  // their own zone; monsters overflow into the Extra Monster Zones.
+  const ygoSpot = (kinds: YugiohCellKind[]) =>
+    placeInYugiohField({ kinds, cards: me.battlefield, excludeIid: menu.iid });
+  const monsterSpot = () => ygoSpot(['monster', 'extraMonster']);
+  const backrowSpot = () => ygoSpot(isYugiohFieldSpell(card?.scryfallId) ? ['field'] : ['spell']);
 
   const card =
     me.battlefield.find((c) => c.iid === menu.iid) ??
@@ -1087,7 +1136,7 @@ function CardMenu({
         : menu.zone === 'exile'
           ? t('tblExile')
           : menu.zone === 'command'
-            ? t('tblCommand')
+            ? cmdLabel
             : 'Battlefield';
 
   /** Zones a card disappears into: worth confirming, because the card is gone
@@ -1191,12 +1240,12 @@ function CardMenu({
         <>
           <div className="menuQuickActions">
             {quick(
-              card.tapped ? 'Untap' : 'Tap',
+              card.tapped ? (yugioh ? 'Attack Position' : 'Untap') : yugioh ? 'Defense Position' : 'Tap',
               <RotateCw size={16} />,
               { kind: 'card.tap', iid: menu.iid, tapped: !card.tapped },
             )}
             {quick(
-              card.faceDown ? 'Face up' : 'Face down',
+              card.faceDown ? (yugioh ? 'Flip face up' : 'Face up') : yugioh ? 'Set face down' : 'Face down',
               card.faceDown ? <Eye size={16} /> : <EyeOff size={16} />,
               { kind: 'card.face', iid: menu.iid, faceDown: !card.faceDown },
             )}
@@ -1215,7 +1264,7 @@ function CardMenu({
           {expander('Counters', <CirclePlus size={15} />, 'counter')}
           {sub === 'counter' && (
             <div className="menuInset">
-              {COUNTER_PALETTE.map((entry) => (
+              {(yugioh ? COUNTER_PALETTE.slice(0, 2) : COUNTER_PALETTE).map((entry) => (
                 <button
                   key={entry.label}
                   type="button"
@@ -1326,13 +1375,42 @@ function CardMenu({
           {card.piled &&
             item(t('gpPileLeave'), <Unlink size={15} />, { kind: 'card.attach', iid: menu.iid, hostIid: null })}
           {item(t('gpStack'), <Layers size={15} />, { kind: 'stack.push', iid: menu.iid }, 'stack')}
+          <MenuSub label={t('ctQuick')}>
+            {([
+              ['+1/+1', 1, t('ctPlus')],
+              ['+1/+1', -1, t('ctMinusP')],
+              ['-1/-1', 1, t('ctMinus')],
+              ['loyalty', 1, t('ctLoyaltyUp')],
+              ['loyalty', -1, t('ctLoyaltyDown')],
+              ['charge', 1, t('ctCharge')],
+            ] as const).map(([counter, delta, label], i) => (
+              <MenuItem key={i} onSelect={() => useGame.getState().act({ kind: 'card.counter', iid: menu.iid, counter, delta })}>
+                {label}
+              </MenuItem>
+            ))}
+          </MenuSub>
+          <MenuSub label={t('mkTitle')}>
+            {([
+              ['target', t('mkTarget')],
+              ['point', t('mkPoint')],
+              ['skull', t('mkSkull')],
+              ['star', t('mkStar')],
+              ['eye', t('mkEye')],
+              ['clear', t('mkClear')],
+            ] as const).map(([kind, label]) => (
+              <MenuItem key={kind} onSelect={() => send({ type: 'aim', toIid: menu.iid, kind })}>
+                {label}
+              </MenuItem>
+            ))}
+          </MenuSub>
+
           {expander('Move to', <ArrowRight size={15} />, 'move')}
           {sub === 'move' && (
             <div className="menuInset">
               {item(t('tblHand'), <Hand size={14} />, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
               {item(t('tblGraveyard'), <Skull size={14} />, { kind: 'card.move', iid: menu.iid, to: 'graveyard' }, `grave:${me.userId}`)}
               {item(t('tblExile'), <Ban size={14} />, { kind: 'card.move', iid: menu.iid, to: 'exile' }, `exile:${me.userId}`)}
-              {item(t('tblCommand'), <Crown size={14} />, { kind: 'card.move', iid: menu.iid, to: 'command' }, `cmd:${me.userId}`)}
+              {item(cmdLabel, <Crown size={14} />, { kind: 'card.move', iid: menu.iid, to: 'command' }, `cmd:${me.userId}`)}
               {item('Top of library', <ArrowUpToLine size={14} />, { kind: 'card.move', iid: menu.iid, to: 'library', index: 0 }, `lib:${me.userId}`)}
               {item('Bottom of library', <ArrowDownToLine size={14} />, { kind: 'card.move', iid: menu.iid, to: 'library', index: -1 }, `lib:${me.userId}`)}
             </div>
@@ -1341,8 +1419,57 @@ function CardMenu({
       )}
       {menu.zone === 'hand' && (
         <>
-          {item('Play', <Play size={15} />, { kind: 'card.move', iid: menu.iid, to: 'battlefield', x: 0.5, y: 0.55 }, 'field:mine')}
-          {item('Play face down', <EyeOff size={15} />, { kind: 'card.face', iid: menu.iid, faceDown: true })}
+          {yugioh
+            ? item(
+                t('ygoSummon'),
+                <Play size={15} />,
+                { kind: 'card.move', iid: menu.iid, to: 'battlefield', ...monsterSpot() },
+                'field:mine',
+              )
+            : item('Play', <Play size={15} />, { kind: 'card.move', iid: menu.iid, to: 'battlefield', x: 0.5, y: 0.55 }, 'field:mine')}
+          {yugioh ? (
+            <>
+              {/* A Set lands face-down in ONE act (card.move carries faceDown):
+                  moving face-up and flipping afterwards would broadcast the
+                  card's identity to the whole table first. The defense turn is
+                  a second act, but a card's rotation was never secret. */}
+              <button
+                type="button"
+                className="menuItem"
+                role="menuitem"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => {
+                  moveWithArc(
+                    { kind: 'card.move', iid: menu.iid, to: 'battlefield', ...monsterSpot(), faceDown: true },
+                    'field:mine',
+                    t('ygoSetMonster'),
+                  );
+                  onAction({ kind: 'card.tap', iid: menu.iid, tapped: true });
+                }}
+              >
+                <span className="menuItemIcon" aria-hidden><EyeOff size={15} /></span>
+                <span>{t('ygoSetMonster')}</span>
+              </button>
+              <button
+                type="button"
+                className="menuItem"
+                role="menuitem"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() =>
+                  moveWithArc(
+                    { kind: 'card.move', iid: menu.iid, to: 'battlefield', ...backrowSpot(), faceDown: true },
+                    'field:mine',
+                    t('ygoSetBackrow'),
+                  )
+                }
+              >
+                <span className="menuItemIcon" aria-hidden><EyeOff size={15} /></span>
+                <span>{t('ygoSetBackrow')}</span>
+              </button>
+            </>
+          ) : (
+            item('Play face down', <EyeOff size={15} />, { kind: 'card.face', iid: menu.iid, faceDown: true })
+          )}
           {item(t('gpStack'), <Layers size={15} />, { kind: 'stack.push', iid: menu.iid }, 'stack')}
           {expander('Move to', <ArrowRight size={15} />, 'move')}
           {sub === 'move' && (
@@ -1381,7 +1508,7 @@ function CardMenu({
               <Repeat size={15} />,
               { kind: 'card.transform', iid: menu.iid, transformed: !card.transformed },
             )}
-          {item(`${t('tblCommand')} → Battlefield`, <Play size={15} />, { kind: 'cmd.cast', iid: menu.iid, x: 0.55, y: 0.55 }, 'field:mine')}
+          {item(`${cmdLabel} → Battlefield`, <Play size={15} />, { kind: 'cmd.cast', iid: menu.iid, x: 0.55, y: 0.55 }, 'field:mine')}
           {item(t('tblHand'), <Hand size={15} />, { kind: 'card.move', iid: menu.iid, to: 'hand' }, 'hand:mine')}
           {/* Manual tax control: +2 always (the server creates the entry), -2
               once any tax exists. Commander formats only - Cyberpunk Legends
@@ -1459,9 +1586,37 @@ function SidePanel({
 }) {
   const t = useT();
   const log = useGame((state) => state.log);
+  const chat = useGame((state) => state.chat);
   const scrollRef = useRef<HTMLDivElement>(null);
   // The phone sheet: which tab is open (null = collapsed to the handle chip).
-  const [sheet, setSheet] = useState<'vitals' | 'players' | 'log' | null>(null);
+  const [sheet, setSheet] = useState<'vitals' | 'players' | 'log' | 'chat' | null>(null);
+  // Desktop: the chat aside slides over the board edge when opened from the
+  // nav row. Messages that arrive while it is closed light an unread dot.
+  const [chatOpen, setChatOpen] = useState(false);
+  // The log is collapsed by default and card names are starred out: a glance
+  // at it must never spoil what a tutor fetched or what is about to resolve.
+  const [logOpen, setLogOpen] = useState(() => {
+    try { return localStorage.getItem('pc.log.open') === 'on'; } catch { return false; }
+  });
+  const [logSpoilers, setLogSpoilers] = useState(false);
+  const toggleLog = () => {
+    setLogOpen((open) => {
+      try { localStorage.setItem('pc.log.open', open ? 'off' : 'on'); } catch { /* ignore */ }
+      return !open;
+    });
+  };
+  // The command palette (and anything else) can pop the chat aside open.
+  useEffect(() => {
+    const openChat = () => setChatOpen(true);
+    window.addEventListener('pc:open-chat', openChat);
+    return () => window.removeEventListener('pc:open-chat', openChat);
+  }, []);
+  const [chatSeen, setChatSeen] = useState(0);
+  const chatVisible = chatOpen || sheet === 'chat';
+  useEffect(() => {
+    if (chatVisible) setChatSeen(chat.length);
+  }, [chatVisible, chat.length]);
+  const chatUnread = Math.max(0, chat.length - chatSeen);
   const seated = me != null && !spectating;
 
   // Keep the log pinned to the newest entry.
@@ -1491,25 +1646,81 @@ function SidePanel({
       pingCooling={pingCooling}
     />
   );
+  // Star out capitalized name runs (card names) while protecting player
+  // names and structural words. Heuristic on purpose: over-masking a verb is
+  // harmless, under-masking a tutored card is the thing we are preventing.
+  const maskSpoilers = (text: string): string => {
+    if (logSpoilers) return text;
+    let masked = text;
+    const names = room.players.map((p) => p.username).sort((a, b) => b.length - a.length);
+    const tokens: string[] = [];
+    names.forEach((name, i) => {
+      masked = masked.split(name).join(`\u0000${i}\u0000`);
+      tokens.push(name);
+    });
+    masked = masked.replace(
+      /\b[A-Z][\w'!-]*(?:(?:,?\s+(?:of|the|and|a|an|to|in|for)\s+|,?\s+)[A-Z][\w'!-]*)*\b/g,
+      (run) => (['Game', 'Turn', 'GG', 'AI', 'Foil'].includes(run) ? run : '★★★'),
+    );
+    tokens.forEach((name, i) => {
+      masked = masked.split(`\u0000${i}\u0000`).join(name);
+    });
+    return masked;
+  };
+
+  const logTime = (ts: number) =>
+    new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
   const logEl = (
-    <div className="sideLogCard">
+    <div className="sideLogCard" data-collapsed={!logOpen || undefined}>
       <div className="sideHead">
         <span className="sideHeadTitle">
           <ScrollText size={13} />
           {t('tblLog')}
         </span>
-      </div>
-      <div ref={scrollRef} className="sideScroll">
-        {log.length === 0 ? (
-          <p className="sideEmpty">{t('tblLogEmpty')}</p>
-        ) : (
-          log.map((line, index) => (
-            <p key={`${line.seq}-${index}`} className="sideLine">
-              {line.text}
-            </p>
-          ))
+        {logOpen && (
+          <Tooltip content={logSpoilers ? t('logHideNames') : t('logShowNames')}>
+            <IconButton
+              size="sm"
+              variant="ghost"
+              aria-label={logSpoilers ? t('logHideNames') : t('logShowNames')}
+              onClick={() => setLogSpoilers((v) => !v)}
+            >
+              {logSpoilers ? <EyeOff size={14} /> : <Eye size={14} />}
+            </IconButton>
+          </Tooltip>
         )}
+        <Tooltip content={logOpen ? t('logCollapse') : t('logExpand')}>
+          <IconButton
+            size="sm"
+            variant="ghost"
+            aria-label={logOpen ? t('logCollapse') : t('logExpand')}
+            onClick={toggleLog}
+          >
+            <ChevronRight size={14} className="logChevron" data-open={logOpen || undefined} />
+          </IconButton>
+        </Tooltip>
       </div>
+      {logOpen && (
+        <div ref={scrollRef} className="sideScroll">
+          {log.length === 0 ? (
+            <p className="sideEmpty">{t('tblLogEmpty')}</p>
+          ) : (
+            log.map((line, index) => (
+              <p
+                key={`${line.seq}-${index}`}
+                className={line.coach ? 'sideLine sideLineCoach' : 'sideLine'}
+                data-rule={line.coach}
+                title={logTime(line.ts)}
+              >
+                {line.coach && <GraduationCap size={13} className="sideLineCoachIcon" />}
+                <span className="sideLineTime">{logTime(line.ts)}</span>
+                {maskSpoilers(line.text)}
+              </p>
+            ))
+          )}
+        </div>
+      )}
       {room.spectators.length > 0 && (
         <div className="sideSpectators">
           <span className="sideHeadTitle">
@@ -1527,6 +1738,21 @@ function SidePanel({
   );
   const navEl = (
     <nav className="tableSideNav" aria-label={t('tblTableNav')}>
+      {!mobile && room.started && (
+        <Tooltip content={chatOpen ? t('tblChatClose') : t('tblChatOpen')}>
+          <span className="chatNavWrap">
+            <IconButton
+              size="sm"
+              variant="ghost"
+              aria-label={chatOpen ? t('tblChatClose') : t('tblChatOpen')}
+              onClick={() => setChatOpen((open) => !open)}
+            >
+              <MessageSquare size={16} />
+            </IconButton>
+            {!chatOpen && chatUnread > 0 && <span className="chatNavDot" aria-hidden />}
+          </span>
+        </Tooltip>
+      )}
       <Tooltip content={t('tblPingHint')}>
         <Menu
           aria-label={t('tblPing')}
@@ -1562,25 +1788,6 @@ function SidePanel({
           onClick={() => window.dispatchEvent(new CustomEvent('pc:open-settings'))}
         >
           <Settings size={16} />
-        </IconButton>
-      </Tooltip>
-      {/* The way back to packs. The dock's own pill can be dismissed from
-          anywhere, and at a table there is no rail and no tab bar to relaunch
-          it from - so it lives here, in the one row every viewer of a table
-          has, seated or spectating, lobby or match. Latched on `window` as
-          well as dispatched because the dock is code-split: a request made
-          while its chunk is still streaming would land on no listener. */}
-      <Tooltip content={t('navBoosters')}>
-        <IconButton
-          size="sm"
-          variant="ghost"
-          aria-label={t('navBoosters')}
-          onClick={() => {
-            (window as { __pcPackDock?: 'open' | 'show' }).__pcPackDock = 'open';
-            window.dispatchEvent(new CustomEvent('pc:open-packdock', { detail: { open: true } }));
-          }}
-        >
-          <PackageOpen size={16} />
         </IconButton>
       </Tooltip>
       {mobile && onInviteFriend && (inviteTargets?.length ?? 0) > 0 && (
@@ -1632,6 +1839,7 @@ function SidePanel({
       ...(seated ? [{ value: 'vitals', label: t('tblLife') }] : []),
       { value: 'players', label: t('tblPlayers') },
       { value: 'log', label: t('tblLog') },
+      { value: 'chat', label: t('tblChat') },
     ];
     return (
       <div className="mobileDock" data-open={sheet != null || undefined}>
@@ -1662,7 +1870,7 @@ function SidePanel({
                     aria-selected={sheet === tab.value}
                     data-active={sheet === tab.value || undefined}
                     className="mobileSheetTab"
-                    onClick={() => setSheet(tab.value as 'vitals' | 'players' | 'log')}
+                    onClick={() => setSheet(tab.value as 'vitals' | 'players' | 'log' | 'chat')}
                   >
                     {tab.label}
                   </button>
@@ -1677,6 +1885,7 @@ function SidePanel({
               {sheet === 'vitals' && vitalsEl}
               {sheet === 'players' && playersEl}
               {sheet === 'log' && logEl}
+              {sheet === 'chat' && <LobbyChat variant="table" />}
             </div>
           </div>
         )}
@@ -1685,16 +1894,23 @@ function SidePanel({
   }
 
   return (
-    <aside className="tableSide" data-nav-only={!room.started || undefined}>
-      {room.started && (
-        <div className="tableSideScroll">
-          {vitalsEl}
-          {playersEl}
-          {logEl}
+    <>
+      <aside className="tableSide" data-nav-only={!room.started || undefined}>
+        {room.started && (
+          <div className="tableSideScroll">
+            {vitalsEl}
+            {playersEl}
+            {logEl}
+          </div>
+        )}
+        {navEl}
+      </aside>
+      {room.started && chatOpen && (
+        <div className="chatAside" role="dialog" aria-label={t('tblChat')}>
+          <LobbyChat variant="table" onClose={() => setChatOpen(false)} />
         </div>
       )}
-      {navEl}
-    </aside>
+    </>
   );
 }
 
@@ -1809,7 +2025,7 @@ function PlayersCard({
                     <Skull size={12} /> {player.poison}
                   </span>
                 )}
-                {room.game !== 'cyberpunk' && <ManaPoolReadout mana={player.mana} />}
+                {(room.game ?? 'mtg') === 'mtg' && <ManaPoolReadout mana={player.mana} />}
                 <span className="playerStat" title={t('tblHand')}>
                   {player.handCount}
                 </span>

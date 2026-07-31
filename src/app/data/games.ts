@@ -1,6 +1,7 @@
 import type { Board, Zone } from '../net/types.ts';
 import { cardImage } from './cards.ts';
 import { cyberpunkImage } from './cyberpunk.ts';
+import { yugiohImage } from './yugioh.ts';
 import { FORMATS, formatFor } from './formats.ts';
 
 /**
@@ -17,7 +18,7 @@ import { FORMATS, formatFor } from './formats.ts';
  * and hides the slots it does not use.
  */
 
-export type GameId = 'mtg' | 'cyberpunk';
+export type GameId = 'mtg' | 'cyberpunk' | 'yugioh';
 
 export interface GameZoneDef {
   /** The physical server zone slot this maps to. */
@@ -40,7 +41,7 @@ export interface GameResourceDef {
 }
 
 export interface GameStatDef {
-  id: 'cost' | 'power' | 'ram' | 'mana' | 'pt';
+  id: 'cost' | 'power' | 'ram' | 'mana' | 'pt' | 'atk' | 'level';
   label: string;
 }
 
@@ -72,10 +73,19 @@ export interface GameDef {
   stats: GameStatDef[];
   deck: GameDeckRules;
   formats: { id: string; label: string }[];
-  /** Whether cards tap/exhaust (both games do). */
+  /** Whether cards tap/exhaust (all three games do). */
   tapping: boolean;
-  /** Resolve a card id (Scryfall id for mtg, Netdeck UUID for cyberpunk) to a
-   * rendered face image URL. */
+  /** Work-in-progress: hidden from every picker unless the "Enable WIP
+   * features" developer toggle is on. */
+  wip?: boolean;
+  /** Guided combat (attack/block declarations + banners) applies. */
+  combat?: boolean;
+  /** The token picker / create-token affordances apply. */
+  tokens?: boolean;
+  /** The table markers menu (monarch/initiative/day-night/storm) applies. */
+  markers?: boolean;
+  /** Resolve a card id (Scryfall id for mtg, Netdeck UUID for cyberpunk,
+   * YGOPRODeck passcode for yugioh) to a rendered face image URL. */
   resolveImage: (cardId: string | undefined) => string;
 }
 
@@ -117,6 +127,9 @@ const MTG: GameDef = {
   },
   formats: FORMATS.map((f) => ({ id: f.id, label: f.name })),
   tapping: true,
+  combat: true,
+  tokens: true,
+  markers: true,
   resolveImage: (id) => cardImage(id),
 };
 
@@ -153,12 +166,60 @@ const CYBERPUNK: GameDef = {
   },
   formats: [{ id: 'standard', label: 'Standard' }],
   tapping: true,
+  wip: true,
   resolveImage: (id) => cyberpunkImage(id),
 };
 
-export const GAMES: Record<GameId, GameDef> = { mtg: MTG, cyberpunk: CYBERPUNK };
+const YUGIOH: GameDef = {
+  id: 'yugioh',
+  name: 'Yu-Gi-Oh!',
+  tagline: 'Freeform dueling at 8000 LP — Main, Extra & Side Decks',
+  // Millennium-gold, deliberately warmer/deeper than Cyberpunk's neon lemon.
+  accent: '#d99123',
+  zones: [
+    { slot: 'library', label: 'Deck', hidden: true },
+    { slot: 'graveyard', label: 'Graveyard' },
+    { slot: 'exile', label: 'Banished' },
+    // The Extra Deck rides the command slot (the anchor-board pattern
+    // cyberpunk's Legends established). The server deals it face-down, so
+    // opponents see a pile of backs while the owner can browse it.
+    { slot: 'command', label: 'Extra Deck' },
+  ],
+  resources: [
+    // LP only: Yu-Gi-Oh has no standing secondary counter, and the vitals UI
+    // hides the secondary row when a game defines none.
+    { id: 'lp', label: 'LP', start: 8000, primary: true },
+  ],
+  // Duel phases mapped onto the server's fixed MTG phase ids (the server
+  // validates phase.set against that list; the labels are ours). Standby is
+  // folded into Draw — freeform players announce it when it matters.
+  phases: [
+    { id: 'upkeep', label: 'Draw' },
+    { id: 'main1', label: 'Main 1' },
+    { id: 'attack', label: 'Battle' },
+    { id: 'main2', label: 'Main 2' },
+    { id: 'end', label: 'End' },
+  ],
+  stats: [
+    { id: 'level', label: 'Level' },
+    { id: 'atk', label: 'ATK / DEF' },
+  ],
+  deck: {
+    // Main Deck 40-60 (40 is the constructed floor and the target), up to 3
+    // copies of a name, Extra Deck (<=15) anchored on the commander board.
+    size: 40,
+    singleton: false,
+    startingHand: 5,
+    anchor: { board: 'commander', label: 'Extra Deck', count: 15 },
+  },
+  formats: [{ id: 'standard', label: 'Standard' }],
+  tapping: true,
+  resolveImage: (id) => yugiohImage(id),
+};
 
-export const GAME_LIST: GameDef[] = [MTG, CYBERPUNK];
+export const GAMES: Record<GameId, GameDef> = { mtg: MTG, cyberpunk: CYBERPUNK, yugioh: YUGIOH };
+
+export const GAME_LIST: GameDef[] = [MTG, CYBERPUNK, YUGIOH];
 
 /** The default game for existing rooms and any snapshot without a `game` field. */
 export const DEFAULT_GAME: GameId = 'mtg';

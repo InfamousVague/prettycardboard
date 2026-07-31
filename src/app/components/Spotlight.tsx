@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Avatar, Kbd, SearchField, Size, StatusDot, Text, TextTone, useToast } from '@glacier/react';
-import { Layers, Package, User } from '@glacier/icons';
+import { Layers, Package, Swords, User } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import * as api from '../net/api.ts';
 import { useApp } from '../state/appStore.ts';
+import { useGame } from '../state/gameStore.ts';
 import { useUi } from '../state/uiStore.ts';
 import { cardImage } from '../data/cards.ts';
 import { CATALOG, catalogDeckCards, type CatalogDeck } from '../data/catalog.ts';
@@ -21,7 +22,7 @@ import './spotlight.css';
 
 interface Hit {
   key: string;
-  group: 'decks' | 'catalog' | 'cards' | 'friends';
+  group: 'match' | 'decks' | 'catalog' | 'cards' | 'friends';
   title: string;
   subtitle?: string;
   thumb?: string;
@@ -36,6 +37,9 @@ export function Spotlight() {
   const friends = useApp((state) => state.friends);
   const refreshDecks = useApp((state) => state.refreshDecks);
   const selectDeck = useUi((state) => state.selectDeck);
+  const room = useGame((state) => state.room);
+  const joinedRoomId = useGame((state) => state.joinedRoomId);
+  const spectating = useGame((state) => state.spectating);
   const popup = useCardPopup();
 
   const [open, setOpen] = useState(false);
@@ -91,6 +95,32 @@ export function Spotlight() {
     const list: Hit[] = [];
     const matches = (text: string) => q.length > 0 && text.toLowerCase().includes(q);
 
+    // Match commands: only while seated at a started table. Shown unfiltered
+    // when the palette opens empty, filtered like everything else otherwise.
+    if (room && room.roomId === joinedRoomId && room.started && !spectating) {
+      const act = useGame.getState().act;
+      const cmd = (key: string, title: string, subtitle: string, action: () => void) => {
+        if (q.length === 0 || title.toLowerCase().includes(q) || subtitle.toLowerCase().includes(q)) {
+          list.push({ key: `match-${key}`, group: 'match', title, subtitle, action: () => { action(); close(); } });
+        }
+      };
+      cmd('pass', t('cmdPassTurn'), 'turn', () => act({ kind: 'turn.pass' }));
+      cmd('attack', t('cmdAttack'), 'combat attack', () => act({ kind: 'combat.begin' }));
+      cmd('endcombat', t('cmdEndCombat'), 'combat', () => act({ kind: 'combat.end' }));
+      cmd('draw', t('cmdDraw'), 'card library', () => act({ kind: 'draw', count: 1 }));
+      cmd('untap', t('cmdUntap'), 'untap permanents', () => act({ kind: 'untap.all' }));
+      cmd('shuffle', t('cmdShuffle'), 'library', () => act({ kind: 'shuffle' }));
+      cmd('search', t('cmdSearchLib'), 'library tutor', () => act({ kind: 'library.search' }));
+      cmd('reveal', t('cmdRevealHand'), 'hand show', () => act({ kind: 'reveal.hand' }));
+      cmd('d20', t('cmdRollD20'), 'dice roll', () => act({ kind: 'dice.roll', sides: 20 }));
+      cmd('d6', t('cmdRollD6'), 'dice roll', () => act({ kind: 'dice.roll', sides: 6 }));
+      cmd('coin', t('cmdCoin'), 'flip', () => act({ kind: 'dice.roll', sides: 2 }));
+      cmd('life+', t('cmdLifeUp'), 'life gain', () => act({ kind: 'life.add', delta: 1 }));
+      cmd('life-', t('cmdLifeDown'), 'life lose damage', () => act({ kind: 'life.add', delta: -1 }));
+      cmd('chat', t('cmdChat'), 'talk message', () => window.dispatchEvent(new CustomEvent('pc:open-chat')));
+      cmd('concede', t('cmdConcede'), 'give up surrender', () => act({ kind: 'concede' }));
+    }
+
     for (const deck of decks.filter((entry) => matches(entry.name) || matches(entry.commander ?? ''))) {
       list.push({
         key: `deck-${deck.id}`,
@@ -144,7 +174,7 @@ export function Spotlight() {
     }
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, decks, cards, friends, selectDeck, close, popup]);
+  }, [query, decks, cards, friends, selectDeck, close, popup, room, joinedRoomId, spectating]);
 
   const addCatalogDeck = async (deck: CatalogDeck) => {
     try {
@@ -176,8 +206,9 @@ export function Spotlight() {
     }
   };
 
-  const GROUP_LABEL = { decks: t('spDecks'), catalog: t('spCatalog'), cards: t('spCards'), friends: t('spFriends') };
+  const GROUP_LABEL = { match: t('spMatch'), decks: t('spDecks'), catalog: t('spCatalog'), cards: t('spCards'), friends: t('spFriends') };
   const GROUP_ICON = {
+    match: <Swords size={13} />,
     decks: <Layers size={13} />,
     catalog: <Package size={13} />,
     cards: null,
@@ -218,7 +249,7 @@ export function Spotlight() {
                   {t('spNoResults')}
                 </Text>
               )}
-              {(['decks', 'catalog', 'cards', 'friends'] as const).map((group) => {
+              {(['match', 'decks', 'catalog', 'cards', 'friends'] as const).map((group) => {
                 const groupHits = hits.filter((hit) => hit.group === group);
                 if (groupHits.length === 0) return null;
                 return (

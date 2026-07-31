@@ -29,12 +29,15 @@ export function HandCard({
   dimmed,
   faceDown,
   handX,
+  playable,
   onPointerDown,
   onPointerEnter,
   onPointerLeave,
   onClick,
   onContextMenu,
 }: {
+  /** Enforced rooms: this card is legal to play right now (Arena gold glow). */
+  playable?: boolean;
   card: CardInst;
   /** Marks the card for hit-testing during a touch hand-scrub (MyBoard). */
   dataIid?: string;
@@ -91,6 +94,7 @@ export function HandCard({
       className="handCard"
       style={{ zIndex: z, ['--slink' as string]: offset }}
       data-hand-iid={dataIid}
+      data-playable={playable || undefined}
       data-preview-src={previewSrc}
       data-preview-name={previewSrc ? card.name : undefined}
       initial={{ y: 60, opacity: 0 }}

@@ -301,7 +301,8 @@ function BrowseTile({ deck, index, owned }: { deck: BrowseDeck; index: number; o
         popup.open({
           scryfallId: deck.cardId,
           name: deck.cardName!,
-          imageUrl: deck.game === 'cyberpunk' ? deck.cover : undefined,
+          // Non-MTG covers resolve locally; only Scryfall ids resolve from the id alone.
+          imageUrl: deck.game !== 'mtg' ? deck.cover : undefined,
         })
     : undefined;
 

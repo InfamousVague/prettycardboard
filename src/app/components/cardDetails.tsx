@@ -1,15 +1,24 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Heading, Size, Spinner, Text, TextTone } from '@glacier/react';
-import { CircleDollarSign, Coins, Cpu, Layers, Palette, Swords } from '@glacier/icons';
+import { CircleDollarSign, Coins, Cpu, Layers, Link2, Palette, Shield, Star, Swords } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { cyberpunkCard, type CyberpunkCard } from '../data/cyberpunk.ts';
+import {
+  isYugiohId,
+  loadYugiohCatalog,
+  primeYugiohCatalog,
+  yugiohCard,
+  yugiohStat,
+  type YugiohCard,
+} from '../data/yugioh.ts';
 import { isAltArtId } from '../data/cards.ts';
 import { ManaCost, ManaSymbol, parseCost } from './Mana.tsx';
 
 /**
  * The card details renderer, shared by the fullscreen CardPopup and the hover
- * preview. Given a card id (Scryfall UUID or bundled Cyberpunk id) it resolves
- * the right game's data — Cyberpunk ships offline, MTG resolves from the bundled
+ * preview. Given a card id (Scryfall UUID, bundled Cyberpunk id, or Yu-Gi-Oh
+ * passcode) it resolves the right game's data — Cyberpunk ships offline,
+ * Yu-Gi-Oh reads the lazily-fetched catalog, MTG resolves from the bundled
  * precon index first and falls back to a cached Scryfall lookup — and renders a
  * readable panel: title, cost/type, rules text, flavour, artist.
  */
@@ -135,7 +144,7 @@ async function fetchDetails(scryfallId: string): Promise<CardDetails> {
   // here: printedPt pulls in the (heavy) bundled precon index, and this module
   // is reachable from the always-loaded shell.
   const { notePrintedPT } = await import('../data/printedPt.ts');
-  notePrintedPT(scryfallId, details.power, details.toughness);
+  notePrintedPT(scryfallId, details.power, details.toughness, details.typeLine);
   return details;
 }
 
@@ -215,6 +224,62 @@ export function CyberpunkDetails({ card }: { card: CyberpunkCard }) {
   );
 }
 
+/**
+ * A Yu-Gi-Oh card's structured details from the lazily-loaded catalog —
+ * type line, ATK/DEF (or Link rating), Level/Rank, Pendulum Scale, card text.
+ */
+export function YugiohDetails({ card }: { card: YugiohCard }) {
+  const typeLine = [card.type, card.race, card.attribute].filter(Boolean).join(' · ');
+  const isLink = card.frameType.startsWith('link');
+  const isXyz = card.frameType.startsWith('xyz');
+  const stats: { label: string; value: string; icon: ReactNode }[] = [];
+  // yugiohStat renders the '?' that YGOPRODeck encodes as -1.
+  if (card.atk != null) stats.push({ label: 'ATK', value: yugiohStat(card.atk), icon: <Swords size={12} /> });
+  if (isLink) stats.push({ label: 'LINK', value: String(card.linkval ?? 0), icon: <Link2 size={12} /> });
+  else if (card.def != null) stats.push({ label: 'DEF', value: yugiohStat(card.def), icon: <Shield size={12} /> });
+  if (card.level != null)
+    stats.push({ label: isXyz ? 'Rank' : 'Level', value: String(card.level), icon: <Star size={12} /> });
+  if (card.scale != null) stats.push({ label: 'Scale', value: String(card.scale), icon: <Layers size={12} /> });
+  return (
+    <>
+      {typeLine && (
+        <Text size={Size.Small} tone={TextTone.Muted} className="cpTypeLine">
+          {typeLine}
+        </Text>
+      )}
+      {stats.length > 0 && (
+        <div className="cpCyberStats">
+          {stats.map((stat) => (
+            <span key={stat.label} className="cpStat">
+              <span className="cpStatIcon" aria-hidden>
+                {stat.icon}
+              </span>
+              <span className="cpStatLabel">{stat.label}</span>
+              <span className="cpStatVal">{stat.value}</span>
+            </span>
+          ))}
+        </div>
+      )}
+      {card.desc && (
+        <div className="cpRules">
+          {card.desc.split('\n').map((line, li) => (
+            <p key={li} className="cpRuleLine">
+              {line}
+            </p>
+          ))}
+        </div>
+      )}
+      {card.archetype && (
+        <div className="cpFooter">
+          <span className="cpMeta">
+            <Layers size={11} aria-hidden /> {card.archetype}
+          </span>
+        </div>
+      )}
+    </>
+  );
+}
+
 /** Rules text with inline {W}{U}{T} symbols rendered as the real glyphs. */
 function OracleText({ text }: { text: string }) {
   const paragraphs = text.split('\n');
@@ -253,17 +318,39 @@ export function CardDetailsBody({
 }) {
   const t = useT();
   // A Cyberpunk card is recognized by its id living in the bundled catalog; its
-  // full details ship with the app, so we never hit Scryfall for it.
+  // full details ship with the app, so we never hit Scryfall for it. A Yu-Gi-Oh
+  // card is recognized by its all-digits passcode; its details come from the
+  // lazily-fetched catalog, never Scryfall.
   const cyber = scryfallId ? cyberpunkCard(scryfallId) : undefined;
+  const isYgo = !!scryfallId && isYugiohId(scryfallId);
+  const [ygo, setYgo] = useState<YugiohCard | undefined>(scryfallId ? yugiohCard(scryfallId) : undefined);
   const [details, setDetails] = useState<CardDetails | null>(
     scryfallId ? (DETAILS.get(scryfallId) ?? null) : null,
   );
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    setYgo(scryfallId ? yugiohCard(scryfallId) : undefined);
+    if (!scryfallId || !isYugiohId(scryfallId) || yugiohCard(scryfallId)) return;
+    let cancelled = false;
+    loadYugiohCatalog()
+      .then(() => {
+        if (!cancelled) setYgo(yugiohCard(scryfallId));
+      })
+      // Offline (or a deployment missing the catalog): stop at the card's name
+      // rather than spinning forever, exactly like the Scryfall path does.
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scryfallId]);
+
+  useEffect(() => {
     setDetails(scryfallId ? (DETAILS.get(scryfallId) ?? null) : null);
     setFailed(false);
-    if (!scryfallId || cyber) return;
+    if (!scryfallId || cyber || isYgo) return;
     if (DETAILS.get(scryfallId)) return;
     let cancelled = false;
     fetchDetails(scryfallId)
@@ -276,7 +363,7 @@ export function CardDetailsBody({
     return () => {
       cancelled = true;
     };
-  }, [scryfallId, cyber]);
+  }, [scryfallId, cyber, isYgo]);
 
   const costSymbols = parseCost(details?.manaCost);
 
@@ -286,10 +373,21 @@ export function CardDetailsBody({
         <Heading level={headingLevel} noMargin>
           {name}
         </Heading>
-        {!cyber && costSymbols.length > 0 && <ManaCost cost={details?.manaCost} size="1.05rem" />}
+        {!cyber && !isYgo && costSymbols.length > 0 && <ManaCost cost={details?.manaCost} size="1.05rem" />}
       </div>
       {cyber ? (
         <CyberpunkDetails card={cyber} />
+      ) : ygo ? (
+        <YugiohDetails card={ygo} />
+      ) : isYgo ? (
+        compact || failed ? null : (
+          <div className="cpLoading">
+            <Spinner size="sm" aria-label={t('cpLoading')} />
+            <Text size={Size.Small} tone={TextTone.Subtle}>
+              {t('cpLoading')}
+            </Text>
+          </div>
+        )
       ) : (
         <>
           {details?.typeLine && (
@@ -348,7 +446,7 @@ export function useCardDetails(scryfallId: string | undefined): CardDetails | nu
   );
   useEffect(() => {
     setDetails(scryfallId ? (DETAILS.get(scryfallId) ?? null) : null);
-    if (!scryfallId || cyber || DETAILS.get(scryfallId)) return;
+    if (!scryfallId || cyber || isYugiohId(scryfallId) || DETAILS.get(scryfallId)) return;
     let cancelled = false;
     fetchDetails(scryfallId)
       .then((loaded) => {
@@ -363,14 +461,21 @@ export function useCardDetails(scryfallId: string | undefined): CardDetails | nu
 }
 
 /** True when this id has details we can render instantly (no network) — a
- *  bundled Cyberpunk card or an already-cached MTG lookup. */
+ *  bundled Cyberpunk card, a Yu-Gi-Oh card whose catalog has loaded, or an
+ *  already-cached MTG lookup. */
 export function hasInstantDetails(id: string | undefined): boolean {
   if (!id) return false;
+  if (isYugiohId(id)) return yugiohCard(id) !== undefined;
   return cyberpunkCard(id) !== undefined || DETAILS.has(id);
 }
 
-/** Warm the MTG offline precon index + fetch, so hovering resolves quickly. */
+/** Warm the offline indexes (MTG precons / Yu-Gi-Oh catalog) + fetch, so
+ *  hovering resolves quickly. */
 export function primeDetails(scryfallId: string | undefined): void {
   if (!scryfallId || cyberpunkCard(scryfallId) || DETAILS.has(scryfallId)) return;
+  if (isYugiohId(scryfallId)) {
+    primeYugiohCatalog();
+    return;
+  }
   fetchDetails(scryfallId).catch(() => {});
 }

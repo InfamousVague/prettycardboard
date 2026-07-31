@@ -7,7 +7,9 @@ import {
   clampMobileScale,
   loadBoardMode,
   loadCardScale,
+  loadGridView,
   loadGridZoom,
+  saveGridView,
   loadMobileScale,
   saveBoardMode,
   saveCardScale,
@@ -48,9 +50,11 @@ interface TableUiState {
   mobileScale: number;
   hydrateMobileScale: (userId: string | undefined) => void;
   setMobileScale: (scale: number, userId: string | undefined) => void;
-  /** Desktop overview: every seat's playmat side by side in a grid. */
+  /** Desktop overview, and the default view: every seat's playmat at once,
+   * opponents across the top and my own board along the bottom. */
   gridView: boolean;
-  setGridView: (on: boolean) => void;
+  hydrateGridView: (userId: string | undefined) => void;
+  setGridView: (on: boolean, userId?: string | undefined) => void;
   /** How far the grid's miniatures are zoomed out, on top of the fit-to-cell
    * factor the grid derives from its column count. Persisted per user. */
   gridZoom: number;
@@ -66,8 +70,8 @@ interface TableUiState {
   setLibIntent: (intent: LibIntent) => void;
 
   /** Public pile browser (any player's graveyard/exile). */
-  pileView: { userId: string; zone: 'graveyard' | 'exile' } | null;
-  setPileView: (view: { userId: string; zone: 'graveyard' | 'exile' } | null) => void;
+  pileView: { userId: string; zone: 'graveyard' | 'exile' | 'command' } | null;
+  setPileView: (view: { userId: string; zone: 'graveyard' | 'exile' | 'command' } | null) => void;
 
 }
 
@@ -95,8 +99,12 @@ export const useTableUi = create<TableUiState>((set) => ({
     saveMobileScale(userId, clamped);
     set({ mobileScale: clamped });
   },
-  gridView: false,
-  setGridView: (on) => set({ gridView: on }),
+  gridView: true,
+  hydrateGridView: (userId) => set({ gridView: loadGridView(userId) }),
+  setGridView: (on, userId) => {
+    saveGridView(userId, on);
+    set({ gridView: on });
+  },
   gridZoom: GRID_ZOOM_DEFAULT,
   hydrateGridZoom: (userId) => set({ gridZoom: loadGridZoom(userId) }),
   setGridZoom: (zoom, userId) => {

@@ -62,6 +62,8 @@ pub fn turn_clock_interaction(room: &mut Room, seat: usize, now: i64) {
 pub fn turn_clock_begin(room: &mut Room, seat: usize, now: i64) {
     if let Some(p) = room.players.iter_mut().find(|p| p.seat == seat) {
         p.turns_taken += 1;
+        // A fresh turn is a fresh land drop.
+        p.lands_this_turn = 0;
     }
     room.turn_started_ms = now;
     room.turn_last_interaction_ms = now;
@@ -121,15 +123,17 @@ pub fn auto_turn_begin(room: &mut Room, seat: usize) -> Vec<String> {
             Some(force) => force,
             None => !crate::rooms::format_has_commander(&room.format) || room.players.len() == 2,
         };
+    // Untap and draw are per-player conveniences, OFF by default (the client
+    // syncs each player's choice via `auto.set`). A player who leaves them off
+    // untaps and draws by hand. ENFORCED tables run both for everyone, Arena
+    // style - the rules forbid manual untapping there, so the engine owes it.
+    let enforced = crate::rules::enforced(room);
     let Some(p) = room.players.iter_mut().find(|p| p.seat == seat) else {
         return Vec::new();
     };
-    // Untap and draw are per-player conveniences, OFF by default (the client
-    // syncs each player's choice via `auto.set`). A player who leaves them off
-    // untaps and draws by hand.
-    let do_untap = p.auto_untap;
+    let do_untap = p.auto_untap || enforced;
     // The starting player's very first turn skips its draw (standard / 2-player).
-    let do_draw = p.auto_draw && !skip;
+    let do_draw = (p.auto_draw || enforced) && !skip;
 
     if do_untap {
         for c in p.battlefield.iter_mut() {

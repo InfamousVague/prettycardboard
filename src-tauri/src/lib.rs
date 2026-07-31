@@ -1,3 +1,5 @@
+mod local_server;
+
 // The greet command the About page invokes. Add your own #[tauri::command]
 // functions here and register them in the invoke_handler below.
 #[tauri::command]
@@ -38,7 +40,26 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet])
+        .manage(local_server::LocalServer(std::sync::Mutex::new(None)))
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            local_server::local_server_start,
+            local_server::local_server_stop,
+            local_server::local_server_port
+        ])
+        .on_window_event(|window, event| {
+            // The sidecar dies with the app - a headless local server left
+            // behind would hold its port and its SQLite lock forever.
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                use tauri::Manager;
+                if let Some(state) = window.app_handle().try_state::<local_server::LocalServer>() {
+                    if let Some((mut child, _)) = state.0.lock().unwrap().take() {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                    }
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

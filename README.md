@@ -1,10 +1,11 @@
 # PrettyCardboard
 
-A multiplayer, freeform **Magic: The Gathering** tabletop. Play *pretend
-cardboard*: a shared 2–6 seat table with drag-anywhere cards, a fanned hand, zone
-piles, guided combat, and premium 2.5D foil visuals — manual play with
-conveniences, no rules engine getting in your way. The server is authoritative;
-the same React bundle runs on the web and as a desktop app.
+A multiplayer, freeform card-game tabletop for **Magic: The Gathering** and
+**Yu-Gi-Oh!** (with the Cyberpunk TCG in the works). Play *pretend cardboard*:
+a shared 2–6 seat table with drag-anywhere cards, a fanned hand, zone piles,
+guided combat, and premium 2.5D foil visuals — manual play with conveniences,
+no rules engine getting in your way. The server is authoritative; the same
+React bundle runs on the web and as a desktop app.
 
 **Live at [prettycardboard.com](https://prettycardboard.com).**
 

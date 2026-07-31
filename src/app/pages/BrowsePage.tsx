@@ -19,6 +19,8 @@ import {
   cyberpunkImage,
   cyberpunkStarters,
 } from '../data/cyberpunk.ts';
+import { yugiohImage, yugiohStarters } from '../data/yugioh.ts';
+import { yugiohDeckCatalog } from '../data/yugiohDecks.ts';
 import { artCrop, cardImage } from '../data/cards.ts';
 import { ColorIdentity, ManaSymbol } from '../components/Mana.tsx';
 import { BrowseCatalog, type BrowseDeck, type BrowseFacet } from '../components/BrowseCatalog.tsx';
@@ -62,12 +64,12 @@ export function BrowsePage() {
     sessionStorage.setItem('pc_browse_game', value);
     setGameState(value);
   };
-  // Cyberpunk is a WIP game: if it was the sticky choice but the dev toggle is
-  // off, fall back to Magic so the hidden game never renders.
-  const cyberVisible = games.some((g) => g.id === 'cyberpunk');
+  // If the sticky choice is a game this user cannot see (a WIP game with the
+  // dev toggle off, or a stale id), fall back to Magic so it never renders.
+  const gameVisible = games.some((g) => g.id === game);
   useEffect(() => {
-    if (game === 'cyberpunk' && !cyberVisible) setGame('mtg');
-  }, [game, cyberVisible]);
+    if (!gameVisible) setGame('mtg');
+  }, [game, gameVisible]);
 
   const mtg: BrowseDeck[] = useMemo(
     () =>
@@ -130,6 +132,68 @@ export function BrowsePage() {
     [t],
   );
 
+  const ygo: BrowseDeck[] = useMemo(() => {
+    // The two bundled starters (also the featured shelf) lead…
+    const starters: BrowseDeck[] = yugiohStarters().map((deck) => {
+      const count = deck.cards
+        .filter((card) => card.board === 'main')
+        .reduce((sum, card) => sum + card.quantity, 0);
+      const coverName = deck.cards.find((card) => card.scryfallId === deck.cover)?.name ?? deck.name;
+      const image = yugiohImage(deck.cover);
+      return {
+        id: deck.id,
+        name: deck.name,
+        subtitle: coverName,
+        cover: image,
+        art: image,
+        metaText: `${count} ${t('decksCards')}`,
+        cardId: deck.cover,
+        cardName: coverName,
+        kind: 'Starter',
+        facets: ['Starter'],
+        // The bundled starters carry no release date, so they need an explicit
+        // Year bucket or that grouping renders them under a blank heading.
+        groups: { kind: 'Starter', year: t('brKindStarter') },
+        sortDate: '',
+        cards: deck.cards,
+        game: 'yugioh',
+        format: 'standard',
+      };
+    });
+    // …followed by every official deck product Konami has boxed (synced from
+    // YGOPRODeck's set listings; every card qty 1, see yugiohDecks.ts).
+    const products: BrowseDeck[] = yugiohDeckCatalog().map((deck) => {
+      const count = deck.cards.reduce((sum, card) => sum + card.qty, 0);
+      const coverName = deck.cards.find((card) => card.id === deck.cover)?.name ?? deck.name;
+      const image = yugiohImage(deck.cover);
+      const year = deck.date.slice(0, 4);
+      return {
+        id: deck.id,
+        name: deck.name,
+        subtitle: coverName,
+        cover: image,
+        art: image,
+        badge: deck.code || undefined,
+        metaText: `${count} ${t('decksCards')}`,
+        cardId: deck.cover,
+        cardName: coverName,
+        kind: deck.kind,
+        facets: [deck.kind],
+        groups: { kind: deck.kind, ...(year ? { year } : {}) },
+        sortDate: deck.date,
+        cards: deck.cards.map((card) => ({
+          scryfallId: card.id,
+          name: card.name,
+          quantity: card.qty,
+          board: card.board,
+        })),
+        game: 'yugioh',
+        format: 'standard',
+      };
+    });
+    return [...starters, ...products];
+  }, [t]);
+
   const mtgFacet: BrowseFacet = {
     label: t('brFilterColors'),
     options: WUBRG.map((color) => ({
@@ -165,13 +229,30 @@ export function BrowsePage() {
       ariaLabel: color,
     })),
   };
+  // Facet values match the product kinds yugiohDecks.ts ships ('Other' — the
+  // 2-player sets — stays reachable by search and the unfiltered grid).
+  const YGO_KINDS: { value: string; key: MessageKey }[] = [
+    { value: 'Starter', key: 'brKindStarter' },
+    { value: 'Structure', key: 'brKindStructure' },
+    { value: 'Speed Duel', key: 'brKindSpeedDuel' },
+  ];
+  const ygoKindFacet: BrowseFacet = {
+    label: t('brFilterKind'),
+    options: YGO_KINDS.map(({ value, key }) => ({
+      value,
+      node: t(key),
+      ariaLabel: `${t('brFilterKind')} ${t(key)}`,
+    })),
+  };
 
   return (
     <div className="page browsePage">
       <div className="browseHead">
-        <Heading level={1}>{game === 'cyberpunk' ? t('brTitleCyber') : t('brTitle')}</Heading>
+        <Heading level={1}>
+          {game === 'cyberpunk' ? t('brTitleCyber') : game === 'yugioh' ? t('brTitleYugioh') : t('brTitle')}
+        </Heading>
         <Text size={Size.Large} tone={TextTone.Muted} className="lede">
-          {game === 'cyberpunk' ? t('brLedeCyber') : t('brLede')}
+          {game === 'cyberpunk' ? t('brLedeCyber') : game === 'yugioh' ? t('brLedeYugioh') : t('brLede')}
         </Text>
         <div className="browseGameSwitch">
           <SegmentedControl
@@ -189,6 +270,18 @@ export function BrowsePage() {
           featuredIds={cyberpunkStarters().map((starter) => starter.id)}
           facet={cyberFacet}
           groupModes={[{ id: 'color', label: t('brFilterColors') }]}
+          searchPlaceholder={t('brSearch')}
+          emptyQuip={t('esUntapped')}
+        />
+      ) : game === 'yugioh' ? (
+        <BrowseCatalog
+          decks={ygo}
+          featuredIds={yugiohStarters().map((starter) => starter.id)}
+          facet={[ygoKindFacet]}
+          groupModes={[
+            { id: 'kind', label: t('brGroupKind') },
+            { id: 'year', label: t('brGroupYear') },
+          ]}
           searchPlaceholder={t('brSearch')}
           emptyQuip={t('esUntapped')}
         />

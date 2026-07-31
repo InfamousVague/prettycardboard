@@ -9,6 +9,7 @@ import { FORMATS } from '../../data/formats.ts';
 import { GAME_LIST, getGame } from '../../data/games.ts';
 import { usePreference } from '../../hooks/usePreference.ts';
 import { cyberpunkCatalog, cyberpunkImage } from '../../data/cyberpunk.ts';
+import { yugiohImage, yugiohStarters } from '../../data/yugioh.ts';
 import { GameBadge } from '../../components/GameTag.tsx';
 import type { DeckCard } from '../../net/types.ts';
 import './newDeckWizard.css';
@@ -24,9 +25,9 @@ export function NewDeckWizard({ open, onClose }: { open: boolean; onClose: () =>
   const refreshDecks = useApp((state) => state.refreshDecks);
   const selectDeck = useUi((state) => state.selectDeck);
   const enableWip = usePreference('enableWip');
-  // With WIP features off, Cyberpunk is hidden and Magic is the only game — the
-  // game-picker step is then skipped straight to the deck kinds.
-  const games = enableWip ? GAME_LIST : GAME_LIST.filter((g) => g.id !== 'cyberpunk');
+  // With WIP features off, WIP games are hidden; if only one game remains, the
+  // game-picker step is skipped straight to the deck kinds.
+  const games = enableWip ? GAME_LIST : GAME_LIST.filter((g) => !g.wip);
   const sole = games.length === 1 ? games[0]!.id : null;
   const [game, setGame] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -127,7 +128,52 @@ export function NewDeckWizard({ open, onClose }: { open: boolean; onClose: () =>
                     </button>
                   )),
                 ]
-              : FORMATS.map((format) => (
+              : activeGame === 'yugioh'
+                ? [
+                    <button
+                      key="blank"
+                      type="button"
+                      className="ndwKind ndwKindBlank"
+                      disabled={busy}
+                      onClick={() => create({ game: 'yugioh', format: 'Standard', name: t('dbUntitled') })}
+                    >
+                      <span className="ndwKindIcon">
+                        <Plus size={20} />
+                      </span>
+                      <span className="ndwKindBody">
+                        <span className="ndwKindName">{t('ndwBlank')}</span>
+                        <span className="ndwKindDesc">{t('ndwBlankHintYugioh')}</span>
+                      </span>
+                    </button>,
+                    ...yugiohStarters().map((starter) => (
+                      <button
+                        key={starter.id}
+                        type="button"
+                        className="ndwKind"
+                        style={{ ['--game-accent' as string]: chosen.accent }}
+                        disabled={busy}
+                        onClick={() =>
+                          create({ game: 'yugioh', format: 'Standard', name: starter.name, cards: starter.cards })
+                        }
+                      >
+                        <span
+                          className="ndwKindArt"
+                          style={{ backgroundImage: `url("${yugiohImage(starter.cover)}")` }}
+                          aria-hidden
+                        />
+                        <span className="ndwKindBody">
+                          <span className="ndwKindName">{starter.name}</span>
+                          <span className="ndwKindDesc">
+                            {starter.cards
+                              .filter((c) => c.board === 'main')
+                              .reduce((sum, c) => sum + c.quantity, 0)}{' '}
+                            cards · starter deck
+                          </span>
+                        </span>
+                      </button>
+                    )),
+                  ]
+                : FORMATS.map((format) => (
                   <button
                     key={format.id}
                     type="button"

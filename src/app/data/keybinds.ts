@@ -54,22 +54,22 @@ export interface KeybindDef {
 
 export const KEYBIND_DEFS: KeybindDef[] = [
   // common
-  { action: 'tapHovered', labelKey: 'kbTap', group: 'common', games: ['mtg', 'cyberpunk'], defaultCode: 'KeyT', guard: 'hoveredMine' },
-  { action: 'flipHovered', labelKey: 'kbFlip', group: 'common', games: ['mtg', 'cyberpunk'], defaultCode: 'KeyF', guard: 'hoveredMine' },
-  { action: 'draw', labelKey: 'tblDraw', group: 'common', games: ['mtg', 'cyberpunk'], defaultCode: 'KeyD', guard: 'canAct' },
-  { action: 'shuffle', labelKey: 'tblShuffle', group: 'common', games: ['mtg', 'cyberpunk'], defaultCode: 'KeyS', guard: 'canAct' },
-  { action: 'untapAll', labelKey: 'tblUntapAll', group: 'common', games: ['mtg'], defaultCode: 'KeyU', guard: 'canAct' },
+  { action: 'tapHovered', labelKey: 'kbTap', group: 'common', games: ['mtg', 'cyberpunk', 'yugioh'], defaultCode: 'KeyT', guard: 'hoveredMine' },
+  { action: 'flipHovered', labelKey: 'kbFlip', group: 'common', games: ['mtg', 'cyberpunk', 'yugioh'], defaultCode: 'KeyF', guard: 'hoveredMine' },
+  { action: 'draw', labelKey: 'tblDraw', group: 'common', games: ['mtg', 'cyberpunk', 'yugioh'], defaultCode: 'KeyD', guard: 'canAct' },
+  { action: 'shuffle', labelKey: 'tblShuffle', group: 'common', games: ['mtg', 'cyberpunk', 'yugioh'], defaultCode: 'KeyS', guard: 'canAct' },
+  { action: 'untapAll', labelKey: 'tblUntapAll', group: 'common', games: ['mtg', 'yugioh'], defaultCode: 'KeyU', guard: 'canAct' },
   { action: 'createToken', labelKey: 'kbToken', group: 'common', games: ['mtg'], defaultCode: 'KeyK', guard: 'canAct' },
   { action: 'cloneHovered', labelKey: 'kbClone', group: 'common', games: ['mtg'], defaultCode: 'KeyC', guard: 'hoveredToken' },
-  { action: 'incrementCounters', labelKey: 'kbCountersUp', group: 'common', games: ['mtg'], defaultCode: 'BracketRight', guard: 'hoveredMine' },
-  { action: 'decrementCounters', labelKey: 'kbCountersDown', group: 'common', games: ['mtg'], defaultCode: 'BracketLeft', guard: 'hoveredMine' },
-  { action: 'rollD20', labelKey: 'kbRollD20', group: 'common', games: ['mtg'], defaultCode: 'KeyR', guard: 'canAct' },
-  { action: 'peelPile', labelKey: 'kbPeelPile', group: 'common', games: ['mtg', 'cyberpunk'], defaultCode: '', guard: 'hoveredMine' },
+  { action: 'incrementCounters', labelKey: 'kbCountersUp', group: 'common', games: ['mtg', 'yugioh'], defaultCode: 'BracketRight', guard: 'hoveredMine' },
+  { action: 'decrementCounters', labelKey: 'kbCountersDown', group: 'common', games: ['mtg', 'yugioh'], defaultCode: 'BracketLeft', guard: 'hoveredMine' },
+  { action: 'rollD20', labelKey: 'kbRollD20', group: 'common', games: ['mtg', 'yugioh'], defaultCode: 'KeyR', guard: 'canAct' },
+  { action: 'peelPile', labelKey: 'kbPeelPile', group: 'common', games: ['mtg', 'cyberpunk', 'yugioh'], defaultCode: '', guard: 'hoveredMine' },
   // turn
-  { action: 'passTurn', labelKey: 'kbPass', group: 'turn', games: ['mtg', 'cyberpunk'], defaultCode: 'Space', guard: 'myTurn' },
-  // vitals (labels rendered game-aware in the UI: Life/Net, Poison/RAM)
-  { action: 'lifeUp', labelKey: 'kbLifeUp', group: 'vitals', games: ['mtg', 'cyberpunk'], defaultCode: 'Equal', guard: 'canAct' },
-  { action: 'lifeDown', labelKey: 'kbLifeDown', group: 'vitals', games: ['mtg', 'cyberpunk'], defaultCode: 'Minus', guard: 'canAct' },
+  { action: 'passTurn', labelKey: 'kbPass', group: 'turn', games: ['mtg', 'cyberpunk', 'yugioh'], defaultCode: 'Space', guard: 'myTurn' },
+  // vitals (labels rendered game-aware in the UI: Life/Net/LP, Poison/RAM)
+  { action: 'lifeUp', labelKey: 'kbLifeUp', group: 'vitals', games: ['mtg', 'cyberpunk', 'yugioh'], defaultCode: 'Equal', guard: 'canAct' },
+  { action: 'lifeDown', labelKey: 'kbLifeDown', group: 'vitals', games: ['mtg', 'cyberpunk', 'yugioh'], defaultCode: 'Minus', guard: 'canAct' },
   { action: 'secondaryUp', labelKey: 'kbSecondaryUp', group: 'vitals', games: ['mtg', 'cyberpunk'], defaultCode: '', guard: 'canAct' },
   { action: 'secondaryDown', labelKey: 'kbSecondaryDown', group: 'vitals', games: ['mtg', 'cyberpunk'], defaultCode: '', guard: 'canAct' },
   // combat / markers (MTG)
@@ -77,7 +77,7 @@ export const KEYBIND_DEFS: KeybindDef[] = [
   { action: 'stormUp', labelKey: 'kbStorm', group: 'markers', games: ['mtg'], defaultCode: '', guard: 'canAct' },
   { action: 'cycleDayNight', labelKey: 'kbDayNight', group: 'markers', games: ['mtg'], defaultCode: '', guard: 'canAct' },
   // danger - unbound by default; routes through the concede confirm dialog
-  { action: 'concede', labelKey: 'tblConcede', group: 'danger', games: ['mtg', 'cyberpunk'], defaultCode: '', guard: 'canAct' },
+  { action: 'concede', labelKey: 'tblConcede', group: 'danger', games: ['mtg', 'cyberpunk', 'yugioh'], defaultCode: '', guard: 'canAct' },
 ];
 
 export const KEYBIND_DEF: Record<ActionId, KeybindDef> = Object.fromEntries(

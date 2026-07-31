@@ -191,6 +191,11 @@ CREATE TABLE IF NOT EXISTS pull_feed(
 );
 CREATE INDEX IF NOT EXISTS idx_pull_feed_ts ON pull_feed(ts);
 CREATE INDEX IF NOT EXISTS idx_pull_feed_user ON pull_feed(user_id, ts);
+CREATE TABLE IF NOT EXISTS oracle_cards(
+    scryfall_id TEXT PRIMARY KEY,
+    json TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL
+);
 ";
 
 pub fn open(path: &std::path::Path) -> Connection {
@@ -1192,4 +1197,22 @@ pub fn history_load(conn: &Connection, room_id: &str) -> (Vec<crate::rooms::Snap
         _ => snaps.len().saturating_sub(1),
     };
     (snaps, cursor)
+}
+
+// --- oracle card cache (see oracle.rs) -------------------------------------
+
+pub fn oracle_load(conn: &Connection, scryfall_id: &str) -> Option<String> {
+    conn.query_row(
+        "SELECT json FROM oracle_cards WHERE scryfall_id = ?",
+        [scryfall_id],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+}
+
+pub fn oracle_store(conn: &Connection, scryfall_id: &str, json: &str) {
+    let _ = conn.execute(
+        "INSERT OR REPLACE INTO oracle_cards(scryfall_id, json, fetched_at) VALUES(?,?,?)",
+        params![scryfall_id, json, crate::now_ms()],
+    );
 }

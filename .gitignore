@@ -39,3 +39,4 @@ server/data
 .vscode
 .idea
 *.log
+playtest/logs/

@@ -79,6 +79,10 @@ export interface Preferences {
   autoUntap: boolean;
   /** Automatically draw a card at the start of your turn (off by default). */
   autoDraw: boolean;
+  /** Show private rules advice at the table when a move looks like it breaks a
+   * Magic rule. Purely a teaching aid - it never blocks or undoes anything, so
+   * house rules and unusual cards are unaffected. Off by default. */
+  rulesCoach: boolean;
   /** Developer / work-in-progress features (off by default). Gates everything
    * that isn't production-ready — currently the whole Cyberpunk TCG game. */
   enableWip: boolean;
@@ -133,6 +137,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   cardTotals: true,
   autoUntap: false,
   autoDraw: false,
+  rulesCoach: false,
   enableWip: false,
   keybinds: {},
 };

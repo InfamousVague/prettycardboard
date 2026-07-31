@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Button, IconButton, ScrollArea, SearchField, Text, Size, TextTone } from '@glacier/react';
+import { Button, IconButton, ScrollArea, SearchField, Select, Text, Size, TextTone } from '@glacier/react';
 import { Hand as HandIcon, X } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
@@ -8,6 +8,8 @@ import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import type { CardInst } from '../../net/types.ts';
 import { useTableUi } from './tableUi.ts';
+import { oracleFacts, primePrintedPT } from '../../data/printedPt.ts';
+import { typeLineOf } from './boardModes.ts';
 import { flightAnchor } from './juice.ts';
 
 const HAND_PAD = 44;
@@ -29,6 +31,7 @@ export function LibrarySidebar() {
   const popup = useCardPopup();
 
   const [filter, setFilter] = useState('');
+  const [sort, setSort] = useState<'library' | 'name' | 'mv' | 'type'>('library');
   // Cards pulled out of the library this session are dropped from the list right
   // away (the fetched snapshot is otherwise stale until the next request).
   const [pulled, setPulled] = useState<Set<string>>(new Set());
@@ -45,9 +48,22 @@ export function LibrarySidebar() {
 
   const results = useMemo(() => {
     const query = filter.trim().toLowerCase();
-    const list = (libraryCards ?? []).filter((card) => !pulled.has(card.iid));
-    return query ? list.filter((card) => card.name.toLowerCase().includes(query)) : list;
-  }, [libraryCards, pulled, filter]);
+    let list = (libraryCards ?? []).filter((card) => !pulled.has(card.iid));
+    for (const card of list) primePrintedPT(card);
+    // Search matches names AND type lines, so "instant" or "goblin" both work.
+    if (query) {
+      list = list.filter((card) => {
+        const line = typeLineOf(card) ?? '';
+        return card.name.toLowerCase().includes(query) || line.toLowerCase().includes(query);
+      });
+    }
+    const mv = (card: CardInst) => oracleFacts(card.scryfallId)?.mv ?? oracleFacts(card.scryfallId)?.generic ?? 99;
+    const line = (card: CardInst) => typeLineOf(card) ?? 'zzz';
+    if (sort === 'name') list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    else if (sort === 'mv') list = [...list].sort((a, b) => mv(a) - mv(b) || a.name.localeCompare(b.name));
+    else if (sort === 'type') list = [...list].sort((a, b) => line(a).localeCompare(line(b)) || a.name.localeCompare(b.name));
+    return list;
+  }, [libraryCards, pulled, filter, sort]);
 
   if (!open) return null;
 
@@ -132,7 +148,20 @@ export function LibrarySidebar() {
             <X size={15} />
           </IconButton>
         </div>
-        <SearchField size="sm" value={filter} onValueChange={setFilter} placeholder={t('dbSearchPlaceholder')} glass />
+        <SearchField size="sm" value={filter} onValueChange={setFilter} placeholder={t('libSearchPh')} glass />
+        <Select
+          size="sm"
+          fullWidth
+          value={sort}
+          onValueChange={(value) => setSort(value as typeof sort)}
+          aria-label={t('libSortLabel')}
+          options={[
+            { value: 'library', label: t('libSortOrder') },
+            { value: 'name', label: t('libSortName') },
+            { value: 'mv', label: t('libSortMv') },
+            { value: 'type', label: t('libSortType') },
+          ]}
+        />
         <Text size={Size.XSmall} tone={TextTone.Subtle} className="libSidebarHint">
           {t('gpLibDragHint')}
         </Text>

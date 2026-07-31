@@ -1,9 +1,13 @@
 mod api;
+mod bot;
 mod brackets;
+mod coach;
 mod collection;
 mod db;
 mod game;
+mod oracle;
 mod rooms;
+mod rules;
 mod ws;
 
 use axum::http::HeaderValue;
@@ -55,6 +59,17 @@ pub struct App {
     /// Serializes cache misses: one Scryfall fetch at a time keeps us far
     /// inside their published rate limit however many tiles land at once.
     pub booster_art_lock: tokio::sync::Mutex<()>,
+    /// Cached Yu-Gi-Oh card faces (served at /api/ygo/img/{passcode}.jpg).
+    /// YGOPRODeck forbids client-side hotlinking of its image CDN, so the
+    /// server fetches each face exactly once and re-hosts it.
+    pub ygo_img_dir: std::path::PathBuf,
+    /// Serializes cache misses, keeping us far inside YGOPRODeck's 20 req/s.
+    pub ygo_img_lock: tokio::sync::Mutex<()>,
+    /// Oracle card facts for enforced rooms (see oracle.rs): memory cache over
+    /// a SQLite mirror over lazy Scryfall fetches.
+    pub oracle: DashMap<String, std::sync::Arc<oracle::OracleCard>>,
+    /// Serializes Scryfall oracle fetches server-wide.
+    pub oracle_lock: tokio::sync::Mutex<()>,
 }
 
 impl App {
@@ -149,9 +164,10 @@ async fn main() {
             .and_then(|s| serde_json::from_str::<rooms::Room>(s).ok());
         match parsed {
             Some(mut room) => {
-                // Everyone resumes by reconnecting.
+                // Everyone resumes by reconnecting; bots are always "present"
+                // (the scheduler picks them back up on its next scan).
                 for p in room.players.iter_mut() {
-                    p.online = false;
+                    p.online = p.is_bot;
                 }
                 room.spectators.clear();
                 // Rooms persisted before the match-end feature carry zeroed
@@ -198,6 +214,8 @@ async fn main() {
     std::fs::create_dir_all(&backs_dir).expect("create backs dir");
     let alt_art_dir = data_dir.join("alt-art");
     std::fs::create_dir_all(&alt_art_dir).expect("create alt art dir");
+    let ygo_img_dir = data_dir.join("ygo-img");
+    std::fs::create_dir_all(&ygo_img_dir).expect("create ygo img dir");
 
     let app = Arc::new(App {
         db: Mutex::new(conn),
@@ -215,6 +233,10 @@ async fn main() {
         alt_art_dir,
         booster_art_dir,
         booster_art_lock: tokio::sync::Mutex::new(()),
+        ygo_img_dir,
+        ygo_img_lock: tokio::sync::Mutex::new(()),
+        oracle: DashMap::new(),
+        oracle_lock: tokio::sync::Mutex::new(()),
     });
 
     // Rebuild the secondary indexes so codes resolve and seated players
@@ -230,7 +252,13 @@ async fn main() {
         app.rooms.insert(room.id.clone(), room);
     }
 
+    // Enforced rooms that survived a restart want their card facts warm again.
+    for room in app.rooms.iter().filter(|r| rules::enforced(&r)) {
+        oracle::prefetch_room(&app, &room);
+    }
+
     tokio::spawn(rooms::sweeper(app.clone()));
+    tokio::spawn(bot::scheduler(app.clone()));
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(|origin: &HeaderValue, _| {
@@ -293,6 +321,8 @@ async fn main() {
         .route("/api/art/{file}", get(api::alt_art_serve))
         .route("/api/boosters/art/{code}", get(api::booster_art))
         .route("/api/boosters/card/{code}/{index}", get(api::booster_card))
+        // Public, like booster art: Yu-Gi-Oh card faces load from <img> tags.
+        .route("/api/ygo/img/{id}", get(api::ygo_img))
         .route("/api/ws", get(ws::ws_handler))
         .merge(protected)
         .layer(cors)

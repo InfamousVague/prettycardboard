@@ -1,5 +1,6 @@
 import idManifest from '../../data/precon-ids.json' with { type: 'json' };
 import { SERVER_URL } from '../net/api.ts';
+import { isYugiohId, yugiohImage } from './yugioh.ts';
 
 /**
  * Card-image resolution plus the precon type shapes.
@@ -74,9 +75,13 @@ export function registerAltArt(id: string, file: string): void {
   ALT_ART_FILES.set(id, file);
 }
 
-/** The `normal`-size card front for any card id: alt art, bundled cache, then CDN. */
+/** The `normal`-size card front for any card id: alt art, bundled cache, then CDN.
+ * Yu-Gi-Oh passcodes (all-digits, so they can never collide with a Scryfall
+ * UUID or a `pc-` id) route to the yugioh resolver — which makes this the one
+ * safe fallback for every `imageUrl || cardImage(id)` site in the app. */
 export function cardImage(scryfallId: string | undefined): string {
   if (!scryfallId) return '';
+  if (isYugiohId(scryfallId)) return yugiohImage(scryfallId);
   if (isAltArtId(scryfallId)) {
     const file = ALT_ART_FILES.get(scryfallId);
     // An unresolved alt id means the catalog has not loaded yet (or the art was
@@ -103,9 +108,11 @@ export function coverArtCrop(coverImageUrl: string | undefined): string {
   return match ? artCrop(match[1]) : (coverImageUrl ?? '');
 }
 
-/** The wide art-crop for any card: bundled for precon commanders, CDN otherwise. */
+/** The wide art-crop for any card: bundled for precon commanders, CDN otherwise.
+ * Yu-Gi-Oh has no self-hostable crop; the full face stands in. */
 export function artCrop(scryfallId: string | undefined): string {
   if (!scryfallId) return '';
+  if (isYugiohId(scryfallId)) return yugiohImage(scryfallId);
   if (BUNDLED_ART.has(scryfallId)) return commanderArt(scryfallId);
   return `https://cards.scryfall.io/art_crop/front/${scryfallId[0]}/${scryfallId[1]}/${scryfallId}.jpg`;
 }

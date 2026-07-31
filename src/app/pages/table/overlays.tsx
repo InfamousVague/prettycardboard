@@ -14,6 +14,7 @@ import { ArrowDownToLine, ArrowUpToLine, Dices, Hand as HandIcon, Shuffle, Spark
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
+import { zoneLabel } from '../../data/games.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import { focusFromPointer, handSlinky, paintSlinky, restFocus, slinkyOffsets } from '../../components/slinky.ts';
@@ -334,16 +335,20 @@ export function PileViewer({ room, me, canAct }: { room: RoomState; me: TablePla
 
   if (!pileView || !player) return null;
 
-  const zoneKey = pileView.zone === 'graveyard' ? 'tblGraveyard' : 'tblExile';
+  const zoneKey =
+    pileView.zone === 'graveyard' ? 'tblGraveyard' : pileView.zone === 'command' ? 'tblCommand' : 'tblExile';
+  const nonMtg = !!room.game && room.game !== 'mtg';
+  const zoneTitle = nonMtg ? zoneLabel(room.game, pileView.zone) : t(zoneKey);
   const otherZone: Zone = pileView.zone === 'graveyard' ? 'exile' : 'graveyard';
   const otherKey = ZONE_KEYS[otherZone]!;
+  const otherLabel = nonMtg ? zoneLabel(room.game, otherZone) : t(otherKey);
 
   return (
     <Modal
       open
       onClose={() => setPileView(null)}
       size="xl"
-      title={`${player.username} · ${t(zoneKey)}`}
+      title={`${player.username} · ${zoneTitle}`}
       description={`${cards.length}`}
     >
       <ScrollArea className="pileScroll pcMobileFull">
@@ -351,11 +356,16 @@ export function PileViewer({ room, me, canAct }: { room: RoomState; me: TablePla
           {[...cards].reverse().map((card) => (
             <div key={card.iid} className="pileCard">
               <GameCard
-                name={card.name}
+                name={card.faceDown ? '' : card.name}
                 imageUrl={card.imageUrl || cardImage(card.scryfallId)}
+                faceDown={card.faceDown}
                 width={124}
                 tilt={0}
-                onClick={() => popup.open({ scryfallId: card.scryfallId, name: card.name, imageUrl: card.imageUrl })}
+                onClick={
+                  card.faceDown
+                    ? undefined
+                    : () => popup.open({ scryfallId: card.scryfallId, name: card.name, imageUrl: card.imageUrl })
+                }
               />
               {mine && (
                 <div className="pileActions">
@@ -374,7 +384,7 @@ export function PileViewer({ room, me, canAct }: { room: RoomState; me: TablePla
                     <Sparkles size={12} />
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => act({ kind: 'card.move', iid: card.iid, to: otherZone })}>
-                    {t(otherKey)}
+                    {otherLabel}
                   </Button>
                   <Button
                     size="sm"

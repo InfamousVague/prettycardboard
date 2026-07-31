@@ -15,13 +15,34 @@ export interface ChatLine {
   from: { userId: string; username: string };
   text: string;
   ts: number;
+  /**
+   * Set when the line is a card someone opened rather than something they
+   * typed. The server already relays notable pulls to the whole table; folding
+   * them into the chat transcript is what makes a pack opened next to your
+   * friends feel shared instead of private. `text` still carries the card name
+   * so anything that only knows how to render plain lines stays readable.
+   */
+  pull?: {
+    scryfallId: string;
+    name: string;
+    setCode: string;
+    rarity: string;
+    foil: boolean;
+  };
 }
 
 export interface LogLine {
   seq: number;
   text: string;
   ts: number;
+  /** Set on rules-coach advice: the Comprehensive Rules id the note is about.
+   * Only ever present on lines the local player alone can see. */
+  coach?: string;
 }
+
+/** Coach notes arrive without a server sequence number, so they get their own
+ * descending ids - guaranteed not to collide with real log seqs. */
+let coachSeq = 0;
 
 /** Server life lines read "<name> gains/loses N life (total)". Consecutive
  * life changes by the same player within a short window fold into one line so
@@ -59,6 +80,11 @@ interface GameState {
   room: RoomState | null;
   spectating: boolean;
   chat: ChatLine[];
+  /** Ephemeral targeting indicator (cleared ~4s after it arrives). */
+  aim: { fromIid?: string | null; toIid?: string | null; toSeat?: number | null; username: string } | null;
+  /** Table markers by card iid: 'point' (transient arrow) and persistent
+   * skull/star/eye flags, all relayed via the ephemeral aim message. */
+  marks: Record<string, string>;
   log: LogLine[];
   /** Owner-only prompt: your commander is leaving - return it to the command zone? */
   cmdChoice: { iid: string; to: string } | null;
@@ -213,6 +239,9 @@ function applyEvent(room: RoomState, actor: string, action: (GameAction | GameAc
           x: action.x ?? card.x,
           y: action.y ?? card.y,
           tapped: action.to === 'battlefield' ? card.tapped : false,
+          // A Set lands hidden in the same act (server: Action::CardMove
+          // face_down); every other move turns the card face-up.
+          faceDown: action.to === 'battlefield' && action.faceDown === true,
         };
         return withZone(next, action.to, [...zoneList(next, action.to), placed]);
       }
@@ -347,9 +376,67 @@ export const useGame = create<GameState>((set, get) => {
     } else if (message.type === 'chat') {
       if (message.roomId === get().joinedRoomId)
         set((state) => ({ chat: [...state.chat.slice(-199), { from: message.from, text: message.text, ts: message.ts }] }));
+    } else if (message.type === 'pull') {
+      // Notable pulls land in the same transcript as conversation, so the
+      // reaction and the card sit next to each other instead of in two places.
+      if (message.roomId === get().joinedRoomId)
+        set((state) => ({
+          chat: [
+            ...state.chat.slice(-199),
+            {
+              from: { userId: message.fromUserId, username: message.username },
+              text: message.name,
+              ts: message.ts,
+              pull: {
+                scryfallId: message.scryfallId,
+                name: message.name,
+                setCode: message.setCode,
+                rarity: message.rarity,
+                foil: message.foil,
+              },
+            },
+          ],
+        }));
+    } else if (message.type === 'error') {
+      // Enforced-room rejections carry a human reason; surface it. The table
+      // page listens and toasts (the store has no toast context of its own).
+      window.dispatchEvent(new CustomEvent('pc:action-error', { detail: { code: message.code, message: message.message } }));
+    } else if (message.type === 'aim') {
+      if (message.roomId === get().joinedRoomId) {
+        const kind = message.kind ?? 'target';
+        const iid = message.toIid;
+        if (kind === 'target' || !message.kind) {
+          set({ aim: { fromIid: message.fromIid, toIid: message.toIid, toSeat: message.toSeat, username: message.username } });
+          window.setTimeout(() => {
+            set((state) => (state.aim?.fromIid === message.fromIid ? { aim: null } : {}));
+          }, 4000);
+        } else if (iid && kind === 'clear') {
+          set((state) => {
+            const marks = { ...state.marks };
+            delete marks[iid];
+            return { marks };
+          });
+        } else if (iid && kind === 'point') {
+          set((state) => ({ marks: { ...state.marks, [iid]: 'point' } }));
+          window.setTimeout(() => {
+            set((state) => (state.marks[iid] === 'point' ? { marks: Object.fromEntries(Object.entries(state.marks).filter(([k]) => k !== iid)) } : {}));
+          }, 4000);
+        } else if (iid) {
+          set((state) => ({ marks: { ...state.marks, [iid]: kind } }));
+        }
+      }
     } else if (message.type === 'log') {
       if (message.roomId === get().joinedRoomId)
         set((state) => ({ log: appendLog(state.log, { seq: message.seq, text: message.text, ts: message.ts }) }));
+    } else if (message.type === 'coach') {
+      set((state) => ({
+        log: appendLog(state.log, {
+          seq: -(++coachSeq),
+          text: message.text,
+          ts: message.ts,
+          coach: message.rule,
+        }),
+      }));
     } else if (message.type === 'room.closed') {
       // The table was ended by its host (or expired). Clearing the room drops
       // the shell back to the routed page automatically; drop any activity
@@ -369,6 +456,8 @@ export const useGame = create<GameState>((set, get) => {
     room: null,
     spectating: false,
     chat: [],
+    aim: null,
+    marks: {},
     log: [],
     cmdChoice: null,
     libraryCards: null,

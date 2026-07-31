@@ -25,10 +25,13 @@ async function main() {
   host.joinRoom(roomId, seeded.pt_alice.deckId);
   await host.expectState((s) => s.players.length === 1, 'host seated', 5000);
 
-  // Fill the other two seats with bots.
+  // Fill the other two seats with bots. They arrive ready; the host readies up
+  // like any player before start.
   host.send({ type: 'bot.add', style: 'aggro' });
   host.send({ type: 'bot.add', style: 'casual' });
   await host.expectState((s) => s.players.filter((p) => p.isBot).length === 2, 'two bots seated', 10_000);
+  host.setReady(true);
+  await host.expectState((s) => s.players.every((p) => p.ready), 'everyone ready', 5000);
 
   host.send({ type: 'room.start' });
   await host.expectState((s) => s.started, 'started', 5000);
@@ -60,6 +63,10 @@ async function main() {
   const start = spec.messages.length;
   const t0 = Date.now();
   let maxTurn = first.turnNumber ?? 1;
+  // Progress = the turn moving in any way: the round counter OR the active
+  // seat. In a 2-seat game turnNumber only bumps once per full round, so seat
+  // handoffs are what "not stalled" actually means.
+  let turnMark = `${first.turnNumber ?? 1}:${first.activeSeat ?? 0}`;
   let lastTurnAt = Date.now();
   let sawDamage = false;
   let sawCombat = false;
@@ -71,7 +78,9 @@ async function main() {
     await sleep(1500);
     const s = spec.lastState();
     if (!s) continue;
-    if ((s.turnNumber ?? 0) > maxTurn) { maxTurn = s.turnNumber; lastTurnAt = Date.now(); }
+    if ((s.turnNumber ?? 0) > maxTurn) maxTurn = s.turnNumber;
+    const mark = `${s.turnNumber ?? 1}:${s.activeSeat ?? 0}`;
+    if (mark !== turnMark) { turnMark = mark; lastTurnAt = Date.now(); }
     for (const p of s.players) {
       maxBoard = Math.max(maxBoard, p.battlefield.length);
       if (p.life < (startingLife[p.seat] ?? 40)) sawDamage = true;

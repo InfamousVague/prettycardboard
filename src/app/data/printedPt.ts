@@ -50,11 +50,28 @@ const queued = new Set<string>();
 let draining = false;
 
 /**
+ * Type lines learned from the same lookups, keyed by Scryfall id. This is what
+ * lets the board classify cards from ANY deck - the bundled precon map only
+ * covers the starter decks, and creature-vs-land drives real interactions
+ * (attack/block click targets, assisted drops), not just labels.
+ */
+const typeLines = new Map<string, string>();
+for (const precon of PRECONS) {
+  for (const card of precon.cards) typeLines.set(card.id, card.typeLine);
+}
+
+/** The card's printed type line, if any lookup has seen it yet. */
+export function printedTypeLine(scryfallId: string): string | undefined {
+  return typeLines.get(scryfallId);
+}
+
+/**
  * Share a P/T someone else already fetched (the card-details panel pulls the
  * whole Scryfall record for its hover preview), so the board never asks for a
  * card the popup has already seen.
  */
-export function notePrintedPT(scryfallId: string, power?: string, toughness?: string): void {
+export function notePrintedPT(scryfallId: string, power?: string, toughness?: string, typeLine?: string): void {
+  if (typeLine && !typeLines.has(scryfallId)) typeLines.set(scryfallId, typeLine);
   if (cache.has(scryfallId)) return;
   cache.set(scryfallId, power != null && toughness != null ? { power, toughness } : null);
   listeners.forEach((fn) => fn());
@@ -89,42 +106,116 @@ export function printedPT(card: CardInst): PrintedPT | null | undefined {
   return cache.get(card.scryfallId);
 }
 
-/* A card at a time with a breath in between: Scryfall asks for ~10 requests a
-   second at the very most, and a fresh 30-card board would otherwise fire 30
-   at once on the first frame. */
-const REQUEST_GAP_MS = 120;
+/* A breath between batches; Scryfall asks for ~10 requests a second at most. */
+const REQUEST_GAP_MS = 150;
+/* /cards/collection accepts up to 75 identifiers per POST. */
+const BATCH_MAX = 75;
 
 interface ScryPT {
+  id?: string;
   power?: string;
   toughness?: string;
-  card_faces?: { power?: string; toughness?: string }[];
+  type_line?: string;
+  mana_cost?: string;
+  cmc?: number;
+  oracle_text?: string;
+  keywords?: string[];
+  produced_mana?: string[];
+  card_faces?: { power?: string; toughness?: string; type_line?: string; mana_cost?: string; oracle_text?: string }[];
 }
 
-/** One card's P/T from Scryfall. A card wearing our own art has a `pc-…` id
- *  Scryfall 404s on, so it is asked for by the oracle identity that art was
- *  published against - the same route the card details take. */
-async function lookup(id: string): Promise<ScryPT | undefined> {
-  if (isAltArtId(id)) {
-    // Dynamic: scryfall.ts is a static dependency of the app shell, and pulling
-    // this module into that graph drags the bundled precon decklists with it.
-    const { altArtOracleId, loadAltArtCatalog } = await import('./scryfall.ts');
-    await loadAltArtCatalog();
-    const oracleId = altArtOracleId(id);
-    if (!oracleId) return undefined;
-    const response = await fetch('https://api.scryfall.com/cards/collection', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ identifiers: [{ oracle_id: oracleId }] }),
-    });
-    if (!response.ok) return undefined;
-    const body = (await response.json()) as { data?: ScryPT[] };
-    return body.data?.[0];
+/** Everything the enforced-mode client logic needs to know about a card:
+ * cost (parsed to pips), types, keywords, what it taps for. Mirrors the
+ * server's oracle.rs so both sides agree about legality and affordability. */
+export interface OracleFacts {
+  typeLine: string;
+  mv: number;
+  /** Generic cost component (hybrid/phyrexian counted here, X as 0). */
+  generic: number;
+  /** Required colored pips by letter (W U B R G C). */
+  pips: Record<string, number>;
+  keywords: string[];
+  /** Colors this card can produce (lands, rocks). */
+  produced: string[];
+  /** What this spell targets, parsed from its oracle text ("creature",
+   * "permanent", "player", ...). Empty = it does not target. */
+  targetKinds: string[];
+}
+
+const factsMap = new Map<string, OracleFacts>();
+
+/** Parsed oracle facts, once a lookup has landed. */
+export function oracleFacts(scryfallId: string | undefined): OracleFacts | undefined {
+  return scryfallId ? factsMap.get(scryfallId) : undefined;
+}
+
+/** "{2}{W}{W}" -> { generic: 2, pips: { W: 2 } }. Hybrid/Phyrexian count as
+ * generic (payable-any-way is close enough); X counts as 0. */
+function parseCost(cost: string): { generic: number; pips: Record<string, number> } {
+  let generic = 0;
+  const pips: Record<string, number> = {};
+  for (const sym of cost.replace(/^\{/, '').replace(/\}$/, '').split('}{')) {
+    if (!sym) continue;
+    const n = Number(sym);
+    if (Number.isFinite(n)) generic += n;
+    else if (sym.length === 1 && 'WUBRGC'.includes(sym)) pips[sym] = (pips[sym] ?? 0) + 1;
+    else if (sym === 'X' || sym === 'Y' || sym === 'Z') {
+      /* X chosen at cast time; charged 0 here */
+    } else generic += 1;
   }
-  const response = await fetch(`https://api.scryfall.com/cards/${id}`, {
-    headers: { Accept: 'application/json' },
+  return { generic, pips };
+}
+
+/** Fold one fetched card into the caches. */
+function absorb(id: string, card: ScryPT): void {
+  const face = card.card_faces?.[0];
+  const power = card.power ?? face?.power;
+  const toughness = card.toughness ?? face?.toughness;
+  // The lookup already paid for the whole card: keep its type line too, so
+  // creature/land classification works beyond the bundled precons.
+  // Split and adventure layouts come back COMBINED - "Creature — Zombie
+  // Knight // Instant", "{1}{B}{B} // {1}{B}" - so the top-level string reads
+  // as the wrong half and costs the sum of both. Face 0 is what you cast from
+  // hand. Mirrors oracle.rs::parse_card, which the server enforces on.
+  const line = face?.type_line || card.type_line;
+  if (line && !typeLines.has(id)) typeLines.set(id, line);
+  const cost = face?.mana_cost || card.mana_cost || '';
+  const { generic, pips } = parseCost(cost);
+  const text = (face?.oracle_text || card.oracle_text || '').toLowerCase();
+  const targetKinds: string[] = [];
+  for (const kind of ['creature', 'planeswalker', 'artifact', 'enchantment', 'land', 'permanent', 'player', 'opponent', 'spell']) {
+    if (text.includes(`target ${kind}`) && !targetKinds.includes(kind)) targetKinds.push(kind);
+  }
+  if (targetKinds.length === 0 && /\btarget\b/.test(text)) targetKinds.push('any');
+  factsMap.set(id, {
+    typeLine: line ?? '',
+    mv: Math.round(card.cmc ?? 0),
+    generic,
+    pips,
+    keywords: (card.keywords ?? []).map((k) => k.toLowerCase()),
+    produced: (card.produced_mana ?? []).filter((c) => 'WUBRGC'.includes(c)),
+    targetKinds,
   });
-  if (!response.ok) throw new Error(String(response.status));
-  return (await response.json()) as ScryPT;
+  cache.set(id, power != null && toughness != null ? { power, toughness } : null);
+}
+
+/** A `pc-…` alt-art id Scryfall 404s on is asked for by the oracle identity
+ *  its art was published against - the same route the card details take. */
+async function lookupAltArt(id: string): Promise<ScryPT | undefined> {
+  // Dynamic: scryfall.ts is a static dependency of the app shell, and pulling
+  // this module into that graph drags the bundled precon decklists with it.
+  const { altArtOracleId, loadAltArtCatalog } = await import('./scryfall.ts');
+  await loadAltArtCatalog();
+  const oracleId = altArtOracleId(id);
+  if (!oracleId) return undefined;
+  const response = await fetch('https://api.scryfall.com/cards/collection', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ identifiers: [{ oracle_id: oracleId }] }),
+  });
+  if (!response.ok) return undefined;
+  const body = (await response.json()) as { data?: ScryPT[] };
+  return body.data?.[0];
 }
 
 async function drain(): Promise<void> {
@@ -132,22 +223,69 @@ async function drain(): Promise<void> {
   draining = true;
   try {
     while (queued.size > 0) {
-      const id = queued.values().next().value as string;
-      queued.delete(id);
-      if (cache.has(id)) continue;
-      try {
-        const card = await lookup(id);
-        if (!card) continue;
-        const face = card.card_faces?.[0];
-        const power = card.power ?? face?.power;
-        const toughness = card.toughness ?? face?.toughness;
-        cache.set(id, power != null && toughness != null ? { power, toughness } : null);
-        listeners.forEach((fn) => fn());
-      } catch {
-        // Leave it uncached: a flaky lookup should not permanently brand a
-        // creature as P/T-less. The next board change re-queues it.
+      // One /cards/collection POST covers a whole fresh board at once, so a
+      // deck the app has never seen classifies in a single round trip instead
+      // of trickling in a card at a time. Alt-art ids take their own path.
+      const batch: string[] = [];
+      const alts: string[] = [];
+      for (const id of queued) {
+        if (cache.has(id)) {
+          queued.delete(id);
+          continue;
+        }
+        if (isAltArtId(id)) {
+          if (alts.length === 0) alts.push(id);
+          continue;
+        }
+        batch.push(id);
+        if (batch.length >= BATCH_MAX) break;
       }
-      await new Promise((resolve) => setTimeout(resolve, REQUEST_GAP_MS));
+      for (const id of batch) queued.delete(id);
+
+      if (batch.length > 0) {
+        try {
+          const response = await fetch('https://api.scryfall.com/cards/collection', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ identifiers: batch.map((id) => ({ id })) }),
+          });
+          if (response.ok) {
+            const body = (await response.json()) as { data?: ScryPT[] };
+            const seen = new Set<string>();
+            for (const card of body.data ?? []) {
+              if (!card.id) continue;
+              seen.add(card.id);
+              absorb(card.id, card);
+            }
+            // Ids Scryfall says do not exist will never resolve; cache the
+            // "no P/T" answer so they are not re-asked forever.
+            for (const id of batch) {
+              if (!seen.has(id)) cache.set(id, null);
+            }
+            listeners.forEach((fn) => fn());
+          }
+          // Non-OK: leave the batch uncached; a flaky response should not
+          // permanently brand creatures as P/T-less. The next board change
+          // re-queues them.
+        } catch {
+          /* same: transient failures stay uncached */
+        }
+      } else if (alts.length > 0) {
+        const id = alts[0]!;
+        queued.delete(id);
+        try {
+          const card = await lookupAltArt(id);
+          if (card) {
+            absorb(id, card);
+            listeners.forEach((fn) => fn());
+          }
+        } catch {
+          /* transient; retried on the next queue */
+        }
+      }
+      if (queued.size > 0) {
+        await new Promise((resolve) => setTimeout(resolve, REQUEST_GAP_MS));
+      }
     }
   } finally {
     draining = false;

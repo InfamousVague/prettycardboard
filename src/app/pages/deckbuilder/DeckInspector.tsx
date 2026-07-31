@@ -23,6 +23,8 @@ import './deckInspector.css';
 export function DeckInspector({ deck, open, onClose }: { deck: DeckSummary; open: boolean; onClose: () => void }) {
   const t = useT();
   const cyber = (deck.game || 'mtg') === 'cyberpunk';
+  const ygo = (deck.game || 'mtg') === 'yugioh';
+  const mtg = !cyber && !ygo;
   const fmt = formatFor(deck.format);
   const cover = deck.coverImageUrl || (deck.coverCardId ? resolveCardImage(deck.game, deck.coverCardId) : undefined);
 
@@ -39,7 +41,7 @@ export function DeckInspector({ deck, open, onClose }: { deck: DeckSummary; open
     void getDeck(deck.id)
       .then(async (full) => {
         if (!alive) return;
-        if (!cyber) setBracket(estimateBracket(full.cards));
+        if (mtg) setBracket(estimateBracket(full.cards));
         const computed = await computeDeckMeta(full, deck.game || 'mtg');
         if (alive) setMeta(computed);
       })
@@ -50,7 +52,7 @@ export function DeckInspector({ deck, open, onClose }: { deck: DeckSummary; open
     return () => {
       alive = false;
     };
-  }, [open, deck.id, deck.game, cyber]);
+  }, [open, deck.id, deck.game, mtg]);
 
   const row = (label: string, value: ReactNode) => (
     <div className="diRow">
@@ -72,7 +74,7 @@ export function DeckInspector({ deck, open, onClose }: { deck: DeckSummary; open
             <span className="diName">{deck.name}</span>
             <span className="diTags">
               <GameTag game={deck.game} />
-              {!cyber && (
+              {mtg && (
                 <Pill size="sm" variant="soft">
                   {fmt.name}
                 </Pill>
@@ -88,7 +90,16 @@ export function DeckInspector({ deck, open, onClose }: { deck: DeckSummary; open
 
         <div className="diStats">
           {row(t('diCards'), <span className="diNumeric">{deck.cardCount}</span>)}
-          {!cyber &&
+          {ygo &&
+            meta != null &&
+            row(
+              t('anTypes'),
+              <span className="diNumeric">
+                {meta.monsters ?? 0}M · {meta.spells ?? 0}S · {meta.traps ?? 0}T
+                {meta.extra ? ` · +${meta.extra}` : ''}
+              </span>,
+            )}
+          {mtg &&
             row(
               t('diColors'),
               meta == null ? (
@@ -130,7 +141,7 @@ export function DeckInspector({ deck, open, onClose }: { deck: DeckSummary; open
               </Text>
             ),
           )}
-          {!cyber &&
+          {mtg &&
             fmt.brackets &&
             bracket != null &&
             row(

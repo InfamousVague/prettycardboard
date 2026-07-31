@@ -96,6 +96,12 @@ jobs:
       - name: Install npm deps
         run: npm ci
 
+      - name: Stage local game server sidecar
+        # The bundled server that powers Local play (offline bot matches).
+        # macOS bundles are universal, so the sidecar must be too.
+        if: ${{ !(matrix.os == 'macos-latest' && github.ref_type == 'tag') }}
+        run: node scripts/stage-server-sidecar.mjs ${{ matrix.os == 'macos-latest' && '--universal' || '' }}
+
       - name: Build (Tauri bundle)
         # Skip macOS on tag push: the signed/notarized DMG is built + uploaded
         # locally. macOS still builds on manual dispatch for smoke.

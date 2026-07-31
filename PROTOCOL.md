@@ -55,7 +55,7 @@ increasing `seq` per room; clients apply events in order.
 - `{type: "game.action", action: Action}`
 
 ### Action (freeform table ops — server applies, never judges legality)
-- `{kind: "card.move", iid, to: Zone, x?, y?, index?}` — zones: `library | hand | battlefield | graveyard | exile | command`. Moving to library: `index` 0 = top, -1 = bottom.
+- `{kind: "card.move", iid, to: Zone, x?, y?, index?, faceDown?}` — zones: `library | hand | battlefield | graveyard | exile | command`. Moving to library: `index` 0 = top, -1 = bottom. `faceDown` (battlefield only) lands the card hidden in the same act — a Yu-Gi-Oh Set. The card's identity is never broadcast: other seats get no `card` payload, the log says "sets a card face-down", and they are resynced from the masked snapshot.
 - `{kind: "card.pos", iid, x, y}` — battlefield drag (0..1 normalized within the seat's field)
 - `{kind: "card.tap", iid, tapped}`
 - `{kind: "card.face", iid, faceDown}`
@@ -406,7 +406,7 @@ undo truncates the redo tail (single linear branch). All three resync via
 RoomState is unchanged. Undo/redo/replay all reuse the existing full-state
 resync path, so no per-action inverse deltas exist on the wire.
 
-## Multi-game addendum (`mtg` | `cyberpunk`)
+## Multi-game addendum (`mtg` | `cyberpunk` | `yugioh`)
 
 The engine is game-agnostic (it moves cards between zones and never judges
 legality), so a "game" is defined by presentation + defaults, not new engine
@@ -414,21 +414,44 @@ rules. A `game` field tags rooms and decks; the client reads it to relabel
 zones, pick vitals, hide phases, and resolve card art. Default `"mtg"`, so every
 pre-multigame room/deck/snapshot reads back unchanged.
 
-- `POST /api/rooms` body gains `game?: "mtg" | "cyberpunk"` (default `mtg`).
-  Cyberpunk rooms are forced to `format: "standard"`.
+- `POST /api/rooms` body gains `game?: "mtg" | "cyberpunk" | "yugioh"` (default
+  `mtg`). Cyberpunk and Yu-Gi-Oh rooms are forced to `format: "standard"`
+  (which also keeps the commander machinery off).
 - `POST /api/decks` / `PUT` body gains `game?`; `GET /api/decks` items gain
-  `game` + `coverCardId` (Cyberpunk art is client-resolved from the id, so
-  `coverImageUrl` is null for Cyberpunk).
+  `game` + `coverCardId` (Cyberpunk/Yu-Gi-Oh art is client-resolved from the
+  id, so `coverImageUrl` is null for both).
 - `RoomState` gains `game`.
 - Starting vitals are game-driven: MTG `life` 40/20 + `poison`; Cyberpunk reuses
-  the `life`/`poison` slots as **Net** + **RAM** counters, both starting at 0.
+  the `life`/`poison` slots as **Net** + **RAM** counters, both starting at 0;
+  Yu-Gi-Oh starts `life` at **8000 LP** (host override clamp widens to 99999
+  for it) and leaves `poison` unused. Yu-Gi-Oh deals 5-card opening hands and
+  has NO mulligan flow: seats are dealt already `kept`, so the first turn
+  begins with the deal.
 - Zones map onto the same six physical slots; Cyberpunk relabels them
   Deck / Hand / In-Play / Trash / Eddies / Legend (the Legend rides the
-  `commander` board slot, so it deals into the command zone without MTG tax).
+  `commander` board slot, so it deals into the command zone without MTG tax);
+  Yu-Gi-Oh relabels them Deck / Hand / Field / Graveyard / Banished /
+  **Extra Deck** (the Extra Deck rides the `commander` board slot, with the
+  `side` board as the Side Deck). Extra Deck contents are hidden information
+  to everyone but their owner: snapshots mask command-zone cards (identity
+  stripped, `faceDown: true`) for every other viewer, while the owner sees
+  them face-up and plays them with ordinary `card.move`. The command zone
+  counts as a HIDDEN zone for yugioh events too, so moves in and out of it are
+  logged as "a card" and never carry the identity to other seats.
+- The Yu-Gi-Oh field is a printed 7x3 zone grid (Extra Monster / Field /
+  Monster / Spell & Trap, with Banished, Graveyard, Deck and Extra Deck in
+  their own cells). It is a CLIENT concern only — the server stays freeform and
+  stores whatever normalized x/y it is sent; the client snaps drops to the
+  nearest cell center (`src/app/pages/table/yugiohZones.tsx`).
 - Cyberpunk cards carry a bundled art path in `imageUrl`
-  (`/cache/cyberpunk/<id>.webp`); MTG still sends `imageUrl: null` and the client
-  resolves Scryfall from the id. Card identity for Cyberpunk is the Netdeck UUID,
-  stored in the same `scryfallId` slot.
+  (`/cache/cyberpunk/<id>.webp`); MTG and Yu-Gi-Oh send `imageUrl: null` and
+  the client resolves art from the id (Scryfall CDN for MTG; for Yu-Gi-Oh the
+  bundled starter cache, else `GET /api/ygo/img/{passcode}.jpg` — a public
+  server endpoint that fetches a face from YGOPRODeck's CDN once, caches it on
+  disk, and serves it thereafter, since YGOPRODeck forbids client hotlinking).
+  Card identity is the Netdeck UUID for Cyberpunk and the YGOPRODeck passcode
+  (unpadded decimal string, e.g. `"46986414"`) for Yu-Gi-Oh, both stored in
+  the same `scryfallId` slot.
 
 ## Mat layout addendum (2026-07-24)
 
@@ -564,3 +587,116 @@ themselves.
   face of a `A // B` split/double-faced entry. 0 Game Changers = bracket 2, 1-3 =
   3, 4+ = 4; brackets 1 and 5 are social calls a card list cannot make, so the
   estimate never claims them and clients must label it an estimate.
+
+## Bots addendum (v3, 2026-07-30) — AI opponents
+
+Server-resident heuristic opponents. A bot is an ordinary `Player` driven by
+the server itself (`server/src/bot.rs`); it acts exclusively through the same
+`game.action` pipeline as a human, so every rule in this document applies to
+bots unchanged. Bots also TALK: they announce their plays in the room chat
+using the ordinary `chat` frame.
+
+### Seating
+
+- `{ "type": "bot.add", "deckCode"?: "FIC-<n>"|"random", "style"?:
+  "casual"|"aggro"|"defensive" }` — host only, room not started, MTG tables
+  only, at least one free seat. Seats a synthetic player (`userId` `"bot:<id>"`,
+  persona username like `"Bramble (AI)"`, `isBot: true` in RoomState players).
+  Defaults: `deckCode` random precon, `style` "casual". Errors: `forbidden`
+  (non-host), `already_started`, `bad_game`, `room_full`, `bad_deck`.
+- `{ "type": "bot.remove", "seat": <n> }` — host only, room not started,
+  target seat must hold a bot. Error: `not_a_bot`.
+- Bots play the bundled Commander precons only (the server embeds their lists
+  plus per-card attributes generated from `src/data/precons.json` by
+  `scripts/gen-bot-data.mjs` into `server/src/data/bot_data.json`). A bot seat
+  arrives `ready: true` with a sentinel `deckId` (`"bot:FIC-<n>"`), always
+  `online`, and with `auto.set`-style untap/draw enabled, so `room.start`'s
+  readiness checks hold without special cases.
+
+### Behavior contract
+
+- The scheduler ticks ~every 800 ms; a bot performs at most one action per
+  tick (human-like pacing; ~0 idle cost). Bots resume automatically after a
+  server restart (the scheduler scans persisted rooms — no extra state).
+- Mulligan: keeps 2-5 lands in a 7-card hand (bounds scale with the dealt
+  size), mulligans at most three times and never below five cards; London
+  keeps bottom the most expensive spells first.
+- On its turn: plays one land per turn; casts what its untapped lands can
+  afford (tapping lands as payment), commander included (tax-aware);
+  creatures/permanents go to the battlefield, instants/sorceries ride the
+  stack and self-resolve to the graveyard; never attacks with a creature it
+  played that same turn.
+- Attacking: picks its defender fresh every combat by threat score (board
+  value + resources + a finisher bonus at low life, discounted by untapped
+  defense; a runaway leader eats every attack). Per-creature attack classes
+  follow the Forge ladder: free swings when the defender has no untapped
+  creatures, safe attacks, even trades, all-in only when the race math says
+  so. After declaring, the bot announces the attack in chat ("Attacking Matt
+  for 12 damage with A, B and C.") and holds combat open ~9 s (1.6 s at an
+  all-bot table) so defenders can respond, then ends combat. A bot never
+  stalls a turn longer than ~35 s (failsafe: pass).
+- Defending: an ordered block pipeline (free blocks, profitable trades, gang
+  blocks, chump blocks only when the unblocked total would put it in the
+  red). After the combat clears, the bot settles ITS OWN damage from the
+  room's last-combat record: unblocked commander damage via `cmd.damage`
+  (which also lowers life), the rest via `life.add`, and its dead creatures
+  move themselves to the graveyard. It never touches another seat's cards or
+  totals - the freeform contract stands.
+- Answers its own `cmd.choice` prompts (accept: return to command zone), and
+  concedes (with a "GG" in chat) once its life reaches 0, poison reaches 10,
+  or any single commander has dealt it 21 - that is what lets a bot match
+  actually END via the normal last-player-standing path.
+- Table talk: a greeting when seated, keep/mulligan notes, attack
+  announcements, block declarations (capped per combat), damage taken, a GG
+  on concede, and a handshake on winning. All through the ordinary `chat`
+  frame with `from.userId` = the bot id, so clients need nothing special.
+- Bots do not count as "online" for room-expiry liveness, never become host,
+  write no match-history rows, and `matchResult.players[].isBot` is true for
+  them; games without two humans stay unranked.
+
+## Enforced rules addendum (2026-07-30) — Arena-lite tables
+
+Opt-in per room: `settings.enforced` (host toggle, MTG only; ignored for other
+games). Freeform stays the default and the coach stays advisory. In an
+enforced room the server validates the actions that matter and rejects illegal
+ones with `{"type":"error","code":"illegal","message":<human reason>}`
+(`must_cast` when a hand card was dragged out without paying).
+
+Card facts come from a server-side oracle cache (`oracle.rs`: memory over
+SQLite over lazy Scryfall `/cards/collection` fetches, prefetched at deck
+select / bot add / start). Unknown cards (custom art ids, fetch failures) stay
+permissive rather than bricking a deck. The client mirrors the same facts from
+its own Scryfall cache to glow legal moves (`data-playable`, attack/block
+affordances); the server remains the authority.
+
+### What is enforced (v1)
+
+- One land per turn, your own main phases only (`landsThisTurn` is public on
+  each player).
+- Casting: `{kind: "cast", iid, payment?: [land iids], x?, y?}` pays the real
+  colored cost - floating pool first, then auto-chosen lands (or exactly
+  `payment`). Permanents enter the battlefield (`enteredTurn` stamped for
+  summoning sickness); instants/sorceries ride the stack, their EFFECT still
+  performed manually by the caster before stack.resolve. Commanders via
+  `cmd.cast` pay cost + tax the same way. Dragging a known non-land out of
+  hand is rejected (`must_cast`); the client sends `cast` instead.
+- Tapping your own land floats mana into your pool (`card.tap` gains optional
+  `mana: "W".."C"` to pick a color on multi-producers); pools empty at every
+  phase boundary. Manual untapping is rejected (untap happens at turn start).
+- Turn order: only the active player passes/edits phases; `turn.set` and
+  `untap.all` are rejected.
+- Combat is a locked machine: `combat.begin` → `combat.attack` (validated:
+  untapped creature, no summoning sickness unless haste, no defender) →
+  `combat.lock` → defender `combat.block` (validated: untapped creature,
+  flying needs flying/reach, menace needs 0 or 2+) → `combat.ready` → server
+  computes `combat.preview` on the room state (per-attacker damage, deaths,
+  life deltas with first strike / double strike / deathtouch / trample /
+  lifelink, commander damage) → active player `combat.resolve` applies it
+  (deaths to graveyards, life totals, cmdDamage). `combat.end` cancels.
+- Wire additions: `Combat` gains `locked`, `blocksReady`, `preview`
+  (camelCase `CombatPreview`: `rows[]`, `life{seat: delta}`, `commander[]`).
+
+Bots play enforced rooms through the same validator (oracle-aware casting,
+keyword-aware combat math, the lock/ready/resolve flow) and skip their manual
+damage settlement there. `bot.add` gains `difficulty: "easy"|"normal"|"hard"`
+(scales aggression, casting budget, blocking discipline).

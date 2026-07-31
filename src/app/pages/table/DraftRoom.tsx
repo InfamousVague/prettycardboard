@@ -520,7 +520,13 @@ function DraftPicking({ room, spectating }: { room: RoomState; spectating: boole
                   transition={{ type: 'spring', stiffness: 320, damping: 32 }}
                 >
                   {pack.map((card, index) => (
-                    <li key={`${card.id}-${index}`} className="dfPick" data-rarity={card.rarity}>
+                    <li
+                      key={`${card.id}-${index}`}
+                      className="dfPick"
+                      data-rarity={card.rarity}
+                      data-preview-src={cardImage(card.id)}
+                      data-preview-name={card.name}
+                    >
                       <GameCard
                         name={card.name}
                         imageUrl={cardImage(card.id)}
@@ -872,7 +878,19 @@ function DraftBuilding({
   useEffect(() => {
     let alive = true;
     loadSetPool(draft.set)
-      .then((setPool) => alive && setBasics(setPool.basic.slice(0, 5)))
+      .then((setPool) => {
+        if (!alive) return;
+        // The pool lists EVERY printing of each basic, ordered by collector
+        // number - slicing the head used to hand you five Plains arts. Keep
+        // one printing per basic, in WUBRG order.
+        const order = ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest', 'Wastes'];
+        const seen = new Map<string, PoolCard>();
+        for (const card of setPool.basic) {
+          const base = order.find((n) => card.name === n || card.name === `Snow-Covered ${n}`);
+          if (base && !seen.has(base)) seen.set(base, card);
+        }
+        setBasics(order.filter((n) => seen.has(n)).map((n) => seen.get(n)!));
+      })
       .catch(() => undefined);
     return () => {
       alive = false;
@@ -1000,25 +1018,32 @@ function DraftBuilding({
         <div className="dfLands">
           <span className="dfLandsLabel">{t('dfLands')}</span>
           {basics.map((basic) => (
-            <span key={basic.id} className="dfLand">
+            <span
+              key={basic.id}
+              className="dfLand"
+              data-preview-src={cardImage(basic.id)}
+              data-preview-name={basic.name}
+            >
               <img src={cardImage(basic.id)} alt={basic.name} className="dfLandArt" />
-              <button
-                type="button"
-                className="dfLandStep"
-                aria-label={`${basic.name} −`}
-                onClick={() => bumpLand(basic.id, -1)}
-              >
-                −
-              </button>
-              <span className="dfLandCount">{lands[basic.id] ?? 0}</span>
-              <button
-                type="button"
-                className="dfLandStep"
-                aria-label={`${basic.name} +`}
-                onClick={() => bumpLand(basic.id, 1)}
-              >
-                +
-              </button>
+              <span className="dfLandRow">
+                <button
+                  type="button"
+                  className="dfLandStep"
+                  aria-label={`${basic.name} −`}
+                  onClick={() => bumpLand(basic.id, -1)}
+                >
+                  −
+                </button>
+                <span className="dfLandCount">{lands[basic.id] ?? 0}</span>
+                <button
+                  type="button"
+                  className="dfLandStep"
+                  aria-label={`${basic.name} +`}
+                  onClick={() => bumpLand(basic.id, 1)}
+                >
+                  +
+                </button>
+              </span>
             </span>
           ))}
         </div>
@@ -1028,7 +1053,13 @@ function DraftBuilding({
         {pool.map((card, index) => {
           const chosen = inDeck.has(index);
           return (
-            <li key={`${card.id}-${index}`} className="dfPoolCard" data-in={chosen || undefined}>
+            <li
+              key={`${card.id}-${index}`}
+              className="dfPoolCard"
+              data-in={chosen || undefined}
+              data-preview-src={cardImage(card.id)}
+              data-preview-name={card.name}
+            >
               <GameCard
                 name={card.name}
                 imageUrl={cardImage(card.id)}
