@@ -117,6 +117,44 @@ compiles the server to Linux, ships the binary, restarts the service, and smoke-
 checks the site. The SQLite data dir on the box is never touched, so rooms and
 accounts survive a deploy.
 
+### Releasing the desktop app
+
+One command bumps the version, tags it, builds all three desktop platforms, and
+publishes the OTA manifest:
+
+```sh
+npm run bump-n-distribute -- --dry-run   # print the plan, change nothing
+npm run bump-n-distribute                # patch bump (0.5.3 -> 0.5.4)
+npm run bump-n-distribute -- minor       # 0.5.3 -> 0.6.0
+npm run bump-n-distribute -- 1.0.0       # explicit version
+```
+
+With `npm run`, flags MUST follow `--` or npm swallows them (`npm run
+bump-n-distribute --dry-run` would perform a real release; the script rejects
+unknown flags to catch exactly that). `yarn bump-n-distribute --dry-run` works
+without the separator.
+
+What it does, and why it is shaped this way: pushing the `v*` tag starts
+`.github/workflows/desktop-build.yml`, which builds **Windows + Linux** on
+native runners. **macOS is built locally** by the same command, because Apple
+notarization does not run reliably on hosted runners. Both halves upload to the
+same release; the script then waits for CI and rebuilds `latest.json` so the
+OTA updater offers every platform.
+
+It refuses to run when it should: not on `main`, dirty tree, tag already exists,
+version not newer than the current one, no push access, or a failing typecheck.
+Each has an escape hatch (`--allow-branch`, `--allow-dirty`, `--allow-downgrade`,
+`--skip-checks`). Useful extras: `--skip-mac` (not on a Mac), `--skip-ci` (don't
+wait), `--notes "…"`, `--yes`, `--help`.
+
+By default only `package.json` and `src-tauri/tauri.conf.json` are committed —
+unrelated work in the tree is never folded into a release commit unless you pass
+`--allow-dirty`. If a step after the push fails, the script says exactly which
+one and how to finish it by hand, and exits non-zero.
+
+macOS signing needs a gitignored `.env.apple`; see
+[scripts/release-mac.mjs](./scripts/release-mac.mjs) for the required keys.
+
 ## Conventions
 
 - **Protocol first.** Any new client/server message goes in `PROTOCOL.md` and the

@@ -49,6 +49,58 @@ pub struct BotDeckCard {
     pub board: String,
 }
 
+/// The public deck-metrics blob for a bot seat, in the same shape a human
+/// client pushes with `deckmeta.set` (see src/app/data/deckMeta.ts).
+///
+/// Humans compute their own because the server only stores card ids - but a
+/// bot has no client to compute anything, so its seat used to carry no metrics
+/// at all and every deck-facing affordance went dark against the commonest
+/// opponent in the app. The embedded attr table already holds exactly what
+/// this needs, so derive it here.
+pub fn deck_meta(code: &str) -> Option<serde_json::Value> {
+    let d = data();
+    let deck = d.decks.iter().find(|deck| deck.code == code)?;
+    let mut size = 0u64;
+    let (mut creatures, mut lands, mut spells, mut other) = (0u64, 0u64, 0u64, 0u64);
+    let mut mv_sum = 0f64;
+    let mut mv_count = 0u64;
+    let mut curve = vec![0u64; 8];
+    for card in &deck.cards {
+        if card.board == "side" {
+            continue;
+        }
+        let qty = card.qty as u64;
+        size += qty;
+        let Some(attr) = d.attrs.get(&card.sid) else { continue };
+        let is_land = attr.t.contains('L');
+        if is_land {
+            lands += qty;
+        } else if attr.t.contains('C') {
+            creatures += qty;
+        } else if attr.t.contains('I') || attr.t.contains('S') {
+            spells += qty;
+        } else {
+            other += qty;
+        }
+        if !is_land {
+            mv_sum += attr.mv * qty as f64;
+            mv_count += qty;
+            let slot = (attr.mv.round().max(0.0) as usize).min(curve.len() - 1);
+            curve[slot] += qty;
+        }
+    }
+    let avg_mv = if mv_count > 0 { (mv_sum / mv_count as f64 * 10.0).round() / 10.0 } else { 0.0 };
+    Some(serde_json::json!({
+        "size": size,
+        "creatures": creatures,
+        "lands": lands,
+        "spells": spells,
+        "other": other,
+        "avgMv": avg_mv,
+        "curve": curve,
+    }))
+}
+
 /// Per-card attributes: mana value, type letters (subset of LCISAEPB, O =
 /// other), and printed power/toughness when present.
 #[derive(Deserialize)]
@@ -297,6 +349,15 @@ fn mull_line(down_to: usize) -> String {
     }
 }
 
+/// Acknowledge a resolved spell that killed one of the bot's permanents.
+fn honor_line(card: &str, spell: &str) -> String {
+    match rand::random_range(0..3) {
+        0 => format!("{spell} gets {card}. Moving it to the graveyard."),
+        1 => format!("Fair enough - {card} dies to {spell}."),
+        _ => format!("{card} goes to the graveyard from {spell}."),
+    }
+}
+
 fn gg_line() -> String {
     pick(&[
         "That's it for me. GG all!",
@@ -411,6 +472,8 @@ struct BotMind {
     adopted: bool,
     /// Chat lines spoken about blocks in the combat currently on the table.
     block_says: u32,
+    /// seqs of resolved targeted spells this bot has already honored.
+    honored_targets: Vec<u64>,
     said_gg: bool,
     said_win: bool,
 }
@@ -594,6 +657,38 @@ fn decide(app: &App, room: &Room, uid: &str, mind: &mut BotMind, now: i64) -> De
         mind.adopted = true;
         mind.settled_combat = room.last_combat.as_ref().map(|e| e.seq);
     }
+    // A spell someone else cast resolved while pointed at one of MY
+    // permanents. The freeform contract makes the owner perform the effect, so
+    // the bot does what a human opponent would: move the card to the
+    // graveyard. Its commander then rides the existing cmd.choice path back to
+    // the command zone. Countered spells are skipped, and each seq is honored
+    // once so an undo/redo cannot double-apply it.
+    for rt in &room.resolved_targets {
+        if rt.countered || rt.caster == me.user_id || mind.honored_targets.contains(&rt.seq) {
+            continue;
+        }
+        let Some(card) = me.battlefield.iter().find(|c| c.iid == rt.target_iid) else {
+            continue;
+        };
+        mind.honored_targets.push(rt.seq);
+        if mind.honored_targets.len() > 16 {
+            mind.honored_targets.remove(0);
+        }
+        say.push(honor_line(&card.name, &rt.spell));
+        return Decision {
+            action: Some(Action::CardMove {
+                iid: card.iid.clone(),
+                to: Zone::Graveyard,
+                x: None,
+                y: None,
+                index: None,
+                face_down: false,
+            }),
+            say,
+            fast: false,
+        };
+    }
+
     if let Some(action) = mind.queue.pop_front() {
         return Decision { action: Some(action), say, fast: true };
     }

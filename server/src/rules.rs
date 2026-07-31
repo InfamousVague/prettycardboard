@@ -66,9 +66,6 @@ fn has_kw(app: &App, card: &Card, kw: &str) -> bool {
     facts(app, card).map(|f| f.has(kw)).unwrap_or(false)
 }
 
-/// Effective power/toughness: oracle printed stats, +N/+N-style counters,
-/// and (pass B) anthems projected by the controller's other permanents.
-/// Tokens and unknowns fall back to the instance's own printed strings.
 /// How many permanents a `*` power counts, from the controller's point of
 /// view. Only the counting CDA shape is modelled (see `oracle::CountCda`).
 fn cda_count(app: &App, room: &Room, controller: usize, cda: &crate::oracle::CountCda) -> i64 {
@@ -87,6 +84,10 @@ fn cda_count(app: &App, room: &Room, controller: usize, cda: &crate::oracle::Cou
         .count() as i64
 }
 
+/// Effective power/toughness: oracle printed stats (a `*` counted from its
+/// defining ability), +N/+N-style counters, and (pass B) anthems projected by
+/// the controller's other permanents. Tokens and unknowns fall back to the
+/// instance's own printed strings.
 pub fn effective_pt(app: &App, room: &Room, card: &Card) -> (i64, i64) {
     let stat = |s: &Option<String>| s.as_deref().and_then(|v| v.trim().parse::<i64>().ok());
     // The seat this permanent sits under: both the `*` count and the anthem
@@ -787,7 +788,7 @@ pub fn run_cascade(app: &App, room: &mut Room, pi: usize, n: i64, source: &str) 
         card.tapped = false;
         card.face_down = false;
         let name = card.name.clone();
-        room.stack.push(crate::rooms::StackEntry { owner, card });
+        room.stack.push(crate::rooms::StackEntry { owner, card, target_iid: None });
         room.stack_passed.clear();
         room.stack_changed_ms = crate::now_ms();
         logs.push(format!(

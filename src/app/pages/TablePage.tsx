@@ -48,10 +48,14 @@ import {
   Zap,
   ZoomIn,
   ZoomOut,
+  Sparkles,
+  Minus,
+  Trash2,
 } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
+import { oracleFacts } from '../data/printedPt.ts';
 import { cardImage } from '../data/cards.ts';
 import { useFaces } from '../data/faces.ts';
 import { cardBackUrl, effectiveCardBack } from '../data/cardBacks.ts';
@@ -91,7 +95,7 @@ import { OpponentHand } from './table/OpponentHand.tsx';
 import { CyberpunkDicePanel } from './table/CyberpunkDicePanel.tsx';
 import { CombatPreviewCard, PhaseRibbon } from './table/PhaseRibbon.tsx';
 import { StackTray } from './table/StackTray.tsx';
-import { CmdChoiceDialog, LibraryViewer, MulliganOverlay, PileViewer, RevealTray, RollBanner, TriggerPrompts } from './table/overlays.tsx';
+import { CmdChoiceDialog, LibraryViewer, MulliganOverlay, PileViewer, RevealTray, RollBanner, TargetPicker, TriggerPrompts } from './table/overlays.tsx';
 import { TablePresence } from './table/TablePresence.tsx';
 import { AimLayer } from './table/AimLayer.tsx';
 import { MARK_KINDS, markIcon } from './table/bits.tsx';
@@ -1064,6 +1068,7 @@ export function TablePage() {
       {me && !spectating && !preMatch && !replay.active && <MulliganOverlay room={room} me={me} />}
       {me && !spectating && !replay.active && <CmdChoiceDialog me={me} />}
       {me && !spectating && !replay.active && <TriggerPrompts room={room} me={me} />}
+      {me && !spectating && !replay.active && <TargetPicker room={room} me={me} />}
       {preMatch && <PreMatch room={room} onClose={() => setPreMatch(false)} />}
       {/* Combat v3: target picker, defender response, resolved breakdown. */}
       {/* Spectators see the result too; controls inside are gated to players. */}
@@ -1384,24 +1389,52 @@ function CardMenu({
           {card.piled &&
             item(t('gpPileLeave'), <Unlink size={15} />, { kind: 'card.attach', iid: menu.iid, hostIid: null })}
           {item(t('gpStack'), <Layers size={15} />, { kind: 'stack.push', iid: menu.iid }, 'stack')}
-          <MenuSub label={t('ctQuick')}>
+          {(() => {
+            // Activated abilities read off the card's oracle text. Effects stay
+            // manual (the freeform contract), so activating pays what the
+            // engine can see - tap, loyalty - and announces the rest so the
+            // table knows what was just used.
+            const abilities = oracleFacts(card.scryfallId)?.abilities ?? [];
+            if (abilities.length === 0) return null;
+            return (
+              <MenuSub label={t('abTitle')} icon={<Zap size={15} />}>
+                {abilities.map((ability, i) => (
+                  <MenuItem
+                    key={i}
+                    icon={ability.loyalty !== undefined ? <Crown size={14} /> : ability.tap ? <RotateCw size={14} /> : <Sparkles size={14} />}
+                    onSelect={() => {
+                      const act = useGame.getState().act;
+                      if (ability.tap && !card.tapped) act({ kind: 'card.tap', iid: menu.iid, tapped: true });
+                      if (ability.loyalty !== undefined) {
+                        act({ kind: 'card.counter', iid: menu.iid, counter: 'loyalty', delta: ability.loyalty });
+                      }
+                      useGame.getState().sendChat(`${card.name} — ${ability.cost}: ${ability.effect}`);
+                    }}
+                  >
+                    {ability.cost}: {ability.effect.length > 46 ? `${ability.effect.slice(0, 46)}…` : ability.effect}
+                  </MenuItem>
+                ))}
+              </MenuSub>
+            );
+          })()}
+          <MenuSub label={t('ctQuick')} icon={<Plus size={15} />}>
             {([
-              ['+1/+1', 1, t('ctPlus')],
-              ['+1/+1', -1, t('ctMinusP')],
-              ['-1/-1', 1, t('ctMinus')],
-              ['loyalty', 1, t('ctLoyaltyUp')],
-              ['loyalty', -1, t('ctLoyaltyDown')],
-              ['charge', 1, t('ctCharge')],
-            ] as const).map(([counter, delta, label], i) => (
-              <MenuItem key={i} onSelect={() => useGame.getState().act({ kind: 'card.counter', iid: menu.iid, counter, delta })}>
+              ['+1/+1', 1, t('ctPlus'), <Plus size={14} />],
+              ['+1/+1', -1, t('ctMinusP'), <Minus size={14} />],
+              ['-1/-1', 1, t('ctMinus'), <Minus size={14} />],
+              ['loyalty', 1, t('ctLoyaltyUp'), <Crown size={14} />],
+              ['loyalty', -1, t('ctLoyaltyDown'), <Crown size={14} />],
+              ['charge', 1, t('ctCharge'), <Zap size={14} />],
+            ] as const).map(([counter, delta, label, icon], i) => (
+              <MenuItem key={i} icon={icon} onSelect={() => useGame.getState().act({ kind: 'card.counter', iid: menu.iid, counter, delta })}>
                 {label}
               </MenuItem>
             ))}
           </MenuSub>
-          <MenuSub label={t('mkTitle')}>
+          <MenuSub label={t('mkTitle')} icon={<Flag size={15} />}>
             {/* Pointing is the ephemeral gesture (an arrow the table watches);
                 every other entry parks a marker that stays until lifted. */}
-            <MenuItem onSelect={() => send({ type: 'aim', toIid: menu.iid, kind: 'point' })}>
+            <MenuItem icon={<ArrowRight size={14} />} onSelect={() => send({ type: 'aim', toIid: menu.iid, kind: 'point' })}>
               {t('mkPoint')}
             </MenuItem>
             {MARK_KINDS.map((kind) => {
@@ -1420,12 +1453,12 @@ function CardMenu({
               );
             })}
             {marks?.[menu.iid] && (
-              <MenuItem onSelect={() => useGame.getState().act({ kind: 'mark.set', iid: menu.iid, mark: null })}>
+              <MenuItem icon={<X size={14} />} onSelect={() => useGame.getState().act({ kind: 'mark.set', iid: menu.iid, mark: null })}>
                 {t('mkClear')}
               </MenuItem>
             )}
             {Object.keys(marks ?? {}).length > 1 && (
-              <MenuItem onSelect={() => useGame.getState().act({ kind: 'mark.clear' })}>
+              <MenuItem icon={<Trash2 size={14} />} onSelect={() => useGame.getState().act({ kind: 'mark.clear' })}>
                 {t('mkClearAll')}
               </MenuItem>
             )}

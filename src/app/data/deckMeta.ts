@@ -46,6 +46,9 @@ export async function computeDeckMeta(deck: Deck, game: string): Promise<DeckMet
   let spells = 0;
   let other = 0;
   const colors = new Set<string>();
+  // Buckets 0..7, where 7 is "7 or more" - the shape everyone reads a curve
+  // in, and short enough to draw in a hover panel.
+  const curve = new Array<number>(CURVE_BUCKETS).fill(0);
   for (const entry of deck.cards) {
     size += entry.quantity;
     const meta = getCardMeta(entry.scryfallId);
@@ -59,6 +62,8 @@ export async function computeDeckMeta(deck: Deck, game: string): Promise<DeckMet
     if (bucket !== 'land') {
       mvSum += meta.manaValue * entry.quantity;
       mvCount += entry.quantity;
+      const slot = Math.min(CURVE_BUCKETS - 1, Math.max(0, Math.round(meta.manaValue)));
+      curve[slot] = (curve[slot] ?? 0) + entry.quantity;
     }
   }
   const ORDER = ['W', 'U', 'B', 'R', 'G'];
@@ -67,12 +72,16 @@ export async function computeDeckMeta(deck: Deck, game: string): Promise<DeckMet
     cover,
     colors: ORDER.filter((color) => colors.has(color)),
     avgMv: mvCount > 0 ? round1(mvSum / mvCount) : 0,
+    curve,
     creatures,
     lands,
     spells,
     other,
   };
 }
+
+/** Mana values 0..6 plus a "7+" catch-all. */
+export const CURVE_BUCKETS = 8;
 
 function round1(value: number): number {
   return Math.round(value * 10) / 10;

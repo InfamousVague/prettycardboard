@@ -150,6 +150,14 @@ export function MyBoard({
   const act = useGame((state) => state.act);
   const aim = useGame((state) => state.aim);
   const marks = useGame((state) => state.room?.marks);
+  // Targets ride the stack entries, so the ring stays lit for exactly as long
+  // as the spell is on the stack - a target that fades after a few seconds
+  // reads as "nothing happened".
+  const targetedIids = new Set(
+    ((room.stack ?? []) as (CardInst & { targetIid?: string })[])
+      .map((e) => e.targetIid)
+      .filter((x): x is string => Boolean(x)),
+  );
   // My targeting spell on top of the stack invites a target click.
   const topSpell = (room.stack ?? [])[(room.stack ?? []).length - 1] as
     | (CardInst & { ownerSeat?: number })
@@ -1000,7 +1008,7 @@ export function MyBoard({
       | (CardInst & { ownerSeat?: number })
       | undefined;
     if (top && top.ownerSeat === me.seat && top.iid !== card.iid) {
-      send({ type: 'aim', fromIid: top.iid, toIid: card.iid });
+      useGame.getState().act({ kind: 'stack.target', iid: top.iid, targetIid: card.iid });
       juicePulse(cardEls.current.get(card.iid));
       return;
     }
@@ -1146,7 +1154,7 @@ export function MyBoard({
             : undefined
         }
         data-affordance={affordance}
-        data-aimed={aim?.toIid === card.iid || undefined}
+        data-aimed={aim?.toIid === card.iid || targetedIids.has(card.iid) || undefined}
         data-targetable={(aimingKinds.length > 0 && matchesTargetKind(aimingKinds, card)) || undefined}
         data-blocking={blockerIid === card.iid || undefined}
         data-ambient={ambientCards && !dragging ? '' : undefined}

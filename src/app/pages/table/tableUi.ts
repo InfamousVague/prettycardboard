@@ -73,6 +73,12 @@ interface TableUiState {
   pileView: { userId: string; zone: 'graveyard' | 'exile' | 'command' } | null;
   setPileView: (view: { userId: string; zone: 'graveyard' | 'exile' | 'command' } | null) => void;
 
+  /** Stack entry whose target picker should be forced open. The picker shows
+   * itself once per spell; this is how the stack tray reopens one that was
+   * dismissed. */
+  targetPickerIid: string | null;
+  setTargetPickerIid: (iid: string | null) => void;
+
 }
 
 export const useTableUi = create<TableUiState>((set) => ({
@@ -121,6 +127,9 @@ export const useTableUi = create<TableUiState>((set) => ({
 
   pileView: null,
   setPileView: (view) => set({ pileView: view }),
+
+  targetPickerIid: null,
+  setTargetPickerIid: (iid) => set({ targetPickerIid: iid }),
 }));
 
 /** The scale every card-sizing site should use: the phone board's own ladder

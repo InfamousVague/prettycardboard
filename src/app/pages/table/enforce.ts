@@ -146,6 +146,12 @@ export function stackTargetKinds(card: CardInst): string[] {
   return oracleFacts(card.scryfallId)?.targetKinds ?? [];
 }
 
+/** Do these kinds allow aiming at a PLAYER rather than a permanent?
+ * "any target" in modern templating means creature, player or planeswalker. */
+export function targetsPlayers(kinds: string[]): boolean {
+  return kinds.some((kind) => kind === 'player' || kind === 'opponent' || kind === 'any');
+}
+
 /** Would `card` satisfy one of these target kinds? Loose on purpose: the
  * pointing gesture is communication, not a judge. */
 export function matchesTargetKind(kinds: string[], card: CardInst): boolean {

@@ -19,7 +19,8 @@
     "redeploy:web": "node scripts/redeploy.mjs web",
     "redeploy:api": "node scripts/redeploy.mjs api",
     "release:mac": "node scripts/release-mac.mjs",
-    "release:manifest": "node scripts/build-updater-manifest.mjs"
+    "release:manifest": "node scripts/build-updater-manifest.mjs",
+    "bump-n-distribute": "node scripts/bump-n-distribute.mjs"
   },
   "dependencies": {
     "@3d-dice/dice-box-threejs": "^0.0.12",

@@ -1192,7 +1192,8 @@ fn bot_add(
         mulligan: None,
         playmat: Some(crate::bot::bot_playmat(&username).to_string()),
         card_back: None,
-        deck_meta: None,
+        // Derived here rather than pushed by a client, since a bot has none.
+        deck_meta: crate::bot::deck_meta(&deck.code),
         // Bots untap and draw on their own turn without a human's clicks.
         auto_untap: true,
         auto_draw: true,
@@ -2251,7 +2252,7 @@ fn sanitize_deck_meta(raw: serde_json::Value) -> Option<serde_json::Value> {
     };
     let mut clean = serde_json::Map::new();
     clean.insert("size".into(), serde_json::json!(num("size", 100_000.0).unwrap_or(0.0) as u64));
-    for key in ["creatures", "lands", "spells", "other", "ram"] {
+    for key in ["creatures", "lands", "spells", "other", "ram", "monsters", "traps", "extra", "avgAtk"] {
         if let Some(n) = num(key, 100_000.0) {
             clean.insert(key.into(), serde_json::json!(n as u64));
         }
@@ -2259,6 +2260,28 @@ fn sanitize_deck_meta(raw: serde_json::Value) -> Option<serde_json::Value> {
     for key in ["avgMv", "avgCost"] {
         if let Some(n) = num(key, 99.0) {
             clean.insert(key.into(), serde_json::json!(n));
+        }
+    }
+    // The deck's face: a card id, so it is checked as one rather than passed
+    // through as arbitrary text.
+    if let Some(cover) = obj.get("cover").and_then(|v| v.as_str()) {
+        let ok = cover.len() <= 64
+            && !cover.is_empty()
+            && cover.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+        if ok {
+            clean.insert("cover".into(), serde_json::json!(cover));
+        }
+    }
+    // Mana curve: fixed-length bucket counts, so a client cannot use it as a
+    // channel for anything but numbers.
+    if let Some(curve) = obj.get("curve").and_then(|v| v.as_array()) {
+        let buckets: Vec<u64> = curve
+            .iter()
+            .take(8)
+            .map(|v| v.as_f64().unwrap_or(0.0).clamp(0.0, 100_000.0) as u64)
+            .collect();
+        if !buckets.is_empty() {
+            clean.insert("curve".into(), serde_json::json!(buckets));
         }
     }
     if let Some(colors) = obj.get("colors").and_then(|v| v.as_array()) {

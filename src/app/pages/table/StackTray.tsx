@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { Button, MenuItem, SplitButton, Text, Size, TextTone } from '@glacier/react';
-import { Check, Layers, X } from '@glacier/icons';
+import { Check, Crosshair, Layers, X } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import { useApp } from '../../state/appStore.ts';
 import { useGame } from '../../state/gameStore.ts';
@@ -10,6 +10,7 @@ import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import type { CardInst, RoomState, Zone } from '../../net/types.ts';
 import { setFlightAnchor } from './juice.ts';
+import { useTableUi } from './tableUi.ts';
 
 /**
  * The shared stack: a center-floating glass tray, visible only while spells
@@ -29,6 +30,7 @@ export function StackTray({ room, canAct }: { room: RoomState; canAct: boolean }
   const act = useGame((state) => state.act);
   const popup = useCardPopup();
   const myId = useApp((state) => state.identity?.userId);
+  const setTargetPickerIid = useTableUi((state) => state.setTargetPickerIid);
   const stack = room.stack ?? [];
   // Enforced rooms run the Arena resolve loop: the TOP spell belongs to its
   // caster, everyone else responds or passes, and it resolves only when all
@@ -68,9 +70,23 @@ export function StackTray({ room, canAct }: { room: RoomState; canAct: boolean }
               const top = stack[stack.length - 1] as (CardInst & { ownerSeat?: number }) | undefined;
               if (top && mySeat != null && top.ownerSeat === mySeat) {
                 const kinds = stackTargetKinds(top);
+                // A targeting spell's hint reopens the picker; anything else
+                // is just the "drag an arrow" reminder.
+                if (kinds.length > 0) {
+                  return (
+                    <button
+                      type="button"
+                      className="stackAimHint stackAimHintButton"
+                      onClick={() => setTargetPickerIid(top.iid)}
+                    >
+                      <Crosshair size={11} />
+                      {`${t('stChooseTarget')} ${top.name}`}
+                    </button>
+                  );
+                }
                 return (
                   <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="stackAimHint">
-                    {kinds.length > 0 ? `${t('stChooseTarget')} ${top.name}` : t('stAimHint')}
+                    {t('stAimHint')}
                   </Text>
                 );
               }

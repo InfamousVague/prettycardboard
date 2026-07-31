@@ -10,7 +10,9 @@ import {
   Size,
   TextTone,
 } from '@glacier/react';
-import { ArrowDownToLine, ArrowUpToLine, Dices, Hand as HandIcon, Shuffle, Sparkles } from '@glacier/icons';
+import { ArrowDownToLine, ArrowUpToLine, Crosshair, Dices, Hand as HandIcon, Shuffle, Sparkles } from '@glacier/icons';
+import { send } from '../../net/ws.ts';
+import { matchesTargetKind, stackTargetKinds, targetsPlayers } from './enforce.ts';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
@@ -349,7 +351,9 @@ export function PileViewer({ room, me, canAct }: { room: RoomState; me: TablePla
       onClose={() => setPileView(null)}
       size="xl"
       title={`${player.username} · ${zoneTitle}`}
-      description={`${cards.length}`}
+      // Every other modal here labels its count ("Library · 12"); a bare
+      // number read as a stray digit under the title.
+      description={`${cards.length} ${t('dsCards')}`}
     >
       <ScrollArea className="pileScroll pcMobileFull">
         <div className="pileGrid">
@@ -625,6 +629,173 @@ export function CmdChoiceDialog({ me }: { me: TablePlayer | undefined }) {
     </AlertDialog>
   );
 }
+
+/* ------------------------------------------------------------------------ */
+/* Target picker (a spell of mine on the stack that wants targets)           */
+/* ------------------------------------------------------------------------ */
+
+/** One thing a spell can be pointed at. */
+interface TargetOption {
+  key: string;
+  label: string;
+  /** Whose board/seat it belongs to, for grouping. */
+  seat: number;
+  owner: string;
+  card?: CardInst;
+  toSeat?: number;
+}
+
+/**
+ * When a spell of mine hits the stack with "target ..." in its text, this
+ * lists what it can legally be pointed at instead of leaving the choice to a
+ * hunt across four boards. Picking one sends the same `aim` relay that
+ * clicking a card sends - the gesture is communication, not enforcement, so
+ * the modal never blocks resolving and "no target" is always available.
+ *
+ * Opens itself once per stack entry. Reopened from the stack tray after that,
+ * so a dismissal stays dismissed.
+ */
+export function TargetPicker({ room, me }: { room: RoomState; me: TablePlayer | undefined }) {
+  const t = useT();
+  const act = useGame((state) => state.act);
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  const stack = room.stack ?? [];
+  const top = stack[stack.length - 1] as (CardInst & { ownerSeat?: number }) | undefined;
+  const forced = useTableUi((state) => state.targetPickerIid);
+  const setForced = useTableUi((state) => state.setTargetPickerIid);
+
+  const kinds = top && me && top.ownerSeat === me.seat ? stackTargetKinds(top) : [];
+  const wants = Boolean(top) && kinds.length > 0;
+  const open = wants && (forced === top!.iid || !dismissed.includes(top!.iid));
+
+  const options = useMemo<TargetOption[]>(() => {
+    if (!wants || !top) return [];
+    const out: TargetOption[] = [];
+    for (const player of [...room.players].sort((a, b) => a.seat - b.seat)) {
+      if (player.conceded) continue;
+      if (targetsPlayers(kinds) && player.seat !== me?.seat) {
+        out.push({
+          key: `seat:${player.seat}`,
+          label: player.username,
+          seat: player.seat,
+          owner: player.username,
+          toSeat: player.seat,
+        });
+      }
+      for (const card of player.battlefield) {
+        // A face-down card has no public identity to match a kind against.
+        if (card.faceDown) continue;
+        if (!matchesTargetKind(kinds, card)) continue;
+        out.push({
+          key: `card:${card.iid}`,
+          label: card.name,
+          seat: player.seat,
+          owner: player.username,
+          card,
+        });
+      }
+    }
+    return out;
+  }, [wants, top, room.players, kinds, me?.seat]);
+
+  if (!top || !wants) return null;
+
+  const close = () => {
+    setForced(null);
+    setDismissed((seen) => (seen.includes(top.iid) ? seen : [...seen, top.iid]));
+  };
+  const pick = (option: TargetOption) => {
+    if (option.card) {
+      // Same channel as clicking the permanent on the board: the target binds
+      // to the stack entry and stays lit while the spell is on the stack.
+      act({ kind: 'stack.target', iid: top.iid, targetIid: option.card.iid });
+    } else if (option.toSeat != null) {
+      // `stack.target` names a permanent only, so a player target still goes
+      // out as the ephemeral pointing relay.
+      send({ type: 'aim', fromIid: top.iid, toSeat: option.toSeat, kind: 'target' });
+    }
+    close();
+  };
+
+  // Group by seat so "which board is this on" is answered by position.
+  const groups: { seat: number; owner: string; items: TargetOption[] }[] = [];
+  for (const option of options) {
+    const last = groups[groups.length - 1];
+    if (last && last.seat === option.seat) last.items.push(option);
+    else groups.push({ seat: option.seat, owner: option.owner, items: [option] });
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={close}
+      size="md"
+      title={`${t('tgTitle')}: ${top.name}`}
+      description={kinds.map((kind) => t(TARGET_KIND_KEYS[kind] ?? 'tgAny')).join(' · ')}
+      footer={
+        <Button variant="ghost" onClick={close}>
+          {t('tgNoTarget')}
+        </Button>
+      }
+    >
+      {options.length === 0 ? (
+        <Text as="p" size={Size.Small} tone={TextTone.Subtle}>
+          {t('tgNone')}
+        </Text>
+      ) : (
+        <ScrollArea className="targetPickScroll pcMobileFull" maxHeight={420}>
+          {groups.map((group) => (
+            <div className="targetGroup" key={group.seat}>
+              <Text as="p" size={Size.XSmall} tone={TextTone.Subtle} className="targetGroupHead">
+                {group.owner}
+              </Text>
+              <div className="targetGrid">
+                {group.items.map((option) => (
+                  <button
+                    type="button"
+                    className="targetOption"
+                    key={option.key}
+                    data-player={option.toSeat != null || undefined}
+                    onClick={() => pick(option)}
+                  >
+                    {option.card ? (
+                      <GameCard
+                        name={option.card.name}
+                        imageUrl={option.card.imageUrl || cardImage(option.card.scryfallId)}
+                        width={72}
+                        tilt={0}
+                      />
+                    ) : (
+                      <span className="targetSeatChip">
+                        <Crosshair size={18} />
+                      </span>
+                    )}
+                    <span className="targetOptionName">{option.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </ScrollArea>
+      )}
+    </Modal>
+  );
+}
+
+/** Target-kind word -> i18n key, for the modal's subtitle. */
+type MsgKey = Parameters<ReturnType<typeof useT>>[0];
+const TARGET_KIND_KEYS: Record<string, MsgKey> = {
+  creature: 'tgCreature',
+  planeswalker: 'tgPlaneswalker',
+  artifact: 'tgArtifact',
+  enchantment: 'tgEnchantment',
+  land: 'tgLand',
+  permanent: 'tgPermanent',
+  player: 'tgPlayer',
+  opponent: 'tgOpponent',
+  spell: 'tgSpell',
+  any: 'tgAny',
+};
 
 /* ------------------------------------------------------------------------ */
 /* Trigger prompts (enforced rooms, rules pass A)                            */

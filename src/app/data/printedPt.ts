@@ -125,6 +125,50 @@ interface ScryPT {
   card_faces?: { power?: string; toughness?: string; type_line?: string; mana_cost?: string; oracle_text?: string; colors?: string[] }[];
 }
 
+export interface CardAbility {
+  /** Printed cost exactly as written: "{T}", "{2}{U}", "{T}, Sacrifice a creature", "+1". */
+  cost: string;
+  /** The effect text after the colon. */
+  effect: string;
+  /** The cost includes {T} - activating should tap the permanent. */
+  tap: boolean;
+  /** Loyalty ability: the delta to apply to the loyalty counter. */
+  loyalty?: number;
+}
+
+/**
+ * Pull activated abilities out of oracle text. A line reads as an activated
+ * ability when it is "<cost>: <effect>" AND the cost half actually looks like
+ * a cost - mana/tap symbols, a loyalty delta, or a sacrifice/discard/pay verb.
+ * That check keeps reminder text and colon-bearing sentences out.
+ */
+export function parseAbilities(oracle: string): CardAbility[] {
+  const out: CardAbility[] = [];
+  for (const rawLine of (oracle ?? '').split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    // Triggered abilities are not activated ones, even when they print a colon.
+    if (/^(when|whenever|at the beginning)/i.test(line)) continue;
+    const colon = line.indexOf(':');
+    if (colon <= 0 || colon > 80) continue;
+    const cost = line.slice(0, colon).trim();
+    const effect = line.slice(colon + 1).trim();
+    if (!effect) continue;
+    // Loyalty costs print as "+1" / "-3" (oracle text uses U+2212 for minus).
+    const loyaltyMatch = /^([+\u2212-]?\d+)$/.exec(cost.replace(/[[\]]/g, ''));
+    const hasSymbol = /\{[^}]+\}/.test(cost);
+    const hasVerb = /\b(sacrifice|discard|pay|exile|tap|untap|remove|reveal)\b/i.test(cost);
+    if (!loyaltyMatch && !hasSymbol && !hasVerb) continue;
+    out.push({
+      cost,
+      effect,
+      tap: /\{T\}/.test(cost),
+      loyalty: loyaltyMatch?.[1] ? Number(loyaltyMatch[1].replace('\u2212', '-')) : undefined,
+    });
+  }
+  return out;
+}
+
 /** Everything the enforced-mode client logic needs to know about a card:
  * cost (parsed to pips), types, keywords, what it taps for. Mirrors the
  * server's oracle.rs so both sides agree about legality and affordability. */
@@ -141,6 +185,9 @@ export interface OracleFacts {
   /** What this spell targets, parsed from its oracle text ("creature",
    * "permanent", "player", ...). Empty = it does not target. */
   targetKinds: string[];
+  /** Activated abilities parsed off the oracle text (cost / effect / taps).
+   * Triggered and static text is excluded - those are not player-activated. */
+  abilities: CardAbility[];
   /** The card's colors (W U B R G) - evasion checks read these. */
   colors: string[];
   /** "(<type> )spells you cast cost {N} less" statics this permanent
@@ -224,6 +271,7 @@ function absorb(id: string, card: ScryPT): void {
     mv: Math.round(card.cmc ?? 0),
     generic,
     pips,
+    abilities: parseAbilities(face?.oracle_text || card.oracle_text || ''),
     keywords: (card.keywords ?? []).map((k) => k.toLowerCase()),
     produced: (card.produced_mana ?? []).filter((c) => 'WUBRGC'.includes(c)),
     targetKinds,

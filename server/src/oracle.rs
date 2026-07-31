@@ -1002,8 +1002,24 @@ pub async fn ensure(app: &Arc<App>, ids: Vec<String>) {
             .arg("https://api.scryfall.com/cards/collection")
             .output()
             .await;
-        let Ok(out) = output else { continue };
+        // Every failure here is loud. A silently-swallowed fetch leaves the
+        // cache empty, and an empty cache makes an enforced table reject every
+        // cast with "no rules data yet" - a symptom that looks like a rules bug
+        // and is nearly impossible to trace back to the network without a log.
+        let out = match output {
+            Ok(out) => out,
+            Err(e) => {
+                eprintln!("oracle: could not run curl ({e}); {} cards left unknown", batch.len());
+                continue;
+            }
+        };
         if !out.status.success() {
+            eprintln!(
+                "oracle: scryfall fetch failed (curl exit {:?}); {} cards left unknown: {}",
+                out.status.code(),
+                batch.len(),
+                String::from_utf8_lossy(&out.stderr).trim(),
+            );
             continue;
         }
         #[derive(Deserialize)]
@@ -1011,8 +1027,18 @@ pub async fn ensure(app: &Arc<App>, ids: Vec<String>) {
             #[serde(default)]
             data: Vec<ScryCard>,
         }
-        let Ok(parsed) = serde_json::from_slice::<Collection>(&out.stdout) else {
-            continue;
+        let parsed = match serde_json::from_slice::<Collection>(&out.stdout) {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                // Scryfall answers errors (a refused User-Agent, a rate limit)
+                // as a JSON error object, which fails to parse as a collection.
+                eprintln!(
+                    "oracle: scryfall returned no usable card list ({e}); {} cards left unknown: {}",
+                    batch.len(),
+                    String::from_utf8_lossy(&out.stdout).chars().take(200).collect::<String>(),
+                );
+                continue;
+            }
         };
         // Scoped: the std MutexGuard must be gone before the await below
         // (future Send analysis is lexical, an explicit drop does not count).

@@ -28,6 +28,10 @@ export interface DeckMeta {
   cover?: string;
   colors?: string[];
   avgMv?: number;
+  /** Nonland counts by mana value, index 0..7 with 7 meaning "7 or more".
+   *  An aggregate like every other field here - it shapes a curve, it does
+   *  not name a card. */
+  curve?: number[];
   creatures?: number;
   lands?: number;
   spells?: number;
@@ -226,6 +230,8 @@ export interface CardInst {
    *  alongside `attachedTo`; the server never sends it without one. */
   piled?: boolean;
   isCommander?: boolean;
+  /** Stack entries: the permanent this spell is pointed at. */
+  targetIid?: string;
   revealed?: boolean;
   /** A double-faced card flipped to its back face; the client resolves the back
    *  art from the card's Scryfall faces. */
@@ -391,6 +397,11 @@ export interface GameSettings {
   /** Arena-lite rules enforcement for this table (MTG only): real costs,
    * land drops, summoning sickness, legal combat, previewed damage. */
   enforced?: boolean;
+  /** Competitive table. Nothing sets this yet - ranked play does not exist -
+   * but the affordances that leak public-but-advantageous information (the
+   * opponent deck-stats hover) already read it, so switching ranked on later
+   * closes them without hunting for call sites. */
+  ranked?: boolean;
 }
 
 /** One card in a draft pack or pool. */
@@ -720,6 +731,7 @@ export type GameActionV2 =
   | { kind: 'combat.ready' }
   | { kind: 'combat.resolve' }
   | { kind: 'stack.pass' }
+  | { kind: 'stack.target'; iid: string; targetIid: string | null }
   | { kind: 'trigger.answer'; id: string; apply: boolean }
   | { kind: 'cascade'; n: number }
   | { kind: 'undo' }

@@ -10,6 +10,7 @@ import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import type { CardInst, CardMarkState, CombatState, MatPos, MatZone, RoomState, TablePlayer, Zone } from '../../net/types.ts';
 import { seatColor, seatColorDeep } from './seatColors.ts';
+import { DeckStatsHover } from './DeckStats.tsx';
 import { selectCardScale, useTableUi } from './tableUi.ts';
 import { useLongPress, menuEventFrom } from '../../hooks/useLongPress.ts';
 import { useMobileLayout } from '../../hooks/useIsPhone.ts';
@@ -418,6 +419,7 @@ export const DEFAULT_MAT_LAYOUT: Record<MatZone, MatPos> = {
 };
 
 export function ZonePiles({
+  room,
   player,
   mine,
   big,
@@ -432,6 +434,9 @@ export function ZonePiles({
   editing,
   onPileGrab,
 }: {
+  /** Only needed for the deck-stats hover, which reads the table's game and
+   * whether it is ranked. Omit it and the hover simply does not appear. */
+  room?: RoomState;
   player: TablePlayer;
   mine?: boolean;
   /** Full-size piles for a staged opponent (a mirror of my own board). */
@@ -662,6 +667,12 @@ export function ZonePiles({
             }}
           />
         </>
+      ) : room ? (
+        // Someone else's deck: resting on it reads out their public deck
+        // metrics. Mine already has the actions menu on click.
+        <DeckStatsHover room={room} player={player} mine={false}>
+          {libraryPile}
+        </DeckStatsHover>
       ) : (
         libraryPile
       )}

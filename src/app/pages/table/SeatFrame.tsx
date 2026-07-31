@@ -57,6 +57,14 @@ export function SeatFrame({
   const act = useGame((state) => state.act);
   const aim = useGame((state) => state.aim);
   const marks = useGame((state) => state.room?.marks);
+  // Targets ride the stack entries, so the ring stays lit for exactly as long
+  // as the spell is on the stack - a target that fades after a few seconds
+  // reads as "nothing happened".
+  const targetedIids = new Set(
+    ((room.stack ?? []) as (CardInst & { targetIid?: string })[])
+      .map((e) => e.targetIid)
+      .filter((x): x is string => Boolean(x)),
+  );
   const topSpell = (room.stack ?? [])[(room.stack ?? []).length - 1] as
     | (CardInst & { ownerSeat?: number })
     | undefined;
@@ -154,7 +162,7 @@ export function SeatFrame({
       | (CardInst & { ownerSeat?: number })
       | undefined;
     if (top && me && top.ownerSeat === me.seat) {
-      send({ type: 'aim', fromIid: top.iid, toIid: card.iid });
+      useGame.getState().act({ kind: 'stack.target', iid: top.iid, targetIid: card.iid });
       return;
     }
     // Legacy pairing: a blocker pre-selected on my own board + their attacker.
@@ -208,7 +216,7 @@ export function SeatFrame({
         data-preview-src={cardPreview}
         data-preview-name={cardPreview ? card.name : undefined}
         data-attacker={attacker ? '' : undefined}
-        data-aimed={aim?.toIid === card.iid || undefined}
+        data-aimed={aim?.toIid === card.iid || targetedIids.has(card.iid) || undefined}
         data-targetable={(aimingKinds.length > 0 && matchesTargetKind(aimingKinds, card)) || undefined}
         data-attachment={host ? (card.piled ? 'pile' : 'aura') : undefined}
         data-pile={pileCount > 0 ? pileCount : undefined}
@@ -355,7 +363,7 @@ export function SeatFrame({
         {ygoField && <YugiohZoneGrid cardWidth={oppCardWidth} labels={stage} />}
         {ygoField && (
           <div className="matZones">
-            <ZonePiles player={player} big={stage} onHover={onHover} layout={YUGIOH_PILE_LAYOUT} />
+            <ZonePiles room={room} player={player} big={stage} onHover={onHover} layout={YUGIOH_PILE_LAYOUT} />
           </div>
         )}
         {hosts.map((card) => {
@@ -380,7 +388,7 @@ export function SeatFrame({
             stage && mtg && player.matLayout && Object.keys(player.matLayout).length > 0
               ? { ...DEFAULT_MAT_LAYOUT, ...player.matLayout }
               : undefined;
-          const piles = <ZonePiles player={player} big={stage} onHover={onHover} layout={custom} />;
+          const piles = <ZonePiles room={room} player={player} big={stage} onHover={onHover} layout={custom} />;
           return custom ? <div className="matZones">{piles}</div> : piles;
         })()}
 

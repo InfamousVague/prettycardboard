@@ -299,6 +299,12 @@ pub struct UserRef {
 pub struct StackEntry {
     pub owner: String, // user_id
     pub card: Card,
+    /// The permanent this spell was pointed at (the aim gesture, bound to the
+    /// spell rather than to a fading overlay). Public: the whole table sees
+    /// what is being targeted for as long as the spell is on the stack, and
+    /// a bot whose permanent is named honors it when the spell resolves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_iid: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -374,6 +380,18 @@ pub struct PreviewRow {
     /// Blockers that die to this attacker.
     pub dead_blockers: Vec<String>,
     pub dead_blocker_names: Vec<String>,
+}
+
+/// A spell that resolved while pointed at a permanent. Server-side only
+/// bookkeeping (never on the wire): bots read it to honor removal aimed at
+/// their own cards, exactly as a human opponent would move the card.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ResolvedTarget {
+    pub seq: u64,
+    pub spell: String,
+    pub caster: String,
+    pub target_iid: String,
+    pub countered: bool,
 }
 
 /// The most recent combat that had attackers when it was cleared, stamped with
@@ -1013,6 +1031,9 @@ pub struct Room {
     /// read it to settle incoming damage; humans settle their own by hand.
     #[serde(default)]
     pub last_combat: Option<EndedCombat>,
+    /// Recently resolved spells that named a target (see `ResolvedTarget`).
+    #[serde(default)]
+    pub resolved_targets: Vec<ResolvedTarget>,
     /// Enforced rooms: seats that passed priority on the current stack. Cleared
     /// whenever the stack changes; the top spell resolves once every other
     /// live seat has passed (or the response window times out).
@@ -1438,6 +1459,9 @@ impl Room {
             .map(|e| {
                 let mut v = serde_json::to_value(&e.card).unwrap();
                 v["owner"] = json!(e.owner);
+                if let Some(target) = &e.target_iid {
+                    v["targetIid"] = json!(target);
+                }
                 if let Some(seat) = self
                     .players
                     .iter()

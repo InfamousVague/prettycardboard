@@ -335,6 +335,12 @@ pub enum Action {
     /// its own field `counter`.)
     #[serde(rename = "mark.set", rename_all = "camelCase")]
     MarkSet { iid: String, mark: Option<String> },
+    /// Point a spell on the stack at a permanent. Unlike the ephemeral `aim`
+    /// relay this rides the stack entry, so the target stays visible for as
+    /// long as the spell does - and a bot whose permanent is named can honor
+    /// it when the spell resolves.
+    #[serde(rename = "stack.target", rename_all = "camelCase")]
+    StackTarget { iid: String, target_iid: Option<String> },
     /// Sweep every table marker off the board.
     #[serde(rename = "mark.clear")]
     MarkClear,
@@ -729,6 +735,21 @@ fn resolve_from_stack(
         return Err(("not_on_stack", format!("No card {iid} on the stack")));
     };
     let entry = room.stack.remove(pos);
+    // A resolved spell that named someone's permanent becomes a standing
+    // request: the freeform contract says the OWNER performs the effect, and
+    // for a bot that means honoring it (see bot.rs::honor_resolved_target).
+    if let Some(target) = entry.target_iid.clone() {
+        room.resolved_targets.push(crate::rooms::ResolvedTarget {
+            seq: room.seq,
+            spell: entry.card.name.clone(),
+            caster: entry.owner.clone(),
+            target_iid: target,
+            countered,
+        });
+        if room.resolved_targets.len() > 8 {
+            room.resolved_targets.remove(0);
+        }
+    }
     let mut card = entry.card;
     card.revealed = false;
     let name = card.name.clone();
@@ -1517,7 +1538,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                 for_actor["card"] = cv.clone();
                 for_others["card"] = cv;
                 log = format!("{username} copies {} on the stack", copy.name);
-                room.stack.push(StackEntry { owner: actor_id.to_string(), card: copy });
+                room.stack.push(StackEntry { owner: actor_id.to_string(), card: copy, target_iid: None });
                 stack_changed(room);
                 resync = true;
             } else {
@@ -1951,7 +1972,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
             // The stack is not a Zone, so there is no same-zone case to suppress
             // here: every push genuinely comes from somewhere else.
             log = format!("{username} puts {} from {} on the stack", card.name, from.desc());
-            room.stack.push(StackEntry { owner: actor_id.to_string(), card });
+            room.stack.push(StackEntry { owner: actor_id.to_string(), card, target_iid: None });
             stack_changed(room);
             if matches!(from, Zone::Hand | Zone::Library | Zone::Command) {
                 room.players[pi].cards_played += 1;
@@ -1979,6 +2000,28 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
             log = resolve_from_stack(room, &username, iid, to, None, None, true, now, &mut private)?;
             stack_changed(room);
             refresh_combat_preview(app, room);
+            resync = true;
+        }
+
+        Action::StackTarget { ref iid, ref target_iid } => {
+            let Some(entry) = room.stack.iter_mut().find(|e| e.card.iid == *iid) else {
+                return Err(("not_on_stack", format!("No card {iid} on the stack")));
+            };
+            if entry.owner != actor_id {
+                return Err(("forbidden", "only the caster chooses targets".to_string()));
+            }
+            entry.target_iid = target_iid.clone();
+            let spell = entry.card.name.clone();
+            log = match target_iid.as_deref().and_then(|t| {
+                room.players
+                    .iter()
+                    .flat_map(|p| p.battlefield.iter())
+                    .find(|c| c.iid == t)
+                    .map(|c| c.name.clone())
+            }) {
+                Some(name) => format!("{username} targets {name} with {spell}"),
+                None => format!("{username} clears {spell}'s target"),
+            };
             resync = true;
         }
 
@@ -2187,7 +2230,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                 let cv = serde_json::to_value(&card).unwrap();
                 for_actor["card"] = cv.clone();
                 for_others["card"] = cv;
-                room.stack.push(StackEntry { owner: actor_id.to_string(), card });
+                room.stack.push(StackEntry { owner: actor_id.to_string(), card, target_iid: None });
                 stack_changed(room);
             } else {
                 card.x = x.unwrap_or(0.5);

@@ -680,6 +680,7 @@ pub async fn room_create(
         stack: Vec::new(),
         combat: None,
         last_combat: None,
+        resolved_targets: Vec::new(),
         stack_passed: Vec::new(),
         stack_changed_ms: 0,
         markers: Default::default(),

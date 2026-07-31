@@ -6255,3 +6255,175 @@
 .sideHead .sideHeadTitle {
   margin-inline-end: auto;
 }
+
+/* ---- target picker (a spell of mine on the stack that wants targets) ---- */
+
+/* The stack tray's hint doubles as the picker's reopen affordance once the
+   modal has been dismissed, so it has to read as a control rather than text. */
+.stackAimHintButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--glacier-radius-sm);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 16%, transparent);
+  color: var(--glacier-text);
+  font: inherit;
+  font-size: var(--glacier-font-size-xs);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.stackAimHintButton:hover {
+  background: color-mix(in oklch, var(--glacier-accent-solid) 28%, transparent);
+  border-color: var(--glacier-accent-solid);
+}
+.stackAimHintButton:focus-visible {
+  outline: 2px solid var(--glacier-accent-solid);
+  outline-offset: 2px;
+}
+
+.targetGroup + .targetGroup {
+  margin-block-start: var(--glacier-space-4);
+}
+.targetGroupHead {
+  margin-block-end: var(--glacier-space-2);
+}
+.targetGrid {
+  display: grid;
+  /* Cards are 72px wide; auto-fill keeps one row per seat on a wide modal and
+     wraps cleanly on a narrow one rather than scrolling sideways. */
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: var(--glacier-space-2);
+}
+
+.targetOption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.4rem 0.25rem;
+  border-radius: var(--glacier-radius-md);
+  border: var(--glacier-hairline) solid transparent;
+  background: transparent;
+  color: var(--glacier-text);
+  font: inherit;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+.targetOption:hover {
+  background: color-mix(in oklch, var(--glacier-accent-solid) 14%, transparent);
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 55%, transparent);
+  transform: translateY(-2px);
+}
+.targetOption:focus-visible {
+  outline: 2px solid var(--glacier-accent-solid);
+  outline-offset: 2px;
+}
+.targetOptionName {
+  font-size: var(--glacier-font-size-xs);
+  line-height: 1.2;
+  text-align: center;
+  /* Two lines then ellipsis: card names are long and a ragged grid is worse
+     than a clipped one. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* A player target has no card art, so it gets a crosshair puck the same size
+   as the card thumbnails to keep the grid on one baseline. */
+.targetSeatChip {
+  display: grid;
+  place-items: center;
+  inline-size: 72px;
+  block-size: 100px;
+  border-radius: var(--glacier-radius-md);
+  border: var(--glacier-hairline) dashed color-mix(in oklch, var(--glacier-accent-solid) 60%, transparent);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 10%, transparent);
+  color: var(--glacier-accent-solid);
+}
+
+/* ---- deck stats hover (opponent decks; suppressed at a ranked table) ---- */
+
+.deckStats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  min-inline-size: 190px;
+}
+.deckStatsHead {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+.deckStatsRow {
+  margin: 0;
+}
+.deckStatsPips {
+  display: inline-flex;
+  gap: 0.15rem;
+}
+.deckStatsPip {
+  inline-size: 9px;
+  block-size: 9px;
+  border-radius: 50%;
+  border: var(--glacier-hairline) solid rgba(0, 0, 0, 0.35);
+}
+.deckStatsPip[data-color='W'] { background: oklch(0.94 0.03 95); }
+.deckStatsPip[data-color='U'] { background: oklch(0.7 0.13 245); }
+.deckStatsPip[data-color='B'] { background: oklch(0.35 0.03 300); }
+.deckStatsPip[data-color='R'] { background: oklch(0.63 0.19 30); }
+.deckStatsPip[data-color='G'] { background: oklch(0.6 0.14 150); }
+
+.deckStatsCurve {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 0.2rem;
+  align-items: end;
+  block-size: 68px;
+}
+.deckStatsBarCol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  block-size: 100%;
+}
+.deckStatsBarCount {
+  font-size: 0.6rem;
+  line-height: 1;
+  color: var(--glacier-text-subtle);
+  block-size: 0.7rem;
+}
+.deckStatsBarTrack {
+  display: flex;
+  align-items: flex-end;
+  inline-size: 100%;
+  flex: 1;
+  min-block-size: 0;
+}
+.deckStatsBar {
+  inline-size: 100%;
+  min-block-size: 2px;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--glacier-accent-solid) 90%, white),
+    var(--glacier-accent-solid)
+  );
+}
+.deckStatsBar[data-empty] {
+  background: color-mix(in oklch, var(--glacier-border) 70%, transparent);
+}
+.deckStatsBarLabel {
+  font-size: 0.6rem;
+  line-height: 1;
+  color: var(--glacier-text-subtle);
+}
+
+/* The bubble holds a panel, not a sentence - let it size to the content. */
+.deckStatsTip {
+  max-inline-size: none;
+}
