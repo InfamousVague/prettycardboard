@@ -19,6 +19,10 @@
     "triggers": "node scenarios/enforced-triggers.js",
     "statics": "node scenarios/enforced-statics.js",
     "cascade": "node scenarios/enforced-cascade.js",
+    "discard": "node scenarios/enforced-discard.js",
+    "scrymill": "node scenarios/enforced-scry-mill.js",
+    "walkers": "node scenarios/planeswalker-audit.js",
+    "botspells": "node scenarios/bot-spells.js",
     "brawl": "node scenarios/enforced-brawl.js",
     "restart": "node scenarios/restart-resume.js",
     "all": "node run-all.js"

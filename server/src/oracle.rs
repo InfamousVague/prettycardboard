@@ -20,7 +20,7 @@ use std::sync::Arc;
 /// Bumped whenever the parse below learns something new: cached rows stamped
 /// with an older version are treated as missing and refetched, so a deploy
 /// never leaves half the oracle table without the new fields.
-pub const ORACLE_VERSION: u32 = 7;
+pub const ORACLE_VERSION: u32 = 8;
 
 /// A characteristic-defining ability that sets power (and sometimes toughness)
 /// to a count of permanents - "...is equal to the number of artifacts you
@@ -196,6 +196,12 @@ pub struct OracleCard {
     /// That discard is "at random".
     #[serde(default)]
     pub opp_discards_random: bool,
+    /// The discard reads "target player/opponent", not "each opponent". A
+    /// player target cannot be expressed on the stack, so multiplayer rooms
+    /// leave these to the caster's hand; a 2-seat room applies them (the
+    /// target is unambiguous).
+    #[serde(default)]
+    pub opp_discards_targeted: bool,
     /// "Scry N" in the spell's own text.
     #[serde(default)]
     pub scry_spell: Option<i64>,
@@ -857,31 +863,47 @@ fn parse_cda(text: &str) -> Option<CountCda> {
 /// bot can pick spells for a reason and announcements can say what happened.
 /// Closed patterns like everything else here - unknown text classifies as
 /// nothing rather than wrongly.
-fn parse_spell_intent(text: &str) -> (bool, Option<i64>, Option<i64>, bool, Option<i64>) {
+fn parse_spell_intent(
+    text: &str,
+) -> (bool, Option<i64>, Option<i64>, bool, bool, Option<i64>) {
     let t = strip_asides(&text.replace('\n', " ")).to_lowercase();
     // Free-text scanning runs into sentence punctuation ("scry 1."), which
     // the clause-level parsers never see; shed it before reading a number.
     let number = |word: &str| word_number(word.trim_matches(|c: char| ".,;:".contains(c)));
     let counters_spell = t.contains("counter target spell");
-    // "draw two cards" / "draws three cards" as a spell effect.
-    let draws = ["draw ", "draws "].iter().find_map(|verb| {
-        let start = t.find(verb)? + verb.len();
-        let mut words = t[start..].split_whitespace();
-        let n = number(words.next()?)?;
-        let noun = words.next()?;
-        (noun.starts_with("card")).then_some(n)
-    });
-    // "each opponent discards N" / "target player discards N" /
-    // "target opponent discards N".
+    // "Draw two cards" as a CASTER effect: the verb must open its clause
+    // (optionally after "you"), or "each opponent draws" / "target player
+    // draws" would wrongly credit the caster.
+    let draws = t
+        .split(['.', ';'])
+        .flat_map(|s| s.split(", then "))
+        .find_map(|part| {
+            let part = part.trim();
+            let part = part.strip_prefix("you ").unwrap_or(part);
+            let rest = part.strip_prefix("draw ")?;
+            let mut words = rest.split_whitespace();
+            let n = number(words.next()?)?;
+            let noun = words.next()?;
+            noun.starts_with("card").then_some(n)
+        });
+    // "each opponent discards N" (symmetric), or "target player/opponent
+    // discards N" (targeted - the flag lets multiplayer keep it manual,
+    // since a player target cannot be expressed on the stack).
     let mut discards = None;
     let mut discards_random = false;
-    for prefix in ["each opponent discards ", "target player discards ", "target opponent discards "] {
+    let mut discards_targeted = false;
+    for (prefix, targeted) in [
+        ("each opponent discards ", false),
+        ("target player discards ", true),
+        ("target opponent discards ", true),
+    ] {
         if let Some(start) = t.find(prefix) {
             let tail = &t[start + prefix.len()..];
             let mut words = tail.split_whitespace();
             if let Some(n) = words.next().and_then(&number) {
                 if words.next().map(|w| w.starts_with("card")).unwrap_or(false) {
                     discards = Some(n);
+                    discards_targeted = targeted;
                     // The random rider follows the noun: "...two cards at random".
                     discards_random = tail
                         .split(". ")
@@ -898,7 +920,7 @@ fn parse_spell_intent(text: &str) -> (bool, Option<i64>, Option<i64>, bool, Opti
         let mut words = t[at + "scry ".len()..].split_whitespace();
         number(words.next()?)
     });
-    (counters_spell, draws, discards, discards_random, scry)
+    (counters_spell, draws, discards, discards_random, discards_targeted, scry)
 }
 
 /// Does this text read as removal or burn aimed at creatures? Feeds the
@@ -1027,7 +1049,7 @@ fn parse_card(raw: &ScryCard) -> Option<OracleCard> {
         .or_else(|| face.and_then(|f| f.power.as_deref()))
         .map(|p| p.contains('*'))
         .unwrap_or(false);
-    let (counters_spell, draws_spell, opp_discards, opp_discards_random, scry_spell) =
+    let (counters_spell, draws_spell, opp_discards, opp_discards_random, opp_discards_targeted, scry_spell) =
         parse_spell_intent(&oracle_text);
     let loyalty = raw
         .loyalty
@@ -1065,6 +1087,7 @@ fn parse_card(raw: &ScryCard) -> Option<OracleCard> {
         draws_spell,
         opp_discards,
         opp_discards_random,
+        opp_discards_targeted,
         scry_spell,
         colors,
         oracle_text,
@@ -1126,12 +1149,13 @@ pub async fn ensure(app: &Arc<App>, ids: Vec<String>) {
                         card.prevent_combat_to = repl.prevent_to;
                         card.prevent_combat_by = repl.prevent_by;
                         card.discover = parse_discover(&card.oracle_text);
-                        let (counters_spell, draws_spell, opp_discards, opp_discards_random, scry_spell) =
+                        let (counters_spell, draws_spell, opp_discards, opp_discards_random, opp_discards_targeted, scry_spell) =
                             parse_spell_intent(&card.oracle_text);
                         card.counters_spell = counters_spell;
                         card.draws_spell = draws_spell;
                         card.opp_discards = opp_discards;
                         card.opp_discards_random = opp_discards_random;
+                        card.opp_discards_targeted = opp_discards_targeted;
                         card.scry_spell = scry_spell;
                         card.v = ORACLE_VERSION;
                         if let Ok(fresh) = serde_json::to_string(&card) {
@@ -1568,21 +1592,41 @@ mod tests {
 
     #[test]
     fn spell_intent_classifies() {
-        let (counters, draws, discards, random, scry) =
+        let (counters, draws, discards, random, targeted, scry) =
             parse_spell_intent("Counter target spell.");
         assert!(counters);
-        assert_eq!((draws, discards, random, scry), (None, None, false, None));
-        let (_, draws, _, _, scry) = parse_spell_intent("Draw two cards, then scry 1.");
+        assert_eq!((draws, discards, random, targeted, scry), (None, None, false, false, None));
+        let (_, draws, _, _, _, scry) = parse_spell_intent("Draw two cards, then scry 1.");
         assert_eq!(draws, Some(2));
         assert_eq!(scry, Some(1));
-        let (_, _, discards, random, _) =
+        let (_, draws, _, _, _, scry) = parse_spell_intent("Scry 2, then draw a card.");
+        assert_eq!(draws, Some(1));
+        assert_eq!(scry, Some(2));
+        let (_, _, discards, random, targeted, _) =
             parse_spell_intent("Target player discards two cards at random.");
         assert_eq!(discards, Some(2));
         assert!(random);
-        let (_, _, discards, random, _) =
+        assert!(targeted);
+        let (_, _, discards, random, targeted, _) =
             parse_spell_intent("Each opponent discards a card.");
         assert_eq!(discards, Some(1));
         assert!(!random);
+        assert!(!targeted);
+    }
+
+    #[test]
+    fn spell_intent_never_credits_opponent_draws_to_the_caster() {
+        // The draw verb must open its clause: another player's draw is not
+        // the caster's cantrip.
+        let (_, draws, _, _, _, _) = parse_spell_intent("Each opponent draws a card.");
+        assert_eq!(draws, None);
+        let (_, draws, _, _, _, _) = parse_spell_intent("Target player draws two cards.");
+        assert_eq!(draws, None);
+        let (_, draws, _, _, _, _) = parse_spell_intent("You draw a card.");
+        assert_eq!(draws, Some(1));
+        let (_, draws, _, _, _, _) =
+            parse_spell_intent("Destroy target creature. Draw a card.");
+        assert_eq!(draws, Some(1));
     }
 
     #[test]

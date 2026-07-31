@@ -120,16 +120,31 @@ async function main() {
   );
   t.ok(Boolean(landed), 'planeswalker cast onto the battlefield (auto-tap)', '');
 
-  // 2) Loyalty: enters at 4, +1 ability, -3 ability.
-  let expected = 0;
-  for (const [delta, label] of [[4, 'enters with 4'], [1, '+1 ability'], [-3, '-3 ability']]) {
+  // 2) Loyalty: rules pass D banks the PRINTED loyalty automatically on
+  // arrival ("enters with 4 loyalty"), so the player only clicks abilities.
+  let expected = 4;
+  {
+    const p = await fresh(cursor);
+    const pw = p?.battlefield.find((c) => c.iid === ch.iid);
+    t.ok(pw?.counters?.loyalty === expected, `loyalty banked on arrival = ${expected}`, JSON.stringify(pw?.counters));
+  }
+  for (const [delta, label] of [[1, '+1 ability'], [-3, '-3 ability']]) {
     expected += delta;
     cursor = me.mark();
     me.act({ kind: 'card.counter', iid: ch.iid, counter: 'loyalty', delta });
-    await sleep(500);
-    const p = await fresh(cursor);
-    const pw = p?.battlefield.find((c) => c.iid === ch.iid);
-    t.ok(pw?.counters?.loyalty === expected, `loyalty after ${label} = ${expected}`, JSON.stringify(pw?.counters));
+    await sleep(300);
+    me.requestResync();
+    // Wait for the CONDITION, not merely the next state - other activity
+    // (bot ticks, resyncs) can slip a stale frame in first.
+    await me.expectState(
+      (s) => {
+        const pw = s.players.find((p) => !p.isBot)?.battlefield.find((c) => c.iid === ch.iid);
+        return pw?.counters?.loyalty === expected;
+      },
+      `loyalty after ${label} = ${expected}`,
+      8000,
+      { since: cursor },
+    );
   }
 
   // 3) Loyalty survives a full turn cycle (auto-untap must not wipe counters).

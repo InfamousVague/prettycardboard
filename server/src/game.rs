@@ -2013,7 +2013,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                     iid,
                 ));
             } else if let Some((caster, card)) = spell {
-                extra_logs.extend(crate::rules::apply_spell_intent(app, room, &caster, &card));
+                extra_logs.extend(crate::rules::apply_spell_intent(app, room, &caster, &card, &mut private));
             }
             stack_changed(room);
             refresh_combat_preview(app, room);
@@ -2146,7 +2146,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
             }
             let trigger = room.pending_triggers.remove(pos);
             if apply && trigger.auto {
-                extra_logs = crate::rules::apply_trigger_effects(room, &trigger);
+                extra_logs = crate::rules::apply_trigger_effects(room, &trigger, &mut private);
                 // Life or counters may have moved under a showing preview.
                 refresh_combat_preview(app, room);
                 log = format!(

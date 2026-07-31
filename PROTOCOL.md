@@ -852,8 +852,11 @@ spells.
   `card.move` while a spell is on the stack also logs the "in response to"
   clause.
 - Scry N: a bot applies a keep-lands-when-short heuristic silently (the log
-  says only "scries N"); a human gets the top N as a private `peeked` view -
-  the existing library viewer's reorder/bottom verbs finish the scry.
+  says only "scries N"); a human gets the top N as a private peek (the same
+  `library.cards` message the peek verb sends, so the viewer opens) - the
+  existing reorder/bottom verbs finish the scry. When one spell both draws
+  and scries (Preordain, Opt), the engine deliberately draws FIRST and
+  scries the new top - a draw would otherwise wipe the peek mid-scry.
 - Mill N: top N to the graveyard, every card named in the log.
 - `stack.counter` now logs "counters X with Y" when the countering player's
   own spell sits above the countered one on the stack.

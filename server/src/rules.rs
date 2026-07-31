@@ -939,15 +939,25 @@ pub fn effects_summary(effects: &[TriggerEffect]) -> String {
 /// Apply an answered trigger's parsed effects to the room. Returns log lines.
 /// Effects apply best-effort against CURRENT state: a source that left the
 /// battlefield just skips its counters, an empty library stops a draw.
-pub fn apply_trigger_effects(room: &mut Room, t: &PendingTrigger) -> Vec<String> {
-    apply_effects(room, &t.owner, &t.source_iid, &t.source_name, &t.effects)
+pub fn apply_trigger_effects(
+    room: &mut Room,
+    t: &PendingTrigger,
+    private: &mut Vec<(String, serde_json::Value)>,
+) -> Vec<String> {
+    apply_effects(room, &t.owner, &t.source_iid, &t.source_name, &t.effects, private)
 }
 
 /// A resolving instant or sorcery whose text the oracle parser understood
 /// applies its effects the moment it leaves the stack: draws for the caster,
 /// discards for each opponent, a scry for the caster. Text the parser did not
 /// fully understand stays manual, exactly like triggers - never half-applied.
-pub fn apply_spell_intent(app: &App, room: &mut Room, caster_id: &str, card: &Card) -> Vec<String> {
+pub fn apply_spell_intent(
+    app: &App,
+    room: &mut Room,
+    caster_id: &str,
+    card: &Card,
+    private: &mut Vec<(String, serde_json::Value)>,
+) -> Vec<String> {
     if !enforced(room) {
         return Vec::new();
     }
@@ -962,7 +972,17 @@ pub fn apply_spell_intent(app: &App, room: &mut Room, caster_id: &str, card: &Ca
         effects.push(TriggerEffect::Draw { n });
     }
     if let Some(n) = f.opp_discards {
-        effects.push(TriggerEffect::EachOpponentDiscards { n, random: f.opp_discards_random });
+        // "Target player discards" has a target the stack cannot express, so
+        // it only auto-applies when the target is unambiguous: exactly one
+        // live opponent. "Each opponent" always applies.
+        let live_opponents = room
+            .players
+            .iter()
+            .filter(|p| p.user_id != caster_id && !p.conceded)
+            .count();
+        if !f.opp_discards_targeted || live_opponents <= 1 {
+            effects.push(TriggerEffect::EachOpponentDiscards { n, random: f.opp_discards_random });
+        }
     }
     if let Some(n) = f.scry_spell {
         effects.push(TriggerEffect::Scry { n });
@@ -970,7 +990,7 @@ pub fn apply_spell_intent(app: &App, room: &mut Room, caster_id: &str, card: &Ca
     if effects.is_empty() {
         return Vec::new();
     }
-    apply_effects(room, caster_id, &card.iid, &card.name, &effects)
+    apply_effects(room, caster_id, &card.iid, &card.name, &effects, private)
 }
 
 /// The shared muscle behind triggers and spell intent: apply a list of parsed
@@ -981,6 +1001,7 @@ fn apply_effects(
     source_iid: &str,
     source_name: &str,
     effects: &[TriggerEffect],
+    private: &mut Vec<(String, serde_json::Value)>,
 ) -> Vec<String> {
     let mut logs = Vec::new();
     let Some(pi) = room.players.iter().position(|p| p.user_id == owner) else {
@@ -1139,12 +1160,21 @@ fn apply_effects(
                     logs.extend(bot_scry(room, pi, *n, source_name));
                 } else {
                     // For a human, "apply" performs the LOOK: the top N arrive
-                    // as a private peek and the existing library viewer's
+                    // as a private peek (the same library.cards message the
+                    // peek verb sends, so the viewer opens) and the existing
                     // reorder/bottom verbs finish the scry. No new UI.
                     let count = (*n).min(p.library.len() as i64) as usize;
                     if count > 0 {
                         let p = &mut room.players[pi];
                         p.peeked = p.library[..count].iter().map(|c| c.iid.clone()).collect();
+                        let cards: Vec<serde_json::Value> = p.library[..count]
+                            .iter()
+                            .map(|c| serde_json::to_value(c).unwrap())
+                            .collect();
+                        private.push((
+                            owner.to_string(),
+                            serde_json::json!({"type": "library.cards", "cards": cards}),
+                        ));
                         logs.push(format!("{} scries {n} ({})", p.username, source_name));
                     }
                 }
