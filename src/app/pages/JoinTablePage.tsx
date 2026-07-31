@@ -43,6 +43,7 @@ import './play.css';
 export function JoinTablePage({ code }: { code: string }) {
   const t = useT();
   const { toast } = useToast();
+  const identity = useApp((state) => state.identity);
   const decks = useApp((state) => state.decks);
   const join = useGame((state) => state.join);
   const spectate = useGame((state) => state.spectate);
@@ -55,8 +56,13 @@ export function JoinTablePage({ code }: { code: string }) {
 
   const chosenDeck = deckId || decks[0]?.id || '';
   const drafting = (room?.format ?? '').toLowerCase() === 'draft';
-  const full = room ? room.players.length >= room.seats : false;
-  const needsDeck = !drafting && decks.length === 0;
+  // A player who already holds a seat is never blocked: a full table or an
+  // empty deck library only matter to someone who has yet to sit down. The
+  // server resumes the existing seat on join, so no deck choice is required.
+  const seated = room != null && identity != null
+    && room.players.some((player) => player.userId === identity.userId);
+  const full = room ? !seated && room.players.length >= room.seats : false;
+  const needsDeck = !seated && !drafting && decks.length === 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -226,7 +232,7 @@ export function JoinTablePage({ code }: { code: string }) {
               <div className="joinActions">
                 <Button onClick={takeSeat} loading={busy} disabled={needsDeck || full}>
                   {drafting ? <Package size={16} aria-hidden /> : <LogIn size={16} aria-hidden />}
-                  {drafting ? t('joinJoinDraft') : t('joinTakeSeat')}
+                  {seated ? t('joinResumeSeat') : drafting ? t('joinJoinDraft') : t('joinTakeSeat')}
                 </Button>
                 <Button variant="soft" onClick={watch}>
                   <Eye size={16} aria-hidden /> {t('joinSpectate')}
