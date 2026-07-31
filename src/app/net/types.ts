@@ -484,6 +484,10 @@ export interface RoomState {
   stack?: CardInst[];
   /** Enforced rooms: seats that passed priority on the current stack. */
   stackPassed?: number[];
+  /** Enforced rooms: fired triggered abilities awaiting their controller. */
+  pendingTriggers?: PendingTrigger[];
+  /** Table markers parked on cards, by card iid. Fully public. */
+  marks?: Record<string, CardMarkState>;
   combat?: CombatState | null;
   markers?: TableMarkers;
   matchResult?: MatchResult | null;
@@ -492,6 +496,42 @@ export interface RoomState {
 }
 
 export type Zone = 'library' | 'hand' | 'battlefield' | 'graveyard' | 'exile' | 'command';
+
+/** A table marker parked on a card, carrying who placed it (the client colours
+ *  the puck by that seat). Lives in room state, so it survives reconnects and
+ *  every spectator sees it. */
+export interface CardMarkState {
+  kind: string;
+  by: string;
+  seat: number;
+  username: string;
+  ts: number;
+}
+
+/** One parsed trigger effect (enforced rooms; see PROTOCOL.md pass A). */
+export type TriggerEffect =
+  | { kind: 'draw'; n: number }
+  | { kind: 'gainLife'; n: number }
+  | { kind: 'loseLife'; n: number }
+  | { kind: 'eachOpponentLoses'; n: number }
+  | { kind: 'selfCounters'; counter: string; n: number }
+  | { kind: 'token'; name: string; power: number; toughness: number; count: number; tapped: boolean }
+  | { kind: 'manual' };
+
+/** A fired triggered ability waiting on its controller (fully public). */
+export interface PendingTrigger {
+  id: string;
+  owner: string;
+  seat: number;
+  sourceIid: string;
+  sourceName: string;
+  when: 'etb' | 'dies' | 'attacks' | 'upkeep' | 'endStep';
+  effects: TriggerEffect[];
+  text: string;
+  /** True = the engine can apply the parsed effects itself. */
+  auto: boolean;
+  deadline: number;
+}
 
 /** Freeform table actions (client → server inside game.action). */
 export type GameAction =
@@ -552,7 +592,21 @@ export type ServerMessage =
       roomId: string;
     }
   | { type: 'log'; seq: number; text: string; ts: number; roomId: string }
-  | { type: 'aim'; fromUserId: string; username: string; fromIid?: string | null; toIid?: string | null; toSeat?: number | null; kind?: string | null; ts: number; roomId: string }
+  | {
+      type: 'aim';
+      fromUserId: string;
+      username: string;
+      /** The pointer's seat, so the arrow can wear that seat's colour. */
+      fromSeat?: number | null;
+      fromIid?: string | null;
+      toIid?: string | null;
+      toSeat?: number | null;
+      kind?: string | null;
+      /** Enforced rooms: the target's printed ward cost, if it has one. */
+      ward?: string | null;
+      ts: number;
+      roomId: string;
+    }
   // Private rules advice, sent only to the player who made the move and only
   // while they have the coach turned on. Advisory - the move already happened.
   | { type: 'coach'; rule: string; text: string; ts: number }
@@ -644,6 +698,9 @@ export type GameActionV2 =
   | { kind: 'marker.set'; marker: 'monarch' | 'initiative'; seat: number }
   | { kind: 'marker.day'; value: 'day' | 'night' | null }
   | { kind: 'marker.storm'; delta: number }
+  /** Park a table marker on a card; `mark: null` lifts it. */
+  | { kind: 'mark.set'; iid: string; mark: string | null }
+  | { kind: 'mark.clear' }
   | { kind: 'library.play'; x: number; y: number }
   | { kind: 'gig.roll'; sides: number }
   | { kind: 'gig.return'; sides: number }
@@ -663,6 +720,8 @@ export type GameActionV2 =
   | { kind: 'combat.ready' }
   | { kind: 'combat.resolve' }
   | { kind: 'stack.pass' }
+  | { kind: 'trigger.answer'; id: string; apply: boolean }
+  | { kind: 'cascade'; n: number }
   | { kind: 'undo' }
   | { kind: 'redo' }
   | { kind: 'rewindTo'; index: number }

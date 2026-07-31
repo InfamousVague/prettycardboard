@@ -1201,6 +1201,20 @@ export const messages = {
   // settings modal — general tab
   setReduceMotion: { en: 'Reduce motion', es: 'Reducir movimiento', fr: 'Réduire les animations', ar: 'تقليل الحركة' },
   setDeveloper: { en: 'Developer', es: 'Desarrollador', fr: 'Développeur', ar: 'المطور' },
+  setBotDuel: { en: 'Start a bot 1v1', es: 'Iniciar 1v1 de bots', fr: 'Lancer un 1v1 de bots', ar: 'بدء 1 ضد 1 بين روبوتين' },
+  setBotDuelHint: {
+    en: 'Two bots play each other while you spectate.',
+    es: 'Dos bots juegan entre sí mientras tú observas.',
+    fr: 'Deux bots s’affrontent pendant que vous observez.',
+    ar: 'روبوتان يلعبان ضد بعضهما بينما تشاهد.',
+  },
+  setBotDuelRoomName: { en: 'Bot exhibition', es: 'Exhibición de bots', fr: 'Exhibition de bots', ar: 'عرض الروبوتات' },
+  setBotDuelFailed: {
+    en: 'Could not start the bot match.',
+    es: 'No se pudo iniciar la partida de bots.',
+    fr: 'Impossible de lancer le match de bots.',
+    ar: 'تعذر بدء مباراة الروبوتات.',
+  },
   setEnableWip: { en: 'Enable WIP features', es: 'Activar funciones en desarrollo', fr: 'Activer les fonctions en cours', ar: 'تفعيل الميزات قيد التطوير' },
   setEnableWipHint: {
     en: 'Show work-in-progress features that are not ready yet — currently the Cyberpunk TCG game.',
@@ -1912,6 +1926,7 @@ export const messages = {
   mkFlame: { en: 'Mark: burn', es: 'Marca: quemar', fr: 'Marque : brûler', ar: 'علامة: حرق' },
   mkBan: { en: 'Mark: locked down', es: 'Marca: bloqueada', fr: 'Marque : verrouillée', ar: 'علامة: مقفلة' },
   mkQuestion: { en: 'Mark: in question', es: 'Marca: en duda', fr: 'Marque : en question', ar: 'علامة: موضع شك' },
+  mkClearAll: { en: 'Clear all markers', es: 'Quitar todas las marcas', fr: 'Effacer toutes les marques', ar: 'مسح كل العلامات' },
   efDealTitle: { en: 'Deal damage or heal', es: 'Hacer daño o curar', fr: 'Infliger ou soigner', ar: 'إلحاق ضرر أو علاج' },
   efDeal: { en: 'Deal', es: 'Hacer', fr: 'Infliger', ar: 'إلحاق' },
   efHeal: { en: 'Heal', es: 'Curar', fr: 'Soigner', ar: 'علاج' },
@@ -1963,6 +1978,10 @@ export const messages = {
   gpToBottom: { en: 'To bottom', es: 'Al fondo', fr: 'Au fond', ar: 'إلى الأسفل' },
   gpMullTake: { en: 'Mulligan', es: 'Mulligan', fr: 'Mulligan', ar: 'مولّيغان' },
   gpMullKeep: { en: 'Keep hand', es: 'Quedarse la mano', fr: 'Garder la main', ar: 'احتفظ باليد' },
+  gpTriggerApply: { en: 'Apply', es: 'Aplicar', fr: 'Appliquer', ar: 'تطبيق' },
+  gpCascadeFor: { en: 'Cascade for…', es: 'Cascada por…', fr: 'Cascade pour…', ar: 'تتالي لـ…' },
+  gpTriggerSkip: { en: 'Skip', es: 'Omitir', fr: 'Ignorer', ar: 'تخطي' },
+  gpTriggerOk: { en: 'Got it', es: 'Entendido', fr: 'Compris', ar: 'فهمت' },
   gpMullBottom: {
     en: 'Choose cards to put on the bottom',
     es: 'Elige cartas para poner en el fondo',

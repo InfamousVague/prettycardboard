@@ -232,6 +232,30 @@ Counters, dice, markers:
   `{kind: "marker.day", value: "day"|"night"|null}` /
   `{kind: "marker.storm", delta}`.
 
+Table markers and pointing arrows (2026-07-30) — the shared "look at this"
+layer, deliberately split in two:
+
+- **Markers are table state.** `{kind: "mark.set", iid, mark: "skull"|"sword"|
+  "shield"|"star"|"eye"|"flame"|"ban"|"question"|null}` parks a marker on a
+  card (`mark: null` lifts it); `{kind: "mark.clear"}` sweeps them all.
+  Anyone at the table may mark anyone's card. They ride in `room.state` as
+  `marks: {<iid>: {kind, by, seat, username, ts}}`, so they survive a
+  reconnect, reach every spectator, and a late joiner inherits the annotated
+  board. The client colours each puck by the placing SEAT (the same palette
+  as that player's cursor and arrows). A marker is dropped automatically when
+  its card leaves the battlefield, including combat deaths. Refusals:
+  `card_not_found` (no such card at the table), `bad_mark` (empty or >24
+  chars), `too_many_marks` (128 cap), `no_marks` (clearing a clean table).
+- **Arrows are ephemeral.** The `aim` relay is unchanged in shape but now
+  carries `fromSeat` so every arrow can wear its sender's colour (plus
+  `ward` in enforced rooms, see below). Nothing about an aim is stored:
+  it is broadcast to every player AND spectator and forgotten. The client
+  draws one arrow per sender - source card → target card or seat - and
+  expires it after ~4s. When the source is not on screen (the staged view
+  shows one board), the arrow arrives from the table edge rather than
+  vanishing, because a ring with no visible origin tells you nothing about
+  who is pointing.
+
 Zone viewers (all logged; server filters what each viewer may see):
 - `{kind: "library.peek", count}` — top N of YOUR library, per-viewer reply
   `{type: "library.cards", iid-list with details}`; logs "X looks at top 3".
@@ -699,4 +723,99 @@ affordances); the server remains the authority.
 Bots play enforced rooms through the same validator (oracle-aware casting,
 keyword-aware combat math, the lock/ready/resolve flow) and skip their manual
 damage settlement there. `bot.add` gains `difficulty: "easy"|"normal"|"hard"`
-(scales aggression, casting budget, blocking discipline).
+(scales aggression, casting budget, blocking discipline). Every bot turn
+begins with a minimum 500ms "thinking" beat before its first action, whoever
+is (or is not) watching - an instant answer reads as a glitch, not an
+opponent.
+
+### Triggered abilities (rules pass A, 2026-07-30)
+
+The oracle cache parses each card's rules text into trigger records at fetch
+time (never per-card hardcoding): `When ~ enters (the battlefield)`,
+`When ~ dies`, `Whenever ~ attacks`, `At the beginning of your upkeep`, and
+`At the beginning of your end step`, with a closed set of effects the engine
+can apply itself - draw N, gain/lose N life, each opponent loses N, +X/+X
+counters on the source, and P/T token stubs. Compound clauses joined by
+"and" parse when every part does; anything else (targets, scaling, extra
+sentences, intervening "if") is `manual`. Quoted granted abilities and
+other-object triggers never fire. Cached oracle rows carry a parse version;
+older rows reparse from their stored text (or refetch) on first use.
+
+In an enforced room the matching event queues a prompt instead of
+auto-resolving:
+
+- Events: battlefield arrival however it happens (cast, land drop,
+  reanimation, stack resolve; a face-down Set stays silent), battlefield ->
+  graveyard (incl. enforced-combat deaths), `combat.lock` (per attacker),
+  turn start (upkeep), and entering the end phase - `turn.pass` fires unvisited
+  end steps exactly once per turn.
+- `room.state` gains `pendingTriggers: [{id, owner, seat, sourceIid,
+  sourceName, when: "etb"|"dies"|"attacks"|"upkeep"|"endStep", effects[],
+  text, auto, deadline}]` (fully public - it is printed card text).
+- The controller answers with `{kind: "trigger.answer", id, apply}`:
+  `apply: true` on an `auto` trigger has the engine perform the effects
+  (logged); on a manual trigger it is an acknowledgment - the text stays the
+  table's to perform by hand. `apply: false` dismisses. Unanswered prompts
+  lapse after 30s with a log line; a lapse never applies anything.
+- Bots answer their own prompts within a tick: auto triggers are applied and
+  announced in chat; manual ones are dismissed. A recognized removal/burn
+  spell on the stack (oracle `threat`) makes a hard bot respond with an
+  instant when it can. A bot action rejected by the validator logs a
+  `[rules]` line - the enforced-brawl playtest asserts none ever appear.
+
+### Static, evasion, and cost effects (rules pass B, 2026-07-30)
+
+The oracle cache also parses (versioned rows reparse/refetch on upgrade):
+card colors; plain anthems (`(Other) creatures you control get +P/+T` -
+one-shot/conditional/subtype variants deliberately unmodeled); cost cuts
+(`(<type> )spells you cast cost {N} less to cast`); bare `~ can't be
+blocked.`; `protection from <color(s)>`; and the printed ward cost.
+
+Enforcement changes:
+
+- `effective_pt` folds the controller's anthems into every creature's P/T, so
+  the combat preview math (damage, deaths, lifelink, trample) sees boosted
+  stats.
+- Block legality is a full evasion table: flying/reach, fear (artifact or
+  black), intimidate (artifact or shared color), shadow (both directions),
+  skulk (by effective power), horsemanship, unblockable, protection from the
+  blocker's colors. Unknown attackers stay permissive; attacker-imposed
+  requirements need the blocker to PROVE it qualifies (same stance v1 took
+  for flying). Bots pick blocks through the same table.
+- Cost cuts fold into the generic component of `cast`/`cmd.cast` payment
+  (colored pips never shrink; floor 0), server-side and in the client's
+  affordance mirror.
+- Vigilance: declaring an attacker no longer taps it in enforced rooms.
+- Ward: an `aim` at an opponent's warded permanent relays `ward: "<cost>"`
+  on the aim broadcast, and the deliberate spell-targeting gesture (fromIid
+  present) also logs a tax reminder line.
+
+### Replacement and cascade effects (rules pass C, 2026-07-30)
+
+Parsed at fetch time (conditional variants stay unmodeled): `~ enters
+tapped`, `~ enters with N <kind> counters on it`, `If ~ would die, exile it
+instead`, `Prevent all combat damage that would be dealt to/by ~`, the
+cascade keyword, and `discover N`.
+
+- Enters replacements auto-apply on every battlefield arrival (cast, land
+  drop, reanimation, stack resolve) before the arrival's ETB prompts fire.
+- A dies-to-exile card's death routes to exile (logged as a replacement)
+  and fires no dies trigger - both on direct moves and enforced-combat
+  deaths.
+- Damage-prevention shields fold into the combat preview: a shielded
+  creature soaks assignment but takes nothing; a shielded dealer deals
+  nothing.
+- `{kind: "cascade", n}` (enforced rooms; also the deck menu's "Cascade
+  for…"): the server reveals from the top of the caster's library until a
+  nonland card with mana value < n, puts the hit on the stack revealed and
+  free to cast (resolve it to the battlefield, or decline it anywhere else
+  - it is a normal stack card), and bottoms the rest in a random order.
+  Unknown cards are set aside with the lands, never a wedge. Casting a
+  spell with cascade fires it automatically with n = the spell's mana
+  value; `discover N` fires with n = N + 1.
+- `token.clone` of an iid on the shared stack copies the SPELL: the copy
+  is a token owned by the copier on top of the stack, resolves like any
+  stack card, and evaporates via the normal token rule if declined.
+- Bots resolve their own stack permanents (cascade hits) to the
+  battlefield, instants and sorceries to the graveyard, and answer the ETB
+  prompts that follow.

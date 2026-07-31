@@ -266,6 +266,34 @@ fn handle_msg(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
         ClientMsg::Aim { from_iid, to_iid, to_seat, kind } => {
             if let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) {
                 if let Some(room) = app.rooms.get(&rref.room_id) {
+                    // Ward tax reminder (rules pass B): aiming a spell at an
+                    // opponent's warded permanent surfaces the printed cost.
+                    // Enriches the relay; a log line only for the deliberate
+                    // spell-targeting gesture (fromIid present).
+                    let mut ward: Option<(String, String)> = None;
+                    if crate::rules::enforced(&room) {
+                        if let Some(target_iid) = &to_iid {
+                            for p in &room.players {
+                                if p.user_id == user.id {
+                                    continue;
+                                }
+                                if let Some(card) =
+                                    p.battlefield.iter().find(|c| c.iid == *target_iid)
+                                {
+                                    if let Some(f) = crate::rules::facts(app, card) {
+                                        if let Some(cost) = &f.ward {
+                                            ward = Some((card.name.clone(), cost.clone()));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // The pointer's own seat travels with it: the client draws
+                    // one arrow per sender in that seat's colour, so several
+                    // people can point at once without the table guessing who
+                    // meant what.
+                    let from_seat = room.players.iter().find(|p| p.user_id == user.id).map(|p| p.seat);
                     room_send_all(
                         app,
                         &room,
@@ -273,13 +301,24 @@ fn handle_msg(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
                             "type": "aim",
                             "fromUserId": user.id,
                             "username": user.username,
+                            "fromSeat": from_seat,
                             "fromIid": from_iid,
                             "toIid": to_iid,
                             "toSeat": to_seat,
                             "kind": kind,
+                            "ward": ward.as_ref().map(|(_, cost)| cost),
                             "ts": crate::now_ms(),
                         }),
                     );
+                    if let (Some((name, cost)), Some(_)) = (&ward, &from_iid) {
+                        let seq = room.seq;
+                        room_log(
+                            app,
+                            &room,
+                            seq,
+                            &format!("Reminder: {name} has ward {cost} - the spell is countered unless its tax is paid"),
+                        );
+                    }
                 }
             }
         }

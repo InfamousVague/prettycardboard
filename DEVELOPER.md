@@ -92,6 +92,11 @@ node run-all.js          # seed + commander-pod + standard-duel + chaos-monkey +
 npm run aimatch          # a full autonomous AI-vs-AI match (dev feature)
 ```
 
+For an eyeball test of the bots, Settings → General → Developer has
+**Start a bot 1v1**: it spins up a two-bot exhibition table and drops you in
+as a spectator. Bots pace themselves — each turn starts with a short
+"thinking" beat (≥500ms) so the match is watchable.
+
 Against a scratch server on another port: `PC_BASE=http://127.0.0.1:8798 node run-all.js`.
 Details and how to write a scenario: [docs/testing.md](./docs/testing.md).
 

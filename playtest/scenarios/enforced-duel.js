@@ -46,6 +46,23 @@ async function main() {
     /Plains|Island|Swamp|Mountain|Forest|Tower|Peaks|Bog|Cairns|Outpost|Glade|Ridgeline|Path of Ancestry|Barrens|Spire|Grounds|Wastes|Panorama|Vista|Crossroads|Land/i.test(name);
   const myself = () => me.lastState().players.find((p) => !p.isBot);
 
+  // The opening hand can hold zero regex-recognizable lands (the FF precons
+  // carry exotic land names). Fetch two basics from the library so the
+  // land-drop assertions below are deterministic.
+  me.act({ kind: 'library.search' });
+  const libMsg = await me.waitFor((m) => m.type === 'library.cards', { timeoutMs: 5000 });
+  const basics = (libMsg?.cards ?? []).filter((c) =>
+    /^(Plains|Island|Swamp|Mountain|Forest)$/.test(c.name),
+  );
+  for (const basic of basics.slice(0, 2)) {
+    me.act({ kind: 'card.move', iid: basic.iid, to: 'hand' });
+    await me.expectState(
+      (s) => s.players.find((p) => !p.isBot).hand?.some((c) => c.iid === basic.iid),
+      `${basic.name} fetched to hand`,
+      5000,
+    );
+  }
+
   // 1) Dragging a nonland out of hand must be rejected: cast it instead.
   // The name heuristic can mislabel an exotic land, so accept either the
   // must_cast rejection or the card legally landing as this turn's drop.
@@ -92,11 +109,13 @@ async function main() {
   }
   t.ok((myself().landsThisTurn ?? 0) === 1, 'landsThisTurn tracked', String(myself().landsThisTurn));
 
-  // 4) Structural guards: untap.all and off-order turn.set are refused.
+  // 4) Structural guards: turn.set is always refused at an enforced table
+  //    (untap.all is a harmless no-op on your own turn, so it makes a poor
+  //    assertion - whether it errors depends on who is active).
   mark = me.mark();
-  me.act({ kind: 'untap.all' });
+  me.act({ kind: 'turn.set', seat: myself().seat });
   let err = await me.waitFor((m) => m.type === 'error', { since: mark, timeoutMs: 4000 });
-  t.ok(err?.code === 'illegal', 'untap.all rejected', JSON.stringify(err));
+  t.ok(err?.code === 'illegal', 'turn.set rejected', JSON.stringify(err));
 
   // 5) Goldfish my turns and ride the bot's enforced combat machine: it must
   //    lock, wait for our ready, and resolve only after the server's preview.

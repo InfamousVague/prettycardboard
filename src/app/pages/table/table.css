@@ -93,10 +93,17 @@
 
 .tableTop,
 .ribbonRow,
-.tableMain,
-.tableSide {
+.tableMain {
   position: relative;
   z-index: 1;
+}
+
+/* No z-index of its own: with the aside at `auto` it creates no stacking
+   context, so the nav pill below can claim a root-level z-index above the
+   floating pack dock (95) while the rail's cards stay under the hand fan
+   (.tableMain, z 2) exactly as before. */
+.tableSide {
+  position: relative;
 }
 
 /* ---- top strip ---- */
@@ -332,32 +339,39 @@
 
 .tableMain[data-lobby] {
   padding-inline-end: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 
 /* ---- pregame lobby ---- */
 
+/* One screen, no page scroll: a grid with the roster + rules + controls in
+   the main column and the chat filling a fixed side column. Only the seat
+   grid scrolls internally when a short window genuinely cannot hold it.
+   Narrow windows fall back to the stacked, page-scrolling flow (see the
+   900px media query below). */
 .pregameLobby {
   flex: 1;
-  /* Seat cards now carry deck artwork, so they need real width - and the lobby
-     scrolls itself rather than growing the page off the bottom. */
   width: min(90rem, 100%);
   min-height: 0;
   margin-inline: auto;
-  padding: var(--glacier-space-5) var(--glacier-space-6) var(--glacier-space-6);
-  display: flex;
-  flex-direction: column;
-  gap: var(--glacier-space-5);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  padding: var(--glacier-space-3) var(--glacier-space-5) var(--glacier-space-2);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 21rem);
+  /* The roster keeps a real minimum so a tall rules card can never squeeze
+     it out; if a short window truly cannot hold everything, the lobby
+     scrolls as a whole rather than clipping. */
+  grid-template-rows: auto minmax(9rem, 1fr) auto auto auto;
+  gap: var(--glacier-space-2) var(--glacier-space-4);
+  overflow: hidden auto;
 }
 
 .pregameHero {
+  grid-column: 1 / -1;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--glacier-space-4);
-  padding-block-end: var(--glacier-space-4);
+  padding-block-end: var(--glacier-space-1);
   border-block-end: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
 }
 
@@ -365,7 +379,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--glacier-space-1);
+  gap: 2px;
 }
 
 .pregameKicker {
@@ -382,16 +396,27 @@
   margin: 0;
   color: var(--glacier-text);
   font-family: var(--glacier-font-display, var(--glacier-font-sans));
-  font-size: 1.75rem;
+  font-size: 1.25rem;
   line-height: 1.1;
   letter-spacing: 0;
 }
 
 .pregameSeats {
+  grid-column: 1;
+  grid-row: 2;
+  min-height: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
-  gap: var(--glacier-space-4);
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  /* Rows keep their natural card height: without this, a definite-height
+     scroll container lets the tracks split its height and crush the cards. */
+  grid-auto-rows: max-content;
+  gap: var(--glacier-space-3);
   align-content: start;
+  /* The one region allowed to scroll when the window is genuinely short. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding-inline-end: 2px;
 }
 
 .pregameSeat {
@@ -536,19 +561,19 @@
 }
 
 .pregameControls {
-  margin-block-start: auto;
-  padding-block-start: var(--glacier-space-5);
+  grid-column: 1;
+  grid-row: 4;
+  padding-block-start: var(--glacier-space-2);
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(16rem, 0.75fr);
-  gap: var(--glacier-space-5);
+  gap: var(--glacier-space-4);
   border-block-start: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
 }
 
 .pregameDeckSetup {
   position: relative;
   isolation: isolate;
-  min-height: 8rem;
-  padding: var(--glacier-space-4);
+  padding: var(--glacier-space-3);
   display: flex;
   align-items: flex-end;
   gap: var(--glacier-space-4);
@@ -597,7 +622,7 @@
 }
 
 .pregameWatching {
-  min-height: 8rem;
+  min-height: 4.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -634,7 +659,23 @@
   font-weight: var(--glacier-font-weight-semibold);
 }
 
+/* The chat owns the side column top-to-bottom, ending above the floating
+   nav pill so the two stack in the same visual lane without overlapping. */
+.pregameLobby > .lobbyChat {
+  grid-column: 2;
+  grid-row: 2 / 5;
+  min-height: 0;
+  margin-block-end: calc(2.75rem + var(--glacier-space-3));
+}
+
+.pregameLobby > .lobbyChat .lobbyChatScroll {
+  flex: 1;
+  min-height: 0;
+}
+
 .pregameSpectators {
+  grid-column: 1 / -1;
+  grid-row: 5;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -646,9 +687,11 @@
 
 /* ---- pregame table rules ---- */
 .pregameSettings {
+  grid-column: 1;
+  grid-row: 3;
   display: grid;
-  gap: var(--glacier-space-3);
-  padding: var(--glacier-space-4);
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-2) var(--glacier-space-3) var(--glacier-space-3);
   border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
   border-radius: 10px;
   background: color-mix(in oklch, var(--glacier-surface) 55%, transparent);
@@ -678,8 +721,8 @@
 
 .pregameSettingsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: var(--glacier-space-3);
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--glacier-space-2) var(--glacier-space-3);
 }
 
 .pregameSetting {
@@ -699,8 +742,34 @@
 }
 
 @media (max-width: 900px) {
+  /* Narrow windows: back to the stacked, page-scrolling flow - a side chat
+     column has no room, and "fits on one screen" stops being meaningful. */
+  .tableMain[data-lobby] {
+    overflow: auto;
+  }
+
   .pregameLobby {
+    display: flex;
+    flex-direction: column;
+    gap: var(--glacier-space-4);
+    overflow: visible;
     padding-inline: var(--glacier-space-4);
+  }
+
+  .pregameLobby > .lobbyChat {
+    margin-block-end: 0;
+  }
+
+  /* In the stacked flow the roster is ordinary content: full height, no
+     internal scroll, never squeezed by the flex column. */
+  .pregameSeats {
+    flex-shrink: 0;
+    overflow: visible;
+  }
+
+  .pregameLobby > .lobbyChat .lobbyChatScroll {
+    flex: none;
+    max-height: 15rem;
   }
 
   .pregameControls {
@@ -2989,6 +3058,44 @@
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
 }
 
+/* ---- trigger prompts (enforced rooms, rules pass A) ---- */
+
+.triggerPrompts {
+  position: fixed;
+  bottom: 23%;
+  inset-inline-end: 1rem;
+  z-index: 66;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 320px;
+}
+
+.triggerPrompt {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: var(--glacier-radius-lg);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border));
+  background: color-mix(in oklch, oklch(0.17 0.02 265) 90%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+.triggerPromptText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.triggerPromptActions {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
 /* ---- flight clones (appended to body) ---- */
 
 .pcFlight {
@@ -3053,6 +3160,9 @@
   display: flex;
   align-items: center;
   justify-content: space-around;
+  /* A crowded row wraps inside the pill rather than spilling buttons out
+     past its rounded border. */
+  flex-wrap: wrap;
   gap: var(--glacier-space-1);
   padding: var(--glacier-space-1);
   border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
@@ -3061,6 +3171,10 @@
   backdrop-filter: blur(var(--glacier-blur-md));
   box-shadow: 0 10px 28px rgb(0 0 0 / 0.38);
   pointer-events: auto;
+  /* The table's own chrome outranks floating extras (the pack dock pill sits
+     at z 95): the nav must never be buried under a pastime. */
+  position: relative;
+  z-index: 96;
 }
 
 /* The log card fills whatever height the life + players cards leave. */
@@ -5944,20 +6058,13 @@
   border-radius: var(--glacier-radius-md);
 }
 
-/* ---- table markers: 3D pointer + vector flag pucks (see CardMark) ---- */
+/* ---- table markers: a puck in the colour of the seat that placed it ---- */
 .cardMark {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
   z-index: 30;
   pointer-events: none;
-}
-
-.cardMarkPoint {
-  top: -2.6rem;
-  filter: drop-shadow(0 6px 10px oklch(0.2 0.05 60 / 0.6)) drop-shadow(0 0 12px oklch(0.8 0.15 75 / 0.7));
-  transform: translateX(-50%) perspective(120px) rotateX(18deg);
-  animation: markBounce 0.7s ease-in-out infinite;
 }
 
 .cardMarkFlag {
@@ -5968,27 +6075,128 @@
   inline-size: 1.6rem;
   block-size: 1.6rem;
   border-radius: var(--glacier-radius-full);
-  color: oklch(0.97 0.01 85);
-  background: linear-gradient(160deg, oklch(0.55 0.12 265), oklch(0.32 0.06 265));
-  border: 1px solid oklch(0.75 0.08 265 / 0.7);
+  color: oklch(0.99 0 0);
+  /* The seat's own colour, with the icon's meaning carried by the glyph. One
+     player's markers therefore read as a set however many kinds they use. */
+  background: linear-gradient(160deg, var(--pc-mark-color, oklch(0.55 0.12 265)), var(--pc-mark-deep, oklch(0.32 0.06 265)));
+  border: 1px solid color-mix(in oklch, var(--pc-mark-color, oklch(0.75 0.08 265)) 75%, white 25%);
   box-shadow:
     0 4px 10px oklch(0.05 0.02 265 / 0.55),
-    inset 0 1px 0 oklch(1 0 0 / 0.25);
+    0 0 12px color-mix(in oklch, var(--pc-mark-color, transparent) 45%, transparent),
+    inset 0 1px 0 oklch(1 0 0 / 0.3);
+  /* A marker landing is worth a glance; it never loops. */
+  animation: markDrop 260ms var(--pc-settle, ease-out);
 }
 
-.cardMarkFlag[data-kind='skull'] { background: linear-gradient(160deg, oklch(0.5 0.16 25), oklch(0.3 0.1 25)); border-color: oklch(0.72 0.16 25 / 0.8); }
-.cardMarkFlag[data-kind='flame'] { background: linear-gradient(160deg, oklch(0.62 0.18 45), oklch(0.4 0.14 35)); border-color: oklch(0.78 0.15 55 / 0.8); }
-.cardMarkFlag[data-kind='star'] { background: linear-gradient(160deg, oklch(0.7 0.13 85), oklch(0.5 0.11 75)); border-color: oklch(0.85 0.12 85 / 0.8); }
-.cardMarkFlag[data-kind='shield'] { background: linear-gradient(160deg, oklch(0.55 0.11 220), oklch(0.35 0.08 230)); border-color: oklch(0.75 0.1 220 / 0.8); }
-.cardMarkFlag[data-kind='sword'] { background: linear-gradient(160deg, oklch(0.55 0.14 25), oklch(0.35 0.09 15)); border-color: oklch(0.72 0.14 25 / 0.8); }
+@keyframes markDrop {
+  0% { transform: translateX(-50%) scale(0.3) translateY(-0.5rem); opacity: 0; }
+  100% { transform: translateX(-50%) scale(1) translateY(0); opacity: 1; }
+}
 
-@keyframes markBounce {
-  0%, 100% { transform: translateX(-50%) perspective(120px) rotateX(18deg) translateY(0); }
-  50% { transform: translateX(-50%) perspective(120px) rotateX(18deg) translateY(0.45rem); }
+/* The seat picker's marker row: the same pucks, as buttons. */
+.markChipRow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.3rem;
+}
+
+.markChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.9rem;
+  block-size: 1.9rem;
+  padding: 0;
+  border-radius: var(--glacier-radius-md);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 70%, transparent);
+  background: color-mix(in oklch, var(--glacier-surface-raised) 80%, transparent);
+  color: var(--glacier-text-muted);
+  cursor: pointer;
+  transition: color 120ms ease-out, border-color 120ms ease-out, background 120ms ease-out;
+}
+
+.markChip:hover {
+  color: var(--glacier-text);
+  border-color: var(--glacier-accent-border);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 12%, var(--glacier-surface-raised));
+}
+
+/* The marker this card already wears: picking it again lifts it. */
+.markChip[data-active] {
+  color: oklch(0.99 0 0);
+  border-color: var(--glacier-accent-border);
+  background: linear-gradient(160deg, var(--glacier-accent-solid), color-mix(in oklch, var(--glacier-accent-solid) 55%, black));
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cardMarkPoint { animation: none; }
+  .cardMarkFlag { animation: none; }
+}
+
+/* The seat's colour key, so a player can read whose arrow and whose marker
+   is whose without being told. */
+.playerSeatDot {
+  flex: none;
+  inline-size: 0.4rem;
+  block-size: 1.5rem;
+  border-radius: var(--glacier-radius-full);
+  background: var(--pc-seat-color, transparent);
+  box-shadow: 0 0 8px color-mix(in oklch, var(--pc-seat-color, transparent) 55%, transparent);
+}
+
+/* ---- pointing arrows (AimLayer): one drawn arc per pointer ---- */
+.aimLayer {
+  position: fixed;
+  inset: 0;
+  /* Over the boards and the rail, under the modals/popovers (110+) that the
+     player deliberately opened. Never a hit target. */
+  z-index: 101;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.aimArrow {
+  transition: opacity 140ms linear;
+}
+
+.aimGlow {
+  stroke-width: 9;
+  stroke-linecap: round;
+  opacity: 0.22;
+  filter: blur(3px);
+}
+
+.aimStroke {
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-dasharray: 10 7;
+  /* The dashes crawl toward the target: which end is the source never has to
+     be guessed. */
+  animation: aimCrawl 620ms linear infinite;
+}
+
+@keyframes aimCrawl {
+  to { stroke-dashoffset: -17; }
+}
+
+.aimLabelText {
+  font-family: var(--glacier-font-sans);
+  font-size: 0.68rem;
+  font-weight: var(--glacier-font-weight-semibold);
+  text-anchor: middle;
+  dominant-baseline: middle;
+  paint-order: stroke;
+  /* Legible over art, felt, or another card, without a plate behind it. */
+  stroke: oklch(0.12 0.02 265 / 0.85);
+  stroke-width: 3.5px;
+  stroke-linejoin: round;
+}
+
+/* My own arrow is confirmation, not news: quieter than everyone else's. */
+.aimArrow[data-mine] .aimStroke { opacity: 0.75; }
+.aimArrow[data-mine] .aimLabelText { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .aimStroke { animation: none; stroke-dasharray: none; }
 }
 
 .oppLifeBtn {

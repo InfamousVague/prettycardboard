@@ -76,7 +76,9 @@ export function LobbyChat({
         )}
       </header>
 
-      <ScrollArea className="lobbyChatScroll" maxHeight={atTable ? undefined : 240}>
+      {/* Height is the layout's call: the lobby grid stretches the list to
+          fill its column, and the narrow-screen fallback caps it in CSS. */}
+      <ScrollArea className="lobbyChatScroll">
         {chat.length === 0 ? (
           <div className="lobbyChatEmpty">
             <Text as="span" size={Size.Small} tone={TextTone.Subtle}>

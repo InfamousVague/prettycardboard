@@ -152,9 +152,9 @@ fn starred(card: &Card) -> bool {
 /// `power` parses the printed string, so a CDA lands there as 0 - which is
 /// exactly why Bronze Guardian never attacked and never blocked usefully. The
 /// rules engine counts the ability, so ask it for those cards.
-fn power_of(app: &App, room: &Room, seat: usize, card: &Card) -> i64 {
+fn power_of(app: &App, room: &Room, card: &Card) -> i64 {
     if starred(card) {
-        crate::rules::effective_pt(app, room, seat, card).0
+        crate::rules::effective_pt(app, room, card).0
     } else {
         power(card)
     }
@@ -168,8 +168,8 @@ fn eval_creature(card: &Card) -> i64 {
 }
 
 /// `eval_creature` for a creature sitting on a board, so a `*` power counts.
-fn eval_creature_at(app: &App, room: &Room, seat: usize, card: &Card) -> i64 {
-    100 + 15 * power_of(app, room, seat, card) + 10 * toughness(card) + 5 * mana_value(card)
+fn eval_creature_at(app: &App, room: &Room, card: &Card) -> i64 {
+    100 + 15 * power_of(app, room, card) + 10 * toughness(card) + 5 * mana_value(card)
 }
 
 /// The card that a combat entry describes, wherever it currently sits, with
@@ -240,18 +240,14 @@ fn attack_legal(app: &App, room: &Room, card: &Card) -> bool {
     !f.map(|f| f.has("defender")).unwrap_or(false)
 }
 
-/// Enforced rooms: may `blocker` legally block `attacker`? (Flying/reach.)
+/// Enforced rooms: may `blocker` legally block `attacker`? Delegates to the
+/// validator's full evasion table (flying, fear, shadow, skulk, protection,
+/// ...), so the bot never proposes a block the engine would reject.
 fn block_legal(app: &App, room: &Room, blocker: &Card, attacker: &Card) -> bool {
     if !crate::rules::enforced(room) {
         return true;
     }
-    let atk_flies = crate::rules::facts(app, attacker).map(|f| f.has("flying")).unwrap_or(false);
-    if !atk_flies {
-        return true;
-    }
-    crate::rules::facts(app, blocker)
-        .map(|f| f.has("flying") || f.has("reach"))
-        .unwrap_or(false)
+    crate::rules::may_block(app, room, blocker, attacker).is_ok()
 }
 
 /// Enforced rooms: does this seat defend against the declared attack?
@@ -422,6 +418,10 @@ struct BotMind {
 /// A bot never chews on one turn longer than this before passing. Its own
 /// attack's response window is exempt (that clock belongs to the defender).
 const TURN_FAILSAFE_MS: i64 = 35_000;
+/// ...and never acts on a fresh turn faster than this. A bot that answers
+/// the instant the turn arrives reads as a glitch, not an opponent - even
+/// at an all-bot table someone may be spectating.
+const TURN_MIN_THINK_MS: i64 = 500;
 /// Attack response windows. Against humans the bot holds combat open until
 /// the defender actually responds (blocks settle, life adjusts, or they end
 /// combat themselves), up to a generous cap; a response is followed by a
@@ -502,6 +502,27 @@ pub async fn scheduler(app: Arc<App>) {
                         ws::dispatch_action(&app, &mut room, &uid, action, None)
                     {
                         eprintln!("bot {uid} in room {rid}: {code}: {msg}");
+                        // Enforced tables surface a rejected bot action to the
+                        // room log: a bot proposing an illegal move is an
+                        // engine bug, and the fuzz playtest asserts none
+                        // appear. (match_over is the room freezing mid-plan,
+                        // not an illegal move.)
+                        if crate::rules::enforced(&room) && code != "match_over" {
+                            let username = room
+                                .players
+                                .iter()
+                                .find(|p| p.user_id == uid)
+                                .map(|p| p.username.clone())
+                                .unwrap_or_default();
+                            room.seq += 1;
+                            let seq = room.seq;
+                            ws::room_log(
+                                &app,
+                                &room,
+                                seq,
+                                &format!("[rules] {username}'s move was rejected: {msg}"),
+                            );
+                        }
                         break;
                     }
                     if !decision.fast {
@@ -603,6 +624,26 @@ fn decide(app: &App, room: &Room, uid: &str, mind: &mut BotMind, now: i64) -> De
         return Decision { action: Some(Action::CmdReturn { iid: p.iid.clone(), accept: true }), say, fast: false };
     }
 
+    // A fired trigger of mine: apply what the engine parsed and say so;
+    // triggers only a human could perform are dismissed (their text is table
+    // knowledge either way). `fast` so a burst of triggers clears in one tick.
+    if crate::rules::enforced(room) {
+        if let Some(pt) = room.pending_triggers.iter().find(|t| t.owner == uid) {
+            if pt.auto {
+                say.push(format!(
+                    "{} triggers: {}.",
+                    pt.source_name,
+                    crate::rules::effects_summary(&pt.effects)
+                ));
+            }
+            return Decision {
+                action: Some(Action::TriggerAnswer { id: pt.id.clone(), apply: pt.auto }),
+                say,
+                fast: true,
+            };
+        }
+    }
+
     // Wait politely while anyone is still deciding their mulligan. Conceded
     // seats never keep (their decision is void), so they do not hold this up.
     let all_kept = room
@@ -620,12 +661,18 @@ fn decide(app: &App, room: &Room, uid: &str, mind: &mut BotMind, now: i64) -> De
         let top = room.stack.last().unwrap();
         if top.owner == me.user_id {
             if crate::rules::stack_resolvable(room, me.seat) {
+                // Permanents (a cascade hit riding the stack) resolve onto
+                // the battlefield; instants and sorceries to the graveyard.
+                let to_battlefield = crate::rules::facts(app, &top.card)
+                    .map(|f| f.is_permanent() || f.is_land())
+                    .unwrap_or(false);
+                let k = me.battlefield.iter().filter(|c| !is_land(c)).count();
                 return Decision {
                     action: Some(Action::StackResolve {
                         iid: top.card.iid.clone(),
-                        to: Zone::Graveyard,
-                        x: None,
-                        y: None,
+                        to: if to_battlefield { Zone::Battlefield } else { Zone::Graveyard },
+                        x: to_battlefield.then(|| (0.15 + 0.11 * (k % 7) as f64).min(0.92)),
+                        y: to_battlefield.then_some(0.5),
                     }),
                     say,
                     fast: false,
@@ -634,13 +681,24 @@ fn decide(app: &App, room: &Room, uid: &str, mind: &mut BotMind, now: i64) -> De
             return Decision { action: None, say, fast: false };
         }
         if !room.stack_passed.contains(&me.seat) {
-            // Hard bots occasionally answer with an instant of their own.
-            if tier_of(me) > 0 && rand::random_range(0..100) < 30 {
+            // The threat table: a recognized removal/burn spell from an
+            // opponent, while I have a board, is answered by a hard bot every
+            // time; otherwise hard bots respond occasionally.
+            let threatened = crate::rules::facts(app, &top.card)
+                .map(|f| f.threat)
+                .unwrap_or(false)
+                && me.battlefield.iter().any(is_creature);
+            if tier_of(me) > 0 && (threatened || rand::random_range(0..100) < 30) {
                 let response = me.hand.iter().find(|c| {
                     crate::rules::facts(app, c)
                         .map(|f| {
                             (f.is_instant() || f.has("flash"))
-                                && crate::rules::can_afford(app, me, f.generic, &f.pips)
+                                && crate::rules::can_afford(
+                                    app,
+                                    me,
+                                    crate::rules::reduced_generic(app, me, &f, f.generic),
+                                    &f.pips,
+                                )
                         })
                         .unwrap_or(false)
                 });
@@ -921,7 +979,7 @@ fn choose_block(
                 }
             }
             let p = stat(a.power.as_deref())
-                .or_else(|| found.map(|(s, c)| power_of(app, room, s, c)))
+                .or_else(|| found.map(|(_, c)| power_of(app, room, c)))
                 .unwrap_or(0);
             let t = stat(a.toughness.as_deref())
                 .or_else(|| found.map(|(_, c)| toughness(c)))
@@ -948,7 +1006,7 @@ fn choose_block(
     if free.is_empty() {
         return None;
     }
-    free.sort_by_key(|c| std::cmp::Reverse(eval_creature_at(app, room, me.seat, c)));
+    free.sort_by_key(|c| std::cmp::Reverse(eval_creature_at(app, room, c)));
 
     let unblocked_total: i64 = incoming.iter().filter(|x| !x.blocked).map(|x| x.power).sum();
     let danger_threshold = if crate::rooms::format_has_commander(&room.format) { 8 } else { 4 };
@@ -962,7 +1020,7 @@ fn choose_block(
             .battlefield
             .iter()
             .filter(|c| is_creature(c))
-            .map(|c| power_of(app, room, me.seat, c))
+            .map(|c| power_of(app, room, c))
             .sum();
         if my_power > unblocked_total * 2 {
             return None;
@@ -991,7 +1049,7 @@ fn choose_block(
         Some(Action::CombatBlock {
             blocker_iid: blocker.iid.clone(),
             attacker_iid: atk.a.iid.clone(),
-            power: Some(power_of(app, room, me.seat, blocker).to_string()),
+            power: Some(power_of(app, room, blocker).to_string()),
             toughness: Some(toughness(blocker).to_string()),
         })
     };
@@ -1000,7 +1058,7 @@ fn choose_block(
     for atk in incoming.iter().filter(|x| !x.blocked) {
         for b in &free {
             if atk.toughness > 0
-                && power_of(app, room, me.seat, b) >= atk.toughness
+                && power_of(app, room, b) >= atk.toughness
                 && toughness(b) > atk.power
                 && pairable(b, atk, false)
             {
@@ -1016,11 +1074,11 @@ fn choose_block(
         let atk_eval = 100 + 15 * atk.power + 10 * atk.toughness;
         for b in free.iter().rev() {
             // Smallest adequate blocker first.
-            let kills = atk.toughness > 0 && power_of(app, room, me.seat, b) >= atk.toughness;
+            let kills = atk.toughness > 0 && power_of(app, room, b) >= atk.toughness;
             let dies = atk.power >= toughness(b);
             if kills
                 && dies
-                && atk_eval >= eval_creature_at(app, room, me.seat, b) + margin
+                && atk_eval >= eval_creature_at(app, room, b) + margin
                 && pairable(b, atk, false)
             {
                 return declare(b, atk, mind, say);
@@ -1033,7 +1091,7 @@ fn choose_block(
         if let Some(atk) = incoming.iter().find(|x| !x.blocked) {
             if free.len() >= 2 && atk.toughness > 0 {
                 let combined =
-                    power_of(app, room, me.seat, free[0]) + power_of(app, room, me.seat, free[1]);
+                    power_of(app, room, free[0]) + power_of(app, room, free[1]);
                 if combined >= atk.toughness
                     && pairable(free[0], atk, true)
                     && pairable(free[1], atk, true)
@@ -1055,7 +1113,7 @@ fn choose_block(
                 if let Some(b) = free
                     .iter()
                     .find(|b| {
-                        committed + power_of(app, room, me.seat, b) >= atk.toughness
+                        committed + power_of(app, room, b) >= atk.toughness
                             && pairable(b, atk, true)
                     })
                 {
@@ -1200,7 +1258,7 @@ fn plan_attack(app: &App, room: &Room, me: &Player, mind: &BotMind, style: Style
         .filter(|c| {
             is_creature(c)
                 && !c.tapped
-                && power_of(app, room, me.seat, c) > 0
+                && power_of(app, room, c) > 0
                 && !mind.played_this_turn.iter().any(|iid| iid == &c.iid)
                 && attack_legal(app, room, c)
         })
@@ -1208,7 +1266,7 @@ fn plan_attack(app: &App, room: &Room, me: &Player, mind: &BotMind, style: Style
     if ready.is_empty() {
         return None;
     }
-    ready.sort_by_key(|c| std::cmp::Reverse(power_of(app, room, me.seat, c)));
+    ready.sort_by_key(|c| std::cmp::Reverse(power_of(app, room, c)));
 
     // Per-creature safety classes (Forge): unblockable-ish always goes; safe
     // attackers from level 1; even trades from level 3; sacrifices only at 5.
@@ -1220,9 +1278,9 @@ fn plan_attack(app: &App, room: &Room, me: &Player, mind: &BotMind, style: Style
             let mut killed_by_any = false;
             let mut all_trade_back = true;
             for &b in &their_blockers {
-                if toughness(c) > 0 && power_of(app, room, defender.seat, b) >= toughness(c) {
+                if toughness(c) > 0 && power_of(app, room, b) >= toughness(c) {
                     killed_by_any = true;
-                    if !(toughness(b) > 0 && power_of(app, room, me.seat, c) >= toughness(b)) {
+                    if !(toughness(b) > 0 && power_of(app, room, c) >= toughness(b)) {
                         all_trade_back = false;
                     }
                 }
@@ -1253,7 +1311,7 @@ fn plan_attack(app: &App, room: &Room, me: &Player, mind: &BotMind, style: Style
             .any(|p| {
                 p.battlefield
                     .iter()
-                    .any(|c| is_creature(c) && power_of(app, room, p.seat, c) >= 2)
+                    .any(|c| is_creature(c) && power_of(app, room, c) >= 2)
             });
         let hold = if outside_threat {
             if style == Style::Defensive {
@@ -1305,11 +1363,13 @@ fn own_turn(app: &App, room: &Room, me: &Player, mind: &mut BotMind, style: Styl
         mind.casting = None;
         mind.attack = None;
         mind.played_this_turn.clear();
-        // With a human watching, a fresh turn deserves a beat of "thinking"
-        // before the first move; an all-bot table just gets on with it.
-        if room.players.iter().any(|p| !p.is_bot && !p.conceded) || !room.spectators.is_empty() {
-            return Decision::none();
-        }
+        // Every fresh turn gets a beat of "thinking" before the first move.
+        return Decision::none();
+    }
+    // The beat is a real minimum, not just a skipped tick: whatever the
+    // scheduler cadence, a turn's first action waits TURN_MIN_THINK_MS.
+    if now - mind.turn_started.map(|(_, ts)| ts).unwrap_or(now) < TURN_MIN_THINK_MS {
+        return Decision::none();
     }
     if mind.casts.0 != tn {
         mind.casts = (tn, 0);
@@ -1528,7 +1588,12 @@ fn cast_step(app: &App, room: &Room, me: &Player, mind: &mut BotMind, style: Sty
             crate::rules::facts(app, c)
                 .map(|f| {
                     let tax = me.commander_tax.get(&c.iid).copied().unwrap_or(0);
-                    crate::rules::can_afford(app, me, f.generic + tax, &f.pips)
+                    crate::rules::can_afford(
+                        app,
+                        me,
+                        crate::rules::reduced_generic(app, me, &f, f.generic + tax),
+                        &f.pips,
+                    )
                 })
                 .unwrap_or(false)
         });
@@ -1548,7 +1613,14 @@ fn cast_step(app: &App, room: &Room, me: &Player, mind: &mut BotMind, style: Sty
         let mut best: Option<(&Card, i64, bool)> = None;
         for c in &me.hand {
             let Some(f) = crate::rules::facts(app, c) else { continue };
-            if f.is_land() || !crate::rules::can_afford(app, me, f.generic, &f.pips) {
+            if f.is_land()
+                || !crate::rules::can_afford(
+                    app,
+                    me,
+                    crate::rules::reduced_generic(app, me, &f, f.generic),
+                    &f.pips,
+                )
+            {
                 continue;
             }
             let better = match &best {

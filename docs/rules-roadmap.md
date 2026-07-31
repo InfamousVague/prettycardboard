@@ -16,9 +16,18 @@ per card.
   strike, double strike, deathtouch, trample, lifelink, commander damage.
 - Manual escape hatches: life.deal, counters submenu, marks/aim relay.
 
-## Pass A - triggered abilities (highest value)
+## Pass A - triggered abilities (highest value) — SHIPPED (v3)
 
-Parse oracle text into trigger records at fetch time:
+Landed 2026-07-30: oracle.rs parses trigger records (versioned cache rows
+reparse on upgrade), rules.rs queues prompts on ETB / dies / attacks /
+upkeep / end step, `trigger.answer` applies the closed set (draw, life,
+each-opponent drain, self counters, token stubs) or acknowledges manual
+text, bots auto-apply + announce and hard bots answer recognized
+removal/burn on the stack (`threat`). Tested by
+playtest/scenarios/enforced-triggers.js (deterministic solo goldfish) and
+enforced-brawl.js (four FF precons bot-vs-bot, zero `[rules]` logs).
+
+Original scope:
 - `When ~ enters the battlefield, <effect>` (ETB) - detect draw/token/damage/
   life/counter effects with numeric payloads.
 - `When ~ dies, ...` / `Whenever ~ attacks, ...` / beginning-of-upkeep/end-step.
@@ -27,15 +36,40 @@ Parse oracle text into trigger records at fetch time:
   set the engine can do (draw N, gain/lose N, +1/+1 counters, token stubs).
 - Bot: auto-applies its own recognized triggers; announces them in chat.
 
-## Pass B - static and evasion effects
+## Pass B - static and evasion effects — SHIPPED (v3)
+
+Landed 2026-07-30: plain anthems folded into effective_pt (and thus the
+combat preview), the full evasion table in may_block (fear / intimidate /
+shadow both ways / skulk by effective power / horsemanship / unblockable /
+protection from color), cost cuts folded into cast + cmd.cast payment,
+vigilance no longer taps attackers, and ward relayed as a tax reminder on
+the aim gesture. Bots block through the same may_block table. Tested by
+playtest/scenarios/enforced-statics.js (two-seat deterministic evasion
+matrix + anthem-in-preview + single-land cost-cut cast) and the
+enforced-brawl fuzz.
+
+Original scope:
 
 - Anthems (`Creatures you control get +X/+X`) folded into effective_pt.
 - Evasion beyond v2: fear/intimidate/shadow/skulk/unblockable, protection
   from color (blocks + targeting), ward (tax reminder prompt), vigilance
-  (already: no tap on attack), defender edge cases.
+  (no tap on attack), defender edge cases.
 - Cost modifiers (`spells cost {1} less`) folded into solve_payment.
 
-## Pass C - replacement and cascade-style effects
+## Pass C - replacement and cascade-style effects — SHIPPED (v3)
+
+Landed 2026-07-30: enters-tapped and enters-with-counters auto-apply on
+every battlefield arrival (before that arrival's ETB prompts), dies-to-exile
+replacements route deaths to exile with no dies trigger, damage-prevention
+shields fold into the combat preview, and the `cascade` action (deck menu
+"Cascade for N", plus automatic firing for the cascade keyword and
+discover N) digs the library server-side - the hit rides the stack revealed
+and free to cast, the rest bottoms in random order. `token.clone` now also
+copies a spell on the stack. Impulse-style exile-and-play is still out of
+scope. Tested by playtest/scenarios/enforced-cascade.js and the
+enforced-brawl fuzz.
+
+Original scope:
 
 - Dies-to-exile replacements, "enters with N counters", "enters tapped"
   (auto-apply on resolve), damage prevention shields.

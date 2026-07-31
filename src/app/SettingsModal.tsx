@@ -16,11 +16,14 @@ import {
   useToast,
   type TabbedModalSection,
 } from '@glacier/react';
-import { ChevronLeft, CircleUserRound, Globe, Info, Keyboard, LayoutGrid, Paintbrush, Palette, Wrench } from '@glacier/icons';
+import { ChevronLeft, CircleUserRound, Globe, Info, Keyboard, LayoutGrid, Paintbrush, Palette, Swords, Wrench } from '@glacier/icons';
 import { useMobileLayout } from './hooks/useIsPhone.ts';
 import { accentSteps } from '@glacier/tokens';
 import { ACCENTS, DEFAULT_PREFERENCES, MONO_FONTS, SANS_FONTS, type Preferences } from './preferences.ts';
 import { LANGUAGES, useT, type AppLocale } from './i18n.ts';
+import { createRoom } from './net/api.ts';
+import { send } from './net/ws.ts';
+import { useGame } from './state/gameStore.ts';
 import { AccountTab } from './settings/AccountTab.tsx';
 import { AboutTab } from './settings/AboutTab.tsx';
 import { CustomizeTab } from './settings/CustomizeTab.tsx';
@@ -73,6 +76,42 @@ export function SettingsModal({
     }
   }, [open, initialSection]);
   const swatchTheme = resolveTheme(preferences.theme);
+  // Developer helper: spin up an all-bot exhibition table and watch it.
+  const [duelStarting, setDuelStarting] = useState(false);
+  const startBotDuel = async () => {
+    if (duelStarting) return;
+    setDuelStarting(true);
+    try {
+      const { roomId } = await createRoom(t('setBotDuelRoomName'), 2, false, { format: 'commander' });
+      // Through the store's own actions (raw sends would leave joinedRoomId
+      // stale and the store would drop the new room's states): vacate
+      // whatever room we were in, take the spectator chair, seat the
+      // combatants.
+      const game = useGame.getState();
+      if (game.joinedRoomId) game.leave();
+      game.spectate(roomId);
+      send({ type: 'bot.add', style: 'aggro', difficulty: 'hard' });
+      send({ type: 'bot.add', style: 'defensive', difficulty: 'hard' });
+      // Start once the authoritative state shows both bots in their seats.
+      const deadline = Date.now() + 10_000;
+      let seated = false;
+      while (Date.now() < deadline) {
+        const room = useGame.getState().room;
+        if (room?.roomId === roomId && (room.players?.length ?? 0) >= 2) {
+          seated = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+      if (!seated) throw new Error('bots never seated');
+      useGame.getState().start();
+      onClose();
+    } catch {
+      toast({ tone: 'danger', message: t('setBotDuelFailed') });
+    } finally {
+      setDuelStarting(false);
+    }
+  };
   // Fall back to the defaults for the numeric sliders, so a preferences object
   // that is missing a field (an older persisted version, or Fast Refresh state
   // that predates the field) renders instead of crashing on `undefined.toFixed`.
@@ -115,6 +154,14 @@ export function SettingsModal({
           checked={preferences.enableWip}
           onCheckedChange={(checked) => onChange({ enableWip: checked })}
         />
+        <div style={{ display: 'grid', gap: 'var(--glacier-space-1)', justifyItems: 'start' }}>
+          <Button variant="soft" onClick={() => void startBotDuel()} disabled={duelStarting}>
+            <Swords size={15} /> {t('setBotDuel')}
+          </Button>
+          <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+            {t('setBotDuelHint')}
+          </Text>
+        </div>
       </Fieldset>
     </div>
   );

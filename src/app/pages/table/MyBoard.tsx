@@ -149,7 +149,7 @@ export function MyBoard({
   const t = useT();
   const act = useGame((state) => state.act);
   const aim = useGame((state) => state.aim);
-  const marks = useGame((state) => state.marks);
+  const marks = useGame((state) => state.room?.marks);
   // My targeting spell on top of the stack invites a target click.
   const topSpell = (room.stack ?? [])[(room.stack ?? []).length - 1] as
     | (CardInst & { ownerSeat?: number })
@@ -1181,7 +1181,7 @@ export function MyBoard({
         }}
         onClick={(event) => clickFieldCard(event, card)}
       >
-        {marks[card.iid] != null && <CardMark kind={marks[card.iid]!} />}
+        {marks?.[card.iid] && <CardMark mark={marks[card.iid]!} />}
         <div className="fieldCardShell">
           <GameCard
             name={displayName}
@@ -1438,6 +1438,8 @@ export function MyBoard({
     <div
       ref={boardRef}
       className="myBoard"
+      // An arrow aimed at ME lands here (see AimLayer's anchorOf).
+      data-seat-anchor={me.seat}
       data-my-turn={(started && myTurn) || undefined}
       data-game={room.game || 'mtg'}
       data-strip-only={hideField || undefined}

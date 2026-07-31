@@ -131,7 +131,10 @@ export const DEFAULT_PREFERENCES: Preferences = {
   customPlaymats: [],
   customCardBack: '',
   verticalCards: false,
-  mirrorOpponent: true,
+  // Across-the-table mirroring is a taste, not a default: new players read
+  // an upright board faster, and anyone who wants the tabletop feel can
+  // still flip it on in Settings -> Table.
+  mirrorOpponent: false,
   mobileLayout: 'auto',
   ambientCards: false,
   cardTotals: true,

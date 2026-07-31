@@ -627,6 +627,75 @@ export function CmdChoiceDialog({ me }: { me: TablePlayer | undefined }) {
 }
 
 /* ------------------------------------------------------------------------ */
+/* Trigger prompts (enforced rooms, rules pass A)                            */
+/* ------------------------------------------------------------------------ */
+
+/** My fired triggered abilities: a small queue of prompts, newest last. An
+ * `auto` trigger offers Apply (the server performs the parsed effects) or
+ * Skip; a manual one is an acknowledgment - its text is performed by hand. */
+export function TriggerPrompts({ room, me }: { room: RoomState; me: TablePlayer | undefined }) {
+  const t = useT();
+  const act = useGame((state) => state.act);
+  const mine = useMemo(
+    () => (room.pendingTriggers ?? []).filter((p) => p.owner === me?.userId),
+    [room.pendingTriggers, me?.userId],
+  );
+  if (!me || mine.length === 0) return null;
+  return (
+    <div className="triggerPrompts">
+      <AnimatePresence>
+        {mine.map((p) => (
+          <motion.div
+            key={p.id}
+            className="triggerPrompt"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+          >
+            <div className="triggerPromptText">
+              <Text size={Size.Small} weight="semibold">
+                {p.sourceName}
+              </Text>
+              <Text size={Size.XSmall} tone={TextTone.Subtle}>
+                {p.text}
+              </Text>
+            </div>
+            <div className="triggerPromptActions">
+              {p.auto ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant="soft"
+                    onClick={() => act({ kind: 'trigger.answer', id: p.id, apply: true })}
+                  >
+                    {t('gpTriggerApply')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => act({ kind: 'trigger.answer', id: p.id, apply: false })}
+                  >
+                    {t('gpTriggerSkip')}
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="soft"
+                  onClick={() => act({ kind: 'trigger.answer', id: p.id, apply: true })}
+                >
+                  {t('gpTriggerOk')}
+                </Button>
+              )}
+            </div>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------------ */
 /* Dice banner: surface roll results the moment they land in the log         */
 /* ------------------------------------------------------------------------ */
 

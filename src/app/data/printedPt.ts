@@ -119,9 +119,10 @@ interface ScryPT {
   mana_cost?: string;
   cmc?: number;
   oracle_text?: string;
+  colors?: string[];
   keywords?: string[];
   produced_mana?: string[];
-  card_faces?: { power?: string; toughness?: string; type_line?: string; mana_cost?: string; oracle_text?: string }[];
+  card_faces?: { power?: string; toughness?: string; type_line?: string; mana_cost?: string; oracle_text?: string; colors?: string[] }[];
 }
 
 /** Everything the enforced-mode client logic needs to know about a card:
@@ -140,6 +141,15 @@ export interface OracleFacts {
   /** What this spell targets, parsed from its oracle text ("creature",
    * "permanent", "player", ...). Empty = it does not target. */
   targetKinds: string[];
+  /** The card's colors (W U B R G) - evasion checks read these. */
+  colors: string[];
+  /** "(<type> )spells you cast cost {N} less" statics this permanent
+   * projects, mirroring the server's cost fold (rules pass B). */
+  costCuts: { filter?: string; n: number }[];
+  /** "~ can't be blocked." with no qualifier. */
+  unblockable: boolean;
+  /** Colors this card has protection from. */
+  protectionFrom: string[];
 }
 
 const factsMap = new Map<string, OracleFacts>();
@@ -187,6 +197,28 @@ function absorb(id: string, card: ScryPT): void {
     if (text.includes(`target ${kind}`) && !targetKinds.includes(kind)) targetKinds.push(kind);
   }
   if (targetKinds.length === 0 && /\btarget\b/.test(text)) targetKinds.push('any');
+  // Pass B statics, mirrored from the server's parse (reminder text out).
+  const clean = text.replace(/\([^)]*\)/g, '');
+  const costCuts: { filter?: string; n: number }[] = [];
+  let unblockable = false;
+  for (const rawLine of clean.split('\n')) {
+    const l = rawLine.trim();
+    const cut = l.match(/^(?:([a-z]+) )?spells you cast cost \{(\d+)\} less to cast\.?$/);
+    if (cut) costCuts.push({ filter: cut[1] || undefined, n: Number(cut[2]) });
+    if (/^this [a-z]+ can't be blocked\.?$/.test(l)) unblockable = true;
+  }
+  const protectionFrom: string[] = [];
+  const PRO: Record<string, string> = { white: 'W', blue: 'U', black: 'B', red: 'R', green: 'G' };
+  for (const m of clean.matchAll(/protection from ([a-z ]+)/g)) {
+    const what = m[1] ?? '';
+    if (what.startsWith('all colors') || what.startsWith('everything')) {
+      protectionFrom.push('W', 'U', 'B', 'R', 'G');
+    } else {
+      for (const [word, c] of Object.entries(PRO)) {
+        if (what.includes(word) && !protectionFrom.includes(c)) protectionFrom.push(c);
+      }
+    }
+  }
   factsMap.set(id, {
     typeLine: line ?? '',
     mv: Math.round(card.cmc ?? 0),
@@ -195,6 +227,10 @@ function absorb(id: string, card: ScryPT): void {
     keywords: (card.keywords ?? []).map((k) => k.toLowerCase()),
     produced: (card.produced_mana ?? []).filter((c) => 'WUBRGC'.includes(c)),
     targetKinds,
+    colors: (card.colors ?? card.card_faces?.[0]?.colors ?? []).filter((c) => 'WUBRG'.includes(c)),
+    costCuts,
+    unblockable,
+    protectionFrom,
   });
   cache.set(id, power != null && toughness != null ? { power, toughness } : null);
 }

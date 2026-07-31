@@ -8,7 +8,8 @@ import { isFoilInst } from '../../data/foil.ts';
 import { zoneLabel } from '../../data/games.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
-import type { CardInst, CombatState, MatPos, MatZone, RoomState, TablePlayer, Zone } from '../../net/types.ts';
+import type { CardInst, CardMarkState, CombatState, MatPos, MatZone, RoomState, TablePlayer, Zone } from '../../net/types.ts';
+import { seatColor, seatColorDeep } from './seatColors.ts';
 import { selectCardScale, useTableUi } from './tableUi.ts';
 import { useLongPress, menuEventFrom } from '../../hooks/useLongPress.ts';
 import { useMobileLayout } from '../../hooks/useIsPhone.ts';
@@ -470,6 +471,9 @@ export function ZonePiles({
   // Cyberpunk, Deck / Graveyard / Banished / Extra Deck for Yu-Gi-Oh) from the
   // registry.
   const gameId = useGame((state) => state.room?.game);
+  const enforced = useGame(
+    (state) => Boolean(state.room?.settings?.enforced) && (state.room?.game ?? 'mtg') === 'mtg',
+  );
   const mobile = useMobileLayout();
   const cyber = gameId === 'cyberpunk';
   const yugioh = gameId === 'yugioh';
@@ -629,6 +633,17 @@ export function ZonePiles({
                 </MenuItem>
               ))}
             </MenuSub>
+            {/* Enforced rooms: the server digs until a nonland with mana
+                value below N, stacks it free to cast, bottoms the rest. */}
+            {enforced && (
+              <MenuSub label={t('gpCascadeFor')}>
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                  <MenuItem key={n} onSelect={() => act({ kind: 'cascade', n })}>
+                    {n}
+                  </MenuItem>
+                ))}
+              </MenuSub>
+            )}
             <MenuItem onSelect={() => setConfirmShuffle(true)}>{t('tblShuffle')}</MenuItem>
             {/* Yu-Gi-Oh has no mulligans — hide the action, not just the flow. */}
             {!yugioh && <MenuItem onSelect={() => act({ kind: 'mulligan' })}>{t('tblMulligan')}</MenuItem>}
@@ -965,41 +980,54 @@ function CmdCard({
   );
 }
 
-/** A shared table marker floating over a card: a 3D-styled pointer arrow or
- * a persistent flag puck. Vector icons, not emoji, so they match the kit. */
-export function CardMark({ kind }: { kind: string }) {
-  if (kind === 'point') {
-    return (
-      <span className="cardMark cardMarkPoint" aria-hidden>
-        <svg viewBox="0 0 24 34" width="26" height="38">
-          <defs>
-            <linearGradient id="pcArrowG" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="oklch(0.9 0.14 85)" />
-              <stop offset="1" stopColor="oklch(0.68 0.16 60)" />
-            </linearGradient>
-          </defs>
-          <path
-            d="M12 34 L2 20 L8 20 L8 2 L16 2 L16 20 L22 20 Z"
-            fill="url(#pcArrowG)"
-            stroke="oklch(0.35 0.08 60)"
-            strokeWidth="1.4"
-          />
-        </svg>
-      </span>
-    );
+/** Every marker the table can park on a card, in menu order. Exported so the
+ *  board menus and the marker picker can never drift from what renders. */
+export const MARK_KINDS = [
+  'skull',
+  'sword',
+  'shield',
+  'star',
+  'eye',
+  'flame',
+  'ban',
+  'question',
+] as const;
+
+export type MarkKind = (typeof MARK_KINDS)[number];
+
+export function markIcon(kind: string, size = 13) {
+  switch (kind) {
+    case 'skull': return <Skull size={size} />;
+    case 'star': return <Star size={size} />;
+    case 'eye': return <EyeIcon size={size} />;
+    case 'shield': return <ShieldIcon size={size} />;
+    case 'sword': return <Swords size={size} />;
+    case 'flame': return <Flame size={size} />;
+    case 'ban': return <Ban size={size} />;
+    case 'question': return <CircleHelp size={size} />;
+    default: return null;
   }
-  const icon =
-    kind === 'skull' ? <Skull size={13} /> :
-    kind === 'star' ? <Star size={13} /> :
-    kind === 'eye' ? <EyeIcon size={13} /> :
-    kind === 'shield' ? <ShieldIcon size={13} /> :
-    kind === 'sword' ? <Swords size={13} /> :
-    kind === 'flame' ? <Flame size={13} /> :
-    kind === 'ban' ? <Ban size={13} /> :
-    kind === 'question' ? <CircleHelp size={13} /> : null;
+}
+
+/**
+ * A shared table marker parked on a card. The puck wears the colour of the
+ * SEAT that placed it - the same palette as that player's cursor and arrows -
+ * so "who is watching this card" is answered without opening a tooltip, and
+ * its title names them for the case where colour is not enough.
+ */
+export function CardMark({ mark }: { mark: CardMarkState }) {
+  const icon = markIcon(mark.kind);
   if (!icon) return null;
   return (
-    <span className="cardMark cardMarkFlag" data-kind={kind} aria-hidden>
+    <span
+      className="cardMark cardMarkFlag"
+      data-kind={mark.kind}
+      style={{
+        ['--pc-mark-color' as string]: seatColor(mark.seat),
+        ['--pc-mark-deep' as string]: seatColorDeep(mark.seat),
+      }}
+      title={mark.username}
+    >
       {icon}
     </span>
   );

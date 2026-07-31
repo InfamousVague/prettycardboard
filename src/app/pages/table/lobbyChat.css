@@ -226,8 +226,8 @@
   position: relative;
   display: grid;
   place-items: center;
-  min-height: 8.5rem;
-  padding: var(--glacier-space-3) 0;
+  min-height: 5.5rem;
+  padding: var(--glacier-space-2) 0;
   background-image: var(--pc-seat-mat, none);
   background-size: cover;
   background-position: center;

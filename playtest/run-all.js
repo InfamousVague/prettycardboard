@@ -17,8 +17,14 @@ const STEPS = [
   ['chaos-monkey', join(HERE, 'scenarios', 'chaos-monkey.js')],
   ['locked-combat', join(HERE, 'scenarios', 'locked-combat.js')],
   ['tapland-audit', join(HERE, 'scenarios', 'tapland-audit.js')],
+  ['marks-arrows', join(HERE, 'scenarios', 'marks-arrows.js')],
   ['booster-draft', join(HERE, 'scenarios', 'booster-draft.js')],
   ['sealed', join(HERE, 'scenarios', 'sealed.js')],
+  ['enforced-duel', join(HERE, 'scenarios', 'enforced-duel.js')],
+  ['enforced-triggers', join(HERE, 'scenarios', 'enforced-triggers.js')],
+  ['enforced-statics', join(HERE, 'scenarios', 'enforced-statics.js')],
+  ['enforced-cascade', join(HERE, 'scenarios', 'enforced-cascade.js')],
+  ['enforced-brawl', join(HERE, 'scenarios', 'enforced-brawl.js')],
 ];
 
 function runStep(name, script) {

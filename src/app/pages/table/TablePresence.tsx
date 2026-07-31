@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { send, onMessage } from '../../net/ws.ts';
+import { seatColor } from './seatColors.ts';
 
 /**
  * Live table presence: broadcasts my pointer position (normalized over the
@@ -22,15 +23,6 @@ interface RemoteCursor {
 
 const STALE_MS = 4000;
 const SEND_INTERVAL = 45;
-
-/** A distinct, legible hue per seat. */
-function seatHue(seat: number): number {
-  return (seat * 67) % 360;
-}
-
-function seatColor(seat: number, alpha = 1): string {
-  return alpha < 1 ? `hsl(${seatHue(seat)} 85% 62% / ${alpha})` : `hsl(${seatHue(seat)} 85% 62%)`;
-}
 
 export function TablePresence({ meId, active }: { meId: string | undefined; active: boolean }) {
   // Which cursors exist (drives React nodes); live values live in the ref so the

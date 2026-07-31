@@ -53,6 +53,20 @@ export function canAfford(me: TablePlayer, generic: number, pips: Record<string,
   return lands.length >= needGeneric;
 }
 
+/** The generic cost of `facts` for `me` after battlefield cost cuts
+ * ("<type> spells you cast cost {N} less"), mirroring the server's fold. */
+export function discountedGeneric(me: TablePlayer, facts: OracleFacts): number {
+  let cut = 0;
+  const line = facts.typeLine.toLowerCase();
+  for (const c of me.battlefield) {
+    const f = oracleFacts(c.scryfallId);
+    for (const s of f?.costCuts ?? []) {
+      if (!s.filter || line.includes(s.filter)) cut += s.n;
+    }
+  }
+  return Math.max(0, facts.generic - cut);
+}
+
 /** How a hand card may enter play right now: play it as the land drop, cast
  * it for mana, or not at all (null). Unknown cards return null - the freeform
  * drag still works for them, the glow just stays off. */
@@ -69,7 +83,7 @@ export function handPlayability(
   // in response to the stack - whenever the cost is payable.
   const instantSpeed = facts.typeLine.includes('Instant') || facts.keywords.includes('flash');
   if (instantSpeed) {
-    return canAfford(me, facts.generic, facts.pips) ? 'cast' : null;
+    return canAfford(me, discountedGeneric(me, facts), facts.pips) ? 'cast' : null;
   }
   // Everything else is sorcery speed: your turn, a main phase, empty stack.
   if (room.activeSeat !== me.seat) return null;
@@ -79,7 +93,7 @@ export function handPlayability(
   if (facts.typeLine.includes('Land')) {
     return (me.landsThisTurn ?? 0) === 0 ? 'land' : null;
   }
-  return canAfford(me, facts.generic, facts.pips) ? 'cast' : null;
+  return canAfford(me, discountedGeneric(me, facts), facts.pips) ? 'cast' : null;
 }
 
 /** May this creature be declared as an attacker right now? */
@@ -93,13 +107,36 @@ export function canDeclareAttacker(room: RoomState, me: TablePlayer, card: CardI
   return true;
 }
 
-/** May `blocker` legally block `attacker` (flying/reach)? */
+/** May `blocker` legally block `attacker`? Mirrors the server's pass-B
+ * evasion table (flying, fear, intimidate, shadow, skulk, unblockable,
+ * protection from color); the server stays the authority. */
 export function canPairBlock(room: RoomState, blocker: CardInst, attacker: CardInst): boolean {
   if (!enforcedRoom(room)) return true;
   const atk = oracleFacts(attacker.scryfallId);
-  if (!atk?.keywords.includes('flying')) return true;
+  if (!atk) return true; // unknown attacker: permissive
   const blk = oracleFacts(blocker.scryfallId);
-  return Boolean(blk && (blk.keywords.includes('flying') || blk.keywords.includes('reach')));
+  const blkHas = (kw: string) => blk?.keywords.includes(kw) ?? false;
+  const blkArtifact = blk?.typeLine.includes('Artifact') ?? false;
+  const blkColors = blk?.colors ?? [];
+  if (atk.unblockable) return false;
+  if (atk.keywords.includes('flying') && !blkHas('flying') && !blkHas('reach')) return false;
+  if (atk.keywords.includes('shadow') && !blkHas('shadow')) return false;
+  if (!atk.keywords.includes('shadow') && blkHas('shadow')) return false;
+  if (atk.keywords.includes('horsemanship') && !blkHas('horsemanship')) return false;
+  if (atk.keywords.includes('fear') && !blkArtifact && !blkColors.includes('B')) return false;
+  if (
+    atk.keywords.includes('intimidate') &&
+    !blkArtifact &&
+    !blkColors.some((c) => atk.colors.includes(c))
+  ) {
+    return false;
+  }
+  if (atk.protectionFrom.length > 0 && blkColors.some((c) => atk.protectionFrom.includes(c))) {
+    return false;
+  }
+  // Skulk compares printed power only (the client mirror skips counters and
+  // anthems; a stale yes just means one rejected block and a toast).
+  return true;
 }
 
 /** The target kinds of a stack card that wants targets ([] = untargeted or

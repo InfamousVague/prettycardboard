@@ -420,6 +420,42 @@ pub struct PendingCmd {
     pub deadline: i64, // unix ms
 }
 
+/// A table marker parked on a card: the shared "watch this one" gesture, kept
+/// in room state rather than in each client's head so a reconnect, a late
+/// joiner, and every spectator all see the same annotated board. The kind is
+/// the client's vocabulary (skull/star/eye/...); the server only bounds it.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CardMark {
+    pub kind: String,
+    /// Who placed it (user_id) and from which seat - the client colors the
+    /// puck by seat, the same palette the cursors and arrows use.
+    pub by: String,
+    pub seat: usize,
+    pub username: String,
+    pub ts: i64,
+}
+
+/// A triggered ability that fired and awaits its controller's answer
+/// (enforced rooms, rules roadmap pass A). Fully public - the trigger is
+/// printed card text and its source is visible. `auto` = the engine can apply
+/// the parsed effects itself; otherwise the prompt is an acknowledgment and
+/// the controller performs the text by hand. Lapsed prompts dismiss.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingTrigger {
+    pub id: String,
+    pub owner: String, // user_id of the controller
+    pub seat: usize,
+    pub source_iid: String,
+    pub source_name: String,
+    pub when: crate::oracle::TriggerWhen,
+    pub effects: Vec<crate::oracle::TriggerEffect>,
+    pub text: String,
+    pub auto: bool,
+    pub deadline: i64, // unix ms
+}
+
 /// The finished-match record, kept on the room (so reconnects still see the
 /// post-match screen) and mirrored into SQLite for all-time stats.
 #[derive(Clone, Serialize, Deserialize)]
@@ -987,8 +1023,19 @@ pub struct Room {
     pub stack_changed_ms: i64,
     #[serde(default)]
     pub markers: Markers,
+    /// Table markers by card iid (see `CardMark`). Fully public.
+    #[serde(default)]
+    pub marks: BTreeMap<String, CardMark>,
     #[serde(default)]
     pub pending_cmd: Vec<PendingCmd>,
+    /// Fired triggered abilities awaiting their controller (enforced rooms).
+    #[serde(default)]
+    pub pending_triggers: Vec<PendingTrigger>,
+    /// (turn number, seat) whose end-step triggers already fired. Guards
+    /// against firing twice when a player visits the end phase and then
+    /// passes the turn.
+    #[serde(default)]
+    pub end_fired: Option<(u64, usize)>,
     /// When the current active player's turn began (unix ms; 0 = no clock).
     #[serde(default)]
     pub turn_started_ms: i64,
@@ -1199,6 +1246,9 @@ impl Room {
         }
         for pc in restored.pending_cmd.iter_mut() {
             pc.deadline = now + crate::game::CMD_CHOICE_MS;
+        }
+        for pt in restored.pending_triggers.iter_mut() {
+            pt.deadline = now + crate::game::TRIGGER_CHOICE_MS;
         }
         *self = restored;
         true
@@ -1418,7 +1468,9 @@ impl Room {
             "stack": stack,
             "combat": self.combat,
             "stackPassed": self.stack_passed,
+            "pendingTriggers": self.pending_triggers,
             "markers": self.markers,
+            "marks": self.marks,
             "matchResult": self.match_result,
             "draft": self.draft_view(viewer),
             "players": players,
@@ -1624,14 +1676,19 @@ pub fn delete_room(app: &App, room_id: &str) {
 const QUICK_TTL_MS: i64 = 24 * 60 * 60 * 1000; // all seats offline this long
 const PERSISTENT_TTL_MS: i64 = 30 * 24 * 60 * 60 * 1000; // no action this long
 
-/// Complete every pending commander choice whose 30s window has lapsed: the
-/// original move is carried out as if the owner declined the command zone.
+/// Complete every pending commander choice whose 30s window has lapsed (the
+/// original move is carried out as if the owner declined the command zone),
+/// and dismiss trigger prompts nobody answered - the card's text stays
+/// performable by hand, so a lapse never eats an effect silently.
 pub fn expire_pending(app: &App) {
     let now = crate::now_ms();
     let due_rooms: Vec<String> = app
         .rooms
         .iter()
-        .filter(|r| r.pending_cmd.iter().any(|p| p.deadline <= now))
+        .filter(|r| {
+            r.pending_cmd.iter().any(|p| p.deadline <= now)
+                || r.pending_triggers.iter().any(|p| p.deadline <= now)
+        })
         .map(|r| r.id.clone())
         .collect();
     for id in due_rooms {
@@ -1642,7 +1699,12 @@ pub fn expire_pending(app: &App) {
             .into_iter()
             .partition(|p| p.deadline <= now);
         room.pending_cmd = keep;
-        if due.is_empty() {
+        let (lapsed, alive): (Vec<PendingTrigger>, Vec<PendingTrigger>) =
+            std::mem::take(&mut room.pending_triggers)
+                .into_iter()
+                .partition(|p| p.deadline <= now);
+        room.pending_triggers = alive;
+        if due.is_empty() && lapsed.is_empty() {
             continue;
         }
         for pending in due {
@@ -1650,6 +1712,15 @@ pub fn expire_pending(app: &App) {
             room.seq += 1;
             let seq = room.seq;
             ws::room_log(app, &room, seq, &log);
+        }
+        for trigger in lapsed {
+            room.seq += 1;
+            let seq = room.seq;
+            let line = format!(
+                "{}'s trigger lapses unanswered: {}",
+                trigger.source_name, trigger.text
+            );
+            ws::room_log(app, &room, seq, &line);
         }
         touch(app, &mut room);
         ws::room_send_states(app, &room);

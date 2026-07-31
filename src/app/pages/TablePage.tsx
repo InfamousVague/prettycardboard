@@ -91,8 +91,12 @@ import { OpponentHand } from './table/OpponentHand.tsx';
 import { CyberpunkDicePanel } from './table/CyberpunkDicePanel.tsx';
 import { CombatPreviewCard, PhaseRibbon } from './table/PhaseRibbon.tsx';
 import { StackTray } from './table/StackTray.tsx';
-import { CmdChoiceDialog, LibraryViewer, MulliganOverlay, PileViewer, RevealTray, RollBanner } from './table/overlays.tsx';
+import { CmdChoiceDialog, LibraryViewer, MulliganOverlay, PileViewer, RevealTray, RollBanner, TriggerPrompts } from './table/overlays.tsx';
 import { TablePresence } from './table/TablePresence.tsx';
+import { AimLayer } from './table/AimLayer.tsx';
+import { MARK_KINDS, markIcon } from './table/bits.tsx';
+import { MARK_LABEL } from './table/marks.ts';
+import { seatColor } from './table/seatColors.ts';
 import { LibrarySidebar } from './table/LibrarySidebar.tsx';
 import { PostMatch } from './table/PostMatch.tsx';
 import { PreMatch } from './table/PreMatch.tsx';
@@ -1059,12 +1063,16 @@ export function TablePage() {
       <PileViewer room={room} me={me} canAct={!spectating && me != null} />
       {me && !spectating && !preMatch && !replay.active && <MulliganOverlay room={room} me={me} />}
       {me && !spectating && !replay.active && <CmdChoiceDialog me={me} />}
+      {me && !spectating && !replay.active && <TriggerPrompts room={room} me={me} />}
       {preMatch && <PreMatch room={room} onClose={() => setPreMatch(false)} />}
       {/* Combat v3: target picker, defender response, resolved breakdown. */}
       {/* Spectators see the result too; controls inside are gated to players. */}
       <PostMatch room={room} meId={identity?.userId} spectating={spectating} onLeave={leave} />
       <RollBanner />
       <TablePresence meId={identity?.userId} active={room.started && !spectating} />
+      {/* Drawn pointing arrows. Spectators watch them too - a spectator who
+          cannot see who is pointing where is missing half the table talk. */}
+      {room.started && !replay.active && <AimLayer meId={identity?.userId} />}
     </div>
   );
 }
@@ -1101,6 +1109,7 @@ function CardMenu({
   // Yu-Gi-Oh renames the shared gestures in its own vocabulary: tapping is
   // battle position, playing face-down is Setting.
   const menuGame = useGame((state) => state.room?.game) ?? 'mtg';
+  const marks = useGame((state) => state.room?.marks);
   const yugioh = menuGame === 'yugioh';
   // The command slot is the Extra Deck in Yu-Gi-Oh (and the Legend tray in
   // Cyberpunk): name it whatever this game calls it.
@@ -1390,18 +1399,36 @@ function CardMenu({
             ))}
           </MenuSub>
           <MenuSub label={t('mkTitle')}>
-            {([
-              ['target', t('mkTarget')],
-              ['point', t('mkPoint')],
-              ['skull', t('mkSkull')],
-              ['star', t('mkStar')],
-              ['eye', t('mkEye')],
-              ['clear', t('mkClear')],
-            ] as const).map(([kind, label]) => (
-              <MenuItem key={kind} onSelect={() => send({ type: 'aim', toIid: menu.iid, kind })}>
-                {label}
+            {/* Pointing is the ephemeral gesture (an arrow the table watches);
+                every other entry parks a marker that stays until lifted. */}
+            <MenuItem onSelect={() => send({ type: 'aim', toIid: menu.iid, kind: 'point' })}>
+              {t('mkPoint')}
+            </MenuItem>
+            {MARK_KINDS.map((kind) => {
+              const active = marks?.[menu.iid]?.kind === kind;
+              return (
+                <MenuItem
+                  key={kind}
+                  icon={markIcon(kind, 14)}
+                  onSelect={() =>
+                    useGame.getState().act({ kind: 'mark.set', iid: menu.iid, mark: active ? null : kind })
+                  }
+                >
+                  {t(MARK_LABEL[kind])}
+                  {active ? ' ✓' : ''}
+                </MenuItem>
+              );
+            })}
+            {marks?.[menu.iid] && (
+              <MenuItem onSelect={() => useGame.getState().act({ kind: 'mark.set', iid: menu.iid, mark: null })}>
+                {t('mkClear')}
               </MenuItem>
-            ))}
+            )}
+            {Object.keys(marks ?? {}).length > 1 && (
+              <MenuItem onSelect={() => useGame.getState().act({ kind: 'mark.clear' })}>
+                {t('mkClearAll')}
+              </MenuItem>
+            )}
           </MenuSub>
 
           {expander('Move to', <ArrowRight size={15} />, 'move')}
@@ -1969,7 +1996,11 @@ function PlayersCard({
             data-dead={player.conceded || undefined}
             data-focusable={focusable || undefined}
             onClick={focusable && onFocusSeat ? () => onFocusSeat(player.seat) : undefined}
+            // The key to the colour code: this seat's hue is the same one its
+            // cursor, its pointing arrows and its table markers all wear.
+            style={{ ['--pc-seat-color' as string]: seatColor(player.seat) }}
           >
+            <span className="playerSeatDot" aria-hidden />
             <Avatar name={player.username} size="sm" />
             <div className="playerBody">
               <span className="playerNameRow">

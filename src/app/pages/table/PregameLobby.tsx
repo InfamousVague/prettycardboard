@@ -590,6 +590,23 @@ export function PregameLobby({
                 ]}
               />
             </label>
+            {/* Last on purpose: the full-width row would otherwise split the
+                compact fields into extra rows and grow the card. */}
+            {game === 'mtg' && (
+              <label className="pregameSetting pregameSettingWide">
+                <span className="pregameSettingLabel">{t('setEnforced')}</span>
+                <div className="pregameEnforcedRow">
+                  <Switch
+                    checked={Boolean(settings.enforced)}
+                    onCheckedChange={(on) => patchSettings({ enforced: on })}
+                    aria-label={t('setEnforced')}
+                  />
+                  <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+                    {t('setEnforcedHint')}
+                  </Text>
+                </div>
+              </label>
+            )}
           </div>
         ) : (
           <div className="pregameSettingsSummary">

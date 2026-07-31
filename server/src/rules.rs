@@ -14,8 +14,8 @@
 //! needing text beyond Scryfall's keyword list. Unknown cards (no oracle
 //! data) are treated permissively rather than bricking a deck.
 
-use crate::oracle::{self, OracleCard};
-use crate::rooms::{Card, Combat, CombatPreview, Player, PreviewRow, Room};
+use crate::oracle::{self, OracleCard, TriggerEffect, TriggerWhen};
+use crate::rooms::{Card, Combat, CombatPreview, PendingTrigger, Player, PreviewRow, Room};
 use crate::App;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -66,13 +66,9 @@ fn has_kw(app: &App, card: &Card, kw: &str) -> bool {
     facts(app, card).map(|f| f.has(kw)).unwrap_or(false)
 }
 
-/// Does this permanent arrive tapped? Enforced tables only - in a freeform
-/// room the engine deliberately knows nothing about cards, and there the
-/// player taps whatever the card says by hand.
-pub fn enters_tapped(app: &App, room: &Room, card: &Card) -> bool {
-    enforced(room) && facts(app, card).map(|f| f.tapped_on_entry).unwrap_or(false)
-}
-
+/// Effective power/toughness: oracle printed stats, +N/+N-style counters,
+/// and (pass B) anthems projected by the controller's other permanents.
+/// Tokens and unknowns fall back to the instance's own printed strings.
 /// How many permanents a `*` power counts, from the controller's point of
 /// view. Only the counting CDA shape is modelled (see `oracle::CountCda`).
 fn cda_count(app: &App, room: &Room, controller: usize, cda: &crate::oracle::CountCda) -> i64 {
@@ -83,23 +79,29 @@ fn cda_count(app: &App, room: &Room, controller: usize, cda: &crate::oracle::Cou
     }
     room.players
         .iter()
-        .filter(|p| if cda.opponents { p.seat != controller && !p.conceded } else { p.seat == controller })
+        .filter(|p| {
+            if cda.opponents { p.seat != controller && !p.conceded } else { p.seat == controller }
+        })
         .flat_map(|p| p.battlefield.iter())
         .filter(|c| facts(app, c).map(|f| f.type_line.contains(&want)).unwrap_or(false))
         .count() as i64
 }
 
-/// Effective power/toughness: oracle printed stats plus +N/+N-style counters.
-/// Tokens and unknowns fall back to the instance's own printed strings.
-/// `controller` is the seat the card is under, which a `*` power needs.
-pub fn effective_pt(app: &App, room: &Room, controller: usize, card: &Card) -> (i64, i64) {
+pub fn effective_pt(app: &App, room: &Room, card: &Card) -> (i64, i64) {
     let stat = |s: &Option<String>| s.as_deref().and_then(|v| v.trim().parse::<i64>().ok());
+    // The seat this permanent sits under: both the `*` count and the anthem
+    // fold below are asked from its controller's point of view.
+    let controller =
+        room.players.iter().find(|pl| pl.battlefield.iter().any(|c| c.iid == card.iid));
     let (mut p, mut t) = match facts(app, card) {
         Some(f) => {
-            // A `*` power is defined by an ability, not printed. Count it
-            // rather than letting the unparsed stat fall through as 0 - that
-            // is what kept Bronze Guardian from ever attacking.
-            let starred = f.cda.as_ref().map(|cda| cda_count(app, room, controller, cda));
+            // A `*` power is defined by an ability, not printed. Counting it
+            // is what lets those creatures fight at all - left unparsed it
+            // fell through as 0, and a 0-power creature never attacks.
+            let starred = f
+                .cda
+                .as_ref()
+                .and_then(|cda| controller.map(|pl| cda_count(app, room, pl.seat, cda)));
             (
                 starred.or(f.power).or_else(|| stat(&card.power)).unwrap_or(0),
                 f.cda
@@ -126,7 +128,113 @@ pub fn effective_pt(app: &App, room: &Room, controller: usize, card: &Card) -> (
             }
         }
     }
+    // Anthems: only creatures grow, and only from their own controller's
+    // battlefield ("creatures you control").
+    if is_creature(app, card) {
+        if let Some(controller) = controller {
+            for source in &controller.battlefield {
+                let Some(f) = facts(app, source) else { continue };
+                for s in &f.statics {
+                    if let crate::oracle::StaticEffect::Anthem { power, toughness, others_only } = s
+                    {
+                        if *others_only && source.iid == card.iid {
+                            continue;
+                        }
+                        p += power;
+                        t += toughness;
+                    }
+                }
+            }
+        }
+    }
     (p, t)
+}
+
+/// The generic cost of a spell for `player` after their battlefield cost
+/// cuts ("<type> spells you cast cost {N} less"). Colored pips are never
+/// reduced; the result never goes below zero.
+pub fn reduced_generic(app: &App, player: &Player, spell: &OracleCard, base: i64) -> i64 {
+    let mut cut = 0i64;
+    let line = spell.type_line.to_lowercase();
+    for c in &player.battlefield {
+        let Some(f) = facts(app, c) else { continue };
+        for s in &f.statics {
+            if let crate::oracle::StaticEffect::CostCut { filter, n } = s {
+                let applies = filter.as_ref().map(|w| line.contains(w.as_str())).unwrap_or(true);
+                if applies {
+                    cut += n;
+                }
+            }
+        }
+    }
+    (base - cut).max(0)
+}
+
+/// May `blocker` legally block `attacker` (pass B evasion)? Unknown
+/// attackers are permissive; attacker-imposed requirements (flying, fear,
+/// protection...) need the blocker to PROVE it qualifies - the same stance
+/// v2 took for flying.
+pub fn may_block(app: &App, room: &Room, blocker: &Card, attacker: &Card) -> Result<(), String> {
+    let Some(atk) = facts(app, attacker) else {
+        return Ok(());
+    };
+    let blk = facts(app, blocker);
+    let blk_has = |kw: &str| blk.as_ref().map(|f| f.has(kw)).unwrap_or(false);
+    let blk_artifact =
+        blk.as_ref().map(|f| f.type_line.contains("Artifact")).unwrap_or(false);
+    let blk_colors: Vec<char> = blk.as_ref().map(|f| f.colors.clone()).unwrap_or_default();
+    let a = attacker.name.as_str();
+    if atk.unblockable {
+        return Err(format!("{a} can't be blocked"));
+    }
+    if atk.has("flying") && !blk_has("flying") && !blk_has("reach") {
+        return Err("only flying or reach can block a flyer".to_string());
+    }
+    if atk.has("shadow") && !blk_has("shadow") {
+        return Err(format!("{a} has shadow - only shadow can block it"));
+    }
+    if !atk.has("shadow") && blk_has("shadow") {
+        return Err("a shadow creature can only block shadow".to_string());
+    }
+    if atk.has("horsemanship") && !blk_has("horsemanship") {
+        return Err(format!("{a} has horsemanship - only horsemanship can block it"));
+    }
+    if atk.has("fear") && !blk_artifact && !blk_colors.contains(&'B') {
+        return Err(format!("{a} has fear - only artifact or black creatures block it"));
+    }
+    if atk.has("intimidate")
+        && !blk_artifact
+        && !blk_colors.iter().any(|c| atk.colors.contains(c))
+    {
+        return Err(format!(
+            "{a} has intimidate - only artifacts or creatures sharing its color block it"
+        ));
+    }
+    if atk.has("skulk") {
+        let (bp, _) = effective_pt(app, room, blocker);
+        let (ap, _) = effective_pt(app, room, attacker);
+        if bp > ap {
+            return Err(format!("{a} has skulk - blockers with greater power can't block it"));
+        }
+    }
+    if !atk.protection_from.is_empty() && blk_colors.iter().any(|c| atk.protection_from.contains(c))
+    {
+        let colors: String = atk
+            .protection_from
+            .iter()
+            .map(|c| match c {
+                'W' => "white",
+                'U' => "blue",
+                'B' => "black",
+                'R' => "red",
+                'G' => "green",
+                _ => "?",
+            })
+            .collect::<Vec<_>>()
+            .join("/");
+        return Err(format!("{a} has protection from {colors}"));
+    }
+    Ok(())
 }
 
 /// Summoning sickness: entered the battlefield this turn round, no haste.
@@ -343,7 +451,8 @@ pub fn check(app: &App, room: &Room, pi: usize, action: &crate::game::Action) ->
                 }
             }
             let paylist = payment.as_deref();
-            solve_payment(app, me, f.generic, &f.pips, paylist).map(|_| ())
+            let generic = reduced_generic(app, me, &f, f.generic);
+            solve_payment(app, me, generic, &f.pips, paylist).map(|_| ())
         }
         Action::CmdCast { iid, .. } => {
             let Some(card) = me.command.iter().find(|c| c.iid == *iid) else {
@@ -358,7 +467,8 @@ pub fn check(app: &App, room: &Room, pi: usize, action: &crate::game::Action) ->
             match facts(app, card) {
                 Some(f) => {
                     let tax = me.commander_tax.get(iid).copied().unwrap_or(0);
-                    solve_payment(app, me, f.generic + tax, &f.pips, None).map(|_| ())
+                    let generic = reduced_generic(app, me, &f, f.generic + tax);
+                    solve_payment(app, me, generic, &f.pips, None).map(|_| ())
                 }
                 None => Ok(()), // unknown commander: permissive
             }
@@ -493,14 +603,11 @@ pub fn check(app: &App, room: &Room, pi: usize, action: &crate::game::Action) ->
             if combat.blocks.iter().any(|b| b.blocker_iid == *blocker_iid) {
                 return Err(err("that creature is already blocking"));
             }
-            // Evasion: flying is blocked only by flying or reach.
-            let attacker_card = find_card(room, attacker_iid);
-            if let Some(atk) = attacker_card {
-                if has_kw(app, atk, "flying")
-                    && !has_kw(app, blocker, "flying")
-                    && !has_kw(app, blocker, "reach")
-                {
-                    return Err(err("only flying or reach can block a flyer"));
+            // Evasion (pass B): flying, fear, intimidate, shadow, skulk,
+            // horsemanship, unblockable, protection from color.
+            if let Some(atk) = find_card(room, attacker_iid) {
+                if let Err(msg) = may_block(app, room, blocker, atk) {
+                    return Err(err(msg));
                 }
             }
             Ok(())
@@ -584,6 +691,331 @@ fn find_card<'a>(room: &'a Room, iid: &str) -> Option<&'a Card> {
     room.players.iter().find_map(|p| p.battlefield.iter().find(|c| c.iid == iid))
 }
 
+// --------------------------------------------------- replacements (pass C)
+
+/// Apply enters-the-battlefield replacements to a card that just arrived:
+/// "enters tapped" and "enters with N counters". Returns log lines.
+pub fn apply_enters_replacements(app: &App, room: &mut Room, iid: &str) -> Vec<String> {
+    if !enforced(room) {
+        return Vec::new();
+    }
+    let mut logs = Vec::new();
+    for p in room.players.iter_mut() {
+        let Some(card) = p.battlefield.iter_mut().find(|c| c.iid == iid) else { continue };
+        let Some(f) = card.scryfall_id.as_deref().and_then(|sid| oracle::get(app, sid)) else {
+            return logs;
+        };
+        if f.enters_tapped && !card.tapped {
+            card.tapped = true;
+            logs.push(format!("{} enters tapped", card.name));
+        }
+        if let Some((kind, n)) = &f.enters_counters {
+            *card.counters.entry(kind.clone()).or_insert(0) += n;
+            let what = if *n == 1 {
+                format!("a {kind} counter")
+            } else {
+                format!("{n} {kind} counters")
+            };
+            logs.push(format!("{} enters with {what}", card.name));
+        }
+        break;
+    }
+    logs
+}
+
+/// Does this dying card's own text route it to exile instead of the
+/// graveyard? ("If ~ would die, exile it instead.")
+pub fn dies_to_exile(app: &App, card: &Card) -> bool {
+    facts(app, card).map(|f| f.dies_to_exile).unwrap_or(false)
+}
+
+// ------------------------------------------------------- cascade (pass C)
+
+/// Reveal cards from the top of `seat`'s library until a nonland card with
+/// mana value strictly below `n` appears. The hit rides the stack revealed
+/// and free to cast (resolve it to the battlefield, or decline it anywhere
+/// else); everything else goes to the bottom in a random order. Unknown
+/// cards are set aside with the lands - a cascade never wedges on a missing
+/// oracle row. Returns log lines.
+pub fn run_cascade(app: &App, room: &mut Room, pi: usize, n: i64, source: &str) -> Vec<String> {
+    let mut logs = Vec::new();
+    let owner = room.players[pi].user_id.clone();
+    let username = room.players[pi].username.clone();
+    let mut aside: Vec<Card> = Vec::new();
+    let mut hit: Option<Card> = None;
+    let mut revealed_names: Vec<String> = Vec::new();
+    {
+        let p = &mut room.players[pi];
+        while !p.library.is_empty() {
+            let card = p.library.remove(0);
+            revealed_names.push(card.name.clone());
+            let f = card.scryfall_id.as_deref().and_then(|sid| oracle::get(app, sid));
+            let is_hit = f.map(|f| !f.is_land() && f.mv < n).unwrap_or(false);
+            if is_hit {
+                hit = Some(card);
+                break;
+            }
+            aside.push(card);
+        }
+        // The rest go to the bottom in a random order.
+        let mut order: Vec<Card> = std::mem::take(&mut aside);
+        for i in (1..order.len()).rev() {
+            order.swap(i, rand::random_range(0..=i));
+        }
+        let bottomed = order.len();
+        for card in order {
+            p.library.push(card);
+        }
+        p.peeked.clear();
+        if !revealed_names.is_empty() {
+            logs.push(format!(
+                "{username} cascades for {n} ({source}): reveals {}",
+                revealed_names.join(", ")
+            ));
+        } else {
+            logs.push(format!("{username} cascades for {n} ({source}): the library is empty"));
+        }
+        if bottomed > 0 {
+            logs.push(format!(
+                "{bottomed} revealed {} to the bottom in a random order",
+                if bottomed == 1 { "card goes" } else { "cards go" }
+            ));
+        }
+    }
+    if let Some(mut card) = hit {
+        card.revealed = true;
+        card.tapped = false;
+        card.face_down = false;
+        let name = card.name.clone();
+        room.stack.push(crate::rooms::StackEntry { owner, card });
+        room.stack_passed.clear();
+        room.stack_changed_ms = crate::now_ms();
+        logs.push(format!(
+            "{name} rides the stack free to cast (resolve it to the battlefield, or decline)"
+        ));
+    }
+    logs
+}
+
+// ------------------------------------------------------- triggers (pass A)
+
+/// Queue every `when`-kind trigger printed on card `iid` as a prompt for its
+/// controller. The card is looked up in every zone (a dies trigger's source
+/// is already in the graveyard when it fires). Returns log lines; freeform
+/// rooms and trigger-less cards return nothing.
+pub fn fire_card_triggers(app: &App, room: &mut Room, when: TriggerWhen, iid: &str) -> Vec<String> {
+    if !enforced(room) {
+        return Vec::new();
+    }
+    let Some((owner, seat, card)) = room.players.iter().find_map(|p| {
+        [&p.battlefield, &p.graveyard, &p.exile, &p.command, &p.hand]
+            .into_iter()
+            .find_map(|zone| zone.iter().find(|c| c.iid == iid))
+            .map(|c| (p.user_id.clone(), p.seat, c.clone()))
+    }) else {
+        return Vec::new();
+    };
+    let Some(facts) = facts(app, &card) else {
+        return Vec::new();
+    };
+    let mut logs = Vec::new();
+    for trigger in facts.triggers.iter().filter(|t| t.when == when) {
+        logs.push(push_trigger(room, &owner, seat, &card.iid, &card.name, trigger));
+    }
+    logs
+}
+
+/// Queue upkeep/end-step triggers across one seat's battlefield.
+pub fn fire_phase_triggers(
+    app: &App,
+    room: &mut Room,
+    when: TriggerWhen,
+    seat: usize,
+) -> Vec<String> {
+    if !enforced(room) {
+        return Vec::new();
+    }
+    let Some(player) = room.players.iter().find(|p| p.seat == seat) else {
+        return Vec::new();
+    };
+    let owner = player.user_id.clone();
+    let sources: Vec<(String, String, Vec<crate::oracle::Trigger>)> = player
+        .battlefield
+        .iter()
+        .filter_map(|c| {
+            let f = facts(app, c)?;
+            let matching: Vec<crate::oracle::Trigger> =
+                f.triggers.iter().filter(|t| t.when == when).cloned().collect();
+            (!matching.is_empty()).then(|| (c.iid.clone(), c.name.clone(), matching))
+        })
+        .collect();
+    let mut logs = Vec::new();
+    for (iid, name, triggers) in sources {
+        for trigger in &triggers {
+            logs.push(push_trigger(room, &owner, seat, &iid, &name, trigger));
+        }
+    }
+    logs
+}
+
+fn push_trigger(
+    room: &mut Room,
+    owner: &str,
+    seat: usize,
+    source_iid: &str,
+    source_name: &str,
+    trigger: &crate::oracle::Trigger,
+) -> String {
+    room.pending_triggers.push(PendingTrigger {
+        id: crate::hex_id(6),
+        owner: owner.to_string(),
+        seat,
+        source_iid: source_iid.to_string(),
+        source_name: source_name.to_string(),
+        when: trigger.when,
+        effects: trigger.effects.clone(),
+        text: trigger.text.clone(),
+        auto: trigger.auto(),
+        deadline: crate::now_ms() + crate::game::TRIGGER_CHOICE_MS,
+    });
+    format!("Trigger: {source_name} — {}", trigger.text)
+}
+
+/// A short human phrase for a trigger's effect list ("draw a card and gain 2
+/// life"), used by prompts, logs, and bot chat.
+pub fn effects_summary(effects: &[TriggerEffect]) -> String {
+    let part = |e: &TriggerEffect| -> String {
+        match e {
+            TriggerEffect::Draw { n } if *n == 1 => "draw a card".to_string(),
+            TriggerEffect::Draw { n } => format!("draw {n} cards"),
+            TriggerEffect::GainLife { n } => format!("gain {n} life"),
+            TriggerEffect::LoseLife { n } => format!("lose {n} life"),
+            TriggerEffect::EachOpponentLoses { n } => format!("each opponent loses {n} life"),
+            TriggerEffect::SelfCounters { counter, n } if *n == 1 => {
+                format!("put a {counter} counter on it")
+            }
+            TriggerEffect::SelfCounters { counter, n } => {
+                format!("put {n} {counter} counters on it")
+            }
+            TriggerEffect::Token { name, power, toughness, count, .. } if *count == 1 => {
+                format!("create a {power}/{toughness} {name} token")
+            }
+            TriggerEffect::Token { name, power, toughness, count, .. } => {
+                format!("create {count} {power}/{toughness} {name} tokens")
+            }
+            TriggerEffect::Manual => "resolve by hand".to_string(),
+        }
+    };
+    effects.iter().map(part).collect::<Vec<_>>().join(" and ")
+}
+
+/// Apply an answered trigger's parsed effects to the room. Returns log lines.
+/// Effects apply best-effort against CURRENT state: a source that left the
+/// battlefield just skips its counters, an empty library stops a draw.
+pub fn apply_trigger_effects(room: &mut Room, t: &PendingTrigger) -> Vec<String> {
+    let mut logs = Vec::new();
+    let Some(pi) = room.players.iter().position(|p| p.user_id == t.owner) else {
+        return logs;
+    };
+    let turn = room.turn_number;
+    for effect in &t.effects {
+        match effect {
+            TriggerEffect::Draw { n } => {
+                let p = &mut room.players[pi];
+                let mut drew = 0;
+                for _ in 0..*n {
+                    if p.library.is_empty() {
+                        break;
+                    }
+                    let card = p.library.remove(0);
+                    p.hand.push(card);
+                    p.cards_drawn += 1;
+                    drew += 1;
+                }
+                if drew > 0 {
+                    p.hand_revealed = false;
+                    p.peeked.clear();
+                    let plural =
+                        if drew == 1 { "a card".to_string() } else { format!("{drew} cards") };
+                    logs.push(format!("{} draws {plural} ({})", p.username, t.source_name));
+                }
+            }
+            TriggerEffect::GainLife { n } => {
+                let p = &mut room.players[pi];
+                p.life += n;
+                logs.push(format!("{} gains {n} life ({})", p.username, t.source_name));
+            }
+            TriggerEffect::LoseLife { n } => {
+                let p = &mut room.players[pi];
+                p.life -= n;
+                logs.push(format!("{} loses {n} life ({})", p.username, t.source_name));
+            }
+            TriggerEffect::EachOpponentLoses { n } => {
+                let owner_seat = room.players[pi].seat;
+                for p in room.players.iter_mut() {
+                    if p.seat != owner_seat && !p.conceded {
+                        p.life -= n;
+                    }
+                }
+                logs.push(format!("each opponent loses {n} life ({})", t.source_name));
+            }
+            TriggerEffect::SelfCounters { counter, n } => {
+                let p = &mut room.players[pi];
+                if let Some(card) = p.battlefield.iter_mut().find(|c| c.iid == t.source_iid) {
+                    *card.counters.entry(counter.clone()).or_insert(0) += n;
+                    let plural = if *n == 1 {
+                        format!("a {counter} counter")
+                    } else {
+                        format!("{n} {counter} counters")
+                    };
+                    logs.push(format!("{} gets {plural}", t.source_name));
+                }
+            }
+            TriggerEffect::Token { name, power, toughness, count, tapped } => {
+                // Tokens fan out beside the source (or mid-board when it left).
+                let (sx, sy) = room.players[pi]
+                    .battlefield
+                    .iter()
+                    .find(|c| c.iid == t.source_iid)
+                    .map(|c| (c.x, c.y))
+                    .unwrap_or((0.4, 0.55));
+                let p = &mut room.players[pi];
+                for k in 0..*count {
+                    let token = Card {
+                        iid: crate::hex_id(8),
+                        scryfall_id: None,
+                        name: name.clone(),
+                        image_url: None,
+                        tapped: *tapped,
+                        face_down: false,
+                        counters: BTreeMap::new(),
+                        x: (sx + 0.05 + 0.03 * k as f64).min(0.95),
+                        y: sy,
+                        is_token: true,
+                        power: Some(power.to_string()),
+                        toughness: Some(toughness.to_string()),
+                        attached_to: None,
+                        piled: false,
+                        is_commander: false,
+                        revealed: false,
+                        transformed: false,
+                        entered_turn: Some(turn),
+                    };
+                    p.battlefield.push(token);
+                }
+                let what = if *count == 1 {
+                    format!("a {power}/{toughness} {name} token")
+                } else {
+                    format!("{count} {power}/{toughness} {name} tokens")
+                };
+                logs.push(format!("{} creates {what} ({})", p.username, t.source_name));
+            }
+            TriggerEffect::Manual => {}
+        }
+    }
+    logs
+}
+
 // ------------------------------------------------------------ combat math
 
 struct Fighter<'a> {
@@ -595,17 +1027,15 @@ struct Fighter<'a> {
     deathtouch: bool,
     trample: bool,
     lifelink: bool,
+    /// Combat damage TO this creature is prevented (pass C shields).
+    shield_to: bool,
+    /// Combat damage BY this creature is prevented.
+    shield_by: bool,
 }
 
-/// The card and the seat controlling it.
-fn find_card_owner<'a>(room: &'a Room, iid: &str) -> Option<(usize, &'a Card)> {
-    room.players
-        .iter()
-        .find_map(|p| p.battlefield.iter().find(|c| c.iid == iid).map(|c| (p.seat, c)))
-}
-
-fn fighter<'a>(app: &App, room: &Room, controller: usize, card: &'a Card) -> Fighter<'a> {
-    let (power, toughness) = effective_pt(app, room, controller, card);
+fn fighter<'a>(app: &App, room: &Room, card: &'a Card) -> Fighter<'a> {
+    let (power, toughness) = effective_pt(app, room, card);
+    let f = facts(app, card);
     Fighter {
         card,
         power,
@@ -615,6 +1045,8 @@ fn fighter<'a>(app: &App, room: &Room, controller: usize, card: &'a Card) -> Fig
         deathtouch: has_kw(app, card, "deathtouch"),
         trample: has_kw(app, card, "trample"),
         lifelink: has_kw(app, card, "lifelink"),
+        shield_to: f.as_ref().map(|f| f.prevent_combat_to).unwrap_or(false),
+        shield_by: f.as_ref().map(|f| f.prevent_combat_by).unwrap_or(false),
     }
 }
 
@@ -640,13 +1072,13 @@ pub fn compute_preview(app: &App, room: &Room) -> CombatPreview {
         let Some(atk_card) = find_card(room, &a.iid) else { continue };
         let owner = attacker_owner(&a.iid).unwrap_or(active);
         let Some(def_seat) = resolved_defender(room, owner, a.defender_seat) else { continue };
-        let atk = fighter(app, room, owner, atk_card);
+        let atk = fighter(app, room, atk_card);
         let blockers: Vec<Fighter> = combat
             .blocks
             .iter()
             .filter(|b| b.attacker_iid == a.iid)
-            .filter_map(|b| find_card_owner(room, &b.blocker_iid))
-            .map(|(seat, c)| fighter(app, room, seat, c))
+            .filter_map(|b| find_card(room, &b.blocker_iid))
+            .map(|c| fighter(app, room, c))
             .collect();
 
         // Damage marked on each side across the two steps.
@@ -667,7 +1099,9 @@ pub fn compute_preview(app: &App, room: &Room) -> CombatPreview {
                         lifelink_gain: &mut i64,
                         def_lifelink: &mut i64| {
             let atk_alive = *atk_taken < atk.toughness && !(*atk_dt && *atk_taken > 0);
-            let atk_swings = atk_alive && if first_step { atk.first || atk.double } else { !atk.first || atk.double };
+            let atk_swings = atk_alive
+                && !atk.shield_by
+                && if first_step { atk.first || atk.double } else { !atk.first || atk.double };
             if atk_swings {
                 if blockers.is_empty() {
                     *player_damage += atk.power;
@@ -683,6 +1117,13 @@ pub fn compute_preview(app: &App, room: &Room) -> CombatPreview {
                         }
                         let already_dead = blk_taken[i] >= b.toughness || (blk_dt[i] && blk_taken[i] > 0);
                         if already_dead {
+                            continue;
+                        }
+                        // A shielded blocker soaks the assignment but takes
+                        // nothing (pass C damage prevention).
+                        if b.shield_to {
+                            let assign = (b.toughness - blk_taken[i]).max(1).min(remaining);
+                            remaining -= assign;
                             continue;
                         }
                         // Lethal to each blocker in order; the leftover after
@@ -709,8 +1150,10 @@ pub fn compute_preview(app: &App, room: &Room) -> CombatPreview {
             }
             for (i, b) in blockers.iter().enumerate() {
                 let alive = blk_taken[i] < b.toughness && !(blk_dt[i] && blk_taken[i] > 0);
-                let swings = alive && if first_step { b.first || b.double } else { !b.first || b.double };
-                if swings {
+                let swings = alive
+                    && !b.shield_by
+                    && if first_step { b.first || b.double } else { !b.first || b.double };
+                if swings && !atk.shield_to {
                     *atk_taken += b.power;
                     if b.deathtouch && b.power > 0 {
                         *atk_dt = true;
@@ -763,8 +1206,9 @@ pub fn compute_preview(app: &App, room: &Room) -> CombatPreview {
 }
 
 /// Apply a computed preview to the room: life totals, commander damage, and
-/// every death to its owner's graveyard. Returns human log lines.
-pub fn apply_preview(room: &mut Room, preview: &CombatPreview) -> Vec<String> {
+/// every death to its owner's graveyard (dies triggers fire for each).
+/// Returns human log lines.
+pub fn apply_preview(app: &App, room: &mut Room, preview: &CombatPreview) -> Vec<String> {
     let mut logs: Vec<String> = Vec::new();
     let mut dead: Vec<String> = Vec::new();
     for row in &preview.rows {
@@ -797,12 +1241,22 @@ pub fn apply_preview(room: &mut Room, preview: &CombatPreview) -> Vec<String> {
             *p.cmd_damage_by_commander.entry(commander_iid.clone()).or_insert(0) += amount;
         }
     }
-    // Deaths: move each card to its owner's graveyard (tokens evaporate).
+    // Deaths: move each card to its owner's graveyard (tokens evaporate;
+    // a dies-to-exile replacement routes to exile and silences the death).
+    let mut died: Vec<String> = Vec::new();
     for iid in dead {
+        // A dead card's table marker dies with it.
+        room.marks.remove(&iid);
         for p in room.players.iter_mut() {
             if let Some(pos) = p.battlefield.iter().position(|c| c.iid == iid) {
                 let mut card = p.battlefield.remove(pos);
                 let name = card.name.clone();
+                let exile_instead = card
+                    .scryfall_id
+                    .as_deref()
+                    .and_then(|sid| oracle::get(app, sid))
+                    .map(|f| f.dies_to_exile)
+                    .unwrap_or(false);
                 if card.is_token {
                     logs.push(format!("{name} dies (token)"));
                 } else {
@@ -812,12 +1266,21 @@ pub fn apply_preview(room: &mut Room, preview: &CombatPreview) -> Vec<String> {
                     card.attached_to = None;
                     card.piled = false;
                     card.entered_turn = None;
-                    p.graveyard.push(card);
-                    logs.push(format!("{name} dies"));
+                    if exile_instead {
+                        p.exile.push(card);
+                        logs.push(format!("{name} is exiled instead of dying (replacement)"));
+                    } else {
+                        p.graveyard.push(card);
+                        logs.push(format!("{name} dies"));
+                        died.push(iid.clone());
+                    }
                 }
                 break;
             }
         }
+    }
+    for iid in died {
+        logs.extend(fire_card_triggers(app, room, TriggerWhen::Dies, &iid));
     }
     logs
 }

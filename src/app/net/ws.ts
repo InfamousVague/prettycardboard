@@ -25,6 +25,10 @@ export type ClientMessage =
   | { type: 'auto.set'; untap: boolean; draw: boolean }
   | { type: 'coach.set'; on: boolean }
   | { type: 'chat.send'; text: string }
+  /** The pointing gesture (an arrow the table watches, then forgets). The
+   *  persistent cousin is the `mark.set` ACTION - markers live in room state,
+   *  arrows never do. The kind list is the union of both: an arrow can carry
+   *  any marker glyph even though only the marker itself persists. */
   | { type: 'aim'; fromIid?: string; toIid?: string; toSeat?: number; kind?: 'target' | 'point' | 'skull' | 'star' | 'eye' | 'shield' | 'sword' | 'flame' | 'ban' | 'question' | 'clear' }
   // Seat/unseat an AI opponent (host only, pre-start). deckCode picks one of
   // the server's embedded precons; absent = random.

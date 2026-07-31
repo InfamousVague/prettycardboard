@@ -10,7 +10,8 @@ import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import type { CardInst, RoomState, TablePlayer } from '../../net/types.ts';
 import { selectCardScale, useTableUi } from './tableUi.ts';
-import { AttackBadge, BlockCluster, CardMark, CounterBadges, DEFAULT_MAT_LAYOUT, ZonePiles, groupAttachments, splitPile } from './bits.tsx';
+import { AttackBadge, BlockCluster, CardMark, CounterBadges, DEFAULT_MAT_LAYOUT, MARK_KINDS, ZonePiles, groupAttachments, markIcon, splitPile } from './bits.tsx';
+import { MARK_LABEL } from './marks.ts';
 import { YUGIOH_PILE_LAYOUT, YugiohZoneGrid } from './yugiohZones.tsx';
 import { ambientDelay, restTilt } from './juice.ts';
 import { PILE_MAX_EDGES, PILE_STEP_PX, effectivePT, isCreature, ptTotalLabel } from './boardModes.ts';
@@ -55,7 +56,7 @@ export function SeatFrame({
   const t = useT();
   const act = useGame((state) => state.act);
   const aim = useGame((state) => state.aim);
-  const marks = useGame((state) => state.marks);
+  const marks = useGame((state) => state.room?.marks);
   const topSpell = (room.stack ?? [])[(room.stack ?? []).length - 1] as
     | (CardInst & { ownerSeat?: number })
     | undefined;
@@ -233,7 +234,7 @@ export function SeatFrame({
           setMarkPick({ iid: card.iid, x: event.clientX, y: event.clientY });
         }}
       >
-        {marks[card.iid] != null && <CardMark kind={marks[card.iid]!} />}
+        {marks?.[card.iid] && <CardMark mark={marks[card.iid]!} />}
         <GameCard
           name={card.name}
           imageUrl={faceImage(card)}
@@ -265,6 +266,8 @@ export function SeatFrame({
   return (
     <section
       className="oppBoard seatFrame"
+      // An arrow aimed at a PLAYER lands here (see AimLayer's anchorOf).
+      data-seat-anchor={player.seat}
       data-game={room.game || 'mtg'}
       data-active={isActiveSeat || undefined}
       data-stage={stage || undefined}
@@ -390,31 +393,54 @@ export function SeatFrame({
           <Text as="span" size={Size.XSmall} weight="semibold">
             {t('mkTitle')}
           </Text>
-          {([
-            ['target', t('mkTarget')],
-            ['point', t('mkPoint')],
-            ['skull', t('mkSkull')],
-            ['star', t('mkStar')],
-            ['eye', t('mkEye')],
-            ['shield', t('mkShield')],
-            ['sword', t('mkSword')],
-            ['flame', t('mkFlame')],
-            ['ban', t('mkBan')],
-            ['question', t('mkQuestion')],
-            ['clear', t('mkClear')],
-          ] as const).map(([kind, label]) => (
+          {/* Pointing is a gesture (an arrow the table watches travel); the
+              rest are markers that stay put until someone lifts them. */}
+          <button
+            type="button"
+            className="defenderChip"
+            onClick={() => {
+              send({ type: 'aim', toIid: markPick.iid, kind: 'point' });
+              setMarkPick(null);
+            }}
+          >
+            {t('mkPoint')}
+          </button>
+          <div className="markChipRow">
+            {MARK_KINDS.map((kind) => {
+              const active = marks?.[markPick.iid]?.kind === kind;
+              return (
+                <button
+                  key={kind}
+                  type="button"
+                  className="markChip"
+                  data-kind={kind}
+                  data-active={active || undefined}
+                  aria-label={t(MARK_LABEL[kind])}
+                  title={t(MARK_LABEL[kind])}
+                  onClick={() => {
+                    // Picking the marker a card already wears lifts it: one
+                    // gesture both ways, no separate "clear" hunt.
+                    act({ kind: 'mark.set', iid: markPick.iid, mark: active ? null : kind });
+                    setMarkPick(null);
+                  }}
+                >
+                  {markIcon(kind, 15)}
+                </button>
+              );
+            })}
+          </div>
+          {marks?.[markPick.iid] && (
             <button
-              key={kind}
               type="button"
               className="defenderChip"
               onClick={() => {
-                send({ type: 'aim', toIid: markPick.iid, kind });
+                act({ kind: 'mark.set', iid: markPick.iid, mark: null });
                 setMarkPick(null);
               }}
             >
-              {label}
+              {t('mkClear')}
             </button>
-          ))}
+          )}
         </div>
       )}
       {blockPick && me && (

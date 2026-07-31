@@ -80,11 +80,9 @@ interface GameState {
   room: RoomState | null;
   spectating: boolean;
   chat: ChatLine[];
-  /** Ephemeral targeting indicator (cleared ~4s after it arrives). */
+  /** Ephemeral targeting indicator (cleared ~4s after it arrives). Drives the
+   * target card's ring; the drawn arrow itself is AimLayer's own business. */
   aim: { fromIid?: string | null; toIid?: string | null; toSeat?: number | null; username: string } | null;
-  /** Table markers by card iid: 'point' (transient arrow) and persistent
-   * skull/star/eye flags, all relayed via the ephemeral aim message. */
-  marks: Record<string, string>;
   log: LogLine[];
   /** Owner-only prompt: your commander is leaving - return it to the command zone? */
   cmdChoice: { iid: string; to: string } | null;
@@ -402,27 +400,16 @@ export const useGame = create<GameState>((set, get) => {
       // page listens and toasts (the store has no toast context of its own).
       window.dispatchEvent(new CustomEvent('pc:action-error', { detail: { code: message.code, message: message.message } }));
     } else if (message.type === 'aim') {
+      // Pointing is ephemeral and lives here only long enough to ring the
+      // target card; AimLayer draws the arrow off the same relay. Persistent
+      // markers are a real action now (`mark.set`) and arrive in room.state.
       if (message.roomId === get().joinedRoomId) {
         const kind = message.kind ?? 'target';
-        const iid = message.toIid;
-        if (kind === 'target' || !message.kind) {
+        if (kind === 'target' || kind === 'point') {
           set({ aim: { fromIid: message.fromIid, toIid: message.toIid, toSeat: message.toSeat, username: message.username } });
           window.setTimeout(() => {
             set((state) => (state.aim?.fromIid === message.fromIid ? { aim: null } : {}));
           }, 4000);
-        } else if (iid && kind === 'clear') {
-          set((state) => {
-            const marks = { ...state.marks };
-            delete marks[iid];
-            return { marks };
-          });
-        } else if (iid && kind === 'point') {
-          set((state) => ({ marks: { ...state.marks, [iid]: 'point' } }));
-          window.setTimeout(() => {
-            set((state) => (state.marks[iid] === 'point' ? { marks: Object.fromEntries(Object.entries(state.marks).filter(([k]) => k !== iid)) } : {}));
-          }, 4000);
-        } else if (iid) {
-          set((state) => ({ marks: { ...state.marks, [iid]: kind } }));
         }
       }
     } else if (message.type === 'log') {
@@ -457,7 +444,6 @@ export const useGame = create<GameState>((set, get) => {
     spectating: false,
     chat: [],
     aim: null,
-    marks: {},
     log: [],
     cmdChoice: null,
     libraryCards: null,
