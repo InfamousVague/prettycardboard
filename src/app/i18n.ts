@@ -663,6 +663,12 @@ export const messages = {
   },
   joinInProgress: { en: 'In progress', es: 'En curso', fr: 'En cours', ar: 'قيد التقدم' },
   joinTakeSeat: { en: 'Take a seat', es: 'Tomar asiento', fr: 'Prendre place', ar: 'خذ مقعدًا' },
+  joinResumeSeat: {
+    en: 'Resume your seat',
+    es: 'Retomar tu asiento',
+    fr: 'Reprendre votre place',
+    ar: 'عد إلى مقعدك',
+  },
   joinSpectate: { en: 'Spectate', es: 'Observar', fr: 'Regarder', ar: 'مشاهدة' },
   joinNotNow: { en: 'Not now', es: 'Ahora no', fr: 'Pas maintenant', ar: 'ليس الآن' },
   joinFull: { en: 'This table is full.', es: 'Esta mesa está llena.', fr: 'Cette table est complète.', ar: 'هذه الطاولة ممتلئة.' },
