@@ -12,6 +12,9 @@
      Tokenized so the phone layout can zero both in one place. */
   --pc-rail-w: 18.5rem;
   --pc-rail-clear: 19.5rem;
+  /* The floating nav pill's resting height. Anything that shares its corner
+     (the chat aside) stacks on top of it rather than under it. */
+  --pc-nav-h: 2.75rem;
   /* The staged playmat card: shared radius + resting/active glow. */
   --pc-mat-radius: 1.4rem;
   --pc-mat-shadow:
@@ -344,29 +347,25 @@
 
 /* ---- pregame lobby ---- */
 
-/* One screen, no page scroll: a grid with the roster + rules + controls in
-   the main column and the chat filling a fixed side column. Only the seat
-   grid scrolls internally when a short window genuinely cannot hold it.
-   Narrow windows fall back to the stacked, page-scrolling flow (see the
-   900px media query below). */
+/* A matchup, not a form. Top to bottom: who is playing (hero), the versus
+   stage, the roster strip, and the floor bar that holds the only two decisions
+   made here. The stage is the flexible band, so a tall window makes the
+   portraits bigger rather than opening a hole in the middle. Chat is not in
+   this layout at all - the table's floating nav owns it. */
 .pregameLobby {
   flex: 1;
-  width: min(90rem, 100%);
+  width: min(78rem, 100%);
   min-height: 0;
   margin-inline: auto;
   padding: var(--glacier-space-3) var(--glacier-space-5) var(--glacier-space-2);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(16rem, 21rem);
-  /* The roster keeps a real minimum so a tall rules card can never squeeze
-     it out; if a short window truly cannot hold everything, the lobby
-     scrolls as a whole rather than clipping. */
-  grid-template-rows: auto minmax(9rem, 1fr) auto auto auto;
-  gap: var(--glacier-space-2) var(--glacier-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-3);
   overflow: hidden auto;
 }
 
 .pregameHero {
-  grid-column: 1 / -1;
+  flex: none;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -380,6 +379,13 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.pregameHeroMeta {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
 }
 
 .pregameKicker {
@@ -401,25 +407,41 @@
   letter-spacing: 0;
 }
 
-.pregameSeats {
-  grid-column: 1;
-  grid-row: 2;
-  min-height: 0;
+/* ---- the versus stage ---- */
+
+/* Grows into a tall window but never shrinks: the grid centres its rows, so a
+   band squeezed under its content would spill the portraits over the strip and
+   the floor bar instead of clipping. Short windows scroll the lobby (the floor
+   bar is sticky, so Start stays put) rather than squashing the stage. */
+.pregameStage {
+  flex: 1 0 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  /* Rows keep their natural card height: without this, a definite-height
-     scroll container lets the tracks split its height and crush the cards. */
-  grid-auto-rows: max-content;
-  gap: var(--glacier-space-3);
-  align-content: start;
-  /* The one region allowed to scroll when the window is genuinely short. */
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-  padding-inline-end: 2px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--glacier-space-4);
+  padding-block: var(--glacier-space-2);
 }
 
-.pregameSeat {
+/* The two sides lean into the middle, so the VS mark always sits between two
+   portraits rather than floating in whatever gap the columns left over. */
+.pregameStageSide {
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.pregameStageSide[data-them] {
+  justify-content: flex-start;
+}
+
+.pregameStageTile,
+.pregameStagePod,
+.pregameStageEmpty,
+.pregameStageWatch {
+  inline-size: min(23rem, 100%);
+}
+
+.pregameStageTile {
   min-width: 0;
   padding: 0 0 var(--glacier-space-3);
   overflow: hidden;
@@ -427,45 +449,57 @@
   flex-direction: column;
   gap: var(--glacier-space-2);
   border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 72%, transparent);
-  border-radius: 8px;
+  border-radius: 12px;
   background: color-mix(in oklch, var(--glacier-surface-raised) 76%, transparent);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.16);
   transition: border-color 160ms ease-out, background 160ms ease-out, opacity 160ms ease-out;
 }
 
-.pregameSeat[data-ready] {
+/* Everything below the art keeps the tile's padding. */
+.pregameStageTile > :not(.pregameArt) {
+  margin-inline: var(--glacier-space-3);
+}
+
+.pregameStageTile[data-you] {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-border));
+}
+
+.pregameStageTile[data-ready] {
   border-color: color-mix(in oklch, var(--glacier-success-solid, #4ade80) 62%, var(--glacier-border));
   background: color-mix(in oklch, var(--glacier-success-solid, #4ade80) 8%, var(--glacier-surface-raised));
 }
 
-.pregameSeat[data-offline] {
+.pregameStageTile[data-offline] {
   opacity: 0.62;
 }
 
-.pregameSeatNumber {
-  color: var(--glacier-text-subtle);
-  font-family: var(--glacier-font-mono);
-  font-size: 0.65rem;
-  font-weight: var(--glacier-font-weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0;
+/* The stage is the one place the cover card gets room to be a card, and it
+   takes the height a tall window has going spare rather than leaving it as air
+   above and below the portraits. */
+.pregameStageTile .pregameArt {
+  min-height: clamp(8rem, 22vh, 14rem);
 }
 
-.pregameIdentity {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+/* No deck chosen: nothing to show, so the mat band collapses to a sliver
+   instead of holding a card-shaped void open. */
+.pregameStageTile .pregameArt[data-empty] {
+  min-height: 3.5rem;
+}
+
+.pregameStageIdentity {
+  display: flex;
   align-items: center;
   gap: var(--glacier-space-2);
 }
 
-.pregamePlayerName {
+.pregameStageName {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
 
-.pregamePlayerName > span:first-child {
+.pregameStageName > span:first-child {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -489,7 +523,6 @@
 }
 
 .pregameDeck {
-  margin-block-start: auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -504,86 +537,281 @@
   font-weight: var(--glacier-font-weight-semibold);
 }
 
-.pregameSeatEmpty {
+/* The middle: the mark, the verdict, and the way into the rules. */
+.pregameVs {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  color: var(--glacier-text-subtle);
-  border-style: dashed;
-  background: color-mix(in oklch, var(--glacier-surface-sunken) 50%, transparent);
-  font: inherit;
-  cursor: pointer;
-}
-
-.pregameSeatEmpty .pregameSeatNumber {
-  align-self: stretch;
-  text-align: start;
-}
-
-.pregameSeatEmpty:hover {
-  color: var(--glacier-text);
-  border-color: var(--glacier-accent-border);
-  background: color-mix(in oklch, var(--glacier-accent-solid) 8%, var(--glacier-surface-sunken));
-}
-
-/* The host's empty seat splits into two fills: invite a friend, or seat one
-   of the AI opponents. The card itself stops being clickable; its two inner
-   actions take over. */
-.pregameSeatChoices {
-  cursor: default;
   gap: var(--glacier-space-2);
+  text-align: center;
 }
 
-.pregameSeatChoices:hover {
-  border-color: var(--glacier-border);
-  background: color-mix(in oklch, var(--glacier-surface-sunken) 50%, transparent);
+.pregameVsMark {
+  font-family: var(--glacier-font-display, var(--glacier-font-sans));
+  font-size: 2rem;
+  line-height: 1;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: color-mix(in oklch, var(--glacier-accent-solid) 70%, var(--glacier-text));
+  text-shadow: 0 0 26px color-mix(in oklch, var(--glacier-accent-solid) 40%, transparent);
 }
 
-.pregameSeatAction {
+/* The one sentence everyone in the lobby is waiting on, dead centre. A block
+   rather than a flex row: the status wraps to two lines at this width, and a
+   flex icon would centre itself against the whole block and drift away from
+   the words it belongs to. */
+.pregameVsStatus {
+  display: block;
+  max-inline-size: 13rem;
+  color: var(--glacier-text-muted);
+  font-size: var(--glacier-font-size-sm);
+  text-wrap: balance;
+}
+
+.pregameVsStatus svg {
+  vertical-align: -2px;
+  margin-inline-end: 0.35rem;
+}
+
+.pregameVsStatus[data-ready] {
+  color: var(--glacier-success-text, #7ee2a8);
+  font-weight: var(--glacier-font-weight-semibold);
+}
+
+/* Three or more opponents do not fit as portraits: the far side becomes a
+   count, a stack of faces and how much of the pod is still getting ready. */
+.pregameStagePod {
+  /* Enough body that the far side reads as the other half of a matchup rather
+     than a caption beside a portrait. */
+  min-block-size: 14rem;
+  justify-content: center;
+  padding: var(--glacier-space-4) var(--glacier-space-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 72%, transparent);
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--glacier-surface-raised) 76%, transparent);
+}
+
+.pregamePodFaces {
+  display: flex;
+}
+
+.pregamePodFaces > * + * {
+  margin-inline-start: -0.6rem;
+}
+
+.pregamePodFaces > * {
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--glacier-surface-raised);
+}
+
+.pregamePodCount {
   display: inline-flex;
   align-items: center;
+  gap: var(--glacier-space-2);
+  color: var(--glacier-text);
+  font-weight: var(--glacier-font-weight-semibold);
+}
+
+.pregamePodReady {
+  color: var(--glacier-text-muted);
+  font-size: var(--glacier-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.pregamePodReady[data-ready] {
+  color: var(--glacier-success-text, #7ee2a8);
+}
+
+.pregameStageEmpty,
+.pregameStageWatch {
+  min-block-size: 14rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
   gap: var(--glacier-space-2);
-  inline-size: 100%;
-  padding: var(--glacier-space-2) var(--glacier-space-3);
-  border-radius: var(--glacier-radius-lg);
+  padding: var(--glacier-space-4);
   border: var(--glacier-hairline) dashed var(--glacier-border);
-  background: transparent;
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--glacier-surface-sunken) 50%, transparent);
   color: var(--glacier-text-subtle);
   font: inherit;
   font-size: var(--glacier-font-size-sm);
+  text-align: center;
+}
+
+.pregameStageEmpty {
   cursor: pointer;
 }
 
-.pregameSeatAction:hover {
+.pregameStageEmpty:hover {
   color: var(--glacier-text);
   border-color: var(--glacier-accent-border);
   background: color-mix(in oklch, var(--glacier-accent-solid) 8%, var(--glacier-surface-sunken));
 }
 
-.pregameControls {
-  grid-column: 1;
-  grid-row: 4;
-  padding-block-start: var(--glacier-space-2);
-  display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(16rem, 0.75fr);
-  gap: var(--glacier-space-4);
-  border-block-start: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
+/* ---- the roster strip ---- */
+
+/* Every seat, one chip each, scrolling sideways rather than reflowing into
+   rows that push the floor bar off screen. The chip carries only what a glance
+   needs; the popover behind it carries the scouting report. */
+.pregameStrip {
+  flex: none;
+  margin: 0;
+  padding: 0 0 2px;
+  list-style: none;
+  display: flex;
+  gap: var(--glacier-space-2);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
 }
 
-.pregameDeckSetup {
+.pregameStrip > li {
+  flex: 0 0 auto;
+  display: flex;
+}
+
+.pregameChip {
+  flex: 0 0 auto;
+  inline-size: 13.5rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-2);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 72%, transparent);
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--glacier-surface-raised) 76%, transparent);
+  color: var(--glacier-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 160ms ease-out, background 160ms ease-out, opacity 160ms ease-out;
+}
+
+.pregameChip:hover {
+  border-color: var(--glacier-accent-border);
+}
+
+.pregameChip[data-mine] {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-border));
+}
+
+.pregameChip[data-ready] {
+  border-color: color-mix(in oklch, var(--glacier-success-solid, #4ade80) 62%, var(--glacier-border));
+  background: color-mix(in oklch, var(--glacier-success-solid, #4ade80) 8%, var(--glacier-surface-raised));
+}
+
+.pregameChip[data-offline] {
+  opacity: 0.62;
+}
+
+.pregameChipBody {
+  min-width: 0;
+}
+
+/* Blocks, not flex rows: the name and the deck have to truncate, and the
+   badges/pips beside them are inline glyphs riding the same line. */
+.pregameChipName,
+.pregameChipDeck {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pregameChipName {
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-semibold);
+}
+
+.pregameChipName svg {
+  vertical-align: -1px;
+  margin-inline-start: 0.25rem;
+  color: var(--glacier-text-subtle);
+}
+
+.pregameChipDeck {
+  color: var(--glacier-text-muted);
+  font-size: var(--glacier-font-size-xs);
+}
+
+.pregameChipDeck[data-empty] {
+  color: var(--glacier-warning-text, var(--glacier-text-muted));
+}
+
+.pregameChipDeck .pregameDeckPips {
+  vertical-align: -1px;
+  margin-inline-end: 0.3rem;
+}
+
+.pregameChipState {
+  display: inline-flex;
+  align-items: center;
+  color: var(--glacier-text-subtle);
+}
+
+.pregameChip[data-ready] .pregameChipState {
+  color: var(--glacier-success-text, #7ee2a8);
+}
+
+.pregameChipEmpty {
+  border-style: dashed;
+  background: color-mix(in oklch, var(--glacier-surface-sunken) 50%, transparent);
+  color: var(--glacier-text-subtle);
+}
+
+.pregameChipEmpty:hover {
+  color: var(--glacier-text);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 8%, var(--glacier-surface-sunken));
+}
+
+/* ---- the floor: which deck, and go ---- */
+
+/* Sticks to the bottom of the lobby's scroll box: on a short window the stage
+   scrolls under it rather than pushing Start out of reach. */
+.pregameLaunch {
+  flex: none;
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-4);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 72%, transparent);
+  border-radius: 10px;
+  background: color-mix(in oklch, var(--glacier-surface-raised) 92%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  box-shadow: 0 -6px 24px rgb(0 0 0 / 0.22);
+}
+
+.pregameLaunch[data-ready] {
+  border-color: color-mix(in oklch, var(--glacier-success-solid, #4ade80) 55%, var(--glacier-border));
+}
+
+.pregameLaunchSetup {
   position: relative;
   isolation: isolate;
-  padding: var(--glacier-space-3);
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
-  align-items: flex-end;
-  gap: var(--glacier-space-4);
+  align-items: center;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
   overflow: hidden;
-  border: var(--glacier-hairline) solid var(--glacier-border);
   border-radius: 8px;
-  background: var(--glacier-surface-raised);
 }
 
-.pregameDeckSetup[data-has-art]::before {
+/* The chosen deck's art washes the bar it was chosen from. */
+.pregameLaunchSetup[data-has-art]::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -591,27 +819,23 @@
   background-image: var(--pregame-deck-art);
   background-size: cover;
   background-position: center 35%;
-  opacity: 0.42;
+  opacity: 0.34;
 }
 
-.pregameDeckSetup[data-has-art]::after {
+.pregameLaunchSetup[data-has-art]::after {
   content: '';
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: linear-gradient(90deg, var(--glacier-surface-raised) 0 44%, color-mix(in oklch, var(--glacier-surface-raised) 74%, transparent));
-}
-
-.pregameDeckSetupBody {
-  flex: 1;
-  min-width: 0;
-  max-width: 27rem;
-  display: flex;
-  flex-direction: column;
-  gap: var(--glacier-space-2);
+  background: linear-gradient(
+    90deg,
+    var(--glacier-surface-raised) 0 28%,
+    color-mix(in oklch, var(--glacier-surface-raised) 70%, transparent)
+  );
 }
 
 .pregameDeckLabel {
+  flex: none;
   color: var(--glacier-text);
   font-size: var(--glacier-font-size-sm);
   font-weight: var(--glacier-font-weight-semibold);
@@ -619,63 +843,27 @@
 
 .pregameReadyButton {
   flex: none;
+  margin-inline-start: auto;
 }
 
-.pregameWatching {
-  min-height: 4.5rem;
+/* Auto start margin, not space-between on the bar: a spectator's floor has no
+   setup half at all, and the go cluster still belongs on the end edge. */
+.pregameLaunchGo {
+  flex: none;
+  margin-inline-start: auto;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: var(--glacier-space-2);
-  color: var(--glacier-text-muted);
-  border: var(--glacier-hairline) dashed var(--glacier-border);
-  border-radius: 8px;
 }
 
-.pregameLaunch {
-  padding-inline-start: var(--glacier-space-5);
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: center;
-  gap: var(--glacier-space-3);
-  border-inline-start: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
-}
-
-.pregameLaunchStatus,
-.pregameLaunch > span {
+.pregameLaunchGo > span {
   display: inline-flex;
   align-items: center;
   gap: var(--glacier-space-2);
 }
 
-.pregameLaunchStatus {
-  color: var(--glacier-text-muted);
-  font-size: var(--glacier-font-size-sm);
-}
-
-.pregameLaunch[data-ready] .pregameLaunchStatus {
-  color: var(--glacier-success-text, #7ee2a8);
-  font-weight: var(--glacier-font-weight-semibold);
-}
-
-/* The chat owns the side column top-to-bottom, ending above the floating
-   nav pill so the two stack in the same visual lane without overlapping. */
-.pregameLobby > .lobbyChat {
-  grid-column: 2;
-  grid-row: 2 / 5;
-  min-height: 0;
-  margin-block-end: calc(2.75rem + var(--glacier-space-3));
-}
-
-.pregameLobby > .lobbyChat .lobbyChatScroll {
-  flex: 1;
-  min-height: 0;
-}
-
 .pregameSpectators {
-  grid-column: 1 / -1;
-  grid-row: 5;
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -685,16 +873,154 @@
   font-size: var(--glacier-font-size-xs);
 }
 
-/* ---- pregame table rules ---- */
-.pregameSettings {
-  grid-column: 1;
-  grid-row: 3;
+/* ---- seat internals, shared by the versus stage and the scouting popover ---- */
+
+/* Per-player rating strip in a seat's scouting popover: rank + level, all-time
+   record, endorsements, saltiness, turn pace. */
+.pregameStats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem var(--glacier-space-2);
+}
+
+.pregameStat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+
+.pregameRank {
+  color: var(--glacier-text);
+  font-weight: var(--glacier-font-weight-medium);
+}
+
+.pregameRank svg {
+  color: var(--glacier-accent-solid);
+}
+
+.pregameRecord {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A seat's deck, wearing that player's mat: their cover card standing on the
+   felt they will actually be playing on. Used big on the versus stage and small
+   in the scouting popover. */
+.pregameArt {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 5.5rem;
+  padding: var(--glacier-space-2) 0;
+  background-image: var(--pc-seat-mat, none);
+  background-size: cover;
+  background-position: center;
+  border-block-end: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
+}
+
+/* A scrim under the card so the art reads against any mat, light or dark. */
+.pregameArt::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklch, var(--glacier-surface) 25%, transparent),
+    color-mix(in oklch, var(--glacier-surface) 62%, transparent)
+  );
+}
+
+.pregameArt > * {
+  position: relative;
+}
+
+/* No deck chosen yet: the mat alone, quieter. */
+.pregameArt[data-empty] {
+  min-height: 4.5rem;
+  opacity: 0.55;
+}
+
+/* What the deck is made of: a second, quieter chip row under its name. */
+.pregameDeckMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem var(--glacier-space-2);
+  color: var(--glacier-text-subtle);
+}
+
+.pregameDeckPips {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.pregameDeckPips i {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.35);
+}
+
+.pregameDeckPips i[data-color='W'] { background: #f8f2dc; }
+.pregameDeckPips i[data-color='U'] { background: #3b82c4; }
+.pregameDeckPips i[data-color='B'] { background: #3a3a44; }
+.pregameDeckPips i[data-color='R'] { background: #d2603f; }
+.pregameDeckPips i[data-color='G'] { background: #4f9d69; }
+
+/* Deck saltiness, in the same warm orange the post-match rating uses. */
+.pregameSalt {
+  color: oklch(0.75 0.15 45);
+}
+
+.pregameEndorse {
+  color: var(--glacier-success-text, var(--glacier-text-muted));
+}
+
+/* ---- popovers: table rules, and one seat's scouting report ---- */
+
+/* Both panels portal to the body, so they are styled from the root - no
+   .pregameLobby ancestor exists around them at paint time. */
+.pregameRulesPanel {
+  inline-size: min(30rem, 92vw);
   display: grid;
   gap: var(--glacier-space-2);
-  padding: var(--glacier-space-2) var(--glacier-space-3) var(--glacier-space-3);
-  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
-  border-radius: 10px;
-  background: color-mix(in oklch, var(--glacier-surface) 55%, transparent);
+}
+
+.pregameScoutPanel {
+  inline-size: min(20rem, 92vw);
+}
+
+.pregameScout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+}
+
+.pregameScoutHead {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+.pregameScoutWho {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pregameScoutWho > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pregameScoutArt {
+  border-radius: 8px;
+  overflow: hidden;
+  border-block-end: 0;
 }
 
 .pregameSettingsHead {
@@ -742,67 +1068,96 @@
 }
 
 @media (max-width: 900px) {
-  /* Narrow windows: back to the stacked, page-scrolling flow - a side chat
-     column has no room, and "fits on one screen" stops being meaningful. */
+  /* Narrow windows: the stage stops being a side-by-side and the lobby goes
+     back to an ordinary page-scrolling flow. */
   .tableMain[data-lobby] {
     overflow: auto;
   }
 
   .pregameLobby {
-    display: flex;
-    flex-direction: column;
-    gap: var(--glacier-space-4);
     overflow: visible;
     padding-inline: var(--glacier-space-4);
   }
 
-  .pregameLobby > .lobbyChat {
-    margin-block-end: 0;
+  .pregameStage {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    gap: var(--glacier-space-3);
   }
 
-  /* In the stacked flow the roster is ordinary content: full height, no
-     internal scroll, never squeezed by the flex column. */
-  .pregameSeats {
-    flex-shrink: 0;
-    overflow: visible;
+  .pregameStageSide,
+  .pregameStageSide[data-them] {
+    justify-content: center;
+    inline-size: 100%;
   }
 
-  .pregameLobby > .lobbyChat .lobbyChatScroll {
-    flex: none;
-    max-height: 15rem;
+  /* Stacked, the two sides are spending height rather than width, so both
+     shrink to keep the roster strip near the fold. */
+  .pregameStageTile .pregameArt {
+    min-height: clamp(7rem, 16vh, 11rem);
   }
 
-  .pregameControls {
-    grid-template-columns: 1fr;
+  .pregameStagePod,
+  .pregameStageEmpty,
+  .pregameStageWatch {
+    min-block-size: 10rem;
   }
 
+  /* The mark itself is the divider between the two sides here, so it lays out
+     as a row rather than a tall column. */
+  .pregameVs {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--glacier-space-3);
+  }
+
+  .pregameVsMark {
+    font-size: 1.5rem;
+  }
+
+  .pregameVsStatus {
+    max-inline-size: none;
+  }
+
+  /* Deck picker + Ready + Watch + Start is one row too many below this width:
+     the labels start truncating to single letters. Give the setup and the go
+     cluster a line each instead. */
   .pregameLaunch {
-    padding: var(--glacier-space-4) 0 0;
-    border-inline-start: 0;
-    border-block-start: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pregameLaunchGo {
+    justify-content: flex-end;
   }
 }
 
 @media (max-width: 620px) {
   .pregameHero,
-  .pregameDeckSetup {
+  .pregameLaunch {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .pregameHero > button,
-  .pregameReadyButton {
-    width: 100%;
+  .pregameHeroMeta {
+    justify-content: space-between;
   }
 
-  .pregameSeats {
-    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  .pregameLaunchSetup {
+    flex-wrap: wrap;
   }
-}
 
-@media (max-width: 420px) {
-  .pregameSeats {
-    grid-template-columns: 1fr;
+  /* One control per line: side by side, Start and the ghost "watch instead"
+     both want the full width and end up overflowing the bar. */
+  .pregameLaunchGo {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    inline-size: 100%;
+  }
+
+  .pregameChip {
+    inline-size: 12rem;
   }
 }
 
@@ -2809,10 +3164,14 @@
 /* ---- the chat aside (opened from the nav row's chat toggle) ---- */
 
 /* Same fixed slide-over recipe as .libSidebar, one slot narrower so both can
-   coexist without a full eclipse. LobbyChat fills it (data-variant=table). */
+   coexist without a full eclipse. LobbyChat fills it (data-variant=table).
+   Its floor clears the nav pill it is opened from: the two share this corner,
+   and a chat that ran to the bottom edge would sit behind the pill (which
+   outranks it at z 96) with its composer half-covered. */
 .chatAside {
   position: fixed;
-  inset-block: 4.4rem var(--glacier-space-3);
+  inset-block: 4.4rem
+    calc(var(--pc-nav-h, 2.75rem) + var(--glacier-space-3) + var(--glacier-space-2) + var(--pc-safe-b, 0px));
   inset-inline-end: var(--glacier-space-3);
   width: 20rem;
   max-width: 92vw;
@@ -3156,7 +3515,7 @@
 
 .tableSideNav {
   flex: none;
-  min-height: 2.75rem;
+  min-height: var(--pc-nav-h);
   display: flex;
   align-items: center;
   justify-content: space-around;
@@ -6207,14 +6566,6 @@
   cursor: pointer;
   text-decoration: underline dotted color-mix(in oklch, currentColor 50%, transparent);
   text-underline-offset: 3px;
-}
-
-/* Reopen chip for the lobby's right-hand chat aside. */
-.lobbyChatFab {
-  position: fixed;
-  inset-block-end: var(--glacier-space-4);
-  inset-inline-end: var(--glacier-space-4);
-  z-index: 58;
 }
 
 /* The lobby chat fills its aside like the table variant does. */

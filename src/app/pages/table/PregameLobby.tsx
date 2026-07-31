@@ -9,6 +9,7 @@ import {
   MenuItem,
   MenuSeparator,
   Pill,
+  Popover,
   SegmentedControl,
   Select,
   Size,
@@ -20,7 +21,6 @@ import {
 } from '@glacier/react';
 import {
   Bot,
-  MessageSquare,
   Check,
   Circle,
   Cpu,
@@ -40,6 +40,7 @@ import {
   Timer,
   Trophy,
   UserPlus,
+  Users,
   WifiOff,
   X,
 } from '@glacier/icons';
@@ -56,7 +57,6 @@ import { SaltPile } from '../../components/SaltPile.tsx';
 import { playmatBackground } from '../../data/playmats.ts';
 import { getGame, resolveCardImage } from '../../data/games.ts';
 import { formatFor } from '../../data/formats.ts';
-import { LobbyChat } from './LobbyChat.tsx';
 import type { GameSettings, RoomState, TablePlayer, UserStats } from '../../net/types.ts';
 
 /** "1m 40s" / "45s" - a typical turn, short enough for a stat chip. */
@@ -76,6 +76,14 @@ const DEFAULT_SETTINGS: GameSettings = {
   skipFirstDraw: null,
 };
 
+/**
+ * The lobby is a matchup, not a form: a versus stage carries you and the table
+ * you are about to face, a strip of seat chips carries the roster, and one bar
+ * across the floor carries the only two decisions anyone makes here (which deck,
+ * and go). Everything that is scouting rather than deciding - records, salt,
+ * turn pace, deck composition - lives one click deep in a seat's popover, so
+ * the stage stays readable at a glance and the detail is still all there.
+ */
 export function PregameLobby({
   room,
   me,
@@ -90,7 +98,6 @@ export function PregameLobby({
   onShare: () => void;
 }) {
   const t = useT();
-  const [chatOpen, setChatOpen] = useState(true);
   const decks = useApp((state) => state.decks);
   const start = useGame((state) => state.start);
   const game = room.game || 'mtg';
@@ -104,6 +111,12 @@ export function PregameLobby({
   );
   const playersBySeat = new Map(room.players.map((player) => [player.seat, player]));
   const seats = Array.from({ length: room.seats }, (_, seat) => playersBySeat.get(seat));
+  // Everyone who is not me, in seat order. A spectator has no seat of their own,
+  // so the whole table reads as the far side of the stage.
+  const opponents = room.players
+    .filter((player) => player.userId !== me?.userId)
+    .sort((a, b) => a.seat - b.seat);
+  const opponentsReady = opponents.filter((player) => player.ready).length;
 
   // Every seated player's all-time record, so the roster reads as a scouting
   // board. Refetched when the seat set changes; failures just leave a card
@@ -216,211 +229,314 @@ export function PregameLobby({
             {formatFor(room.format).name}
           </span>
           <h1 className="pregameTitle" id="pregame-title">{t('preLobbyTitle')}</h1>
+        </div>
+        <span className="pregameHeroMeta">
           <Text as="span" size={Size.Small} tone={TextTone.Muted}>
             {room.players.length} / {room.seats} {t('playSeats').toLowerCase()}
           </Text>
-        </div>
-        <Button variant="soft" onClick={onShare}>
-          <Link2 size={16} /> {t('tblShare')} <Kbd>{room.code}</Kbd>
-        </Button>
+          <Button size="sm" variant="soft" onClick={onShare}>
+            <Link2 size={15} /> {t('tblShare')} <Kbd>{room.code}</Kbd>
+          </Button>
+        </span>
       </header>
 
-      <div className="pregameSeats">
+      {/* ---- the versus stage: me, the verdict, the far side ---- */}
+      <div className="pregameStage">
+        <div className="pregameStageSide">
+          {me && !spectating ? (
+            <StageTile room={room} player={me} you />
+          ) : (
+            <div className="pregameStageWatch">
+              <Eye size={22} />
+              <span>{t('preWatchingSetup')}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="pregameVs">
+          <span className="pregameVsMark" aria-hidden>{t('preVs')}</span>
+          <span className="pregameVsStatus" data-ready={canStart || undefined}>
+            {canStart ? <Check size={15} /> : <Circle size={12} />}
+            {status}
+          </span>
+          {/* Rules are a reference, not a step: they sit behind one control so
+              the stage is not half rules form. The host edits in place here;
+              everyone else reads the same panel as pills. */}
+          <Popover
+            placement="bottom"
+            aria-label={t('preSettings')}
+            className="pregameRulesPanel"
+            trigger={
+              <Button size="sm" variant="ghost">
+                <Settings2 size={14} /> {t('preSettings')}
+              </Button>
+            }
+          >
+            <header className="pregameSettingsHead">
+              <Settings2 size={15} />
+              <h2 className="pregameSettingsTitle">{t('preSettings')}</h2>
+              {!canEditSettings && (
+                <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+                  <Crown size={11} /> {t('preSettingsHostOnly')}
+                </Text>
+              )}
+            </header>
+
+            {canEditSettings ? (
+              <div className="pregameSettingsGrid">
+                {!cyber && (
+                  <label className="pregameSetting">
+                    <span className="pregameSettingLabel">{t('setStartLife')}</span>
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      value={lifeDraft ?? (settings.startingLife == null ? '' : String(settings.startingLife))}
+                      placeholder={String(lifeDefault)}
+                      onChange={(event) => setLifeDraft(event.target.value)}
+                      onBlur={() => {
+                        if (lifeDraft == null) return;
+                        patchSettings({ startingLife: lifeDraft === '' ? null : Number(lifeDraft) });
+                        setLifeDraft(null);
+                      }}
+                    />
+                  </label>
+                )}
+                <label className="pregameSetting">
+                  <span className="pregameSettingLabel">{t('setStartHand')}</span>
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    value={handDraft ?? (settings.startingHand == null ? '' : String(settings.startingHand))}
+                    placeholder={String(handDefault)}
+                    onChange={(event) => setHandDraft(event.target.value)}
+                    onBlur={() => {
+                      if (handDraft == null) return;
+                      patchSettings({ startingHand: handDraft === '' ? null : Number(handDraft) });
+                      setHandDraft(null);
+                    }}
+                  />
+                </label>
+                {!yugioh && (
+                  <label className="pregameSetting">
+                    <span className="pregameSettingLabel">{t('setMullRule')}</span>
+                    <SegmentedControl
+                      fullWidth
+                      value={settings.mulliganRule}
+                      onValueChange={(value) =>
+                        patchSettings({ mulliganRule: value as GameSettings['mulliganRule'] })
+                      }
+                      options={[
+                        { value: 'london', label: t('setMullLondon') },
+                        { value: 'vancouver', label: t('setMullVancouver') },
+                      ]}
+                    />
+                  </label>
+                )}
+                {!yugioh && (
+                  <label className="pregameSetting">
+                    <span className="pregameSettingLabel">{t('setFreeMulls')}</span>
+                    <Select
+                      fullWidth
+                      value={
+                        settings.unlimitedMulligans
+                          ? 'unlimited'
+                          : settings.freeMulligans == null
+                            ? 'default'
+                            : String(settings.freeMulligans)
+                      }
+                      onValueChange={(value) =>
+                        patchSettings(
+                          value === 'unlimited'
+                            ? { unlimitedMulligans: true, freeMulligans: null }
+                            : {
+                                unlimitedMulligans: false,
+                                freeMulligans: value === 'default' ? null : Number(value),
+                              },
+                        )
+                      }
+                      options={[
+                        { value: 'default', label: t('setDefault') },
+                        { value: '0', label: '0' },
+                        { value: '1', label: '1' },
+                        { value: '2', label: '2' },
+                        { value: '3', label: '3' },
+                        { value: 'unlimited', label: t('setMullUnlimited') },
+                      ]}
+                    />
+                  </label>
+                )}
+                <label className="pregameSetting">
+                  <span className="pregameSettingLabel">{t('setFirstPlayer')}</span>
+                  <Select
+                    fullWidth
+                    value={firstValue}
+                    onValueChange={onFirstChange}
+                    options={[
+                      { value: 'auto', label: t('setFirstAuto') },
+                      { value: 'random', label: t('setFirstRandom') },
+                      ...seatedFirstOptions,
+                    ]}
+                  />
+                </label>
+                <label className="pregameSetting">
+                  <span className="pregameSettingLabel">{t('setSkipDraw')}</span>
+                  <Select
+                    fullWidth
+                    value={settings.skipFirstDraw == null ? 'default' : settings.skipFirstDraw ? 'on' : 'off'}
+                    onValueChange={(value) =>
+                      patchSettings({ skipFirstDraw: value === 'default' ? null : value === 'on' })
+                    }
+                    options={[
+                      { value: 'default', label: t('setDefault') },
+                      { value: 'on', label: t('setOn') },
+                      { value: 'off', label: t('setOff') },
+                    ]}
+                  />
+                </label>
+                {/* Last on purpose: the full-width row would otherwise split the
+                    compact fields into extra rows and grow the panel. */}
+                {game === 'mtg' && (
+                  <label className="pregameSetting pregameSettingWide">
+                    <span className="pregameSettingLabel">{t('setEnforced')}</span>
+                    <div className="pregameEnforcedRow">
+                      <Switch
+                        checked={Boolean(settings.enforced)}
+                        onCheckedChange={(on) => patchSettings({ enforced: on })}
+                        aria-label={t('setEnforced')}
+                      />
+                      <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+                        {t('setEnforcedHint')}
+                      </Text>
+                    </div>
+                  </label>
+                )}
+              </div>
+            ) : (
+              <div className="pregameSettingsSummary">
+                {summary.map((item) => (
+                  <Pill key={item.label} size="sm" variant="soft">
+                    {item.label}: <strong>{item.value}</strong>
+                  </Pill>
+                ))}
+              </div>
+            )}
+          </Popover>
+        </div>
+
+        <div className="pregameStageSide" data-them="">
+          {opponents.length === 0 ? (
+            <button type="button" className="pregameStageEmpty" onClick={onShare}>
+              <UserPlus size={22} />
+              <span>{t('preNobodyYet')}</span>
+              <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+                {t('preInviteLink')}
+              </Text>
+            </button>
+          ) : opponents.length === 1 && opponents[0] ? (
+            <StageTile room={room} player={opponents[0]} />
+          ) : (
+            // A pod does not fit as portraits: it reads as a count, a stack of
+            // faces, and how much of it is still getting ready. The strip below
+            // is where individual opponents get looked at.
+            <div className="pregameStagePod">
+              <span className="pregamePodFaces" aria-hidden>
+                {opponents.slice(0, 4).map((player) => (
+                  <Avatar key={player.userId} name={player.username} size="md" />
+                ))}
+              </span>
+              <span className="pregamePodCount">
+                <Users size={16} /> {opponents.length} {t('preOpponents').toLowerCase()}
+              </span>
+              <span className="pregamePodReady" data-ready={opponentsReady === opponents.length || undefined}>
+                {opponentsReady} / {opponents.length} {t('preReadyCount')}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ---- the roster strip: one chip per seat, detail on click ---- */}
+      <ul className="pregameStrip" aria-label={t('playSeats')}>
         {seats.map((player, seat) =>
           player ? (
-            <article
-              key={player.userId}
-              className="pregameSeat"
-              data-ready={player.ready || undefined}
-              data-offline={player.online === false || undefined}
-            >
-              {/* The seat wears the deck it brought: that player's playmat as
-                  the felt, their cover card standing on it. */}
-              <div
-                className="pregameArt"
-                data-empty={!player.deckMeta?.cover || undefined}
-                style={
-                  player.playmat
-                    ? ({ ['--pc-seat-mat' as string]: playmatBackground(player.playmat) } as CSSProperties)
-                    : undefined
-                }
-              >
-                {player.deckMeta?.cover && (
-                  <GameCard
-                    name={player.deckName || ''}
-                    imageUrl={resolveCardImage(room.game, player.deckMeta.cover)}
-                    width={96}
-                    foil
-                    tilt={6}
-                  />
-                )}
-                <span className="pregameSeatNumber">{t('preSeat')} {seat + 1}</span>
-              </div>
-              <div className="pregameIdentity">
-                <Avatar name={player.username} size="md" />
-                <div className="pregamePlayerName">
-                  <Text as="span" size={Size.Small} weight="semibold">
-                    {player.username}
-                  </Text>
-                  <span className="pregameBadges">
-                    {player.userId === room.hostUserId && (
-                      <Pill size="sm" variant="soft" icon={<Crown size={11} />}>
-                        {t('tblHost')}
-                      </Pill>
-                    )}
-                    {player.isBot && (
-                      <Pill size="sm" variant="soft" icon={<Bot size={11} />}>
-                        {t('preBotBadge')}
-                      </Pill>
-                    )}
-                    {player.userId === me?.userId && <span className="playerYou">{t('tblYou')}</span>}
-                  </span>
-                </div>
-                <StatusDot size="sm" tone={player.online === false ? 'neutral' : 'success'} />
-                {player.isBot && isHost && !spectating && (
-                  <Tooltip content={t('preRemoveBot')}>
-                    <IconButton
-                      size="sm"
-                      variant="ghost"
-                      aria-label={t('preRemoveBot')}
-                      onClick={() => send({ type: 'bot.remove', seat: player.seat })}
-                    >
-                      <X size={14} />
-                    </IconButton>
-                  </Tooltip>
-                )}
-              </div>
-              {player.isBot ? (
-                <div className="pregameStats">
-                  <span className="pregameStat pregameRank">
-                    <Bot size={11} /> {t('preBotTagline')}
-                  </span>
-                </div>
-              ) : (() => {
-                const stats = records[player.userId];
-                const rank = rankFor(stats?.played ?? 0);
-                const rate = stats ? winRate(stats) : null;
-                return (
-                  <div className="pregameStats">
-                    <span className="pregameStat pregameRank" title={`${t('hmLevel')} ${rank.level}`}>
-                      <Trophy size={11} /> {rank.title} · {rank.level}
-                    </span>
-                    <span className="pregameStat pregameRecord">
-                      {stats && stats.played > 0
-                        ? `${stats.wins}W · ${stats.losses}L${rate != null ? ` · ${rate}%` : ''}`
-                        : t('preNoGames')}
-                    </span>
-                    {stats != null && stats.endorsements > 0 && (
-                      <span className="pregameStat pregameEndorse" title={t('preEndorsements')}>
-                        <ThumbsUp size={11} /> {stats.endorsements}
-                      </span>
-                    )}
-                    {/* How salty this seat's DECKS have played, averaged. Held
-                        back until more than one opponent has rated something:
-                        in a duel a single rating names its rater. Which deck
-                        earned it stays on that player's own profile. */}
-                    {stats != null && stats.saltCount > 1 && (
-                      <span className="pregameStat pregameSalt" title={t('preSaltHint')}>
-                        <SaltPile size={11} /> {stats.salt.toFixed(1)}
-                      </span>
-                    )}
-                    {/* How long this player usually takes on a turn - the one
-                        number everyone at a four-player table wants. */}
-                    {stats != null && stats.avgTurnMs > 0 && (
-                      <span className="pregameStat" title={t('preAvgTurn')}>
-                        <Timer size={11} /> {fmtTurn(stats.avgTurnMs)}
-                      </span>
-                    )}
-                  </div>
-                );
-              })()}
-              <span className="pregameDeck" data-empty={!player.deckName || undefined}>
-                <Layers size={14} /> {player.deckName || t('preNoDeck')}
-              </span>
-              {/* What the deck is made of. Aggregates only - the list itself is
-                  never public - and only once its owner has pushed them. */}
-              {player.deckMeta && (
-                <div className="pregameDeckMeta">
-                  {player.deckMeta.colors && player.deckMeta.colors.length > 0 && (
-                    <span className="pregameDeckPips" aria-hidden>
-                      {player.deckMeta.colors.map((color) => (
-                        <i key={color} data-color={color} />
-                      ))}
-                    </span>
-                  )}
-                  <span className="pregameStat" title={t('preDeckSize')}>
-                    <Layers size={11} /> {player.deckMeta.size}
-                  </span>
-                  {player.deckMeta.avgMv != null && player.deckMeta.avgMv > 0 && (
-                    <span className="pregameStat" title={t('preAvgMv')}>
-                      <Gauge size={11} /> {player.deckMeta.avgMv}
-                    </span>
-                  )}
-                  {player.deckMeta.creatures != null && player.deckMeta.creatures > 0 && (
-                    <span className="pregameStat" title={t('preCreatures')}>
-                      <Swords size={11} /> {player.deckMeta.creatures}
-                    </span>
-                  )}
-                  {player.deckMeta.lands != null && player.deckMeta.lands > 0 && (
-                    <span className="pregameStat" title={t('preLands')}>
-                      <Mountain size={11} /> {player.deckMeta.lands}
-                    </span>
-                  )}
-                  {player.deckMeta.spells != null && player.deckMeta.spells > 0 && (
-                    <span className="pregameStat" title={t('preSpells')}>
-                      <Sparkles size={11} /> {player.deckMeta.spells}
-                    </span>
-                  )}
-                  {player.deckMeta.ram != null && (
-                    <span className="pregameStat" title={t('preRam')}>
-                      <Cpu size={11} /> {player.deckMeta.ram}
-                    </span>
-                  )}
-                  {player.deckMeta.avgCost != null && player.deckMeta.avgCost > 0 && (
-                    <span className="pregameStat" title={t('preAvgCost')}>
-                      <Gauge size={11} /> {player.deckMeta.avgCost}
-                    </span>
-                  )}
-                </div>
-              )}
-              <span className="pregameReady" data-ready={player.ready || undefined}>
-                {player.online === false ? (
-                  <><WifiOff size={14} /> {t('preOffline')}</>
-                ) : player.ready ? (
-                  <><Check size={14} /> {t('preReady')}</>
-                ) : (
-                  <><Circle size={12} /> {t('preNotReady')}</>
-                )}
-              </span>
-            </article>
-          ) : isHost && !spectating && game === 'mtg' ? (
-            // The host's empty seat offers both fills: a friend via the share
-            // link, or one of the server's AI opponents with a play style.
-            <div key={seat} className="pregameSeat pregameSeatEmpty pregameSeatChoices">
-              <span className="pregameSeatNumber">{t('preSeat')} {seat + 1}</span>
-              <button type="button" className="pregameSeatAction" onClick={onShare}>
-                <UserPlus size={18} />
-                <span>{t('preOpenSeat')}</span>
-              </button>
-              <Menu
-                aria-label={t('preAddBot')}
+            <li key={player.userId}>
+              <Popover
+                placement="top"
+                aria-label={t('preScouting')}
+                className="pregameScoutPanel"
                 trigger={
-                  <button type="button" className="pregameSeatAction">
-                    <Bot size={18} />
-                    <span>{t('preAddBot')}</span>
+                  <button
+                    type="button"
+                    className="pregameChip"
+                    data-ready={player.ready || undefined}
+                    data-offline={player.online === false || undefined}
+                    data-mine={player.userId === me?.userId || undefined}
+                  >
+                    <Avatar name={player.username} size="sm" />
+                    <span className="pregameChipBody">
+                      <span className="pregameChipName">
+                        {player.username}
+                        {player.userId === room.hostUserId && <Crown size={11} aria-label={t('tblHost')} />}
+                        {player.isBot && <Bot size={11} aria-label={t('preBotBadge')} />}
+                      </span>
+                      <span className="pregameChipDeck" data-empty={!player.deckName || undefined}>
+                        {player.deckMeta?.colors && player.deckMeta.colors.length > 0 && (
+                          <span className="pregameDeckPips" aria-hidden>
+                            {player.deckMeta.colors.map((color) => (
+                              <i key={color} data-color={color} />
+                            ))}
+                          </span>
+                        )}
+                        {player.deckName || t('preNoDeck')}
+                      </span>
+                    </span>
+                    <span className="pregameChipState">
+                      {player.online === false ? (
+                        <WifiOff size={13} />
+                      ) : player.ready ? (
+                        <Check size={13} />
+                      ) : (
+                        <StatusDot size="sm" tone="neutral" />
+                      )}
+                    </span>
                   </button>
                 }
               >
-                <MenuItem
-                  icon={<Bot size={14} />}
-                  onSelect={() => send({ type: 'bot.add', style: 'casual' })}
-                >
+                <ScoutCard
+                  room={room}
+                  player={player}
+                  seat={seat}
+                  stats={records[player.userId]}
+                  isHost={isHost}
+                  spectating={spectating}
+                />
+              </Popover>
+            </li>
+          ) : isHost && !spectating && game === 'mtg' ? (
+            // The host's empty seat offers both fills from one control: a friend
+            // via the share link, or one of the server's AI opponents.
+            <li key={seat}>
+              <Menu
+                aria-label={t('preFillSeat')}
+                placement="top-start"
+                trigger={
+                  <button type="button" className="pregameChip pregameChipEmpty">
+                    <UserPlus size={16} />
+                    <span className="pregameChipBody">
+                      <span className="pregameChipName">{t('preOpenSeat')}</span>
+                      <span className="pregameChipDeck">{t('preSeat')} {seat + 1}</span>
+                    </span>
+                  </button>
+                }
+              >
+                <MenuItem icon={<Link2 size={14} />} onSelect={onShare}>
+                  {t('preInviteLink')}
+                </MenuItem>
+                <MenuSeparator />
+                <MenuItem icon={<Bot size={14} />} onSelect={() => send({ type: 'bot.add', style: 'casual' })}>
                   {t('preBotStyleCasual')}
                 </MenuItem>
-                <MenuItem
-                  icon={<Flame size={14} />}
-                  onSelect={() => send({ type: 'bot.add', style: 'aggro' })}
-                >
+                <MenuItem icon={<Flame size={14} />} onSelect={() => send({ type: 'bot.add', style: 'aggro' })}>
                   {t('preBotStyleAggro')}
                 </MenuItem>
                 <MenuItem
@@ -443,214 +559,51 @@ export function PregameLobby({
                   {t('preBotHard')}
                 </MenuItem>
               </Menu>
-            </div>
+            </li>
           ) : (
-            <button key={seat} type="button" className="pregameSeat pregameSeatEmpty" onClick={onShare}>
-              <span className="pregameSeatNumber">{t('preSeat')} {seat + 1}</span>
-              <UserPlus size={22} />
-              <span>{t('preOpenSeat')}</span>
-            </button>
+            <li key={seat}>
+              <button type="button" className="pregameChip pregameChipEmpty" onClick={onShare}>
+                <UserPlus size={16} />
+                <span className="pregameChipBody">
+                  <span className="pregameChipName">{t('preOpenSeat')}</span>
+                  <span className="pregameChipDeck">{t('preSeat')} {seat + 1}</span>
+                </span>
+              </button>
+            </li>
           ),
         )}
-      </div>
+      </ul>
 
-      <section className="pregameSettings" aria-labelledby="pregame-settings-title">
-        <header className="pregameSettingsHead">
-          <Settings2 size={15} />
-          <h2 className="pregameSettingsTitle" id="pregame-settings-title">
-            {t('preSettings')}
-          </h2>
-          {!canEditSettings && (
-            <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
-              <Crown size={11} /> {t('preSettingsHostOnly')}
-            </Text>
-          )}
-        </header>
-
-        {canEditSettings ? (
-          <div className="pregameSettingsGrid">
-            {!cyber && (
-              <label className="pregameSetting">
-                <span className="pregameSettingLabel">{t('setStartLife')}</span>
-                <Input
-                  type="number"
-                  inputMode="numeric"
-                  value={lifeDraft ?? (settings.startingLife == null ? '' : String(settings.startingLife))}
-                  placeholder={String(lifeDefault)}
-                  onChange={(event) => setLifeDraft(event.target.value)}
-                  onBlur={() => {
-                    if (lifeDraft == null) return;
-                    patchSettings({ startingLife: lifeDraft === '' ? null : Number(lifeDraft) });
-                    setLifeDraft(null);
-                  }}
-                />
-              </label>
-            )}
-            <label className="pregameSetting">
-              <span className="pregameSettingLabel">{t('setStartHand')}</span>
-              <Input
-                type="number"
-                inputMode="numeric"
-                value={handDraft ?? (settings.startingHand == null ? '' : String(settings.startingHand))}
-                placeholder={String(handDefault)}
-                onChange={(event) => setHandDraft(event.target.value)}
-                onBlur={() => {
-                  if (handDraft == null) return;
-                  patchSettings({ startingHand: handDraft === '' ? null : Number(handDraft) });
-                  setHandDraft(null);
-                }}
-              />
-            </label>
-            {!yugioh && (
-            <label className="pregameSetting">
-              <span className="pregameSettingLabel">{t('setMullRule')}</span>
-              <SegmentedControl
-                fullWidth
-                value={settings.mulliganRule}
-                onValueChange={(value) =>
-                  patchSettings({ mulliganRule: value as GameSettings['mulliganRule'] })
-                }
-                options={[
-                  { value: 'london', label: t('setMullLondon') },
-                  { value: 'vancouver', label: t('setMullVancouver') },
-                ]}
-              />
-            </label>
-            )}
-            {!yugioh && (
-            <label className="pregameSetting">
-              <span className="pregameSettingLabel">{t('setFreeMulls')}</span>
-              <Select
-                fullWidth
-                value={
-                  settings.unlimitedMulligans
-                    ? 'unlimited'
-                    : settings.freeMulligans == null
-                      ? 'default'
-                      : String(settings.freeMulligans)
-                }
-                onValueChange={(value) =>
-                  patchSettings(
-                    value === 'unlimited'
-                      ? { unlimitedMulligans: true, freeMulligans: null }
-                      : { unlimitedMulligans: false, freeMulligans: value === 'default' ? null : Number(value) },
-                  )
-                }
-                options={[
-                  { value: 'default', label: t('setDefault') },
-                  { value: '0', label: '0' },
-                  { value: '1', label: '1' },
-                  { value: '2', label: '2' },
-                  { value: '3', label: '3' },
-                  { value: 'unlimited', label: t('setMullUnlimited') },
-                ]}
-              />
-            </label>
-            )}
-            <label className="pregameSetting">
-              <span className="pregameSettingLabel">{t('setFirstPlayer')}</span>
-              <Select
-                fullWidth
-                value={firstValue}
-                onValueChange={onFirstChange}
-                options={[
-                  { value: 'auto', label: t('setFirstAuto') },
-                  { value: 'random', label: t('setFirstRandom') },
-                  ...seatedFirstOptions,
-                ]}
-              />
-            </label>
-            {game === 'mtg' && (
-              <label className="pregameSetting pregameSettingWide">
-                <span className="pregameSettingLabel">{t('setEnforced')}</span>
-                <div className="pregameEnforcedRow">
-                  <Switch
-                    checked={Boolean(settings.enforced)}
-                    onCheckedChange={(on) => patchSettings({ enforced: on })}
-                    aria-label={t('setEnforced')}
-                  />
-                  <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
-                    {t('setEnforcedHint')}
-                  </Text>
-                </div>
-              </label>
-            )}
-            <label className="pregameSetting">
-              <span className="pregameSettingLabel">{t('setSkipDraw')}</span>
-              <Select
-                fullWidth
-                value={settings.skipFirstDraw == null ? 'default' : settings.skipFirstDraw ? 'on' : 'off'}
-                onValueChange={(value) =>
-                  patchSettings({ skipFirstDraw: value === 'default' ? null : value === 'on' })
-                }
-                options={[
-                  { value: 'default', label: t('setDefault') },
-                  { value: 'on', label: t('setOn') },
-                  { value: 'off', label: t('setOff') },
-                ]}
-              />
-            </label>
-            {/* Last on purpose: the full-width row would otherwise split the
-                compact fields into extra rows and grow the card. */}
-            {game === 'mtg' && (
-              <label className="pregameSetting pregameSettingWide">
-                <span className="pregameSettingLabel">{t('setEnforced')}</span>
-                <div className="pregameEnforcedRow">
-                  <Switch
-                    checked={Boolean(settings.enforced)}
-                    onCheckedChange={(on) => patchSettings({ enforced: on })}
-                    aria-label={t('setEnforced')}
-                  />
-                  <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
-                    {t('setEnforcedHint')}
-                  </Text>
-                </div>
-              </label>
-            )}
-          </div>
-        ) : (
-          <div className="pregameSettingsSummary">
-            {summary.map((item) => (
-              <Pill key={item.label} size="sm" variant="soft">
-                {item.label}: <strong>{item.value}</strong>
-              </Pill>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <div className="pregameControls">
+      {/* ---- the floor: which deck, and go ---- */}
+      <footer className="pregameLaunch" data-ready={canStart || undefined}>
         {me && !spectating ? (
           <div
-            className="pregameDeckSetup"
+            className="pregameLaunchSetup"
             data-has-art={Boolean(selectedArt) || undefined}
             style={selectedArt ? { ['--pregame-deck-art' as string]: `url("${selectedArt}")` } : undefined}
           >
-            <div className="pregameDeckSetupBody">
-              <label className="pregameDeckLabel" htmlFor="pregame-deck">{t('playPickDeck')}</label>
-              {deckLocked ? (
-                // A locked draft table plays what it drafted. The server refuses
-                // the swap either way; this just stops the picker from offering
-                // a choice that is not one.
-                <Text size={Size.Small} tone={TextTone.Muted}>
-                  {me.deckName ?? t('dfLockOn')}
-                </Text>
-              ) : gameDecks.length > 0 ? (
-                <Select
-                  id="pregame-deck"
-                  fullWidth
-                  value={me.deckId ?? ''}
-                  onValueChange={(deckId) => send({ type: 'room.deck.set', deckId })}
-                  options={gameDecks.map((deck) => ({ value: deck.id, label: deck.name }))}
-                  placeholder={t('playPickDeck')}
-                  aria-label={t('playPickDeck')}
-                />
-              ) : (
-                <Button variant="soft" onClick={() => { window.location.hash = '/decks'; }}>
-                  <Layers size={15} /> {t('preBuildDeck')}
-                </Button>
-              )}
-            </div>
+            <label className="pregameDeckLabel" htmlFor="pregame-deck">{t('playPickDeck')}</label>
+            {deckLocked ? (
+              // A locked draft table plays what it drafted. The server refuses
+              // the swap either way; this just stops the picker from offering
+              // a choice that is not one.
+              <Text size={Size.Small} tone={TextTone.Muted}>
+                {me.deckName ?? t('dfLockOn')}
+              </Text>
+            ) : gameDecks.length > 0 ? (
+              <Select
+                id="pregame-deck"
+                value={me.deckId ?? ''}
+                onValueChange={(deckId) => send({ type: 'room.deck.set', deckId })}
+                options={gameDecks.map((deck) => ({ value: deck.id, label: deck.name }))}
+                placeholder={t('playPickDeck')}
+                aria-label={t('playPickDeck')}
+              />
+            ) : (
+              <Button variant="soft" onClick={() => { window.location.hash = '/decks'; }}>
+                <Layers size={15} /> {t('preBuildDeck')}
+              </Button>
+            )}
             <Button
               className="pregameReadyButton"
               variant={me.ready ? 'soft' : 'solid'}
@@ -662,25 +615,18 @@ export function PregameLobby({
             </Button>
           </div>
         ) : (
-          <div className="pregameWatching">
-            <Eye size={17} /> {t('preWatchingSetup')}
-          </div>
+          // A spectator has nothing to set up, and the stage already says they
+          // are watching - a second copy of the line here is just noise.
+          null
         )}
 
-        <div className="pregameLaunch" data-ready={canStart || undefined}>
-          <span className="pregameLaunchStatus">
-            {canStart ? <Check size={16} /> : <Circle size={13} />}
-            {status}
-          </span>
+        <div className="pregameLaunchGo">
           {isHost && spectating && room.players.length >= 2 && room.players.every((p) => p.isBot) ? (
-            <Button disabled={!canStart} onClick={start}>
+            <Button size="lg" disabled={!canStart} onClick={start}>
               <Play size={16} /> {t('tblStart')}
             </Button>
           ) : isHost && !spectating ? (
-            <span className="pregameHostActions">
-              <Button disabled={!canStart} onClick={start}>
-                <Play size={16} /> {t('tblStart')}
-              </Button>
+            <>
               <Button
                 variant="ghost"
                 onClick={() => {
@@ -690,29 +636,20 @@ export function PregameLobby({
               >
                 <Eye size={15} /> {t('preWatchOnly')}
               </Button>
-            </span>
+              <Button size="lg" disabled={!canStart} onClick={start}>
+                <Play size={16} /> {t('tblStart')}
+              </Button>
+            </>
           ) : (
             <Text as="span" size={Size.Small} tone={TextTone.Muted}>
               <Crown size={13} /> {t('preHostStarts')}
             </Text>
           )}
         </div>
-      </div>
+      </footer>
 
-      {chatOpen ? (
-        <div className="chatAside" role="dialog" aria-label={t('chatTitle')}>
-          <LobbyChat onClose={() => setChatOpen(false)} />
-        </div>
-      ) : (
-        <IconButton
-          className="lobbyChatFab"
-          variant="solid"
-          aria-label={t('chatTitle')}
-          onClick={() => setChatOpen(true)}
-        >
-          <MessageSquare size={17} />
-        </IconButton>
-      )}
+      {/* Chat is not the lobby's to render: the table's floating nav owns the
+          button and the slide-over, in the lobby and mid-match alike. */}
 
       {room.spectators.length > 0 && (
         <div className="pregameSpectators">
@@ -724,5 +661,229 @@ export function PregameLobby({
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * A seat as a portrait on the versus stage: that player's playmat as the felt,
+ * their deck's cover card standing on it, and the three facts the stage is
+ * actually asking about - who, what deck, are they ready.
+ */
+function StageTile({ room, player, you }: { room: RoomState; player: TablePlayer; you?: boolean }) {
+  const t = useT();
+  return (
+    <article
+      className="pregameStageTile"
+      data-you={you || undefined}
+      data-ready={player.ready || undefined}
+      data-offline={player.online === false || undefined}
+    >
+      <div
+        className="pregameArt"
+        data-empty={!player.deckMeta?.cover || undefined}
+        style={
+          player.playmat
+            ? ({ ['--pc-seat-mat' as string]: playmatBackground(player.playmat) } as CSSProperties)
+            : undefined
+        }
+      >
+        {player.deckMeta?.cover && (
+          <GameCard
+            name={player.deckName || ''}
+            imageUrl={resolveCardImage(room.game, player.deckMeta.cover)}
+            width={130}
+            foil
+            tilt={you ? -6 : 6}
+          />
+        )}
+      </div>
+      <div className="pregameStageIdentity">
+        <Avatar name={player.username} size="md" />
+        <span className="pregameStageName">
+          <Text as="span" weight="semibold">{player.username}</Text>
+          <span className="pregameBadges">
+            {you && <span className="playerYou">{t('tblYou')}</span>}
+            {player.userId === room.hostUserId && (
+              <Pill size="sm" variant="soft" icon={<Crown size={11} />}>{t('tblHost')}</Pill>
+            )}
+            {player.isBot && (
+              <Pill size="sm" variant="soft" icon={<Bot size={11} />}>{t('preBotBadge')}</Pill>
+            )}
+          </span>
+        </span>
+      </div>
+      <span className="pregameDeck" data-empty={!player.deckName || undefined}>
+        <Layers size={14} /> {player.deckName || t('preNoDeck')}
+      </span>
+      <span className="pregameReady" data-ready={player.ready || undefined}>
+        {player.online === false ? (
+          <><WifiOff size={14} /> {t('preOffline')}</>
+        ) : player.ready ? (
+          <><Check size={14} /> {t('preReady')}</>
+        ) : (
+          <><Circle size={12} /> {t('preNotReady')}</>
+        )}
+      </span>
+    </article>
+  );
+}
+
+/**
+ * Everything worth knowing about one seat, behind that seat's chip: the
+ * player's all-time record and pace, and what their deck is made of. Aggregates
+ * only - the list itself is never public - and only once its owner has pushed
+ * them.
+ */
+function ScoutCard({
+  room,
+  player,
+  seat,
+  stats,
+  isHost,
+  spectating,
+}: {
+  room: RoomState;
+  player: TablePlayer;
+  seat: number;
+  stats?: UserStats;
+  isHost: boolean;
+  spectating: boolean;
+}) {
+  const t = useT();
+  const rank = rankFor(stats?.played ?? 0);
+  const rate = stats ? winRate(stats) : null;
+  return (
+    <div className="pregameScout">
+      <header className="pregameScoutHead">
+        <Avatar name={player.username} size="sm" />
+        <span className="pregameScoutWho">
+          <Text as="span" size={Size.Small} weight="semibold">{player.username}</Text>
+          <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+            {t('preSeat')} {seat + 1}
+          </Text>
+        </span>
+        <StatusDot size="sm" tone={player.online === false ? 'neutral' : 'success'} />
+        {player.isBot && isHost && !spectating && (
+          <Tooltip content={t('preRemoveBot')}>
+            <IconButton
+              size="sm"
+              variant="ghost"
+              aria-label={t('preRemoveBot')}
+              onClick={() => send({ type: 'bot.remove', seat: player.seat })}
+            >
+              <X size={14} />
+            </IconButton>
+          </Tooltip>
+        )}
+      </header>
+
+      {player.isBot ? (
+        <div className="pregameStats">
+          <span className="pregameStat pregameRank">
+            <Bot size={11} /> {t('preBotTagline')}
+          </span>
+        </div>
+      ) : (
+        <div className="pregameStats">
+          <span className="pregameStat pregameRank" title={`${t('hmLevel')} ${rank.level}`}>
+            <Trophy size={11} /> {rank.title} · {rank.level}
+          </span>
+          <span className="pregameStat pregameRecord">
+            {stats && stats.played > 0
+              ? `${stats.wins}W · ${stats.losses}L${rate != null ? ` · ${rate}%` : ''}`
+              : t('preNoGames')}
+          </span>
+          {stats != null && stats.endorsements > 0 && (
+            <span className="pregameStat pregameEndorse" title={t('preEndorsements')}>
+              <ThumbsUp size={11} /> {stats.endorsements}
+            </span>
+          )}
+          {/* How salty this seat's DECKS have played, averaged. Held back until
+              more than one opponent has rated something: in a duel a single
+              rating names its rater. Which deck earned it stays on that
+              player's own profile. */}
+          {stats != null && stats.saltCount > 1 && (
+            <span className="pregameStat pregameSalt" title={t('preSaltHint')}>
+              <SaltPile size={11} /> {stats.salt.toFixed(1)}
+            </span>
+          )}
+          {/* How long this player usually takes on a turn - the one number
+              everyone at a four-player table wants. */}
+          {stats != null && stats.avgTurnMs > 0 && (
+            <span className="pregameStat" title={t('preAvgTurn')}>
+              <Timer size={11} /> {fmtTurn(stats.avgTurnMs)}
+            </span>
+          )}
+        </div>
+      )}
+
+      <span className="pregameDeck" data-empty={!player.deckName || undefined}>
+        <Layers size={14} /> {player.deckName || t('preNoDeck')}
+      </span>
+
+      {player.deckMeta && (
+        <div className="pregameDeckMeta">
+          {player.deckMeta.colors && player.deckMeta.colors.length > 0 && (
+            <span className="pregameDeckPips" aria-hidden>
+              {player.deckMeta.colors.map((color) => (
+                <i key={color} data-color={color} />
+              ))}
+            </span>
+          )}
+          <span className="pregameStat" title={t('preDeckSize')}>
+            <Layers size={11} /> {player.deckMeta.size}
+          </span>
+          {player.deckMeta.avgMv != null && player.deckMeta.avgMv > 0 && (
+            <span className="pregameStat" title={t('preAvgMv')}>
+              <Gauge size={11} /> {player.deckMeta.avgMv}
+            </span>
+          )}
+          {player.deckMeta.creatures != null && player.deckMeta.creatures > 0 && (
+            <span className="pregameStat" title={t('preCreatures')}>
+              <Swords size={11} /> {player.deckMeta.creatures}
+            </span>
+          )}
+          {player.deckMeta.lands != null && player.deckMeta.lands > 0 && (
+            <span className="pregameStat" title={t('preLands')}>
+              <Mountain size={11} /> {player.deckMeta.lands}
+            </span>
+          )}
+          {player.deckMeta.spells != null && player.deckMeta.spells > 0 && (
+            <span className="pregameStat" title={t('preSpells')}>
+              <Sparkles size={11} /> {player.deckMeta.spells}
+            </span>
+          )}
+          {player.deckMeta.ram != null && (
+            <span className="pregameStat" title={t('preRam')}>
+              <Cpu size={11} /> {player.deckMeta.ram}
+            </span>
+          )}
+          {player.deckMeta.avgCost != null && player.deckMeta.avgCost > 0 && (
+            <span className="pregameStat" title={t('preAvgCost')}>
+              <Gauge size={11} /> {player.deckMeta.avgCost}
+            </span>
+          )}
+        </div>
+      )}
+
+      {player.deckMeta?.cover && (
+        <div
+          className="pregameArt pregameScoutArt"
+          style={
+            player.playmat
+              ? ({ ['--pc-seat-mat' as string]: playmatBackground(player.playmat) } as CSSProperties)
+              : undefined
+          }
+        >
+          <GameCard
+            name={player.deckName || ''}
+            imageUrl={resolveCardImage(room.game, player.deckMeta.cover)}
+            width={84}
+            foil
+            tilt={4}
+          />
+        </div>
+      )}
+    </div>
   );
 }
