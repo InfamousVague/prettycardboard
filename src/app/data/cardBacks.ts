@@ -19,6 +19,7 @@ export interface CardBack {
 
 export const CARD_BACKS: CardBack[] = [
   { id: 'classic', name: 'Classic Magic', theme: 'magic' },
+  { id: 'yugioh-classic', name: 'Classic Yu-Gi-Oh!', theme: 'yugioh' },
   { id: 'glacier-core', name: 'Glacier Core', theme: 'generic' },
   { id: 'prismatic-holo-burst', name: 'Prismatic Holo Burst', theme: 'generic' },
   { id: 'five-color-stained-glass', name: 'Five-Color Stained Glass', theme: 'magic' },
@@ -60,6 +61,7 @@ export const DEFAULT_CARD_BACK = 'classic';
 export const DEFAULT_CARD_BACK_BY_GAME: Record<string, string> = {
   mtg: DEFAULT_CARD_BACK,
   cyberpunk: 'cyberpunk-cardback-2',
+  yugioh: 'yugioh-classic',
 };
 
 /**

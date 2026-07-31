@@ -14,6 +14,7 @@
     "tauri:build": "tauri build",
     "sync:catalog": "node scripts/sync-catalog.mjs",
     "sync:packs": "node scripts/sync-packs.mjs",
+    "sync:yugioh": "node scripts/sync-yugioh.mjs",
     "redeploy": "node scripts/redeploy.mjs",
     "redeploy:web": "node scripts/redeploy.mjs web",
     "redeploy:api": "node scripts/redeploy.mjs api",

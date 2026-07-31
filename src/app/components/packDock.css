@@ -21,10 +21,11 @@
   --pd-showcase-h: 32vh;
   position: fixed;
   inset-inline-end: calc(var(--glacier-space-2) + env(safe-area-inset-right, 0px));
-  inset-block-end: calc(var(--glacier-space-2) + env(safe-area-inset-bottom, 0px));
+  inset-block-end: calc(var(--glacier-space-2) + var(--pd-corner-clear) + env(safe-area-inset-bottom, 0px));
   /* Under the command palette (110), card popup (120) and pickers (130): the
      dock is a pastime, so anything the player deliberately opened wins. */
   z-index: 95;
+  --pd-corner-clear: 0px;
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
@@ -32,6 +33,14 @@
      empty, and mid-drag the pill leads it by a transform - either way the
      strip of board underneath it must stay tappable. */
   pointer-events: none;
+}
+
+/* At a table the bottom-right corner belongs to the rail's nav pill (the
+   table paints inside its own z-0 stacking context, so it can never outrank
+   this fixed dock): the dock hops up one row instead, and a pastime never
+   buries the table's own chrome. */
+body:has(.tableSideNav) .pdDock {
+  --pd-corner-clear: calc(2.75rem + var(--glacier-space-3));
 }
 
 /* Only the two things you can actually touch take pointers back - not

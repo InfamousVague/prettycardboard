@@ -4,6 +4,7 @@ import { Heading, IconButton, Size, Text, TextTone } from '@glacier/react';
 import { X } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { cardImage } from '../data/cards.ts';
+import { resolveCardImage } from '../data/games.ts';
 import { fetchPrintings, type Printing } from '../data/scryfall.ts';
 import { CardRowSkeleton } from './Skeletons.tsx';
 import './pickers.css';
@@ -167,12 +168,15 @@ export function HeaderCardPicker({
   cards,
   current,
   deckName,
+  game,
   onSelect,
   onClose,
 }: {
   cards: HeaderCandidate[];
   current?: string | null;
   deckName: string;
+  /** The deck's game, for game-aware face resolution (defaults to Scryfall). */
+  game?: string;
   onSelect: (scryfallId: string) => void;
   onClose: () => void;
 }) {
@@ -194,7 +198,7 @@ export function HeaderCardPicker({
               onClose();
             }}
           >
-            <img src={cardImage(card.scryfallId)} alt={card.name} loading="lazy" draggable={false} />
+            <img src={resolveCardImage(game, card.scryfallId)} alt={card.name} loading="lazy" draggable={false} />
             <span className="pkCaption">
               <span className="pkSet">{card.name}</span>
             </span>

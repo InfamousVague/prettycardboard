@@ -51,3 +51,45 @@ export async function greet(name: string): Promise<string> {
   if (mod?.invoke) return (await mod.invoke('greet', { name })) as string;
   return `Hello, ${name || 'friend'}! (running without a Tauri backend)`;
 }
+
+/**
+ * Local play: the bundled game server as a sidecar (offline bot matches).
+ * All three no-op (null/false) outside Tauri or on builds without the sidecar.
+ */
+export async function localServerStart(): Promise<number | null> {
+  const mod = await importApi('core');
+  if (!mod?.invoke) return null;
+  try {
+    return (await mod.invoke('local_server_start')) as number;
+  } catch {
+    return null;
+  }
+}
+
+export async function localServerStop(): Promise<void> {
+  const mod = await importApi('core');
+  try {
+    await mod?.invoke?.('local_server_stop');
+  } catch {
+    /* already stopped */
+  }
+}
+
+export async function localServerPort(): Promise<number | null> {
+  const mod = await importApi('core');
+  if (!mod?.invoke) return null;
+  try {
+    return ((await mod.invoke('local_server_port')) as number | null) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether this install is in local-play mode (persisted across launches). */
+export function isLocalPlay(): boolean {
+  try {
+    return isTauri() && localStorage.getItem('pc.local') === '1';
+  } catch {
+    return false;
+  }
+}

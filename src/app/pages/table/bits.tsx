@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { AlertDialog, Button, IconButton, Input, Menu, MenuItem, MenuSub, NumberInput, Popover } from '@glacier/react';
-import { Ban, Crown, Plus, Skull, SlidersHorizontal, Swords, Trash2 } from '@glacier/icons';
+import { Ban, Crown, Layers, Plus, Skull, SlidersHorizontal, Swords, Trash2, Star, Flame, CircleHelp, Eye as EyeIcon, Shield as ShieldIcon } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
@@ -8,7 +8,8 @@ import { isFoilInst } from '../../data/foil.ts';
 import { zoneLabel } from '../../data/games.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
-import type { CardInst, CombatState, MatPos, MatZone, RoomState, TablePlayer, Zone } from '../../net/types.ts';
+import type { CardInst, CardMarkState, CombatState, MatPos, MatZone, RoomState, TablePlayer, Zone } from '../../net/types.ts';
+import { seatColor, seatColorDeep } from './seatColors.ts';
 import { selectCardScale, useTableUi } from './tableUi.ts';
 import { useLongPress, menuEventFrom } from '../../hooks/useLongPress.ts';
 import { useMobileLayout } from '../../hooks/useIsPhone.ts';
@@ -133,9 +134,10 @@ const COUNTER_PRESETS = ['+1/+1', '-1/-1', 'loyalty', 'defense', 'lore', 'charge
 function CounterManager({ card, onSet }: { card: CardInst; onSet: (counter: string, value: number) => void }) {
   const t = useT();
   const [name, setName] = useState('');
-  // Cyberpunk has none of Magic's counter vocabulary, so it gets the P/T pair
-  // and the free-text field only.
-  const mtg = useGame((state) => state.room?.game) !== 'cyberpunk';
+  // Only Magic has this counter vocabulary; Cyberpunk and Yu-Gi-Oh get the
+  // stat pair and the free-text field only.
+  const counterGame = useGame((state) => state.room?.game) ?? 'mtg';
+  const mtg = counterGame !== 'cyberpunk' && counterGame !== 'yugioh';
   const presets = mtg ? COUNTER_PRESETS : COUNTER_PRESETS.slice(0, 2);
   const entries = Object.entries(card.counters)
     .filter(([, count]) => count > 0)
@@ -464,18 +466,28 @@ export function ZonePiles({
   const cardScale = useTableUi(selectCardScale);
   const [confirmShuffle, setConfirmShuffle] = useState(false);
   const [libMenuOpen, setLibMenuOpen] = useState(false);
-  // Zone rail labels are game-driven: MTG keeps its localized strings, Cyberpunk
-  // relabels the physical slots (Deck / Trash / Eddies / Legend) from the registry.
+  // Zone rail labels are game-driven: MTG keeps its localized strings; the
+  // other games relabel the physical slots (Deck / Trash / Eddies / Legend for
+  // Cyberpunk, Deck / Graveyard / Banished / Extra Deck for Yu-Gi-Oh) from the
+  // registry.
   const gameId = useGame((state) => state.room?.game);
+  const enforced = useGame(
+    (state) => Boolean(state.room?.settings?.enforced) && (state.room?.game ?? 'mtg') === 'mtg',
+  );
   const mobile = useMobileLayout();
   const cyber = gameId === 'cyberpunk';
-  const libLabel = cyber ? zoneLabel(gameId, 'library') : t('tblLibrary');
-  const graveLabel = cyber ? zoneLabel(gameId, 'graveyard') : t('tblGraveyard');
-  const exileLabel = cyber ? zoneLabel(gameId, 'exile') : t('tblExile');
-  const cmdLabel = cyber ? zoneLabel(gameId, 'command') : t('tblCommand');
+  const yugioh = gameId === 'yugioh';
+  const nonMtg = cyber || yugioh;
+  const libLabel = nonMtg ? zoneLabel(gameId, 'library') : t('tblLibrary');
+  const graveLabel = nonMtg ? zoneLabel(gameId, 'graveyard') : t('tblGraveyard');
+  const exileLabel = nonMtg ? zoneLabel(gameId, 'exile') : t('tblExile');
+  const cmdLabel = nonMtg ? zoneLabel(gameId, 'command') : t('tblCommand');
 
   const graveTop = player.graveyard[player.graveyard.length - 1];
   const exileTop = player.exile[player.exile.length - 1];
+  // Yu-Gi-Oh: the command slot is the Extra Deck — a pile (top card + count +
+  // viewer), not the side-by-side commander row (15 cards would not fit).
+  const extraTop = player.command[player.command.length - 1];
   // My own piles (and a staged opponent's mirror) ride the card-scale
   // preference; compact everywhere else. On phones they match the battlefield's
   // card width exactly (the same 120 base MyBoard uses) so the deck reads as
@@ -495,6 +507,9 @@ export function ZonePiles({
   const exileLongPress = useLongPress((info) => {
     if (interactive && onMenu && exileTop) onMenu(menuEventFrom(info), exileTop.iid, 'exile');
   });
+  const extraLongPress = useLongPress((info) => {
+    if (interactive && onMenu && extraTop) onMenu(menuEventFrom(info), extraTop.iid, 'command');
+  });
   // Library: left-click draws; right-click (or hold on touch) opens the menu.
   const libLongPress = useLongPress(() => setLibMenuOpen(true));
 
@@ -511,9 +526,14 @@ export function ZonePiles({
   );
 
   // Free placement (mat editor): each pile rides a .pileSlot wrapper that both
-  // the Cyberpunk grid (data-zone slot names) and the custom layout target. The
+  // the game mat grids (data-zone slot names) and the custom layout target. The
   // wrapper - not the pile - is positioned, so pile internals stay untouched.
   const custom = !mat && (editing || Object.keys(layout ?? {}).length > 0);
+  // Per-game mat slot names, which the game's mat CSS keys its grid areas on
+  // (cyberpunk-mat.css / yugioh-mat.css).
+  const slotName: Record<MatZone, string> = cyber
+    ? { library: 'deck', graveyard: 'trash', exile: 'eddies', command: 'legends' }
+    : { library: 'deck', graveyard: 'grave', exile: 'banish', command: 'extra' };
   const slotProps = (zone: MatZone, slot: string) => {
     const pos = custom ? (layout?.[zone] ?? DEFAULT_MAT_LAYOUT[zone]) : undefined;
     return {
@@ -536,7 +556,7 @@ export function ZonePiles({
       data-editing={editing || undefined}
     >
       {/* library: mine opens the actions menu, theirs is a plain pile */}
-      <div {...slotProps('library', 'deck')}>
+      <div {...slotProps('library', slotName.library)}>
       {interactive ? (
         <>
           <Menu
@@ -613,8 +633,20 @@ export function ZonePiles({
                 </MenuItem>
               ))}
             </MenuSub>
+            {/* Enforced rooms: the server digs until a nonland with mana
+                value below N, stacks it free to cast, bottoms the rest. */}
+            {enforced && (
+              <MenuSub label={t('gpCascadeFor')}>
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                  <MenuItem key={n} onSelect={() => act({ kind: 'cascade', n })}>
+                    {n}
+                  </MenuItem>
+                ))}
+              </MenuSub>
+            )}
             <MenuItem onSelect={() => setConfirmShuffle(true)}>{t('tblShuffle')}</MenuItem>
-            <MenuItem onSelect={() => act({ kind: 'mulligan' })}>{t('tblMulligan')}</MenuItem>
+            {/* Yu-Gi-Oh has no mulligans — hide the action, not just the flow. */}
+            {!yugioh && <MenuItem onSelect={() => act({ kind: 'mulligan' })}>{t('tblMulligan')}</MenuItem>}
           </Menu>
           <AlertDialog
             open={confirmShuffle}
@@ -636,7 +668,7 @@ export function ZonePiles({
       </div>
 
       {/* graveyard */}
-      <div {...slotProps('graveyard', 'trash')}>
+      <div {...slotProps('graveyard', slotName.graveyard)}>
       <button
         type="button"
         className="pileBtn zonePile"
@@ -682,7 +714,7 @@ export function ZonePiles({
       </div>
 
       {/* exile */}
-      <div {...slotProps('exile', 'eddies')}>
+      <div {...slotProps('exile', slotName.exile)}>
       <button
         type="button"
         className="pileBtn zonePile"
@@ -726,8 +758,61 @@ export function ZonePiles({
       </button>
       </div>
 
-      {/* command zone */}
-      <div {...slotProps('command', 'legends')}>
+      {/* command zone — for Yu-Gi-Oh this is the Extra Deck: a stacked pile
+          with a viewer (like the graveyard), not the side-by-side row. */}
+      {yugioh ? (
+        <div {...slotProps('command', slotName.command)}>
+          <button
+            type="button"
+            className="pileBtn zonePile"
+            data-drop={dropHint === 'command' || undefined}
+            title={cmdLabel}
+            onClick={() => {
+              if (dragSuppressed?.()) return;
+              if (player.command.length > 0) setPileView({ userId: player.userId, zone: 'command' });
+            }}
+            onContextMenu={interactive && onMenu && extraTop ? (event) => onMenu(event, extraTop.iid, 'command') : undefined}
+            onPointerDown={
+              interactive && extraTop
+                ? (event) => {
+                    extraLongPress.onPointerDown(event);
+                    onDragOut?.(event, extraTop, 'command');
+                  }
+                : undefined
+            }
+            onPointerMove={interactive ? extraLongPress.onPointerMove : undefined}
+            onPointerUp={interactive ? extraLongPress.onPointerUp : undefined}
+            onClickCapture={extraLongPress.onClickCapture}
+            onPointerEnter={() => extraTop && !extraTop.faceDown && onHover?.(extraTop)}
+            onPointerLeave={(event) => {
+              onHover?.(null);
+              extraLongPress.onPointerLeave(event);
+            }}
+          >
+            <div ref={(el) => setFlightAnchor(`cmd:${player.userId}`, el)}>
+              {extraTop ? (
+                <GameCard
+                  name={extraTop.faceDown ? '' : extraTop.name}
+                  imageUrl={faceImage(extraTop)}
+                  faceDown={extraTop.faceDown}
+                  width={width}
+                  foil={!extraTop.faceDown}
+                  tilt={0}
+                />
+              ) : (
+                <div className="pileEmpty pileEmptyIcon" style={{ width }}>
+                  <Layers size={emptyIcon} />
+                </div>
+              )}
+            </div>
+            <span className="pileCaption">
+              <span className="pileLabel">{cmdLabel}</span>
+              <span className="pileCount">{player.command.length}</span>
+            </span>
+          </button>
+        </div>
+      ) : (
+      <div {...slotProps('command', slotName.command)}>
       <div className="zonePile zoneCommand" data-drop={dropHint === 'command' || undefined} title={cmdLabel} ref={(el) => setFlightAnchor(`cmd:${player.userId}`, el)}>
         {/* Partner commanders sit side by side in this row; the caption below
             matches the graveyard/exile piles. */}
@@ -767,6 +852,7 @@ export function ZonePiles({
         </span>
       </div>
       </div>
+      )}
     </div>
   );
 }
@@ -891,5 +977,58 @@ function CmdCard({
         onClick={onClick}
       />
     </div>
+  );
+}
+
+/** Every marker the table can park on a card, in menu order. Exported so the
+ *  board menus and the marker picker can never drift from what renders. */
+export const MARK_KINDS = [
+  'skull',
+  'sword',
+  'shield',
+  'star',
+  'eye',
+  'flame',
+  'ban',
+  'question',
+] as const;
+
+export type MarkKind = (typeof MARK_KINDS)[number];
+
+export function markIcon(kind: string, size = 13) {
+  switch (kind) {
+    case 'skull': return <Skull size={size} />;
+    case 'star': return <Star size={size} />;
+    case 'eye': return <EyeIcon size={size} />;
+    case 'shield': return <ShieldIcon size={size} />;
+    case 'sword': return <Swords size={size} />;
+    case 'flame': return <Flame size={size} />;
+    case 'ban': return <Ban size={size} />;
+    case 'question': return <CircleHelp size={size} />;
+    default: return null;
+  }
+}
+
+/**
+ * A shared table marker parked on a card. The puck wears the colour of the
+ * SEAT that placed it - the same palette as that player's cursor and arrows -
+ * so "who is watching this card" is answered without opening a tooltip, and
+ * its title names them for the case where colour is not enough.
+ */
+export function CardMark({ mark }: { mark: CardMarkState }) {
+  const icon = markIcon(mark.kind);
+  if (!icon) return null;
+  return (
+    <span
+      className="cardMark cardMarkFlag"
+      data-kind={mark.kind}
+      style={{
+        ['--pc-mark-color' as string]: seatColor(mark.seat),
+        ['--pc-mark-deep' as string]: seatColorDeep(mark.seat),
+      }}
+      title={mark.username}
+    >
+      {icon}
+    </span>
   );
 }

@@ -47,6 +47,12 @@ pub struct Card {
     /// just tracks which face is up so every seat sees the same side.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub transformed: bool,
+    /// The turn number this card arrived on the battlefield, for the rules
+    /// coach. Purely observational - nothing in the freeform pipeline reads it
+    /// to decide whether a move is allowed, and a card that predates the field
+    /// (or arrived some way that never set it) simply yields no advice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entered_turn: Option<u64>,
 }
 
 /// London-mulligan progress for one seat.
@@ -62,10 +68,10 @@ pub struct Mull {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct GameSettings {
-    /// Life every seat starts with; `None` = format default (commander 40,
-    /// standard 20). Ignored for Cyberpunk (Net/RAM start at 0).
+    /// Life every seat starts with; `None` = the game/format default (commander
+    /// 40, standard 20, Yu-Gi-Oh 8000). Ignored for Cyberpunk (Net/RAM start 0).
     pub starting_life: Option<i64>,
-    /// Opening-hand size; `None` = game default (MTG 7, Cyberpunk 6).
+    /// Opening-hand size; `None` = game default (MTG 7, Cyberpunk 6, Yu-Gi-Oh 5).
     pub starting_hand: Option<usize>,
     /// Free mulligans before hands start shrinking; `None` = the classic rule
     /// (1 in 3+ player commander, else 0).
@@ -84,6 +90,11 @@ pub struct GameSettings {
     /// Force the starting player's first-draw skip on/off; `None` = the classic
     /// rule (skipped in standard or any 2-player game).
     pub skip_first_draw: Option<bool>,
+    /// Arena-lite rules enforcement for this table (MTG only): real mana costs
+    /// with colors, land drops, summoning sickness, legal attacks/blocks with
+    /// core keywords, and previewed combat damage. Off = classic freeform.
+    /// See rules.rs; the coach stays advisory and independent of this.
+    pub enforced: bool,
 }
 
 impl Default for GameSettings {
@@ -97,6 +108,7 @@ impl Default for GameSettings {
             first_player: "auto".to_string(),
             first_seat: None,
             skip_first_draw: None,
+            enforced: false,
         }
     }
 }
@@ -206,6 +218,17 @@ pub struct Player {
     pub auto_untap: bool,
     #[serde(default)]
     pub auto_draw: bool,
+    /// Opt-in rules coach: when set, this player gets private advisory notes
+    /// about their own plays (see `coach.rs`). Off by default and never
+    /// enforcing - the table stays freeform whatever this says.
+    #[serde(default)]
+    pub coach: bool,
+    /// Lands this player has put onto the battlefield during the current turn,
+    /// reset as each turn begins. The match-long `cards_played` below cannot
+    /// answer "is this your second land?", which is the single most common
+    /// thing a new player gets wrong.
+    #[serde(default, skip_serializing)]
+    pub lands_this_turn: u64,
     /// Cyberpunk Gig dice (the six d4-d20 in the Fixer); empty for other games.
     #[serde(default)]
     pub gig_dice: Vec<GigDie>,
@@ -224,6 +247,17 @@ pub struct Player {
     /// Out of the game: turns skip them and one remaining player wins.
     #[serde(default)]
     pub conceded: bool,
+    /// Synthetic player driven by the server's bot scheduler (`bot.rs`). Bots
+    /// hold a seat like anyone else and act through the same pipeline.
+    #[serde(default)]
+    pub is_bot: bool,
+    /// "casual" | "aggro" | "defensive"; None for humans.
+    #[serde(default)]
+    pub bot_style: Option<String>,
+    /// "easy" | "normal" | "hard"; None (humans) or absent = normal. Scales
+    /// the bot's aggression, casting budget and blocking discipline.
+    #[serde(default)]
+    pub bot_difficulty: Option<String>,
     /// Turns this player has begun (starting player's first turn included).
     #[serde(default)]
     pub turns_taken: u64,
@@ -302,6 +336,55 @@ pub struct Block {
 pub struct Combat {
     pub attackers: Vec<Attacker>,
     pub blocks: Vec<Block>,
+    /// Enforced rooms: attackers are final; blocks may now be declared.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub locked: bool,
+    /// Enforced rooms: blocks are final; `preview` holds the computed outcome
+    /// awaiting the active player's combat.resolve.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub blocks_ready: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<CombatPreview>,
+}
+
+/// The engine's computed outcome of an enforced combat, shown to the table
+/// before combat.resolve applies it. Everything the client needs to render
+/// "who dies, who takes what" without doing its own math.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CombatPreview {
+    pub rows: Vec<PreviewRow>,
+    /// Life change per seat (negative = damage taken), lifelink included.
+    pub life: BTreeMap<usize, i64>,
+    /// Commander damage dealt: (defending seat, commander iid, amount).
+    #[serde(default)]
+    pub commander: Vec<(usize, String, i64)>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewRow {
+    pub attacker_iid: String,
+    pub attacker_name: String,
+    /// Seat this attacker is hitting (resolved, never None).
+    pub defender_seat: usize,
+    /// Damage getting through to the defending player (0 when fully blocked).
+    pub player_damage: i64,
+    pub attacker_dies: bool,
+    /// Blockers that die to this attacker.
+    pub dead_blockers: Vec<String>,
+    pub dead_blocker_names: Vec<String>,
+}
+
+/// The most recent combat that had attackers when it was cleared, stamped with
+/// the room seq at clear time. Server-side bookkeeping only (never on the
+/// wire): bots settle the damage a combat dealt them from this record, so an
+/// attack that begins and ends between two scheduler ticks is never missed,
+/// and `seq` makes the settlement idempotent per combat.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct EndedCombat {
+    pub seq: u64,
+    pub combat: Combat,
 }
 
 fn is_zero(v: &i64) -> bool {
@@ -334,6 +417,42 @@ pub struct PendingCmd {
     pub x: Option<f64>,
     pub y: Option<f64>,
     pub index: Option<i64>,
+    pub deadline: i64, // unix ms
+}
+
+/// A table marker parked on a card: the shared "watch this one" gesture, kept
+/// in room state rather than in each client's head so a reconnect, a late
+/// joiner, and every spectator all see the same annotated board. The kind is
+/// the client's vocabulary (skull/star/eye/...); the server only bounds it.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CardMark {
+    pub kind: String,
+    /// Who placed it (user_id) and from which seat - the client colors the
+    /// puck by seat, the same palette the cursors and arrows use.
+    pub by: String,
+    pub seat: usize,
+    pub username: String,
+    pub ts: i64,
+}
+
+/// A triggered ability that fired and awaits its controller's answer
+/// (enforced rooms, rules roadmap pass A). Fully public - the trigger is
+/// printed card text and its source is visible. `auto` = the engine can apply
+/// the parsed effects itself; otherwise the prompt is an acknowledgment and
+/// the controller performs the text by hand. Lapsed prompts dismiss.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingTrigger {
+    pub id: String,
+    pub owner: String, // user_id of the controller
+    pub seat: usize,
+    pub source_iid: String,
+    pub source_name: String,
+    pub when: crate::oracle::TriggerWhen,
+    pub effects: Vec<crate::oracle::TriggerEffect>,
+    pub text: String,
+    pub auto: bool,
     pub deadline: i64, // unix ms
 }
 
@@ -385,7 +504,7 @@ pub fn result_player(p: &Player) -> MatchResultPlayer {
         user_id: p.user_id.clone(),
         username: p.username.clone(),
         seat: p.seat,
-        is_bot: false,
+        is_bot: p.is_bot,
         conceded: p.conceded,
         turns_taken: p.turns_taken,
         avg_turn_ms: if p.turns_taken > 0 {
@@ -864,7 +983,7 @@ pub struct Room {
     /// whether command-zone machinery is active.
     #[serde(default = "default_format")]
     pub format: String,
-    /// Which card game this room plays ("mtg" | "cyberpunk"). The freeform
+    /// Which card game this room plays ("mtg" | "cyberpunk" | "yugioh"). The freeform
     /// engine is game-agnostic; the client reads this to relabel zones, pick
     /// vitals, and resolve card art. Default "mtg" so pre-multigame rooms
     /// deserialize unchanged.
@@ -890,10 +1009,33 @@ pub struct Room {
     pub stack: Vec<StackEntry>,
     #[serde(default)]
     pub combat: Option<Combat>,
+    /// The last cleared combat that had attackers (see `EndedCombat`). Bots
+    /// read it to settle incoming damage; humans settle their own by hand.
+    #[serde(default)]
+    pub last_combat: Option<EndedCombat>,
+    /// Enforced rooms: seats that passed priority on the current stack. Cleared
+    /// whenever the stack changes; the top spell resolves once every other
+    /// live seat has passed (or the response window times out).
+    #[serde(default)]
+    pub stack_passed: Vec<usize>,
+    /// When the stack last changed (unix ms) - the response-timeout anchor.
+    #[serde(default)]
+    pub stack_changed_ms: i64,
     #[serde(default)]
     pub markers: Markers,
+    /// Table markers by card iid (see `CardMark`). Fully public.
+    #[serde(default)]
+    pub marks: BTreeMap<String, CardMark>,
     #[serde(default)]
     pub pending_cmd: Vec<PendingCmd>,
+    /// Fired triggered abilities awaiting their controller (enforced rooms).
+    #[serde(default)]
+    pub pending_triggers: Vec<PendingTrigger>,
+    /// (turn number, seat) whose end-step triggers already fired. Guards
+    /// against firing twice when a player visits the end phase and then
+    /// passes the turn.
+    #[serde(default)]
+    pub end_fired: Option<(u64, usize)>,
     /// When the current active player's turn began (unix ms; 0 = no clock).
     #[serde(default)]
     pub turn_started_ms: i64,
@@ -1105,6 +1247,9 @@ impl Room {
         for pc in restored.pending_cmd.iter_mut() {
             pc.deadline = now + crate::game::CMD_CHOICE_MS;
         }
+        for pt in restored.pending_triggers.iter_mut() {
+            pt.deadline = now + crate::game::TRIGGER_CHOICE_MS;
+        }
         *self = restored;
         true
     }
@@ -1203,6 +1348,11 @@ impl Room {
                 let own = viewer == Some(p.user_id.as_str());
                 // Cyberpunk Legends stay hidden even from their owner until Called.
                 let hide_legends = self.game == "cyberpunk";
+                // The Yu-Gi-Oh Extra Deck (the command slot) is hidden info to
+                // everyone but its owner: opponents see a pile of backs, the
+                // owner browses faces. Masked at view time — the cards stay
+                // face-up in room state, so the owner plays them normally.
+                let hide_extra = self.game == "yugioh" && !own;
                 let zone = |cards: &Vec<Card>| {
                     Value::Array(cards.iter().map(|c| card_view(c, own, false)).collect())
                 };
@@ -1230,7 +1380,18 @@ impl Room {
                     "graveyard": zone(&p.graveyard),
                     "exile": zone(&p.exile),
                     "command": Value::Array(
-                        p.command.iter().map(|c| card_view(c, own, hide_legends)).collect(),
+                        p.command
+                            .iter()
+                            .map(|c| {
+                                if hide_extra {
+                                    let mut masked = c.clone();
+                                    masked.face_down = true;
+                                    card_view(&masked, false, false)
+                                } else {
+                                    card_view(c, own, hide_legends)
+                                }
+                            })
+                            .collect(),
                     ),
                     "online": p.online,
                     "handRevealed": p.hand_revealed,
@@ -1241,6 +1402,8 @@ impl Room {
                     "lastRoll": p.last_roll,
                     "conceded": p.conceded,
                     "deckName": p.deck_name,
+                    "isBot": p.is_bot,
+                    "landsThisTurn": p.lands_this_turn,
                 });
                 // The viewer's own deck id, so the client can look up which
                 // tokens the deck can produce (never leaked for other seats).
@@ -1304,7 +1467,10 @@ impl Room {
             "startingSeat": self.starting_seat,
             "stack": stack,
             "combat": self.combat,
+            "stackPassed": self.stack_passed,
+            "pendingTriggers": self.pending_triggers,
             "markers": self.markers,
+            "marks": self.marks,
             "matchResult": self.match_result,
             "draft": self.draft_view(viewer),
             "players": players,
@@ -1367,6 +1533,7 @@ pub fn build_zones(cards: &[DeckCard], flag_commanders: bool, game: &str) -> (Ve
                 is_commander: is_cmd && flag_commanders,
                 revealed: false,
                 transformed: false,
+                entered_turn: None,
             };
             if is_cmd {
                 command.push(card);
@@ -1509,14 +1676,19 @@ pub fn delete_room(app: &App, room_id: &str) {
 const QUICK_TTL_MS: i64 = 24 * 60 * 60 * 1000; // all seats offline this long
 const PERSISTENT_TTL_MS: i64 = 30 * 24 * 60 * 60 * 1000; // no action this long
 
-/// Complete every pending commander choice whose 30s window has lapsed: the
-/// original move is carried out as if the owner declined the command zone.
+/// Complete every pending commander choice whose 30s window has lapsed (the
+/// original move is carried out as if the owner declined the command zone),
+/// and dismiss trigger prompts nobody answered - the card's text stays
+/// performable by hand, so a lapse never eats an effect silently.
 pub fn expire_pending(app: &App) {
     let now = crate::now_ms();
     let due_rooms: Vec<String> = app
         .rooms
         .iter()
-        .filter(|r| r.pending_cmd.iter().any(|p| p.deadline <= now))
+        .filter(|r| {
+            r.pending_cmd.iter().any(|p| p.deadline <= now)
+                || r.pending_triggers.iter().any(|p| p.deadline <= now)
+        })
         .map(|r| r.id.clone())
         .collect();
     for id in due_rooms {
@@ -1527,7 +1699,12 @@ pub fn expire_pending(app: &App) {
             .into_iter()
             .partition(|p| p.deadline <= now);
         room.pending_cmd = keep;
-        if due.is_empty() {
+        let (lapsed, alive): (Vec<PendingTrigger>, Vec<PendingTrigger>) =
+            std::mem::take(&mut room.pending_triggers)
+                .into_iter()
+                .partition(|p| p.deadline <= now);
+        room.pending_triggers = alive;
+        if due.is_empty() && lapsed.is_empty() {
             continue;
         }
         for pending in due {
@@ -1535,6 +1712,15 @@ pub fn expire_pending(app: &App) {
             room.seq += 1;
             let seq = room.seq;
             ws::room_log(app, &room, seq, &log);
+        }
+        for trigger in lapsed {
+            room.seq += 1;
+            let seq = room.seq;
+            let line = format!(
+                "{}'s trigger lapses unanswered: {}",
+                trigger.source_name, trigger.text
+            );
+            ws::room_log(app, &room, seq, &line);
         }
         touch(app, &mut room);
         ws::room_send_states(app, &room);
@@ -1558,7 +1744,10 @@ pub async fn sweeper(app: Arc<App>) {
             let expired = if room.persistent {
                 now - room.updated_at > PERSISTENT_TTL_MS
             } else {
-                room.players.iter().all(|p| !p.online) && now - room.updated_at > QUICK_TTL_MS
+                // Bots do not count as presence: a table kept "alive" only by
+                // its bots still expires once every human is gone.
+                room.players.iter().all(|p| p.is_bot || !p.online)
+                    && now - room.updated_at > QUICK_TTL_MS
             };
             if expired {
                 dead.push(room.id.clone());

@@ -14,6 +14,7 @@ import { ArrowDownToLine, ArrowUpToLine, Dices, Hand as HandIcon, Shuffle, Spark
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
+import { zoneLabel } from '../../data/games.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import { focusFromPointer, handSlinky, paintSlinky, restFocus, slinkyOffsets } from '../../components/slinky.ts';
@@ -334,16 +335,20 @@ export function PileViewer({ room, me, canAct }: { room: RoomState; me: TablePla
 
   if (!pileView || !player) return null;
 
-  const zoneKey = pileView.zone === 'graveyard' ? 'tblGraveyard' : 'tblExile';
+  const zoneKey =
+    pileView.zone === 'graveyard' ? 'tblGraveyard' : pileView.zone === 'command' ? 'tblCommand' : 'tblExile';
+  const nonMtg = !!room.game && room.game !== 'mtg';
+  const zoneTitle = nonMtg ? zoneLabel(room.game, pileView.zone) : t(zoneKey);
   const otherZone: Zone = pileView.zone === 'graveyard' ? 'exile' : 'graveyard';
   const otherKey = ZONE_KEYS[otherZone]!;
+  const otherLabel = nonMtg ? zoneLabel(room.game, otherZone) : t(otherKey);
 
   return (
     <Modal
       open
       onClose={() => setPileView(null)}
       size="xl"
-      title={`${player.username} · ${t(zoneKey)}`}
+      title={`${player.username} · ${zoneTitle}`}
       description={`${cards.length}`}
     >
       <ScrollArea className="pileScroll pcMobileFull">
@@ -351,11 +356,16 @@ export function PileViewer({ room, me, canAct }: { room: RoomState; me: TablePla
           {[...cards].reverse().map((card) => (
             <div key={card.iid} className="pileCard">
               <GameCard
-                name={card.name}
+                name={card.faceDown ? '' : card.name}
                 imageUrl={card.imageUrl || cardImage(card.scryfallId)}
+                faceDown={card.faceDown}
                 width={124}
                 tilt={0}
-                onClick={() => popup.open({ scryfallId: card.scryfallId, name: card.name, imageUrl: card.imageUrl })}
+                onClick={
+                  card.faceDown
+                    ? undefined
+                    : () => popup.open({ scryfallId: card.scryfallId, name: card.name, imageUrl: card.imageUrl })
+                }
               />
               {mine && (
                 <div className="pileActions">
@@ -374,7 +384,7 @@ export function PileViewer({ room, me, canAct }: { room: RoomState; me: TablePla
                     <Sparkles size={12} />
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => act({ kind: 'card.move', iid: card.iid, to: otherZone })}>
-                    {t(otherKey)}
+                    {otherLabel}
                   </Button>
                   <Button
                     size="sm"
@@ -613,6 +623,75 @@ export function CmdChoiceDialog({ me }: { me: TablePlayer | undefined }) {
         </div>
       )}
     </AlertDialog>
+  );
+}
+
+/* ------------------------------------------------------------------------ */
+/* Trigger prompts (enforced rooms, rules pass A)                            */
+/* ------------------------------------------------------------------------ */
+
+/** My fired triggered abilities: a small queue of prompts, newest last. An
+ * `auto` trigger offers Apply (the server performs the parsed effects) or
+ * Skip; a manual one is an acknowledgment - its text is performed by hand. */
+export function TriggerPrompts({ room, me }: { room: RoomState; me: TablePlayer | undefined }) {
+  const t = useT();
+  const act = useGame((state) => state.act);
+  const mine = useMemo(
+    () => (room.pendingTriggers ?? []).filter((p) => p.owner === me?.userId),
+    [room.pendingTriggers, me?.userId],
+  );
+  if (!me || mine.length === 0) return null;
+  return (
+    <div className="triggerPrompts">
+      <AnimatePresence>
+        {mine.map((p) => (
+          <motion.div
+            key={p.id}
+            className="triggerPrompt"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+          >
+            <div className="triggerPromptText">
+              <Text size={Size.Small} weight="semibold">
+                {p.sourceName}
+              </Text>
+              <Text size={Size.XSmall} tone={TextTone.Subtle}>
+                {p.text}
+              </Text>
+            </div>
+            <div className="triggerPromptActions">
+              {p.auto ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant="soft"
+                    onClick={() => act({ kind: 'trigger.answer', id: p.id, apply: true })}
+                  >
+                    {t('gpTriggerApply')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => act({ kind: 'trigger.answer', id: p.id, apply: false })}
+                  >
+                    {t('gpTriggerSkip')}
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="soft"
+                  onClick={() => act({ kind: 'trigger.answer', id: p.id, apply: true })}
+                >
+                  {t('gpTriggerOk')}
+                </Button>
+              )}
+            </div>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
   );
 }
 

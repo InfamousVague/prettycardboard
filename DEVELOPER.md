@@ -67,6 +67,19 @@ to broadcast. Nothing is true until the server says so and echoes it back. Read
 | `cargo build` (in `server/`) | Compile-check the backend. |
 | `node playtest/run-all.js` | Run the scripted protocol tests (see below). |
 | `npm run redeploy` | Build + ship web and API to production. |
+| `node scripts/stage-server-sidecar.mjs` | Build the game server and stage it as the desktop sidecar (required before any `tauri build`/`tauri dev`; `--universal` for macOS release bundles). |
+
+### Local play (desktop)
+
+The desktop app bundles `prettycardboard-server` as a Tauri sidecar
+(`bundle.externalBin`). Settings → Account → **Local play** spawns it on a
+loopback port (scanned from 8790) with its SQLite data in the app-data dir,
+switches the client's server origin to it, and scopes the signed-in identity
+to a separate `pc.identity.local` key so the online account is untouched. The
+same binary that runs production runs locally, so AI bot matches work fully
+offline. The sidecar is killed when the app window closes or the toggle turns
+off. `release:mac` and the desktop CI workflow stage the binary automatically;
+for a dev build run the staging script once by hand.
 
 ## Testing
 
@@ -78,6 +91,11 @@ cd playtest
 node run-all.js          # seed + commander-pod + standard-duel + chaos-monkey + locked-combat
 npm run aimatch          # a full autonomous AI-vs-AI match (dev feature)
 ```
+
+For an eyeball test of the bots, Settings → General → Developer has
+**Start a bot 1v1**: it spins up a two-bot exhibition table and drops you in
+as a spectator. Bots pace themselves — each turn starts with a short
+"thinking" beat (≥500ms) so the match is watchable.
 
 Against a scratch server on another port: `PC_BASE=http://127.0.0.1:8798 node run-all.js`.
 Details and how to write a scenario: [docs/testing.md](./docs/testing.md).

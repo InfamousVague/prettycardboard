@@ -39,10 +39,9 @@ function DeckLibrary() {
   const [newDeckOpen, setNewDeckOpen] = useState(false);
   // Right-click a deck to inspect its summary (stats/colors/bracket, not cards).
   const [inspecting, setInspecting] = useState<DeckSummary | null>(null);
-  // Cyberpunk is a WIP game — hide its decks entirely unless the dev toggle is on.
+  // WIP games' decks are hidden entirely unless the dev toggle is on.
   const games = useVisibleGames();
-  const cyberVisible = games.some((g) => g.id === 'cyberpunk');
-  const decks = cyberVisible ? allDecks : allDecks.filter((deck) => (deck.game || 'mtg') !== 'cyberpunk');
+  const decks = allDecks.filter((deck) => games.some((g) => g.id === (deck.game || 'mtg')));
   // Which game's decks to show. 'all' spans every game.
   const [gameFilter, setGameFilter] = useState('all');
   const shown = gameFilter === 'all' ? decks : decks.filter((deck) => (deck.game || 'mtg') === gameFilter);

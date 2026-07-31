@@ -97,6 +97,87 @@
   white-space: pre-wrap;
 }
 
+/* ---------- pulled cards ----------
+   A pull is an event, not a sentence, so it gets a card-shaped row: art crop,
+   name, and where it came from. The rarity drives the edge colour, which is the
+   whole point of announcing it - a mythic should catch the eye across the room
+   while a rare stays quiet. */
+.lobbyChatPull {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-2);
+  border-radius: var(--glacier-radius-lg);
+  background: var(--glacier-surface-raised);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  border-inline-start: 3px solid var(--pc-rarity, var(--glacier-glass-border));
+  min-width: 0;
+}
+
+/* Same rarity ramp the pack dock's odds table uses, so a mythic reads the same
+   colour wherever the app mentions one. */
+.lobbyChatMsg[data-pull='mythic'] .lobbyChatPull { --pc-rarity: oklch(0.72 0.19 48); }
+.lobbyChatMsg[data-pull='rare'] .lobbyChatPull { --pc-rarity: oklch(0.78 0.13 92); }
+.lobbyChatMsg[data-pull='uncommon'] .lobbyChatPull { --pc-rarity: oklch(0.75 0.08 220); }
+.lobbyChatMsg[data-pull='common'] .lobbyChatPull { --pc-rarity: oklch(0.62 0.01 260); }
+
+.lobbyChatPullArt {
+  inline-size: 3.25rem;
+  block-size: 2.4rem;
+  object-fit: cover;
+  border-radius: var(--glacier-radius-md);
+  flex: none;
+  /* Art crops arrive at their own pace; reserve the space so the transcript
+     never jumps under the reader while one loads. */
+  background: var(--glacier-glass-border);
+}
+
+.lobbyChatPullBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lobbyChatPullName {
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-text);
+  overflow-wrap: anywhere;
+}
+
+.lobbyChatPullMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+
+/* ---------- table variant: fills the chat aside ----------
+   In the lobby the chat is one card in a column and caps its own height; at
+   the table it owns a whole aside panel (or the phone sheet body), so it
+   stretches and lets the scroll area absorb the leftover height. */
+.lobbyChat[data-variant='table'] {
+  block-size: 100%;
+  min-block-size: 0;
+}
+
+.lobbyChat[data-variant='table'] .lobbyChatScroll {
+  flex: 1;
+  min-block-size: 0;
+}
+
+.lobbyChatClose {
+  margin-inline-start: auto;
+}
+
+.lobbyChatBotMark {
+  color: var(--glacier-text-muted);
+  vertical-align: -1px;
+  margin-inline-start: 2px;
+}
+
 .lobbyChatForm {
   display: flex;
   gap: var(--glacier-space-2);
@@ -145,8 +226,8 @@
   position: relative;
   display: grid;
   place-items: center;
-  min-height: 8.5rem;
-  padding: var(--glacier-space-3) 0;
+  min-height: 5.5rem;
+  padding: var(--glacier-space-2) 0;
   background-image: var(--pc-seat-mat, none);
   background-size: cover;
   background-position: center;

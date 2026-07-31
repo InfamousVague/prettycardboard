@@ -14,6 +14,7 @@ import { useT } from '../i18n.ts';
 import { cardImage } from '../data/cards.ts';
 import { isFoil } from '../data/foil.ts';
 import { cyberpunkCard, cyberpunkImage } from '../data/cyberpunk.ts';
+import { isYugiohId, yugiohImage } from '../data/yugioh.ts';
 import { useFaces } from '../data/faces.ts';
 import { GameCard } from './GameCard.tsx';
 import { CardDetailsBody } from './cardDetails.tsx';
@@ -129,21 +130,27 @@ function Popup({ card, onClose }: { card: PopupCard; onClose: () => void }) {
   const panePad = 24;
   const panX = Math.max(0, (vw / 3 - cardWidth) / 2 + panePad);
   const panY = Math.max(0, (vh - cardWidth * CARD_RATIO) / 2 + panePad);
-  // A Cyberpunk card is recognized by its id living in the bundled catalog; its
-  // full art ships with the app, so we never hit Scryfall for it.
+  // A Cyberpunk card is recognized by its id living in the bundled catalog (its
+  // full art ships with the app); a Yu-Gi-Oh card by its all-digits passcode.
+  // Neither ever hits Scryfall.
   const cyber = card.scryfallId ? cyberpunkCard(card.scryfallId) : undefined;
+  const ygo = isYugiohId(card.scryfallId);
   // Two-faced cards get a face toggle right here. This is where people come to
   // look at a card, so it is where "let me see the other side" belongs - it
   // works from the command zone, the hand and every pile viewer, none of which
   // have a board context menu to hang a Transform action off.
-  const faces = useFaces(cyber ? undefined : card.scryfallId);
+  const faces = useFaces(cyber || ygo ? undefined : card.scryfallId);
   const [showBack, setShowBack] = useState(false);
   useEffect(() => {
     setShowBack(false);
   }, [card.scryfallId]);
   const flippable = !!faces?.dfc && !!faces.backImage;
   const faceImg = flippable ? (showBack ? faces.backImage : faces.frontImage) : undefined;
-  const image = cyber ? cyberpunkImage(cyber.id) : faceImg || card.imageUrl || cardImage(card.scryfallId);
+  const image = cyber
+    ? cyberpunkImage(cyber.id)
+    : ygo
+      ? card.imageUrl || yugiohImage(card.scryfallId)
+      : faceImg || card.imageUrl || cardImage(card.scryfallId);
   const faceName = (flippable && (showBack ? faces.backName : faces.frontName)) || card.name;
 
   return (

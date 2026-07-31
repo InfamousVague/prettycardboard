@@ -4,10 +4,12 @@ import { createPortal } from 'react-dom';
 import {
   AlertDialog,
   Button,
+  FilterChip,
   Heading,
   IconButton,
   Pill,
   ProgressBar,
+  SearchField,
   Select,
   Size,
   Text,
@@ -57,10 +59,13 @@ import { CARD_BACKS } from '../../data/cardBacks.ts';
 import { useLongPress } from '../../hooks/useLongPress.ts';
 import { CardSearch } from './CardSearch.tsx';
 import { CyberpunkCardSearch } from './CyberpunkCardSearch.tsx';
+import { YugiohCardSearch } from './YugiohCardSearch.tsx';
 import type { CyberpunkCard } from '../../data/cyberpunk.ts';
+import { isExtraDeckCard, loadYugiohCatalog, type YugiohCard } from '../../data/yugioh.ts';
 import { ManaCurveChart } from './ManaCurveChart.tsx';
 import { ColorPips, ManaPips, TYPE_LABEL, TYPE_ORDER, typeBucket, type TypeBucket } from './shared.tsx';
 import { cyberColorHex, cyberDeckStats, cyberTypeIcon } from './cyberDeck.tsx';
+import { YUGIOH_KIND_ICON, yugiohDeckStats, yugiohFilterKind, type YugiohGroupKind } from './yugiohDeck.tsx';
 
 /**
  * The deck editor: decklist on the start side, Scryfall search on the end
@@ -143,7 +148,12 @@ export function DeckEditor({ deckId }: { deckId: string }) {
         // StrictMode's second pass) may have filled the registry between this
         // render and now, and gating on a fresh-learn count leaves the list
         // stuck on the pre-hydration grouping - every card in "other".
-        void hydrateCardMeta(loaded.cards.map((card) => card.scryfallId)).finally(() => {
+        // Yu-Gi-Oh hydrates from its own catalog instead of Scryfall.
+        const hydrate =
+          loaded.game === 'yugioh'
+            ? loadYugiohCatalog().catch(() => {})
+            : hydrateCardMeta(loaded.cards.map((card) => card.scryfallId));
+        void hydrate.finally(() => {
           if (!cancelled) setMetaVersion((version) => version + 1);
         });
       })
@@ -268,6 +278,26 @@ export function DeckEditor({ deckId }: { deckId: string }) {
       return [...cards, { scryfallId: card.id, name: card.displayName, quantity: 1, board: 'main' }];
     });
 
+  // Yu-Gi-Oh add: Extra Deck monsters (Fusion/Synchro/Xyz/Link) stack on the
+  // Extra board (the 'commander' anchor slot); everything else in the main.
+  const addYugiohCard = (card: YugiohCard) =>
+    editCards((cards) => {
+      const board = isExtraDeckCard(card) ? ('commander' as const) : ('main' as const);
+      const existing = cards.find((c) => c.scryfallId === card.id && c.board === board);
+      if (existing) return cards.map((c) => (c === existing ? { ...c, quantity: c.quantity + 1 } : c));
+      return [...cards, { scryfallId: card.id, name: card.name, quantity: 1, board }];
+    });
+
+  // Move a whole entry between the main deck and the side deck (Yu-Gi-Oh's
+  // Side Deck menu action), merging into an existing entry on the far side.
+  const moveBoard = (target: DeckCard, board: DeckCard['board']) =>
+    editCards((cards) => {
+      const rest = cards.filter((c) => c !== target);
+      const existing = rest.find((c) => c.scryfallId === target.scryfallId && c.board === board);
+      if (existing) return rest.map((c) => (c === existing ? { ...c, quantity: c.quantity + target.quantity } : c));
+      return [...rest, { ...target, board }];
+    });
+
   const changeQuantity = (target: DeckCard, delta: number) =>
     editCards((cards) =>
       cards
@@ -291,8 +321,16 @@ export function DeckEditor({ deckId }: { deckId: string }) {
     }));
   };
 
+  const popup = useCardPopup();
+
   const openArtPicker = (card: DeckCard) => {
     setPreview(null);
+    // Alternate printings are a Scryfall concept; for the other games the same
+    // gesture opens the card lightbox instead of a doomed printings fetch.
+    if ((deck?.game ?? 'mtg') !== 'mtg') {
+      popup.open({ scryfallId: card.scryfallId, name: card.name });
+      return;
+    }
     setArtFor(card);
   };
 
@@ -340,6 +378,66 @@ export function DeckEditor({ deckId }: { deckId: string }) {
     setPreview({ scryfallId: card.scryfallId, name: card.name, x, y });
   };
   const hidePreview = () => setPreview(null);
+
+  // --- filtering the deck you are looking at -------------------------------
+  // Distinct from the search bar above, which searches the whole catalogue to
+  // find cards to ADD. This narrows what is already here, so a 300-card
+  // commander deck can be inspected a slice at a time ("show me the lands").
+  const [filterText, setFilterText] = useState('');
+  const [filterTypes, setFilterTypes] = useState<TypeBucket[]>([]);
+  // Yu-Gi-Oh decks filter by their own categories (Monster/Spell/Trap/Extra).
+  const [filterKinds, setFilterKinds] = useState<(YugiohGroupKind | 'extra')[]>([]);
+  const filtering = filterText.trim() !== '' || filterTypes.length > 0 || filterKinds.length > 0;
+
+  const toggleFilterType = (bucket: TypeBucket, on: boolean) =>
+    setFilterTypes((prev) => (on ? [...prev, bucket] : prev.filter((b) => b !== bucket)));
+  const toggleFilterKind = (kind: YugiohGroupKind | 'extra', on: boolean) =>
+    setFilterKinds((prev) => (on ? [...prev, kind] : prev.filter((k) => k !== kind)));
+  const clearFilters = () => {
+    setFilterText('');
+    setFilterTypes([]);
+    setFilterKinds([]);
+  };
+
+  /**
+   * Text matches on the printed name OR the type line, so "goblin" finds the
+   * tribe and "artifact creature" finds the overlap - typing a type is the
+   * obvious move even with the chips sitting right there. Chips are OR'd
+   * together, then AND'd against the text, which is what selecting two
+   * categories intuitively means.
+   */
+  const isYugiohDeck = deck?.game === 'yugioh';
+  const matchesFilter = useCallback(
+    (card: DeckCard) => {
+      const needle = filterText.trim().toLowerCase();
+      if (isYugiohDeck) {
+        // Yu-Gi-Oh text matches on name (the catalog lookup is live once it
+        // loads, so type words like "dragon" work through the kind chips).
+        if (needle && !card.name.toLowerCase().includes(needle)) return false;
+        if (filterKinds.length > 0) {
+          // Extra-Deck membership is a property of the BOARD, so that chip keeps
+          // working before the catalog lands (or offline); the kind chips only
+          // appear once their catalog-derived counts do.
+          const kind = card.board === 'commander' ? 'extra' : yugiohFilterKind(card.scryfallId);
+          if (!filterKinds.includes(kind)) return false;
+        }
+        return true;
+      }
+      const meta = getCardMeta(card.scryfallId);
+      if (needle) {
+        const hay = `${card.name} ${meta?.typeLine ?? ''}`.toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      if (filterTypes.length > 0 && !filterTypes.includes(typeBucket(meta))) return false;
+      return true;
+    },
+    [filterText, filterTypes, filterKinds, isYugiohDeck],
+  );
+
+  const applyFilter = useCallback(
+    (cards: DeckCard[]) => (filtering ? cards.filter(matchesFilter) : cards),
+    [filtering, matchesFilter],
+  );
 
   // --- derived stats ---
   const derived = useMemo(() => {
@@ -460,7 +558,6 @@ export function DeckEditor({ deckId }: { deckId: string }) {
     [],
   );
 
-  const popup = useCardPopup();
   const heroLongPress = useLongPress(() => setHeaderPicking(true));
 
   if (loadFailed) {
@@ -489,11 +586,15 @@ export function DeckEditor({ deckId }: { deckId: string }) {
 
   const fmt = derived.fmt;
   const sizeTarget = formatTarget(fmt);
-  // Cyberpunk decks reuse the MTG "standard" format shell but have no mana curve,
-  // color identity, or bracket, so those MTG-only stats are hidden. Instead the
-  // view reads through Legends' RAM budget, colour spread, and avg Cost/Power.
+  // Cyberpunk and Yu-Gi-Oh decks reuse the MTG "standard" format shell but have
+  // no mana curve, color identity, or bracket, so those MTG-only stats are
+  // hidden. Cyberpunk reads through Legends' RAM budget and avg Cost/Power;
+  // Yu-Gi-Oh through Main/Extra/Side sizes and the Monster/Spell/Trap split.
   const cyber = deck.game === 'cyberpunk';
+  const yugioh = deck.game === 'yugioh';
+  const mtgDeck = !cyber && !yugioh;
   const cyberStats = cyber ? cyberDeckStats(deck) : null;
+  const ygoStats = yugioh ? yugiohDeckStats(deck) : null;
 
   const heroCommander = derived.commanderCards[0];
   const heroMeta = heroCommander ? getCardMeta(heroCommander.scryfallId) : undefined;
@@ -537,7 +638,11 @@ export function DeckEditor({ deckId }: { deckId: string }) {
         {headerCard && (
           <div
             className="deckHeroArt"
-            style={{ backgroundImage: `url(${artCrop(headerCard.scryfallId)})` }}
+            style={{
+              backgroundImage: `url(${
+                mtgDeck ? artCrop(headerCard.scryfallId) : resolveCardImage(deck.game, headerCard.scryfallId)
+              })`,
+            }}
             aria-hidden
           />
         )}
@@ -577,8 +682,8 @@ export function DeckEditor({ deckId }: { deckId: string }) {
             />
             <div className="deckHeaderMeta">
               <span className="deckFormatSelect">
-                {cyber ? (
-                  <GameTag game="cyberpunk" />
+                {!mtgDeck ? (
+                  <GameTag game={deck.game} />
                 ) : (
                   <Select
                     size="sm"
@@ -610,7 +715,7 @@ export function DeckEditor({ deckId }: { deckId: string }) {
                   ? (CARD_BACKS.find((back) => back.id === deck.cardBack)?.name ?? t('custUploadYours'))
                   : t('dbSleevesDefault')}
               </Button>
-              {!cyber && <ColorPips colors={derived.deckIdentity} label={t('dbIdentity')} />}
+              {mtgDeck && <ColorPips colors={derived.deckIdentity} label={t('dbIdentity')} />}
               <Text as="span" size={Size.Small} tone={TextTone.Muted} mono>
                 {derived.total} {t('decksCards')}
               </Text>
@@ -630,7 +735,7 @@ export function DeckEditor({ deckId }: { deckId: string }) {
                 ) : null}
               </span>
             </div>
-            {!cyber && (
+            {mtgDeck && (
               <div className="deckCurveBand deckStat">
                 <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="deckStatLabel">
                   {t('dbCurve')}
@@ -644,9 +749,9 @@ export function DeckEditor({ deckId }: { deckId: string }) {
       <div className="deckStats" data-commander={fmt.hasCommander ? '' : undefined}>
         {/* identity + size share one tile: both are small facts, and merging
             them keeps the strip a single balanced row. Hidden for Cyberpunk
-            (no color identity / mana size target; the card count is in the
-            header row). */}
-        {!cyber && (
+            and Yu-Gi-Oh (no color identity / mana size target; their sizes
+            live in their own analytics tiles). */}
+        {mtgDeck && (
         <div className="deckStat deckStatIdentity">
           <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="deckStatLabel">
             {t('dbIdentity')}
@@ -782,6 +887,87 @@ export function DeckEditor({ deckId }: { deckId: string }) {
               </Text>
             </div>
           </div>
+        ) : yugioh && ygoStats ? (
+          <div className="deckStat deckStatAnalytics deckStatYugioh">
+            <div className="deckStatSizeBlock">
+              <div className="deckStatRow">
+                <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="deckStatLabel">
+                  {t('dbMainDeck')}
+                </Text>
+                <Text as="span" size={Size.Small} mono>
+                  {ygoStats.mainCount} / 40–60
+                </Text>
+              </div>
+              <ProgressBar
+                value={Math.min(ygoStats.mainCount, 40)}
+                max={40}
+                size="sm"
+                tone={ygoStats.mainCount >= 40 && ygoStats.mainCount <= 60 ? 'success' : 'accent'}
+                aria-label={t('dbMainDeck')}
+              />
+            </div>
+            <div className="deckStatRow">
+              <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="deckStatLabel">
+                {t('dbExtraDeck')}
+              </Text>
+              <Text as="span" size={Size.Small} mono>
+                {ygoStats.extraCount} / 15
+              </Text>
+            </div>
+            <div className="deckStatRow">
+              <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="deckStatLabel">
+                {t('dbSideDeck')}
+              </Text>
+              <Text as="span" size={Size.Small} mono>
+                {ygoStats.sideCount} / 15
+              </Text>
+            </div>
+            <div className="deckStatRow deckStatTypesRow">
+              <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="deckStatLabel">
+                {t('anTypes')}
+              </Text>
+              <span className="deckTypeRow">
+                {(
+                  [
+                    ['monster', t('dbMonsters'), ygoStats.monsterCount],
+                    ['spell', t('dbSpells'), ygoStats.spellCount],
+                    ['trap', t('dbTraps'), ygoStats.trapCount],
+                  ] as const
+                ).map(([kind, label, count]) =>
+                  count === 0 ? null : (
+                    <Tooltip key={kind} content={label}>
+                      <span className="deckTypeStat" role="img" aria-label={`${label}: ${count}`}>
+                        <span className="deckTypeGlyph" aria-hidden>
+                          {YUGIOH_KIND_ICON[kind]}
+                        </span>
+                        <Text as="span" size={Size.XSmall} tone={TextTone.Muted} mono>
+                          {count}
+                        </Text>
+                      </span>
+                    </Tooltip>
+                  ),
+                )}
+              </span>
+            </div>
+            <div className="deckStatRow">
+              <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="deckStatLabel">
+                {t('dbAvgAtk')}
+              </Text>
+              <Text as="span" size={Size.Small} mono>
+                {Math.round(ygoStats.avgAtk)}
+              </Text>
+            </div>
+            {ygoStats.copyWarnings.size > 0 && (
+              <Pill size="sm" tone="warning" icon={<TriangleAlert size={12} />}>
+                {ygoStats.copyWarnings.size} {t('dbCopyWarnSummary')}
+              </Pill>
+            )}
+            {(ygoStats.mainCount > 60 || ygoStats.extraCount > 15 || ygoStats.sideCount > 15) && (
+              <Pill size="sm" tone="warning" icon={<TriangleAlert size={12} />}>
+                {t('ygoSizeWarn')}
+              </Pill>
+            )}
+          </div>
         ) : (
         <div className="deckStat deckStatAnalytics">
           <div className="deckStatRow">
@@ -837,21 +1023,151 @@ export function DeckEditor({ deckId }: { deckId: string }) {
       <div className="deckSearchBar">
         {cyber ? (
           <CyberpunkCardSearch onAdd={addCyberCard} />
+        ) : yugioh ? (
+          <YugiohCardSearch onAdd={addYugiohCard} />
         ) : (
           <CardSearch onAdd={addCard} onSetCommander={setCommander} allowCommander={fmt.hasCommander} />
         )}
       </div>
 
+      {/* narrowing what's already in the deck - the bar above adds to it */}
+      <div className="deckFilterBar">
+        <SearchField
+          value={filterText}
+          onValueChange={setFilterText}
+          placeholder={t('dbFilterPlaceholder')}
+          aria-label={t('dbFilterPlaceholder')}
+          size="sm"
+          className="deckFilterField"
+        />
+        {yugioh && ygoStats ? (
+          <span className="deckFilterChips">
+            {(
+              [
+                ['monster', t('dbMonsters'), ygoStats.monsterCount],
+                ['spell', t('dbSpells'), ygoStats.spellCount],
+                ['trap', t('dbTraps'), ygoStats.trapCount],
+                ['extra', t('dbExtraDeck'), ygoStats.extraCount],
+              ] as const
+            ).map(([kind, label, count]) => {
+              if (!count) return null;
+              return (
+                <FilterChip
+                  key={kind}
+                  size="sm"
+                  selected={filterKinds.includes(kind)}
+                  onSelectedChange={(on) => toggleFilterKind(kind, on)}
+                  icon={YUGIOH_KIND_ICON[kind]}
+                  count={count}
+                >
+                  {label}
+                </FilterChip>
+              );
+            })}
+          </span>
+        ) : mtgDeck && (
+          <span className="deckFilterChips">
+            {TYPE_ORDER.map((bucket) => {
+              // Only offer a category the deck actually contains: chips that can
+              // only ever return nothing are noise.
+              const count = derived.typeCounts.get(bucket);
+              if (!count) return null;
+              return (
+                <FilterChip
+                  key={bucket}
+                  size="sm"
+                  selected={filterTypes.includes(bucket)}
+                  onSelectedChange={(on) => toggleFilterType(bucket, on)}
+                  icon={TYPE_ICON[bucket]}
+                  count={count}
+                >
+                  {t(TYPE_LABEL[bucket])}
+                </FilterChip>
+              );
+            })}
+          </span>
+        )}
+        {filtering && (
+          <Button size="sm" variant="ghost" onClick={clearFilters} className="deckFilterClear">
+            {t('dbFilterClear')}
+          </Button>
+        )}
+      </div>
+
       <div className="deckList">
-          {cyber && cyberStats ? (
+          {yugioh && ygoStats ? (
+            /* Yu-Gi-Oh: Extra Deck anchor group, then the Main Deck grouped
+               Monsters / Spells / Traps. The Side Deck shares the section
+               below with the other games. */
+            <>
+              {(!filtering || applyFilter(ygoStats.extra).length > 0) && (
+                <DeckGroup
+                  title={t('dbExtraDeck')}
+                  // Header counts follow the filter, like the MTG groups do.
+                  count={applyFilter(ygoStats.extra).reduce((sum, c) => sum + c.quantity, 0)}
+                  icon={YUGIOH_KIND_ICON.extra}
+                >
+                  {ygoStats.extra.length === 0 ? (
+                    <Text size={Size.Small} tone={TextTone.Subtle} className="deckGroupEmpty">
+                      {t('ygoNoExtra')}
+                    </Text>
+                  ) : (
+                    <CardGrid
+                      game={deck?.game}
+                      cards={applyFilter(ygoStats.extra)}
+                      violations={ygoStats.copyWarnings}
+                      foil
+                      onQuantity={changeQuantity}
+                      onRemove={removeCard}
+                      onHover={showPreview}
+                      onLeave={hidePreview}
+                      onArt={openArtPicker}
+                    />
+                  )}
+                </DeckGroup>
+              )}
+              {ygoStats.groups.map((group) => {
+                const cards = applyFilter(group.cards);
+                if (cards.length === 0) return null;
+                const label =
+                  group.kind === 'monster'
+                    ? t('dbMonsters')
+                    : group.kind === 'spell'
+                      ? t('dbSpells')
+                      : group.kind === 'trap'
+                        ? t('dbTraps')
+                        : t(TYPE_LABEL.other);
+                return (
+                  <DeckGroup
+                    key={group.kind}
+                    title={label}
+                    count={cards.reduce((sum, c) => sum + c.quantity, 0)}
+                    icon={YUGIOH_KIND_ICON[group.kind]}
+                  >
+                    <CardGrid
+                      game={deck?.game}
+                      cards={cards}
+                      violations={ygoStats.copyWarnings}
+                      onQuantity={changeQuantity}
+                      onRemove={removeCard}
+                      onHover={showPreview}
+                      onLeave={hidePreview}
+                      onArt={openArtPicker}
+                      onToSide={(card) => moveBoard(card, 'side')}
+                    />
+                  </DeckGroup>
+                );
+              })}
+            </>
+          ) : cyber && cyberStats ? (
             /* Cyberpunk: Legends anchor group, then mains grouped by printed type
                (Unit / Gear / Program …) instead of the MTG card-type buckets. */
             <>
-              {cyberStats.legends.length > 0 && (
+              {cyberStats.legends.length > 0 && applyFilter(cyberStats.legends).length > 0 && (
                 <DeckGroup title={t('dbLegends')} count={cyberStats.legendCount} icon={<Crown size={13} />}>
                   <CardGrid
                     game={deck?.game}
-                    cards={cyberStats.legends}
+                    cards={applyFilter(cyberStats.legends)}
                     violations={derived.ruleWarnings}
                     foil
                     onQuantity={changeQuantity}
@@ -862,11 +1178,14 @@ export function DeckEditor({ deckId }: { deckId: string }) {
                   />
                 </DeckGroup>
               )}
-              {cyberStats.groups.map((group) => (
+              {cyberStats.groups.map((group) => {
+                const cards = applyFilter(group.cards);
+                if (cards.length === 0) return null;
+                return (
                 <DeckGroup key={group.type} title={group.type} count={group.count} icon={cyberTypeIcon(group.type)}>
                   <CardGrid
                     game={deck?.game}
-                    cards={group.cards}
+                    cards={cards}
                     violations={derived.ruleWarnings}
                     onQuantity={changeQuantity}
                     onRemove={removeCard}
@@ -875,11 +1194,14 @@ export function DeckEditor({ deckId }: { deckId: string }) {
                     onArt={openArtPicker}
                   />
                 </DeckGroup>
-              ))}
+                );
+              })}
             </>
           ) : (
             <>
-          {derived.fmt.hasCommander && (
+          {/* While filtering, an empty commander slot is just noise; unfiltered
+              it stays visible so the "set a commander" prompt still lands. */}
+          {derived.fmt.hasCommander && (!filtering || applyFilter(derived.commanderCards).length > 0) && (
             <DeckGroup title={t('dbCommander')} icon={<Crown size={13} />}>
               {derived.commanderCards.length === 0 ? (
                 <Text size={Size.Small} tone={TextTone.Subtle} className="deckGroupEmpty">
@@ -888,7 +1210,7 @@ export function DeckEditor({ deckId }: { deckId: string }) {
               ) : (
                 <CardGrid
                   game={deck?.game}
-                  cards={derived.commanderCards}
+                  cards={applyFilter(derived.commanderCards)}
                   violations={derived.ruleWarnings}
                   foil
                   onQuantity={changeQuantity}
@@ -902,8 +1224,8 @@ export function DeckEditor({ deckId }: { deckId: string }) {
           )}
 
           {TYPE_ORDER.map((bucket) => {
-            const cards = derived.groups.get(bucket);
-            if (!cards || cards.length === 0) return null;
+            const cards = applyFilter(derived.groups.get(bucket) ?? []);
+            if (cards.length === 0) return null;
             const count = cards.reduce((sum, c) => sum + c.quantity, 0);
             return (
               <DeckGroup key={bucket} title={t(TYPE_LABEL[bucket])} count={count} icon={TYPE_ICON[bucket]}>
@@ -917,7 +1239,7 @@ export function DeckEditor({ deckId }: { deckId: string }) {
                   onLeave={hidePreview}
                   onArt={openArtPicker}
                   onSetCommander={promoteToCommander}
-                  canCommander={fmt.hasCommander && !cyber}
+                  canCommander={fmt.hasCommander && mtgDeck}
                 />
               </DeckGroup>
             );
@@ -925,24 +1247,34 @@ export function DeckEditor({ deckId }: { deckId: string }) {
             </>
           )}
 
-          {derived.sideCards.length > 0 && (
-            <DeckGroup title={t('dbSide')} count={derived.sideCards.reduce((sum, c) => sum + c.quantity, 0)}>
+          {applyFilter(derived.sideCards).length > 0 && (
+            <DeckGroup
+              title={yugioh ? t('dbSideDeck') : t('dbSide')}
+              count={applyFilter(derived.sideCards).reduce((sum, c) => sum + c.quantity, 0)}
+            >
               <CardGrid
                 game={deck?.game}
-                cards={derived.sideCards}
-                violations={derived.ruleWarnings}
+                cards={applyFilter(derived.sideCards)}
+                violations={yugioh && ygoStats ? ygoStats.copyWarnings : derived.ruleWarnings}
                 onQuantity={changeQuantity}
                 onRemove={removeCard}
                 onHover={showPreview}
                 onLeave={hidePreview}
                 onArt={openArtPicker}
                 onSetCommander={promoteToCommander}
-                canCommander={fmt.hasCommander && !cyber}
+                canCommander={fmt.hasCommander && mtgDeck}
+                onToMain={yugioh ? (card) => moveBoard(card, 'main') : undefined}
               />
             </DeckGroup>
           )}
 
-          {derived.total === 0 && derived.sideCards.length === 0 && (
+          {filtering && applyFilter(deck?.cards ?? []).length === 0 && (
+            <Text size={Size.Small} tone={TextTone.Subtle}>
+              {t('dbFilterNone')}
+            </Text>
+          )}
+
+          {!filtering && derived.total === 0 && derived.sideCards.length === 0 && (
             <Text size={Size.Small} tone={TextTone.Subtle}>
               {t('decksEmpty')}
             </Text>
@@ -1023,6 +1355,7 @@ export function DeckEditor({ deckId }: { deckId: string }) {
         {headerPicking && (
           <HeaderCardPicker
             deckName={deck.name}
+            game={deck.game}
             current={headerCard?.scryfallId ?? deck.header}
             cards={[...new Map(deck.cards.map((c) => [c.scryfallId, { scryfallId: c.scryfallId, name: c.name }])).values()]}
             onSelect={setHeaderCard}
@@ -1132,6 +1465,8 @@ function CardGrid({
   onArt,
   onSetCommander,
   canCommander,
+  onToSide,
+  onToMain,
 }: {
   cards: DeckCard[];
   violations: Set<string>;
@@ -1144,6 +1479,8 @@ function CardGrid({
   onArt: (card: DeckCard) => void;
   onSetCommander?: (card: DeckCard) => void;
   canCommander?: boolean;
+  onToSide?: (card: DeckCard) => void;
+  onToMain?: (card: DeckCard) => void;
 }) {
   return (
     <div className="deckCardGrid">
@@ -1162,6 +1499,8 @@ function CardGrid({
             onArt={onArt}
             onSetCommander={onSetCommander}
             canCommander={canCommander}
+            onToSide={onToSide}
+            onToMain={onToMain}
           />
         ))}
       </AnimatePresence>
@@ -1181,6 +1520,8 @@ function CardCell({
   onArt,
   onSetCommander,
   canCommander,
+  onToSide,
+  onToMain,
 }: {
   card: DeckCard;
   foil?: boolean;
@@ -1193,17 +1534,24 @@ function CardCell({
   onArt: (card: DeckCard) => void;
   onSetCommander?: (card: DeckCard) => void;
   canCommander?: boolean;
+  /** Yu-Gi-Oh: offer moving this main-deck entry to the Side Deck. */
+  onToSide?: (card: DeckCard) => void;
+  /** Yu-Gi-Oh: offer moving this side-deck entry back to the Main Deck. */
+  onToMain?: (card: DeckCard) => void;
 }) {
   const t = useT();
   const popup = useCardPopup();
-  // Right-click context menu (set as commander / change art).
+  // Right-click context menu (set as commander / side deck / change art).
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const canPromote = Boolean(canCommander && onSetCommander && card.board !== 'commander');
+  const canSide = Boolean(onToSide && card.board === 'main');
+  const canMain = Boolean(onToMain && card.board === 'side');
+  const hasMenu = canPromote || canSide || canMain;
   // Long-press mirrors right-click on touch: the menu when there is one,
   // otherwise straight to the artwork picker.
   const longPress = useLongPress((info) => {
-    if (canPromote) setMenu({ x: info.clientX, y: info.clientY });
+    if (hasMenu) setMenu({ x: info.clientX, y: info.clientY });
     else onArt(card);
   });
   useEffect(() => {
@@ -1243,9 +1591,9 @@ function CardCell({
       onClickCapture={longPress.onClickCapture}
       onContextMenu={(event) => {
         event.preventDefault();
-        // Commander decks get a menu (set commander / change art); otherwise
-        // right-click jumps straight to the art picker as before.
-        if (canPromote) setMenu({ x: event.clientX, y: event.clientY });
+        // Decks with board actions get a menu (set commander / side deck /
+        // change art); otherwise right-click jumps straight to the art picker.
+        if (hasMenu) setMenu({ x: event.clientX, y: event.clientY });
         else onArt(card);
       }}
     >
@@ -1315,6 +1663,32 @@ function CardCell({
               <Crown size={14} /> {t('dbSetCommander')}
             </button>
           )}
+          {canSide && (
+            <button
+              type="button"
+              className="deckCardMenuItem"
+              role="menuitem"
+              onClick={() => {
+                onToSide?.(card);
+                setMenu(null);
+              }}
+            >
+              <Shield size={14} /> {t('dbToSide')}
+            </button>
+          )}
+          {canMain && (
+            <button
+              type="button"
+              className="deckCardMenuItem"
+              role="menuitem"
+              onClick={() => {
+                onToMain?.(card);
+                setMenu(null);
+              }}
+            >
+              <Layers size={14} /> {t('dbToMain')}
+            </button>
+          )}
           <button
             type="button"
             className="deckCardMenuItem"
@@ -1324,7 +1698,7 @@ function CardCell({
               setMenu(null);
             }}
           >
-            <Sparkles size={14} /> {t('dbChangeArt')}
+            <Sparkles size={14} /> {(game ?? 'mtg') === 'mtg' ? t('dbChangeArt') : t('dbViewCard')}
           </button>
         </div>,
         document.body,

@@ -79,6 +79,9 @@ console.log(`\x1b[1m\nPrettyCardboard macOS release → ${tag}\x1b[0m`);
 step('Ensuring universal Rust targets');
 run('rustup', ['target', 'add', 'aarch64-apple-darwin', 'x86_64-apple-darwin']);
 
+step('Staging the local game server sidecar (universal)');
+run('node', [join(ROOT, 'scripts', 'stage-server-sidecar.mjs'), '--universal']);
+
 step('Building + signing + notarizing (universal .dmg + OTA)');
 // tauri auto-notarizes when APPLE_ID/_PASSWORD/_TEAM_ID are set and the
 // identity is a Developer ID; --bundles app,dmg gives us the OTA tarball + dmg.

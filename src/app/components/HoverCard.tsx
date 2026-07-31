@@ -35,11 +35,16 @@ const MAX_ANCHOR_OVERLAP = 0.15;
 
 type PreviewPlacement = 'above' | 'below' | 'left' | 'right';
 
-/** Pull the card id (a UUID) back out of its image URL — both the MTG
- *  (cache/cards/<id>.jpg, Scryfall CDN) and Cyberpunk (cache/cyberpunk/<id>.webp)
- *  paths embed it, so the details panel can resolve without extra wiring. */
+/** Pull the card id back out of its image URL — the MTG (cache/cards/<id>.jpg,
+ *  Scryfall CDN) and Cyberpunk (cache/cyberpunk/<id>.webp) paths embed a UUID,
+ *  and the Yu-Gi-Oh paths (cache/yugioh/cards/<passcode>.jpg, /api/ygo/img/
+ *  <passcode>.jpg) a numeric passcode, so the details panel can resolve
+ *  without extra wiring. */
 function idFromSrc(src: string): string | undefined {
-  return src.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/)?.[0];
+  const uuid = src.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/)?.[0];
+  if (uuid) return uuid;
+  if (/(?:cache\/yugioh\/cards|api\/ygo\/img)\//.test(src)) return src.match(/(\d{1,10})\.jpg/)?.[1];
+  return undefined;
 }
 
 interface HoverState {

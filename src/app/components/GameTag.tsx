@@ -1,10 +1,10 @@
 import { Pill } from '@glacier/react';
-import { Cpu, Sparkles } from '@glacier/icons';
+import { Cpu, Pyramid, Sparkles } from '@glacier/icons';
 import { getGame } from '../data/games.ts';
 import './GameTag.css';
 
 /** Per-game glyph. Kept here (not in the data registry) since icons are React. */
-const ICONS = { mtg: Sparkles, cyberpunk: Cpu } as const;
+const ICONS = { mtg: Sparkles, cyberpunk: Cpu, yugioh: Pyramid } as const;
 
 /**
  * A compact identity chip - game icon + name in the game's accent - shown

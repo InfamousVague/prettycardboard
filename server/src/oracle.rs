@@ -1,0 +1,1238 @@
+//! Oracle card facts for enforced rooms (and anything else that wants them).
+//!
+//! The freeform engine deliberately knows nothing about cards. Enforced rooms
+//! need real facts - costs with colors, types, keywords, what a land taps for -
+//! so this module lazily fetches each card's oracle data from Scryfall the
+//! first time it is seen, parses it down to the compact `OracleCard` the rules
+//! engine consumes, and caches it in memory plus SQLite so a restart never
+//! refetches. Bots and the client read the same truths (the client keeps its
+//! own Scryfall cache; ids are shared so they can never disagree about a card).
+//!
+//! Unknown cards (fetch failed, custom `pc-…` art ids with no oracle identity)
+//! stay unknown: the rules engine treats them permissively rather than
+//! bricking a deck the tabletop would happily play.
+
+use crate::App;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashSet};
+use std::sync::Arc;
+
+/// Bumped whenever the parse below learns something new: cached rows stamped
+/// with an older version are treated as missing and refetched, so a deploy
+/// never leaves half the oracle table without the new fields.
+pub const ORACLE_VERSION: u32 = 5;
+
+/// A continuously-true effect a permanent projects (rules pass B).
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum StaticEffect {
+    /// "(Other) creatures you control get +P/+T" - folded into effective
+    /// power/toughness for the controller's creatures.
+    Anthem { power: i64, toughness: i64, others_only: bool },
+    /// "(<type> )spells you cast cost {N} less to cast" - folded into the
+    /// generic component of solve_payment. `filter` is a lowercased type word
+    /// matched against the spell's type line; None = every spell.
+    CostCut { filter: Option<String>, n: i64 },
+}
+
+/// When a parsed triggered ability fires (pass A of the rules roadmap).
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum TriggerWhen {
+    /// "When ~ enters (the battlefield), ..."
+    Etb,
+    /// "When ~ dies, ..."
+    Dies,
+    /// "Whenever ~ attacks, ..."
+    Attacks,
+    /// "At the beginning of your upkeep, ..."
+    Upkeep,
+    /// "At the beginning of your end step, ..."
+    EndStep,
+}
+
+/// One effect the engine can apply on the controller's behalf. `Manual` marks
+/// a recognized trigger whose effect the engine cannot do - the prompt still
+/// fires, the player performs the text by hand.
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum TriggerEffect {
+    Draw { n: i64 },
+    GainLife { n: i64 },
+    LoseLife { n: i64 },
+    EachOpponentLoses { n: i64 },
+    /// N counters of `counter` kind on the trigger's own source.
+    SelfCounters { counter: String, n: i64 },
+    /// `count` stub tokens (name + printed P/T; riders are not modeled).
+    Token { name: String, power: i64, toughness: i64, count: i64, tapped: bool },
+    Manual,
+}
+
+/// A parsed triggered ability: fire condition, the effect list (all applied
+/// together), and the verbatim sentence for prompts and logs.
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Trigger {
+    pub when: TriggerWhen,
+    pub effects: Vec<TriggerEffect>,
+    pub text: String,
+}
+
+impl Trigger {
+    /// Can the engine apply this trigger itself (no Manual part)?
+    pub fn auto(&self) -> bool {
+        !self.effects.iter().any(|e| matches!(e, TriggerEffect::Manual))
+    }
+}
+
+/// One card's rules-relevant facts, trimmed from the Scryfall record.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct OracleCard {
+    pub name: String,
+    pub type_line: String,
+    /// Mana value (converted cost). X counts as 0.
+    pub mv: i64,
+    /// Generic component of the cost ({3} -> 3). Hybrid and Phyrexian pips
+    /// are counted here too - payable-any-way is close enough for v1.
+    pub generic: i64,
+    /// Required colored pips by color letter (W U B R G C).
+    pub pips: BTreeMap<char, i64>,
+    pub power: Option<i64>,
+    pub toughness: Option<i64>,
+    /// Lowercased keyword list from Scryfall ("flying", "first strike", ...).
+    pub keywords: HashSet<String>,
+    /// Colors of mana this card can produce (lands, rocks, dorks).
+    pub produced: Vec<char>,
+    /// Oracle rules text (faces joined by newlines), kept verbatim so later
+    /// passes can reparse without refetching.
+    #[serde(default)]
+    pub oracle_text: String,
+    /// Triggered abilities parsed from the text at fetch time.
+    #[serde(default)]
+    pub triggers: Vec<Trigger>,
+    /// Reads as removal/burn aimed at creatures - the bot's threat table.
+    #[serde(default)]
+    pub threat: bool,
+    /// The card's colors (W U B R G) - evasion checks read these.
+    #[serde(default)]
+    pub colors: Vec<char>,
+    /// Static effects this permanent projects (anthems, cost cuts).
+    #[serde(default)]
+    pub statics: Vec<StaticEffect>,
+    /// "~ can't be blocked." with no qualifier.
+    #[serde(default)]
+    pub unblockable: bool,
+    /// Colors this card has protection from (blocks + damage; "from all
+    /// colors" expands to all five).
+    #[serde(default)]
+    pub protection_from: Vec<char>,
+    /// Ward cost as printed ("{2}", "pay 3 life"), for the tax reminder.
+    #[serde(default)]
+    pub ward: Option<String>,
+    /// "~ enters tapped." - applied by the engine on battlefield arrival.
+    #[serde(default)]
+    pub enters_tapped: bool,
+    /// "~ enters with N <kind> counters on it" - (kind, n), auto-applied.
+    #[serde(default)]
+    pub enters_counters: Option<(String, i64)>,
+    /// "If ~ would die, exile it instead." - deaths route to exile.
+    #[serde(default)]
+    pub dies_to_exile: bool,
+    /// "Prevent all combat damage that would be dealt to ~."
+    #[serde(default)]
+    pub prevent_combat_to: bool,
+    /// "Prevent all combat damage that would be dealt by ~."
+    #[serde(default)]
+    pub prevent_combat_by: bool,
+    /// "Discover N" - fires a cascade-style dig for mv <= N on cast.
+    #[serde(default)]
+    pub discover: Option<i64>,
+    /// Parse-schema version this row was written with (see ORACLE_VERSION).
+    #[serde(default)]
+    pub v: u32,
+}
+
+impl OracleCard {
+    pub fn is_land(&self) -> bool {
+        self.type_line.contains("Land")
+    }
+    pub fn is_creature(&self) -> bool {
+        self.type_line.contains("Creature")
+    }
+    pub fn is_instant(&self) -> bool {
+        self.type_line.contains("Instant")
+    }
+    pub fn is_sorcery(&self) -> bool {
+        self.type_line.contains("Sorcery")
+    }
+    /// Something that stays on the battlefield when it resolves.
+    pub fn is_permanent(&self) -> bool {
+        !self.is_instant() && !self.is_sorcery() && !self.is_land()
+    }
+    pub fn has(&self, keyword: &str) -> bool {
+        self.keywords.contains(keyword)
+    }
+    /// Total pips of one color required by the cost.
+    pub fn pip(&self, color: char) -> i64 {
+        self.pips.get(&color).copied().unwrap_or(0)
+    }
+}
+
+/// Parse a Scryfall mana cost string ("{2}{W}{W}", "{X}{R}", "{W/U}") into
+/// (generic, colored pips). Hybrid/Phyrexian symbols count as generic; X is 0.
+fn parse_cost(cost: &str) -> (i64, BTreeMap<char, i64>) {
+    let mut generic = 0i64;
+    let mut pips: BTreeMap<char, i64> = BTreeMap::new();
+    for sym in cost.trim_start_matches('{').trim_end_matches('}').split("}{") {
+        if sym.is_empty() {
+            continue;
+        }
+        if let Ok(n) = sym.parse::<i64>() {
+            generic += n;
+        } else if sym.len() == 1 && "WUBRGC".contains(sym) {
+            *pips.entry(sym.chars().next().unwrap()).or_insert(0) += 1;
+        } else if sym == "X" || sym == "Y" || sym == "Z" {
+            // X costs: the X itself is chosen at cast time; v1 charges 0 for it.
+        } else {
+            // Hybrid ({W/U}), Phyrexian ({G/P}), twobrid ({2/W}), snow ({S}):
+            // payable more ways than we model, so charge the permissive unit.
+            generic += 1;
+        }
+    }
+    (generic, pips)
+}
+
+// ------------------------------------------------------------ text parsing
+
+/// Strip reminder text `(...)` and granted-ability quotes `"..."` so a card
+/// that TEACHES a trigger ("gains 'Whenever this creature attacks...'") is
+/// never mistaken for having one itself.
+fn strip_asides(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut paren = 0usize;
+    let mut quoted = false;
+    for ch in line.chars() {
+        match ch {
+            '(' => paren += 1,
+            ')' => paren = paren.saturating_sub(1),
+            '"' => quoted = !quoted,
+            _ if paren == 0 && !quoted => out.push(ch),
+            _ => {}
+        }
+    }
+    out.trim().to_string()
+}
+
+/// "a"/"an"/"one"/"two"/... or a digit string -> the number.
+fn word_number(word: &str) -> Option<i64> {
+    match word {
+        "a" | "an" | "one" => Some(1),
+        "two" => Some(2),
+        "three" => Some(3),
+        "four" => Some(4),
+        "five" => Some(5),
+        "six" => Some(6),
+        "seven" => Some(7),
+        "eight" => Some(8),
+        "nine" => Some(9),
+        "ten" => Some(10),
+        _ => word.parse::<i64>().ok(),
+    }
+}
+
+/// Does the (lowercased) subject clause refer to the card itself? Modern
+/// templating says "this creature"/"this land"/...; legends self-refer by
+/// short name; older text may still carry the full card name.
+fn is_self_subject(subject: &str, name_lower: &str, short_lower: &str) -> bool {
+    let s = subject.trim();
+    s.starts_with("this ") || s == name_lower || (!short_lower.is_empty() && s == short_lower)
+}
+
+/// Is this (lowercased) phrase a self-reference target for counters?
+fn is_self_target(target: &str, name_lower: &str, short_lower: &str) -> bool {
+    let t = target.trim();
+    t == "it" || is_self_subject(t, name_lower, short_lower)
+}
+
+/// Parse one effect part ("draw a card", "you gain 2 life", "create a 2/2
+/// black Zombie creature token"). None = not in the closed set.
+fn parse_effect_part(part: &str, name_lower: &str, short_lower: &str) -> Option<TriggerEffect> {
+    let p = part.trim().trim_start_matches("you ").trim();
+
+    // "draw a card" / "draw two cards"
+    if let Some(rest) = p.strip_prefix("draw ") {
+        let mut words = rest.split_whitespace();
+        let n = word_number(words.next()?)?;
+        let noun = words.next()?;
+        if (noun == "card" || noun == "cards") && words.next().is_none() {
+            return Some(TriggerEffect::Draw { n });
+        }
+        return None;
+    }
+    // "gain 2 life" / "lose 1 life"
+    for (verb, gain) in [("gain ", true), ("lose ", false)] {
+        if let Some(rest) = p.strip_prefix(verb) {
+            let mut words = rest.split_whitespace();
+            let n = word_number(words.next()?)?;
+            if words.next() == Some("life") && words.next().is_none() {
+                return Some(if gain {
+                    TriggerEffect::GainLife { n }
+                } else {
+                    TriggerEffect::LoseLife { n }
+                });
+            }
+            return None;
+        }
+    }
+    // "each opponent loses 2 life"
+    if let Some(rest) = p.strip_prefix("each opponent loses ") {
+        let mut words = rest.split_whitespace();
+        let n = word_number(words.next()?)?;
+        if words.next() == Some("life") && words.next().is_none() {
+            return Some(TriggerEffect::EachOpponentLoses { n });
+        }
+        return None;
+    }
+    // "put a +1/+1 counter on it" / "put two -1/-1 counters on this creature"
+    if let Some(rest) = p.strip_prefix("put ") {
+        let mut words = rest.split_whitespace();
+        let n = word_number(words.next()?)?;
+        let kind = words.next()?;
+        if !kind.contains('/') {
+            return None;
+        }
+        let counter_word = words.next()?;
+        if counter_word != "counter" && counter_word != "counters" {
+            return None;
+        }
+        if words.next() != Some("on") {
+            return None;
+        }
+        let target: Vec<&str> = words.collect();
+        if is_self_target(&target.join(" "), name_lower, short_lower) {
+            return Some(TriggerEffect::SelfCounters { counter: kind.to_string(), n });
+        }
+        return None;
+    }
+    // "create a 2/2 black Zombie creature token" (optionally "a tapped ...",
+    // "N ... tokens", "artifact creature token"). Riders after "token" or
+    // unknown descriptor words fall out of the closed set.
+    if let Some(rest) = p.strip_prefix("create ") {
+        let words: Vec<&str> = rest.split_whitespace().collect();
+        let mut i = 0usize;
+        let count = word_number(words.get(i).copied()?)?;
+        i += 1;
+        let mut tapped = false;
+        if words.get(i).copied() == Some("tapped") {
+            tapped = true;
+            i += 1;
+        }
+        let pt = words.get(i).copied()?;
+        let (ps, ts) = pt.split_once('/')?;
+        let (power, toughness) = (ps.parse::<i64>().ok()?, ts.parse::<i64>().ok()?);
+        i += 1;
+        let mut name_words: Vec<&str> = Vec::new();
+        while i < words.len() {
+            let w = words[i];
+            if w == "creature" {
+                break;
+            }
+            match w {
+                "white" | "blue" | "black" | "red" | "green" | "colorless" | "and" => {}
+                "artifact" | "enchantment" => {}
+                _ => name_words.push(w),
+            }
+            i += 1;
+        }
+        // The remainder must be exactly "creature token" / "creature tokens".
+        let tail: Vec<&str> = words[i..].to_vec();
+        let clean = tail == ["creature", "token"] || tail == ["creature", "tokens"];
+        if !clean || name_words.is_empty() {
+            return None;
+        }
+        // Title-case the subtype words for the token's display name.
+        let name = name_words
+            .iter()
+            .map(|w| {
+                let mut c = w.chars();
+                match c.next() {
+                    Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+                    None => String::new(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        return Some(TriggerEffect::Token { name, power, toughness, count, tapped });
+    }
+    None
+}
+
+/// Parse a full effect clause into its parts. A clause with several
+/// sentences, or any part outside the closed set, collapses to [Manual] -
+/// the engine must never half-apply a trigger.
+fn parse_effects(clause: &str, name_lower: &str, short_lower: &str) -> Vec<TriggerEffect> {
+    let c = clause.trim().trim_end_matches('.').trim();
+    if c.contains(". ") || c.is_empty() {
+        return vec![TriggerEffect::Manual];
+    }
+    // "you may X": the prompt itself models the choice; parse X.
+    let c = c.strip_prefix("you may ").unwrap_or(c);
+    let parts: Vec<&str> = c.split(" and ").collect();
+    let mut effects = Vec::new();
+    for part in parts {
+        match parse_effect_part(part, name_lower, short_lower) {
+            Some(e) => effects.push(e),
+            None => return vec![TriggerEffect::Manual],
+        }
+    }
+    effects
+}
+
+/// Parse every triggered ability this module recognizes out of the card's
+/// oracle text. Lines that grant abilities (quoted) or carry intervening-"if"
+/// clauses parse to Manual or nothing - never to a wrong auto effect.
+fn parse_triggers(name: &str, text: &str) -> Vec<Trigger> {
+    let name_lower = name.to_lowercase();
+    // Legends self-refer by short name: "Nadaar, Selfless Paladin" -> "nadaar".
+    let short_lower = name_lower.split(',').next().unwrap_or("").trim().to_string();
+    let mut out: Vec<Trigger> = Vec::new();
+    for raw_line in text.lines() {
+        let line = strip_asides(raw_line);
+        if line.is_empty() {
+            continue;
+        }
+        let lower = line.to_lowercase();
+        let Some((cond, effect_clause)) = lower.split_once(", ") else { continue };
+        // The verbatim sentence (original case) for prompts.
+        let text_orig = line.clone();
+
+        // "at the beginning of your upkeep/end step, ..."
+        for (prefix, when) in [
+            ("at the beginning of your upkeep", TriggerWhen::Upkeep),
+            ("at the beginning of your end step", TriggerWhen::EndStep),
+        ] {
+            if cond == prefix {
+                out.push(Trigger {
+                    when,
+                    effects: parse_effects(effect_clause, &name_lower, &short_lower),
+                    text: text_orig.clone(),
+                });
+            }
+        }
+
+        // "when(ever) SUBJECT <verb>, ..."
+        let subject_verb = cond
+            .strip_prefix("whenever ")
+            .or_else(|| cond.strip_prefix("when "));
+        let Some(sv) = subject_verb else { continue };
+        // Longest verb first so "enters the battlefield" wins over "enters".
+        let verbs: [(&str, &[TriggerWhen]); 6] = [
+            ("enters the battlefield or attacks", &[TriggerWhen::Etb, TriggerWhen::Attacks]),
+            ("enters or attacks", &[TriggerWhen::Etb, TriggerWhen::Attacks]),
+            ("enters the battlefield", &[TriggerWhen::Etb]),
+            ("enters", &[TriggerWhen::Etb]),
+            ("dies", &[TriggerWhen::Dies]),
+            ("attacks", &[TriggerWhen::Attacks]),
+        ];
+        for (verb, whens) in verbs {
+            let Some(subject) = sv.strip_suffix(verb).map(str::trim_end) else { continue };
+            if !is_self_subject(subject, &name_lower, &short_lower) {
+                break; // another card's/creatures' trigger - not ours to fire
+            }
+            let effects = parse_effects(effect_clause, &name_lower, &short_lower);
+            for when in whens {
+                out.push(Trigger { when: *when, effects: effects.clone(), text: text_orig.clone() });
+            }
+            break;
+        }
+    }
+    out
+}
+
+/// Parse static effects (rules pass B): plain anthems and cost cuts. Gated
+/// or one-shot variants ("until end of turn", "as long as", subtype anthems,
+/// "the first ... each turn") are deliberately not recognized - a static the
+/// engine cannot honor continuously must not be half-applied.
+fn parse_statics(text: &str) -> Vec<StaticEffect> {
+    let mut out = Vec::new();
+    for raw_line in text.lines() {
+        let line = strip_asides(raw_line);
+        let lower = line.to_lowercase();
+        if lower.contains("until end of turn") || lower.contains("as long as") {
+            continue;
+        }
+        // "(other) creatures you control get +P/+T" (riders like "and have
+        // vigilance" are tolerated; only the P/T fold is modeled).
+        let anthem = lower
+            .strip_prefix("other creatures you control get ")
+            .map(|r| (r, true))
+            .or_else(|| lower.strip_prefix("creatures you control get ").map(|r| (r, false)));
+        if let Some((rest, others_only)) = anthem {
+            let stat = rest.split_whitespace().next().unwrap_or("");
+            if let Some((ps, ts)) = stat.trim_end_matches('.').split_once('/') {
+                let p = ps.trim_start_matches('+').parse::<i64>().ok();
+                let t = ts.trim_start_matches('+').parse::<i64>().ok();
+                if let (Some(power), Some(toughness)) = (p, t) {
+                    if power >= 0 && toughness >= 0 {
+                        let tail = rest[stat.len()..].trim().trim_end_matches('.');
+                        let clean = tail.is_empty()
+                            || tail.starts_with("and have ")
+                            || tail.starts_with("and gain ");
+                        if clean {
+                            out.push(StaticEffect::Anthem { power, toughness, others_only });
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+        // "(<type> )spells you cast cost {N} less to cast"
+        if let Some(idx) = lower.find("spells you cast cost {") {
+            let prefix = lower[..idx].trim();
+            let filter = match prefix {
+                "" => Some(None),
+                w if !w.contains(' ') => Some(Some(w.to_string())),
+                _ => None, // "the first artifact ..." and friends: not modeled
+            };
+            let rest = &lower[idx + "spells you cast cost {".len()..];
+            let n = rest.split('}').next().and_then(|d| d.parse::<i64>().ok());
+            if let (Some(filter), Some(n)) = (filter, n) {
+                if rest[rest.find('}').map(|i| i + 1).unwrap_or(0)..]
+                    .trim()
+                    .trim_end_matches('.')
+                    == "less to cast"
+                {
+                    out.push(StaticEffect::CostCut { filter, n });
+                }
+            }
+        }
+    }
+    out
+}
+
+/// "~ can't be blocked." with no qualifier ("by", "except") on the line.
+fn parse_unblockable(text: &str) -> bool {
+    for raw_line in text.lines() {
+        let line = strip_asides(raw_line).to_lowercase();
+        let line = line.trim_end_matches('.');
+        if let Some(subject) = line.strip_suffix(" can't be blocked") {
+            if subject.starts_with("this ") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Colors named after "protection from"; "all colors"/"everything" is all
+/// five. Only color protection is modeled (blocks + the bot's read).
+fn parse_protection(text: &str) -> Vec<char> {
+    let t = strip_asides(&text.replace('\n', " ")).to_lowercase();
+    let mut out: Vec<char> = Vec::new();
+    let mut push = |c: char| {
+        if !out.contains(&c) {
+            out.push(c);
+        }
+    };
+    let mut rest = t.as_str();
+    while let Some(idx) = rest.find("protection from ") {
+        rest = &rest[idx + "protection from ".len()..];
+        loop {
+            let tail = rest.trim_start();
+            let matched = [
+                ("white", 'W'),
+                ("blue", 'U'),
+                ("black", 'B'),
+                ("red", 'R'),
+                ("green", 'G'),
+            ]
+            .iter()
+            .find(|(word, _)| tail.starts_with(word));
+            if let Some((word, c)) = matched {
+                push(*c);
+                rest = &tail[word.len()..];
+                // "protection from red and from white" / "from red and white"
+                let more = tail[word.len()..].trim_start();
+                if let Some(r) = more.strip_prefix("and from ") {
+                    rest = r;
+                    continue;
+                }
+                if let Some(r) = more.strip_prefix("and ") {
+                    rest = r;
+                    continue;
+                }
+            } else if tail.starts_with("all colors") || tail.starts_with("everything") {
+                for c in ['W', 'U', 'B', 'R', 'G'] {
+                    push(c);
+                }
+            }
+            break;
+        }
+    }
+    out
+}
+
+/// The printed ward cost ("{2}", "pay 3 life"), for the tax reminder relay.
+/// Word-boundary match per line, so "toward"/"reward" never read as the
+/// keyword and the capture never bleeds into the next ability.
+fn parse_ward(text: &str) -> Option<String> {
+    for raw_line in text.lines() {
+        let line = strip_asides(raw_line).to_lowercase();
+        let mut offset = 0usize;
+        while let Some(rel) = line[offset..].find("ward") {
+            let idx = offset + rel;
+            let boundary = idx == 0
+                || !line[..idx].chars().next_back().map(|c| c.is_alphabetic()).unwrap_or(false);
+            let after = &line[idx + 4..];
+            if boundary && (after.starts_with(' ') || after.starts_with('—')) {
+                let cost: String = after
+                    .trim_start_matches('—')
+                    .trim_start()
+                    .chars()
+                    .take_while(|c| !matches!(c, '.' | ','))
+                    .collect();
+                let cost = cost.trim().to_string();
+                if !cost.is_empty() && cost.len() <= 24 {
+                    return Some(cost);
+                }
+            }
+            offset = idx + 4;
+        }
+    }
+    None
+}
+
+/// Replacement effects the engine applies itself (rules pass C): enters
+/// tapped, enters with counters, dies-to-exile, combat damage prevention.
+/// Conditional variants ("unless", "for each", ...) stay unmodeled.
+struct Replacements {
+    enters_tapped: bool,
+    enters_counters: Option<(String, i64)>,
+    dies_to_exile: bool,
+    prevent_to: bool,
+    prevent_by: bool,
+}
+
+fn parse_replacements(text: &str) -> Replacements {
+    let mut out = Replacements {
+        enters_tapped: false,
+        enters_counters: None,
+        dies_to_exile: false,
+        prevent_to: false,
+        prevent_by: false,
+    };
+    for raw_line in text.lines() {
+        let line = strip_asides(raw_line).to_lowercase();
+        let line = line.trim_end_matches('.').trim();
+        // "this land enters tapped" / "~ enters the battlefield tapped"
+        if let Some(rest) = line.strip_prefix("this ") {
+            if let Some(after_kind) = rest.split_once(' ').map(|(_, r)| r) {
+                let after_kind = after_kind
+                    .strip_prefix("enters the battlefield")
+                    .or_else(|| after_kind.strip_prefix("enters"))
+                    .map(str::trim_start);
+                if let Some(clause) = after_kind {
+                    if clause == "tapped" {
+                        out.enters_tapped = true;
+                        continue;
+                    }
+                    // "with a +1/+1 counter on it" / "with two charge counters
+                    // on it" - exactly that shape; "for each ..." riders and
+                    // other qualifiers fall out of the closed set.
+                    if let Some(with) = clause.strip_prefix("with ") {
+                        let words: Vec<&str> = with.split_whitespace().collect();
+                        if words.len() == 5
+                            && (words[2] == "counter" || words[2] == "counters")
+                            && words[3] == "on"
+                            && words[4] == "it"
+                        {
+                            if let Some(n) = word_number(words[0]) {
+                                out.enters_counters = Some((words[1].to_string(), n));
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // "if this creature would die, exile it instead"
+        if line.starts_with("if this ") && line.ends_with("would die, exile it instead") {
+            out.dies_to_exile = true;
+            continue;
+        }
+        // "prevent all combat damage that would be dealt to and dealt by ~"
+        if line.starts_with("prevent all combat damage that would be dealt ") {
+            let tail = &line["prevent all combat damage that would be dealt ".len()..];
+            let to = tail.starts_with("to and dealt by")
+                || tail.starts_with("by and dealt to")
+                || tail.starts_with("to this");
+            let by = tail.starts_with("to and dealt by")
+                || tail.starts_with("by and dealt to")
+                || tail.starts_with("by this");
+            out.prevent_to |= to;
+            out.prevent_by |= by;
+        }
+    }
+    out
+}
+
+/// "Discover N" (word boundary, digits) - the cascade-style dig threshold.
+fn parse_discover(text: &str) -> Option<i64> {
+    let t = strip_asides(&text.replace('\n', " ")).to_lowercase();
+    let idx = t.find("discover ")?;
+    let boundary =
+        idx == 0 || !t[..idx].chars().next_back().map(|c| c.is_alphabetic()).unwrap_or(false);
+    if !boundary {
+        return None;
+    }
+    let digits: String =
+        t[idx + "discover ".len()..].chars().take_while(|c| c.is_ascii_digit()).collect();
+    digits.parse::<i64>().ok()
+}
+
+/// Does this text read as removal or burn aimed at creatures? Feeds the
+/// bot's threat table; deliberately coarse.
+fn parse_threat(text: &str) -> bool {
+    let t = strip_asides(&text.replace('\n', " ")).to_lowercase();
+    t.contains("destroy target creature")
+        || t.contains("exile target creature")
+        || t.contains("destroy target permanent")
+        || t.contains("exile target permanent")
+        || t.contains("damage to any target")
+        || (t.contains("damage to target creature") && t.contains("deals"))
+        || t.contains("target creature gets -")
+}
+
+/// The raw slice of a Scryfall card record this module reads.
+#[derive(Deserialize)]
+struct ScryCard {
+    id: Option<String>,
+    name: Option<String>,
+    type_line: Option<String>,
+    mana_cost: Option<String>,
+    cmc: Option<f64>,
+    power: Option<String>,
+    toughness: Option<String>,
+    #[serde(default)]
+    oracle_text: Option<String>,
+    #[serde(default)]
+    colors: Option<Vec<String>>,
+    #[serde(default)]
+    keywords: Vec<String>,
+    #[serde(default)]
+    produced_mana: Vec<String>,
+    #[serde(default)]
+    card_faces: Vec<ScryFace>,
+}
+
+#[derive(Deserialize)]
+struct ScryFace {
+    type_line: Option<String>,
+    mana_cost: Option<String>,
+    power: Option<String>,
+    toughness: Option<String>,
+    #[serde(default)]
+    oracle_text: Option<String>,
+    #[serde(default)]
+    colors: Option<Vec<String>>,
+}
+
+fn stat(s: &Option<String>) -> Option<i64> {
+    s.as_deref().and_then(|v| v.trim().parse::<i64>().ok())
+}
+
+fn parse_card(raw: &ScryCard) -> Option<OracleCard> {
+    let face = raw.card_faces.first();
+    let type_line = raw
+        .type_line
+        .clone()
+        .or_else(|| face.and_then(|f| f.type_line.clone()))?;
+    let cost = raw
+        .mana_cost
+        .clone()
+        .filter(|c| !c.is_empty())
+        .or_else(|| face.and_then(|f| f.mana_cost.clone()))
+        .unwrap_or_default();
+    let (generic, pips) = parse_cost(&cost);
+    let power = stat(&raw.power).or_else(|| face.map(|f| stat(&f.power)).unwrap_or(None));
+    let toughness =
+        stat(&raw.toughness).or_else(|| face.map(|f| stat(&f.toughness)).unwrap_or(None));
+    let name = raw.name.clone().unwrap_or_default();
+    // Full-card oracle text; DFC/split cards join their faces' texts. The
+    // FRONT face is what enters the battlefield, but keeping every face's
+    // text costs nothing and later passes may want the back.
+    let oracle_text = raw
+        .oracle_text
+        .clone()
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| {
+            raw.card_faces
+                .iter()
+                .filter_map(|f| f.oracle_text.clone())
+                .collect::<Vec<_>>()
+                .join("\n")
+        });
+    let triggers = parse_triggers(&name, &oracle_text);
+    let threat = parse_threat(&oracle_text);
+    let colors: Vec<char> = raw
+        .colors
+        .clone()
+        .or_else(|| face.and_then(|f| f.colors.clone()))
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|c| c.chars().next())
+        .filter(|c| "WUBRG".contains(*c))
+        .collect();
+    let has_ward_kw = raw.keywords.iter().any(|k| k.eq_ignore_ascii_case("ward"));
+    let repl = parse_replacements(&oracle_text);
+    Some(OracleCard {
+        name,
+        type_line,
+        mv: raw.cmc.unwrap_or(0.0).round() as i64,
+        generic,
+        pips,
+        power,
+        toughness,
+        keywords: raw.keywords.iter().map(|k| k.to_lowercase()).collect(),
+        produced: raw
+            .produced_mana
+            .iter()
+            .filter_map(|c| c.chars().next())
+            .filter(|c| "WUBRGC".contains(*c))
+            .collect(),
+        statics: parse_statics(&oracle_text),
+        unblockable: parse_unblockable(&oracle_text),
+        protection_from: parse_protection(&oracle_text),
+        ward: if has_ward_kw { parse_ward(&oracle_text) } else { None },
+        enters_tapped: repl.enters_tapped,
+        enters_counters: repl.enters_counters,
+        dies_to_exile: repl.dies_to_exile,
+        prevent_combat_to: repl.prevent_to,
+        prevent_combat_by: repl.prevent_by,
+        discover: parse_discover(&oracle_text),
+        colors,
+        oracle_text,
+        triggers,
+        threat,
+        v: ORACLE_VERSION,
+    })
+}
+
+/// Synchronous cache read. None = not (yet) known.
+pub fn get(app: &App, scryfall_id: &str) -> Option<Arc<OracleCard>> {
+    app.oracle.get(scryfall_id).map(|e| e.value().clone())
+}
+
+/// Make sure every id in `ids` is cached: memory first, then the SQLite
+/// mirror, then Scryfall in /cards/collection batches of 75. Failures leave
+/// ids unknown (retried the next time something asks).
+pub async fn ensure(app: &Arc<App>, ids: Vec<String>) {
+    let mut missing: Vec<String> = Vec::new();
+    {
+        let conn = app.db.lock().unwrap();
+        for id in ids {
+            if app.oracle.contains_key(&id) {
+                continue;
+            }
+            // Custom art ids have no Scryfall identity to ask about.
+            if !id.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
+                continue;
+            }
+            if let Some(json) = crate::db::oracle_load(&conn, &id) {
+                if let Ok(mut card) = serde_json::from_str::<OracleCard>(&json) {
+                    if card.v == ORACLE_VERSION {
+                        app.oracle.insert(id, Arc::new(card));
+                        continue;
+                    }
+                    // A v4+ row carries everything reparsing needs (text +
+                    // colors + keywords): upgrade locally instead of asking
+                    // Scryfall again. Anything older is missing raw facts
+                    // (v3 had no colors) and falls through to a refetch.
+                    if card.v >= 4 && !card.oracle_text.is_empty() {
+                        card.triggers = parse_triggers(&card.name, &card.oracle_text);
+                        card.threat = parse_threat(&card.oracle_text);
+                        card.statics = parse_statics(&card.oracle_text);
+                        card.unblockable = parse_unblockable(&card.oracle_text);
+                        card.protection_from = parse_protection(&card.oracle_text);
+                        card.ward = if card.keywords.contains("ward") {
+                            parse_ward(&card.oracle_text)
+                        } else {
+                            None
+                        };
+                        let repl = parse_replacements(&card.oracle_text);
+                        card.enters_tapped = repl.enters_tapped;
+                        card.enters_counters = repl.enters_counters;
+                        card.dies_to_exile = repl.dies_to_exile;
+                        card.prevent_combat_to = repl.prevent_to;
+                        card.prevent_combat_by = repl.prevent_by;
+                        card.discover = parse_discover(&card.oracle_text);
+                        card.v = ORACLE_VERSION;
+                        if let Ok(fresh) = serde_json::to_string(&card) {
+                            crate::db::oracle_store(&conn, &id, &fresh);
+                        }
+                        app.oracle.insert(id, Arc::new(card));
+                        continue;
+                    }
+                }
+            }
+            missing.push(id);
+        }
+    }
+    if missing.is_empty() {
+        return;
+    }
+    // One fetch at a time server-wide keeps us far inside Scryfall's limits
+    // even if several enforced rooms start at once.
+    let _guard = app.oracle_lock.lock().await;
+    missing.retain(|id| !app.oracle.contains_key(id));
+    for batch in missing.chunks(75) {
+        let identifiers: Vec<serde_json::Value> =
+            batch.iter().map(|id| serde_json::json!({ "id": id })).collect();
+        let body = serde_json::json!({ "identifiers": identifiers }).to_string();
+        // Scryfall REQUIRES a User-Agent; requests without one are refused.
+        let output = tokio::process::Command::new("curl")
+            .arg("-s")
+            .arg("-m")
+            .arg("20")
+            .arg("-X")
+            .arg("POST")
+            .arg("-H")
+            .arg("user-agent: PrettyCardboard/0.5 (tabletop; oracle cache)")
+            .arg("-H")
+            .arg("content-type: application/json")
+            .arg("-H")
+            .arg("accept: application/json")
+            .arg("--data-binary")
+            .arg(&body)
+            .arg("https://api.scryfall.com/cards/collection")
+            .output()
+            .await;
+        let Ok(out) = output else { continue };
+        if !out.status.success() {
+            continue;
+        }
+        #[derive(Deserialize)]
+        struct Collection {
+            #[serde(default)]
+            data: Vec<ScryCard>,
+        }
+        let Ok(parsed) = serde_json::from_slice::<Collection>(&out.stdout) else {
+            continue;
+        };
+        // Scoped: the std MutexGuard must be gone before the await below
+        // (future Send analysis is lexical, an explicit drop does not count).
+        {
+            let conn = app.db.lock().unwrap();
+            for raw in &parsed.data {
+                let Some(id) = raw.id.clone() else { continue };
+                let Some(card) = parse_card(raw) else { continue };
+                if let Ok(json) = serde_json::to_string(&card) {
+                    crate::db::oracle_store(&conn, &id, &json);
+                }
+                app.oracle.insert(id, Arc::new(card));
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn triggers(name: &str, text: &str) -> Vec<Trigger> {
+        parse_triggers(name, text)
+    }
+
+    #[test]
+    fn etb_draw() {
+        let t = triggers("Elvish Visionary", "When this creature enters, draw a card.");
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].when, TriggerWhen::Etb);
+        assert_eq!(t[0].effects, vec![TriggerEffect::Draw { n: 1 }]);
+        assert!(t[0].auto());
+    }
+
+    #[test]
+    fn land_etb_life() {
+        let t = triggers(
+            "Radiant Fountain",
+            "When this land enters, you gain 2 life.\n{T}: Add {C}.",
+        );
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].when, TriggerWhen::Etb);
+        assert_eq!(t[0].effects, vec![TriggerEffect::GainLife { n: 2 }]);
+    }
+
+    #[test]
+    fn dies_token() {
+        let t = triggers(
+            "Doomed Dissenter",
+            "When this creature dies, create a 2/2 black Zombie creature token.",
+        );
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].when, TriggerWhen::Dies);
+        assert_eq!(
+            t[0].effects,
+            vec![TriggerEffect::Token {
+                name: "Zombie".into(),
+                power: 2,
+                toughness: 2,
+                count: 1,
+                tapped: false
+            }]
+        );
+    }
+
+    #[test]
+    fn compound_draw_and_lose() {
+        let t = triggers(
+            "Dusk Legion Zealot",
+            "When this creature enters, you draw a card and you lose 1 life.",
+        );
+        assert_eq!(t.len(), 1);
+        assert_eq!(
+            t[0].effects,
+            vec![TriggerEffect::Draw { n: 1 }, TriggerEffect::LoseLife { n: 1 }]
+        );
+    }
+
+    #[test]
+    fn compound_drain() {
+        let t = triggers(
+            "Vampire Spawn",
+            "When this creature enters, each opponent loses 2 life and you gain 2 life.",
+        );
+        assert_eq!(t.len(), 1);
+        assert_eq!(
+            t[0].effects,
+            vec![TriggerEffect::EachOpponentLoses { n: 2 }, TriggerEffect::GainLife { n: 2 }]
+        );
+    }
+
+    #[test]
+    fn attack_counter_and_etb_draw() {
+        let t = triggers(
+            "Operations Officer",
+            "Lifelink (Damage dealt by this creature also causes you to gain that much life.)\nWhen this creature enters, draw a card.\nWhenever this creature attacks, put a +1/+1 counter on it.",
+        );
+        assert_eq!(t.len(), 2);
+        assert_eq!(t[0].when, TriggerWhen::Etb);
+        assert_eq!(t[1].when, TriggerWhen::Attacks);
+        assert_eq!(
+            t[1].effects,
+            vec![TriggerEffect::SelfCounters { counter: "+1/+1".into(), n: 1 }]
+        );
+    }
+
+    #[test]
+    fn upkeep_and_end_step() {
+        let t = triggers(
+            "Breeding Pit",
+            "At the beginning of your upkeep, sacrifice this enchantment unless you pay {B}{B}.\nAt the beginning of your end step, create a 0/1 black Thrull creature token.",
+        );
+        assert_eq!(t.len(), 2);
+        assert_eq!(t[0].when, TriggerWhen::Upkeep);
+        assert_eq!(t[0].effects, vec![TriggerEffect::Manual]);
+        assert!(!t[0].auto());
+        assert_eq!(t[1].when, TriggerWhen::EndStep);
+        assert!(t[1].auto());
+    }
+
+    #[test]
+    fn granted_abilities_do_not_fire() {
+        // A card that TEACHES an attack trigger has no attack trigger itself.
+        let t = triggers(
+            "Root Manipulation",
+            "Until end of turn, creatures you control get +2/+2 and gain menace and \"Whenever this creature attacks, you gain 1 life.\" (A creature with menace can't be blocked except by two or more creatures.)",
+        );
+        assert!(t.is_empty());
+    }
+
+    #[test]
+    fn other_creatures_do_not_fire() {
+        let t = triggers(
+            "Hellrider",
+            "Haste\nWhenever a creature you control attacks, this creature deals 1 damage to the player or planeswalker it's attacking.",
+        );
+        assert!(t.is_empty());
+    }
+
+    #[test]
+    fn trailing_sentence_is_manual() {
+        let t = triggers(
+            "Dream Beavers",
+            "Flying\nWhen this creature enters, each opponent loses 1 life and you gain 1 life. Scry 1.",
+        );
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].effects, vec![TriggerEffect::Manual]);
+    }
+
+    #[test]
+    fn scaling_effects_are_manual() {
+        let t = triggers(
+            "Honden of Cleansing Fire",
+            "At the beginning of your upkeep, you gain 2 life for each Shrine you control.",
+        );
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].effects, vec![TriggerEffect::Manual]);
+    }
+
+    #[test]
+    fn short_name_self_reference() {
+        let t = triggers(
+            "Krenko, Mob Boss",
+            "Whenever Krenko attacks, create a 1/1 red Goblin creature token.",
+        );
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].when, TriggerWhen::Attacks);
+        assert!(t[0].auto());
+    }
+
+    #[test]
+    fn threat_classification() {
+        assert!(parse_threat("Destroy target creature."));
+        assert!(parse_threat("Lightning Strike deals 3 damage to any target."));
+        assert!(!parse_threat("Counter target spell."));
+        assert!(!parse_threat("Draw two cards."));
+    }
+
+    // ---- pass B: statics, evasion text, ward ----
+
+    #[test]
+    fn anthem_parses() {
+        assert_eq!(
+            parse_statics("Creatures you control get +1/+1."),
+            vec![StaticEffect::Anthem { power: 1, toughness: 1, others_only: false }]
+        );
+        assert_eq!(
+            parse_statics("Other creatures you control get +2/+2 and have vigilance."),
+            vec![StaticEffect::Anthem { power: 2, toughness: 2, others_only: true }]
+        );
+        // One-shot, conditional, and subtype anthems stay unmodeled.
+        assert!(parse_statics("Creatures you control get +1/+0 until end of turn.").is_empty());
+        assert!(parse_statics(
+            "Creatures you control get +1/+1 as long as you control an artifact."
+        )
+        .is_empty());
+        assert!(parse_statics("Elves you control get +1/+1.").is_empty());
+    }
+
+    #[test]
+    fn cost_cut_parses() {
+        assert_eq!(
+            parse_statics("Artifact spells you cast cost {1} less to cast."),
+            vec![StaticEffect::CostCut { filter: Some("artifact".into()), n: 1 }]
+        );
+        assert_eq!(
+            parse_statics("Spells you cast cost {2} less to cast."),
+            vec![StaticEffect::CostCut { filter: None, n: 2 }]
+        );
+        // "The first artifact spell each turn" is a gated variant: skipped.
+        assert!(parse_statics(
+            "The first artifact spell you cast each turn costs {1} less to cast."
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn unblockable_parses() {
+        assert!(parse_unblockable("This creature can't be blocked."));
+        assert!(!parse_unblockable(
+            "This creature can't be blocked by creatures with power 2 or greater."
+        ));
+        assert!(!parse_unblockable("This creature can't be blocked except by Walls."));
+    }
+
+    #[test]
+    fn protection_parses() {
+        assert_eq!(
+            parse_protection(
+                "First strike (This creature deals combat damage first.)\nProtection from black (It can't be blocked by anything black.)"
+            ),
+            vec!['B']
+        );
+        assert_eq!(parse_protection("Protection from red and from white"), vec!['R', 'W']);
+        assert_eq!(
+            parse_protection("Protection from all colors"),
+            vec!['W', 'U', 'B', 'R', 'G']
+        );
+        assert!(parse_protection("Flying, lifelink").is_empty());
+    }
+
+    // ---- pass C: replacements + discover ----
+
+    #[test]
+    fn replacements_parse() {
+        let r = parse_replacements(
+            "This land enters tapped.\nWhen this land enters, you gain 1 life.\n{T}: Add {B} or {R}.",
+        );
+        assert!(r.enters_tapped);
+        assert!(r.enters_counters.is_none());
+
+        let r = parse_replacements("This creature enters with a +1/+1 counter on it.");
+        assert_eq!(r.enters_counters, Some(("+1/+1".to_string(), 1)));
+        assert!(!r.enters_tapped);
+
+        // Riders and conditions stay unmodeled.
+        let r = parse_replacements(
+            "This creature enters with a +1/+1 counter on it for each creature you control.",
+        );
+        assert!(r.enters_counters.is_none());
+        let r = parse_replacements("This land enters tapped unless you control a Mountain.");
+        assert!(!r.enters_tapped);
+
+        let r = parse_replacements("If this creature would die, exile it instead.");
+        assert!(r.dies_to_exile);
+        // Replacing OTHER creatures' deaths is not this card's replacement.
+        let r = parse_replacements("If a creature an opponent controls would die, exile it instead.");
+        assert!(!r.dies_to_exile);
+
+        let r = parse_replacements(
+            "Defender (This creature can't attack.)\nFlying\nPrevent all combat damage that would be dealt to and dealt by this creature.",
+        );
+        assert!(r.prevent_to && r.prevent_by);
+        let r = parse_replacements("Prevent all combat damage that would be dealt to this creature.");
+        assert!(r.prevent_to && !r.prevent_by);
+    }
+
+    #[test]
+    fn discover_parses() {
+        assert_eq!(parse_discover("When this creature enters, discover 4."), Some(4));
+        assert_eq!(parse_discover("Draw a card."), None);
+    }
+
+    #[test]
+    fn ward_parses() {
+        assert_eq!(
+            parse_ward("Ward {1} (Whenever this creature becomes the target...)\n{3}{W}: This creature gets +X/+0 until end of turn, where X is its toughness."),
+            Some("{1}".to_string())
+        );
+        assert_eq!(parse_ward("Flying, ward {2}"), Some("{2}".to_string()));
+        assert_eq!(parse_ward("Ward—Pay 3 life."), Some("pay 3 life".to_string()));
+        assert_eq!(parse_ward("Creatures you control move toward the exit."), None);
+    }
+}
+
+/// Fire-and-forget: cache oracle facts for every card this room could see
+/// (all zones of every seat). Called when an enforced room gains a deck and
+/// again at start, so by the time cards matter the answers are local.
+pub fn prefetch_room(app: &Arc<App>, room: &crate::rooms::Room) {
+    let mut ids: HashSet<String> = HashSet::new();
+    for p in &room.players {
+        for zone in [&p.hand, &p.library, &p.battlefield, &p.graveyard, &p.exile, &p.command] {
+            for card in zone.iter() {
+                if let Some(sid) = &card.scryfall_id {
+                    ids.insert(sid.clone());
+                }
+            }
+        }
+    }
+    if ids.is_empty() {
+        return;
+    }
+    let app = app.clone();
+    tokio::spawn(async move {
+        ensure(&app, ids.into_iter().collect()).await;
+    });
+}

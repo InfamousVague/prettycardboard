@@ -21,30 +21,42 @@ function commanderOf(player: TablePlayer) {
 }
 
 /** The deck's shape at a glance: identity pips, size + curve, type spread
- * (MTG) or RAM + avg cost (Cyberpunk). All from the owner-pushed deckMeta. */
-function DeckMetaRows({ meta, cyber }: { meta: DeckMeta; cyber: boolean }) {
+ * (MTG), RAM + avg cost (Cyberpunk), or Monster/Spell/Trap counts + avg ATK
+ * (Yu-Gi-Oh). All from the owner-pushed deckMeta. */
+function DeckMetaRows({ meta, cyber, ygo }: { meta: DeckMeta; cyber: boolean; ygo: boolean }) {
   const t = useT();
   return (
     <>
       <span className="preMeta">
-        {!cyber && meta.colors && meta.colors.length > 0 && <ColorPips colors={meta.colors} />}
+        {!cyber && !ygo && meta.colors && meta.colors.length > 0 && <ColorPips colors={meta.colors} />}
         <span className="preMetaStat">
           {meta.size}
           {cyber
             ? meta.ram != null && ` · ${meta.ram} RAM`
-            : meta.avgMv != null && ` · ${t('preAvgMv')} ${meta.avgMv}`}
+            : ygo
+              ? meta.avgAtk != null && ` · ${t('dbAvgAtk')} ${meta.avgAtk}`
+              : meta.avgMv != null && ` · ${t('preAvgMv')} ${meta.avgMv}`}
         </span>
       </span>
       <span className="preMetaTypes">
         {cyber
           ? meta.avgCost != null && `${t('dbAvgCost')} ${meta.avgCost}`
-          : [
-              meta.creatures != null && `${meta.creatures} ${t('preCreatures')}`,
-              meta.lands != null && `${meta.lands} ${t('preLands')}`,
-              meta.spells != null && `${meta.spells} ${t('preSpells')}`,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
+          : ygo
+            ? [
+                meta.monsters != null && `${meta.monsters} ${t('dbMonsters')}`,
+                meta.spells != null && `${meta.spells} ${t('dbSpells')}`,
+                meta.traps != null && `${meta.traps} ${t('dbTraps')}`,
+                meta.extra != null && meta.extra > 0 && `+${meta.extra} ${t('dbExtraDeck')}`,
+              ]
+                .filter(Boolean)
+                .join(' · ')
+            : [
+                meta.creatures != null && `${meta.creatures} ${t('preCreatures')}`,
+                meta.lands != null && `${meta.lands} ${t('preLands')}`,
+                meta.spells != null && `${meta.spells} ${t('preSpells')}`,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
       </span>
     </>
   );
@@ -55,6 +67,7 @@ export function PreMatch({ room, onClose }: { room: RoomState; onClose: () => vo
   const players = [...room.players].sort((a, b) => a.seat - b.seat);
   const first = room.startingSeat ?? room.activeSeat;
   const cyber = room.game === 'cyberpunk';
+  const ygo = room.game === 'yugioh';
 
   // Every seat's all-time record, fetched once per splash. Failures just leave
   // the row off - the splash must never block on stats.
@@ -134,7 +147,7 @@ export function PreMatch({ room, onClose }: { room: RoomState; onClose: () => vo
                 )}
                 <span className="preName">{player.username}</span>
                 {player.deckName && <span className="preDeck">{player.deckName}</span>}
-                {player.deckMeta && <DeckMetaRows meta={player.deckMeta} cyber={cyber} />}
+                {player.deckMeta && <DeckMetaRows meta={player.deckMeta} cyber={cyber} ygo={ygo} />}
                 {(() => {
                   const stats = records[player.userId];
                   if (!stats || stats.played === 0) return null;

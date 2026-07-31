@@ -379,7 +379,8 @@ fn deck_summary(row: &db::DeckRow) -> Value {
     // CDN URL from one yields a guaranteed 404 that the client cannot recover from,
     // because a truthy coverImageUrl short-circuits its own alt-art resolution. Leave
     // it null exactly like Cyberpunk does and let the client resolve coverCardId.
-    let cover = if row.game == "cyberpunk" {
+    let cover = if row.game == "cyberpunk" || row.game == "yugioh" {
+        // Non-Scryfall ids: the client resolves art from coverCardId + game.
         None
     } else {
         cover_id
@@ -617,7 +618,7 @@ pub struct RoomBody {
     /// first-draw-skip, and whether command-zone machinery is active.
     #[serde(default)]
     format: Option<String>,
-    /// "mtg" (default) or "cyberpunk": which card game this table plays.
+    /// "mtg" (default), "cyberpunk", or "yugioh": which card game this table plays.
     #[serde(default)]
     game: Option<String>,
 }
@@ -631,11 +632,12 @@ pub async fn room_create(
         return err(StatusCode::BAD_REQUEST, "invalid_seats", "seats must be 2-6");
     }
     let game = body.game.unwrap_or_else(|| "mtg".to_string());
-    if game != "mtg" && game != "cyberpunk" {
-        return err(StatusCode::BAD_REQUEST, "invalid_game", "game must be mtg or cyberpunk");
+    if game != "mtg" && game != "cyberpunk" && game != "yugioh" {
+        return err(StatusCode::BAD_REQUEST, "invalid_game", "game must be mtg, cyberpunk, or yugioh");
     }
-    // Cyberpunk has no commander/standard split; force a plain "standard" table.
-    let format = if game == "cyberpunk" {
+    // Only MTG has a commander/standard split; the other games force a plain
+    // "standard" table, which also keeps the commander machinery off.
+    let format = if game == "cyberpunk" || game == "yugioh" {
         "standard".to_string()
     } else {
         body.format.unwrap_or_else(|| "commander".to_string())
@@ -677,8 +679,14 @@ pub async fn room_create(
         starting_seat: 0,
         stack: Vec::new(),
         combat: None,
+        last_combat: None,
+        stack_passed: Vec::new(),
+        stack_changed_ms: 0,
         markers: Default::default(),
+        marks: Default::default(),
         pending_cmd: Vec::new(),
+        pending_triggers: Vec::new(),
+        end_fired: None,
         turn_started_ms: 0,
         turn_last_interaction_ms: 0,
         started_at_ms: 0,
@@ -857,6 +865,9 @@ pub async fn room_get(State(app): State<Arc<App>>, Path(code): Path<String>) -> 
         "name": room.name,
         "seats": room.seats,
         "format": room.format,
+        // Which game this table plays, so an invitee brings a deck for it
+        // rather than one the seat would reject as wrong_game.
+        "game": room.game,
         "players": room.players
             .iter()
             .map(|p| json!({"userId": p.user_id, "username": p.username}))
@@ -1156,6 +1167,73 @@ pub async fn booster_art(State(app): State<Arc<App>>, Path(code): Path<String>) 
                 let _ = std::fs::write(&miss, b"");
             }
             err(StatusCode::NOT_FOUND, "no_art", "no art for this set")
+        }
+    }
+}
+
+/// GET /api/ygo/img/{passcode}.jpg — a Yu-Gi-Oh card face, fetched from
+/// YGOPRODeck's image CDN once and cached on disk forever after. Public for
+/// the same reason as booster art: it is painted from <img>, which cannot
+/// attach auth headers.
+///
+/// YGOPRODeck's API guide forbids apps from hotlinking images.ygoprodeck.com
+/// ("download and re-host the images yourself", on pain of IP blacklist), so
+/// the server takes the hit exactly once per card — every visitor's browser
+/// after that is served from our disk. The bundled starter faces never reach
+/// here (they ship in public/cache/yugioh/cards/); this covers the long tail
+/// of the ~14,500-card pool.
+pub async fn ygo_img(State(app): State<Arc<App>>, Path(id): Path<String>) -> Response {
+    // Passcodes: unpadded decimal, up to ten digits ("46986414"). Accept an
+    // optional .jpg suffix so the URL reads like the file it is.
+    let id = id.strip_suffix(".jpg").unwrap_or(&id).to_string();
+    if id.is_empty() || id.len() > 10 || !id.chars().all(|c| c.is_ascii_digit()) || id.starts_with('0') && id.len() > 1 {
+        return err(StatusCode::BAD_REQUEST, "bad_id", "not a passcode");
+    }
+    let hit = app.ygo_img_dir.join(format!("{id}.jpg"));
+    let miss = app.ygo_img_dir.join(format!("{id}.none"));
+
+    let serve = |bytes: Vec<u8>| {
+        (
+            [
+                (header::CONTENT_TYPE, "image/jpeg"),
+                // A card's face never changes once cached.
+                (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+            ],
+            bytes,
+        )
+            .into_response()
+    };
+
+    if let Ok(bytes) = std::fs::read(&hit) {
+        return serve(bytes);
+    }
+    if miss_fresh(&miss) {
+        // Negative cache, time-limited: an unknown passcode (or a transient
+        // CDN failure that answered) must not be re-fetched per render.
+        return err(StatusCode::NOT_FOUND, "no_card", "no face for this passcode");
+    }
+
+    // One fetch at a time; re-check the disk once inside, because a cold
+    // browse grid queues dozens of faces here at once.
+    let _guard = app.ygo_img_lock.lock().await;
+    if let Ok(bytes) = std::fs::read(&hit) {
+        return serve(bytes);
+    }
+    if miss_fresh(&miss) {
+        return err(StatusCode::NOT_FOUND, "no_card", "no face for this passcode");
+    }
+
+    let url = format!("https://images.ygoprodeck.com/images/cards/{id}.jpg");
+    match curl_jpeg(&url).await {
+        Some(bytes) => {
+            let _ = std::fs::write(&hit, &bytes);
+            serve(bytes)
+        }
+        None => {
+            // curl_jpeg cannot distinguish "404" from "unreachable"; a
+            // time-limited miss marker keeps retries cheap either way.
+            let _ = std::fs::write(&miss, b"");
+            err(StatusCode::NOT_FOUND, "no_card", "no face for this passcode")
         }
     }
 }

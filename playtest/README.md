@@ -24,6 +24,11 @@ npm run duel       # scenario 2
 npm run chaos      # scenario 3 (node scenarios/chaos-monkey.js <seed> to reproduce)
 npm run draft      # scenario 5 — booster draft pass-and-pick
 npm run restart    # scenario 4 — LOCAL ONLY: kills + relaunches the dev server
+npm run enforced   # enforced rules: validator + bot combat machine (vs a bot)
+npm run triggers   # enforced pass A: triggered-ability prompts, solo goldfish
+npm run statics    # enforced pass B: evasion matrix, anthem, cost cut, ward
+npm run cascade    # enforced pass C: replacements, cascade, stack copies
+npm run brawl      # enforced fuzz: all four FF precons bot-vs-bot, ~110s
 ```
 
 ## What each scenario proves
@@ -135,6 +140,51 @@ rotation provable rather than plausible:
 - `draft.built` without a saved deck is refused (`deck_required`); saving a
   deck from the pool seats it automatically, and the last build flips the
   draft to `done`.
+
+### `scenarios/marks-arrows.js` — the shared "look at this" layer
+Three seats plus a spectator, proving the split between the two halves:
+- **Markers** (`mark.set` / `mark.clear`) are real table state: they reach
+  every player and the spectator, carry who placed them (id, seat, name,
+  timestamp), replace in place when someone re-marks a card, lift with
+  `mark: null`, survive a disconnect/reconnect, are inherited by a late
+  viewer, and are dropped automatically when their card leaves the
+  battlefield. Bad input is refused (unknown card, empty/oversized kind,
+  clearing an already-clean table).
+- **Arrows** (the `aim` relay) are ephemeral: broadcast to every player and
+  spectator with the sender's seat attached, aimable at a card or a seat,
+  and provably absent from `room.state` afterwards.
+
+### Enforced-mode scenarios (rules roadmap passes A-C)
+
+All four run in `npm run all` after the freeform scenarios:
+
+- **`enforced-duel.js`** — the Arena-lite validator against a hard bot:
+  must-cast rejections, land-drop limits, structural guards, and the full
+  lock/block/ready/preview/resolve combat machine with server-applied damage.
+- **`enforced-triggers.js`** (pass A) — a solo goldfish with a purpose-built
+  deck exercising every parsed trigger pattern: ETB (draw, compound
+  draw-and-lose, drain, a land's ETB on the real land drop), dies (token
+  stub), attacks (life + self counter on combat.lock), upkeep (auto and
+  manual), end step - including apply/decline/acknowledge answers and
+  once-per-turn end-step semantics across phase.set and turn.pass.
+- **`enforced-statics.js`** (pass B) — two seats: the evasion matrix
+  (unblockable / fear / shadow / skulk / protection rejections and their
+  legal counterparts), vigilance's no-tap, the anthem folded into the
+  combat preview's math, a {2} artifact cast off one land through a cost
+  cut, and the ward tax relayed on the aim gesture.
+- **`enforced-cascade.js`** (pass C) — enters-tapped and
+  enters-with-counters replacements coexisting with ETB prompts,
+  dies-to-exile, the manual "cascade for N" verb and the automatic cascade
+  keyword firing (hit rides the stack free to cast, rest bottoms), a stack
+  spell token-copied and both copies resolving, and Fog Bank's two-way
+  damage prevention in the preview.
+- **`enforced-brawl.js`** (fuzz) — all four FF precons play bot-vs-bot at
+  one enforced table for ~100s while a spectator asserts zero `[rules]`
+  rejection logs, no error frames, per-seat card conservation, answered
+  trigger prompts, and forward progress. Deterministic scenarios use real
+  Scryfall cards whose oracle text is pinned in comments; the trick that
+  makes them reproducible is bottoming the opening hand and fetching every
+  singleton test card out of the library before anything can draw it.
 
 ## Notes
 - `lib.js` is the protocol client: register-or-login, REST, WS with a

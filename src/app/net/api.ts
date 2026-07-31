@@ -12,8 +12,24 @@ import type { Deck, DeckCard, DeckStats, DeckSummary, FriendsPayload, Identity, 
  * plumbing (which is awkward across the Windows/Linux CI runners).
  */
 const LIVE_SERVER = 'https://prettycardboard.com';
-export const SERVER_URL: string =
-  import.meta.env.VITE_PC_SERVER ?? (isTauri() ? LIVE_SERVER : 'http://127.0.0.1:8787');
+
+/** Local play (desktop): the bundled server's port, remembered so the origin
+ *  is known synchronously at boot. main.tsx re-spawns the sidecar and reloads
+ *  if the port it actually got differs (see localServerStart). */
+function localPlayPort(): string | null {
+  try {
+    if (!isTauri() || localStorage.getItem('pc.local') !== '1') return null;
+    return localStorage.getItem('pc.local.port');
+  } catch {
+    return null;
+  }
+}
+
+export const SERVER_URL: string = (() => {
+  const local = localPlayPort();
+  if (local) return `http://127.0.0.1:${local}`;
+  return import.meta.env.VITE_PC_SERVER ?? (isTauri() ? LIVE_SERVER : 'http://127.0.0.1:8787');
+})();
 
 export class ApiError extends Error {
   constructor(

@@ -57,6 +57,19 @@ enum ClientMsg {
     },
     #[serde(rename = "chat.send")]
     ChatSend { text: String },
+    /// Ephemeral targeting indicator: "my spell (fromIid) is aimed at
+    /// toIid/toSeat". Relayed to the room and never stored - the tabletop
+    /// pointing gesture for sorceries and effects, any mode.
+    #[serde(rename = "aim", rename_all = "camelCase")]
+    Aim { from_iid: Option<String>, to_iid: Option<String>, to_seat: Option<usize>, kind: Option<String> },
+    /// Seat an AI opponent (host only, pre-start). `deck_code` picks one of the
+    /// embedded precons ("random"/absent = random); `style` is
+    /// "casual" | "aggro" | "defensive".
+    #[serde(rename = "bot.add", rename_all = "camelCase")]
+    BotAdd { deck_code: Option<String>, style: Option<String>, difficulty: Option<String> },
+    /// Remove the bot holding `seat` (host only, pre-start).
+    #[serde(rename = "bot.remove")]
+    BotRemove { seat: usize },
     #[serde(rename = "invite.send", rename_all = "camelCase")]
     InviteSend { to_user_id: String, room_id: String },
     #[serde(rename = "game.action")]
@@ -80,6 +93,8 @@ enum ClientMsg {
     /// default; synced from the client's settings).
     #[serde(rename = "auto.set")]
     AutoSet { untap: bool, draw: bool },
+    #[serde(rename = "coach.set")]
+    CoachSet { on: bool },
     // Replay scrubbing: viewer-local and read-only. These NEVER enter apply()
     // and never move the shared cursor - they only materialize a past frame
     // for the requesting connection.
@@ -248,6 +263,67 @@ fn handle_msg(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
             pull_notify(app, user, &scryfall_id, &name, &set_code, &rarity, foil, tx)
         }
         ClientMsg::ChatSend { text } => chat_send(app, user, &text, tx),
+        ClientMsg::Aim { from_iid, to_iid, to_seat, kind } => {
+            if let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) {
+                if let Some(room) = app.rooms.get(&rref.room_id) {
+                    // Ward tax reminder (rules pass B): aiming a spell at an
+                    // opponent's warded permanent surfaces the printed cost.
+                    // Enriches the relay; a log line only for the deliberate
+                    // spell-targeting gesture (fromIid present).
+                    let mut ward: Option<(String, String)> = None;
+                    if crate::rules::enforced(&room) {
+                        if let Some(target_iid) = &to_iid {
+                            for p in &room.players {
+                                if p.user_id == user.id {
+                                    continue;
+                                }
+                                if let Some(card) =
+                                    p.battlefield.iter().find(|c| c.iid == *target_iid)
+                                {
+                                    if let Some(f) = crate::rules::facts(app, card) {
+                                        if let Some(cost) = &f.ward {
+                                            ward = Some((card.name.clone(), cost.clone()));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // The pointer's own seat travels with it: the client draws
+                    // one arrow per sender in that seat's colour, so several
+                    // people can point at once without the table guessing who
+                    // meant what.
+                    let from_seat = room.players.iter().find(|p| p.user_id == user.id).map(|p| p.seat);
+                    room_send_all(
+                        app,
+                        &room,
+                        &json!({
+                            "type": "aim",
+                            "fromUserId": user.id,
+                            "username": user.username,
+                            "fromSeat": from_seat,
+                            "fromIid": from_iid,
+                            "toIid": to_iid,
+                            "toSeat": to_seat,
+                            "kind": kind,
+                            "ward": ward.as_ref().map(|(_, cost)| cost),
+                            "ts": crate::now_ms(),
+                        }),
+                    );
+                    if let (Some((name, cost)), Some(_)) = (&ward, &from_iid) {
+                        let seq = room.seq;
+                        room_log(
+                            app,
+                            &room,
+                            seq,
+                            &format!("Reminder: {name} has ward {cost} - the spell is countered unless its tax is paid"),
+                        );
+                    }
+                }
+            }
+        }
+        ClientMsg::BotAdd { deck_code, style, difficulty } => bot_add(app, user, deck_code, style, difficulty, tx),
+        ClientMsg::BotRemove { seat } => bot_remove(app, user, seat, tx),
         ClientMsg::InviteSend { to_user_id, room_id } => invite_send(app, user, &to_user_id, &room_id),
         ClientMsg::GameAction { action } => game_action(app, user, action, tx),
         ClientMsg::PlaymatSet { id } => playmat_set(app, user, id),
@@ -255,6 +331,7 @@ fn handle_msg(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
         ClientMsg::CardBackSet { id } => card_back_set(app, user, id),
         ClientMsg::DeckMetaSet { meta } => deck_meta_set(app, user, meta),
         ClientMsg::AutoSet { untap, draw } => auto_set(app, user, untap, draw),
+        ClientMsg::CoachSet { on } => coach_set(app, user, on),
         ClientMsg::ReplaySeek { index } => replay_seek(app, user, index, tx),
         ClientMsg::DraftStart {
             set,
@@ -442,6 +519,8 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
     // seats and mid-game joiners match the table's actual rule.
     let starting_life = if room.game == "cyberpunk" {
         0
+    } else if room.game == "yugioh" {
+        room.settings.starting_life.unwrap_or(8000)
     } else {
         room.settings
             .starting_life
@@ -478,6 +557,8 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
         deck_meta: None,
         auto_untap: false,
         auto_draw: false,
+        coach: false,
+        lands_this_turn: 0,
         mat_layout: Default::default(),
         gig_dice,
         roll_seq: 0,
@@ -485,6 +566,9 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
         deck_id: deck_id.clone(),
         deck_name,
         conceded: false,
+        is_bot: false,
+        bot_style: None,
+        bot_difficulty: None,
         turns_taken: 0,
         turn_time_ms: 0,
         cards_played: 0,
@@ -620,16 +704,19 @@ fn leave_room(app: &Arc<App>, user: &db::User) {
             room.stack.retain(|e| e.owner != user.id);
             room.pending_cmd.retain(|p| p.owner != user.id);
             if room.host == user.id {
-                // Hand the lobby to whoever remains.
-                if let Some(next) = room.players.first() {
+                // Hand the lobby to whoever remains. A human, preferably:
+                // bots cannot run a lobby (no start, no settings, no kicks).
+                if let Some(next) =
+                    room.players.iter().find(|p| !p.is_bot).or_else(|| room.players.first())
+                {
                     room.host = next.user_id.clone();
                 }
             }
             // If it was the leaver's turn, advance so the table doesn't stall
             // on an empty seat (also what lets an all-bot game keep running).
             if was_active && !room.players.is_empty() {
-                // Locked combats cancel outright; un-locked ones stash the
-                // legacy settle record (game::clear_combat decides).
+                // A combat with attackers is stashed as last_combat so bot
+                // defenders can still settle its damage.
                 game::clear_combat(&mut room);
                 let now = crate::now_ms();
                 // The leaver is already gone, so the credit is a no-op, but
@@ -664,10 +751,6 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
         send_err(tx, "not_in_room", "you are not in a room");
         return;
     };
-    if rref.spectating {
-        send_err(tx, "forbidden", "spectators cannot start the game");
-        return;
-    }
     let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
         send_err(tx, "room_not_found", "no such room");
         return;
@@ -675,6 +758,16 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
     if room.host != user.id {
         send_err(tx, "forbidden", "only the host can start the game");
         return;
+    }
+    // A spectating host may start a table where every seat is a bot: that is
+    // the "sit back and watch them play" mode. Any human seat still requires
+    // the host to be seated like before.
+    if rref.spectating {
+        let all_bots = !room.players.is_empty() && room.players.iter().all(|p| p.is_bot);
+        if !all_bots || room.players.len() < 2 {
+            send_err(tx, "forbidden", "spectators can only start an all-bot table (2+ bots)");
+            return;
+        }
     }
     if room.started {
         send_err(tx, "already_started", "the game has already started");
@@ -699,27 +792,35 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
         return;
     }
     room.started = true;
+    if crate::rules::enforced(&room) {
+        // Belt and braces: any card the lobby phase missed gets fetched now.
+        crate::oracle::prefetch_room(app, &room);
+    }
     let deal = crate::game::effective_hand_size(&room);
     // Reset each seat's life to the effective starting total (host override or
-    // format default). Cyberpunk keeps its Net/RAM slots at 0.
-    let base_life = if room.game == "cyberpunk" {
-        0
-    } else {
-        rooms::format_default_life(&room.format)
+    // format/game default). Cyberpunk keeps its Net/RAM slots at 0; Yu-Gi-Oh
+    // duels start at 8000 LP.
+    let base_life = match room.game.as_str() {
+        "cyberpunk" => 0,
+        "yugioh" => 8000,
+        _ => rooms::format_default_life(&room.format),
     };
     let starting_life = if room.game == "cyberpunk" {
         0
     } else {
         room.settings.starting_life.unwrap_or(base_life)
     };
+    // Yu-Gi-Oh has no mulligans: seats start already "kept" so the first turn
+    // begins the moment the hands are dealt.
+    let mull_state = if room.game == "yugioh" { "kept" } else { "deciding" };
     for p in room.players.iter_mut() {
         p.life = starting_life;
         let n = deal.min(p.library.len());
         let drawn: Vec<rooms::Card> = p.library.drain(0..n).collect();
         p.hand.extend(drawn);
         // Every seat starts in the mulligan decision (freeform: no other action
-        // is gated on it).
-        p.mulligan = Some(rooms::Mull { state: "deciding".to_string(), taken: 0 });
+        // is gated on it) — except Yu-Gi-Oh, which skips the flow entirely.
+        p.mulligan = Some(rooms::Mull { state: mull_state.to_string(), taken: 0 });
     }
     // Turn order anchor: host may force a random seat or a specific one; the
     // default follows the lowest occupied seat.
@@ -753,14 +854,15 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
         &room
             .players
             .iter()
-            .map(|p| serde_json::json!({ "username": p.username, "isBot": false }))
+            .map(|p| serde_json::json!({ "username": p.username, "isBot": p.is_bot }))
             .collect::<Vec<_>>(),
     )
     .unwrap_or_else(|_| "[]".to_string());
     let now = crate::now_ms();
     {
         let conn = app.db.lock().unwrap();
-        for p in room.players.iter() {
+        // Bots have no account and no match-history page; skip their rows.
+        for p in room.players.iter().filter(|p| !p.is_bot) {
             db::match_record(
                 &conn,
                 &crate::hex_id(8),
@@ -782,9 +884,24 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
     room.hist_clear();
     room.push_history(user.id.clone(), "Game started".to_string(), seq, None);
 
+    // Yu-Gi-Oh seats were dealt already "kept" (no mulligan flow): the first
+    // turn begins right now. A no-op for every other game, whose seats are
+    // still deciding (their keeps trigger it via MullKeep/Concede).
+    let first_turn_logs = game::maybe_begin_first_turn(&mut room, started_now);
+
     rooms::touch(app, &mut room);
     room_send_states(app, &room);
-    room_log(app, &room, seq, &format!("Game started: opening hands of {deal} dealt; keep or mulligan"));
+    let started_line = if room.game == "yugioh" {
+        format!("Game started: opening hands of {deal} dealt")
+    } else {
+        format!("Game started: opening hands of {deal} dealt; keep or mulligan")
+    };
+    room_log(app, &room, seq, &started_line);
+    for line in first_turn_logs {
+        room.seq += 1;
+        let line_seq = room.seq;
+        room_log(app, &room, line_seq, &line);
+    }
     send_undo_state(app, &room);
     send_timeline(app, &room);
 }
@@ -889,6 +1006,9 @@ fn room_deck_set(app: &Arc<App>, user: &db::User, deck_id: &str, tx: &Tx) {
     player.graveyard.clear();
     player.exile.clear();
     player.ready = false;
+    if crate::rules::enforced(&room) {
+        crate::oracle::prefetch_room(app, &room);
+    }
     rooms::touch(app, &mut room);
     room_send_states(app, &room);
 }
@@ -919,7 +1039,9 @@ fn room_settings(app: &Arc<App>, user: &db::User, mut settings: rooms::GameSetti
     if !matches!(settings.first_player.as_str(), "random" | "seat") {
         settings.first_player = "auto".to_string();
     }
-    settings.starting_life = settings.starting_life.map(|l| l.clamp(1, 999));
+    // Yu-Gi-Oh life is four digits (8000 default); the other games stay tight.
+    let life_cap = if room.game == "yugioh" { 99_999 } else { 999 };
+    settings.starting_life = settings.starting_life.map(|l| l.clamp(1, life_cap));
     settings.starting_hand = settings.starting_hand.map(|h| h.clamp(0, 20));
     settings.free_mulligans = settings.free_mulligans.map(|m| m.min(7));
     if let Some(seat) = settings.first_seat {
@@ -927,7 +1049,16 @@ fn room_settings(app: &Arc<App>, user: &db::User, mut settings: rooms::GameSetti
             settings.first_seat = None;
         }
     }
+    let enforce_flipped_on = settings.enforced && !room.settings.enforced;
     room.settings = settings;
+    // Enforcement only means something for Magic tables.
+    if room.game != "mtg" {
+        room.settings.enforced = false;
+    }
+    if enforce_flipped_on && crate::rules::enforced(&room) {
+        // Warm the oracle cache so the rules have answers by game start.
+        crate::oracle::prefetch_room(app, &room);
+    }
     rooms::touch(app, &mut room);
     room_send_states(app, &room);
 }
@@ -955,6 +1086,192 @@ fn chat_send(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
             "ts": crate::now_ms(),
         }),
     );
+}
+
+/// Broadcast a chat line spoken by a bot. Bots have no `db::User` or socket;
+/// the frame is byte-for-byte what a human's chat.send produces, so clients
+/// need no special handling to render bot table talk.
+pub fn bot_chat(app: &App, room: &Room, bot_id: &str, username: &str, text: &str) {
+    room_send_all(
+        app,
+        room,
+        &json!({
+            "type": "chat",
+            "from": {"userId": bot_id, "username": username},
+            "text": text,
+            "ts": crate::now_ms(),
+        }),
+    );
+}
+
+/// {"type":"bot.add"} per the Bots addendum: host-only, pre-start, needs a
+/// free seat; seats a synthetic player with one of the embedded precons. The
+/// bot's zones are built through the same path as a human's deck so cards
+/// carry identical scryfall ids and commander flags.
+fn bot_add(
+    app: &Arc<App>,
+    user: &db::User,
+    deck_code: Option<String>,
+    style: Option<String>,
+    difficulty: Option<String>,
+    tx: &Tx,
+) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        send_err(tx, "not_in_room", "you are not in a room");
+        return;
+    };
+    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
+        send_err(tx, "room_not_found", "no such room");
+        return;
+    };
+    if room.host != user.id {
+        send_err(tx, "forbidden", "only the host can add bots");
+        return;
+    }
+    if room.started {
+        send_err(tx, "already_started", "the game has already started");
+        return;
+    }
+    if room.game != "mtg" {
+        send_err(tx, "bad_game", "bots only play Magic tables");
+        return;
+    }
+    let taken: Vec<usize> = room.players.iter().map(|p| p.seat).collect();
+    let Some(seat) = (0..room.seats).find(|s| !taken.contains(s)) else {
+        send_err(tx, "room_full", "room is full");
+        return;
+    };
+    let decks = &crate::bot::data().decks;
+    let deck = match deck_code.as_deref() {
+        None | Some("random") => &decks[rand::random_range(0..decks.len())],
+        Some(code) => match decks.iter().find(|d| d.code == code) {
+            Some(d) => d,
+            None => {
+                send_err(tx, "bad_deck", &format!("no bot deck {code}"));
+                return;
+            }
+        },
+    };
+    let style = match style.as_deref() {
+        Some("aggro") => "aggro",
+        Some("defensive") => "defensive",
+        _ => "casual",
+    };
+    let username = crate::bot::pick_name(&room);
+    let bot_id = format!("bot:{}", crate::hex_id(6));
+    let cards: Vec<db::DeckCard> = deck
+        .cards
+        .iter()
+        .map(|c| db::DeckCard {
+            scryfall_id: c.sid.clone(),
+            name: c.name.clone(),
+            quantity: c.qty,
+            board: c.board.clone(),
+        })
+        .collect();
+    let (command, library) =
+        rooms::build_zones(&cards, rooms::format_has_commander(&room.format), &room.game);
+    let starting_life = room
+        .settings
+        .starting_life
+        .unwrap_or_else(|| rooms::format_default_life(&room.format));
+    let gig_dice = rooms::new_gig_dice(&room.game);
+    room.players.push(rooms::Player {
+        user_id: bot_id.clone(),
+        username: username.clone(),
+        seat,
+        // Bots are always ready and always online; the deck id is a sentinel
+        // so start_room's "everyone picked a deck" check holds for them.
+        ready: true,
+        life: starting_life,
+        poison: 0,
+        mana: rooms::empty_mana(),
+        cmd_damage: Default::default(),
+        cmd_damage_by_commander: Default::default(),
+        commander_tax: Default::default(),
+        mulligan: None,
+        playmat: Some(crate::bot::bot_playmat(&username).to_string()),
+        card_back: None,
+        deck_meta: None,
+        // Bots untap and draw on their own turn without a human's clicks.
+        auto_untap: true,
+        auto_draw: true,
+        // A bot never reads its own advice.
+        coach: false,
+        lands_this_turn: 0,
+        mat_layout: Default::default(),
+        gig_dice,
+        roll_seq: 0,
+        last_roll: None,
+        deck_id: Some(format!("bot:{}", deck.code)),
+        deck_name: Some(deck.name.clone()),
+        conceded: false,
+        is_bot: true,
+        bot_style: Some(style.to_string()),
+        bot_difficulty: Some(match difficulty.as_deref() {
+            Some("easy") => "easy".to_string(),
+            Some("hard") => "hard".to_string(),
+            _ => "normal".to_string(),
+        }),
+        turns_taken: 0,
+        turn_time_ms: 0,
+        cards_played: 0,
+        cards_drawn: 0,
+        peak_battlefield: 0,
+        hand: Vec::new(),
+        library,
+        battlefield: Vec::new(),
+        graveyard: Vec::new(),
+        exile: Vec::new(),
+        command,
+        hand_revealed: false,
+        online: true,
+        undo: None,
+        peeked: Vec::new(),
+    });
+    room.players.sort_by_key(|p| p.seat);
+    room.seq += 1;
+    let seq = room.seq;
+    if crate::rules::enforced(&room) {
+        crate::oracle::prefetch_room(app, &room);
+    }
+    rooms::touch(app, &mut room);
+    room_send_states(app, &room);
+    room_log(app, &room, seq, &format!("{} takes seat {}", username, seat + 1));
+    bot_chat(app, &room, &bot_id, &username, &crate::bot::greeting_line());
+}
+
+/// {"type":"bot.remove"}: host-only, pre-start, target seat must hold a bot.
+fn bot_remove(app: &Arc<App>, user: &db::User, seat: usize, tx: &Tx) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        send_err(tx, "not_in_room", "you are not in a room");
+        return;
+    };
+    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
+        send_err(tx, "room_not_found", "no such room");
+        return;
+    };
+    if room.host != user.id {
+        send_err(tx, "forbidden", "only the host can remove bots");
+        return;
+    }
+    if room.started {
+        send_err(tx, "already_started", "the game has already started");
+        return;
+    }
+    let target = room.players.iter().find(|p| p.seat == seat);
+    let Some(bot) = target.filter(|p| p.is_bot) else {
+        send_err(tx, "not_a_bot", &format!("seat {seat} does not hold a bot"));
+        return;
+    };
+    let bot_id = bot.user_id.clone();
+    let bot_name = bot.username.clone();
+    room.players.retain(|p| p.user_id != bot_id);
+    room.seq += 1;
+    let seq = room.seq;
+    rooms::touch(app, &mut room);
+    room_send_states(app, &room);
+    room_log(app, &room, seq, &format!("{} removes {}", user.username, bot_name));
 }
 
 fn room_ping(app: &Arc<App>, user: &db::User, target_user_id: &str, tx: &Tx) {
@@ -1164,7 +1481,13 @@ fn game_action(app: &Arc<App>, user: &db::User, action: game::Action, tx: &Tx) {
         send_err(tx, "room_not_found", "no such room");
         return;
     };
-    if let Err((code, message)) = dispatch_action(app, &mut room, &user.id, action, Some(tx)) {
+    let outcome = dispatch_action(app, &mut room, &user.id, action, Some(tx));
+    // Enforced rooms: any gap in the oracle cache (a failed fetch, a card the
+    // prefetch missed) heals on the next human action - cached ids no-op.
+    if crate::rules::enforced(&room) {
+        crate::oracle::prefetch_room(app, &room);
+    }
+    if let Err((code, message)) = outcome {
         send_err(tx, code, &message);
     }
 }
@@ -1184,7 +1507,7 @@ pub fn dispatch_action(
     // The card the move concerns, captured before apply consumes the action;
     // its public face is read AFTER apply (where the card has landed).
     let card_iid = game::action_card_iid(&action).map(str::to_string);
-    let applied = game::apply(room, actor_id, action)?;
+    let applied = game::apply(app, room, actor_id, action)?;
     room.seq += 1;
     let seq = room.seq;
     // Record this action as a new point on the undo/redo/replay timeline.
@@ -1969,6 +2292,26 @@ fn auto_set(app: &Arc<App>, user: &db::User, untap: bool, draw: bool) {
         if p.auto_untap != untap || p.auto_draw != draw {
             p.auto_untap = untap;
             p.auto_draw = draw;
+            rooms::touch(app, &mut room);
+        }
+    }
+}
+
+/// Turn the rules coach on or off for one seat. Purely a preference: the coach
+/// only ever adds private advice, so flipping it can never change the game.
+fn coach_set(app: &Arc<App>, user: &db::User, on: bool) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        return;
+    };
+    if rref.spectating {
+        return;
+    }
+    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
+        return;
+    };
+    if let Some(p) = room.players.iter_mut().find(|p| p.user_id == user.id) {
+        if p.coach != on {
+            p.coach = on;
             rooms::touch(app, &mut room);
         }
     }

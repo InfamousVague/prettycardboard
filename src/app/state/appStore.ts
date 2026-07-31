@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import * as api from '../net/api.ts';
 import * as ws from '../net/ws.ts';
+import { isLocalPlay } from '../tauri.ts';
 import type { DeckSummary, FriendsPayload, Identity, ServerMessage } from '../net/types.ts';
 import { cyberpunkStarters } from '../data/cyberpunk.ts';
+import { yugiohStarters } from '../data/yugioh.ts';
 import { loadPreferences, savePreferences } from '../preferences.ts';
 import { DEFAULT_PLAYMAT, isCustomPlaymat } from '../data/playmats.ts';
 import { DEFAULT_CARD_BACK, isCustomCardBack } from '../data/cardBacks.ts';
@@ -13,8 +15,14 @@ import { DEFAULT_CARD_BACK, isCustomCardBack } from '../data/cardBacks.ts';
  * becomes claimable later without the client changing shape.
  */
 
-const IDENTITY_KEY = 'pc.identity';
+// Local play (desktop) signs into the bundled local server, which is a
+// different account universe: scope its identity to its own key so flipping
+// the mode never logs the online account out (and vice versa).
+const IDENTITY_KEY = isLocalPlay() ? 'pc.identity.local' : 'pc.identity';
 const SEEDED_KEY = 'pc.seeded';
+/** Marks that this account's Yu-Gi-Oh starters have been dealt out, so a player
+ *  who deletes one does not find it back at the next sign-in. */
+const YGO_SEEDED_KEY = 'pc.seeded.yugioh';
 
 export interface InviteToast {
   from: { userId: string; username: string };
@@ -157,6 +165,32 @@ export const useApp = create<AppState>((set, get) => {
         await api.createDeck(starter.name, 'standard', starter.cards, null, 'cyberpunk');
       }
       await get().refreshDecks();
+    }
+    // Same server-truth guard for the Yu-Gi-Oh starters — no WIP gate, the game
+    // ships enabled for everyone. Guarded per STARTER (a sign-in interrupted
+    // mid-seed heals on the next one rather than leaving the account half
+    // stocked forever) and best-effort (a seeding hiccup must never fail the
+    // sign-in it rode in on — the player would be bounced to the auth screen
+    // over a starter deck).
+    // The marker is written only after the whole set lands, so a sign-in
+    // interrupted mid-seed heals on the next one; once it IS written, deleting
+    // a starter is respected rather than undone at every login.
+    try {
+      if (localStorage.getItem(YGO_SEEDED_KEY) !== identity.userId) {
+        const owned = new Set(
+          get()
+            .decks.filter((deck) => deck.game === 'yugioh')
+            .map((deck) => deck.name),
+        );
+        for (const starter of yugiohStarters()) {
+          if (owned.has(starter.name)) continue;
+          await api.createDeck(starter.name, 'standard', starter.cards, null, 'yugioh');
+        }
+        localStorage.setItem(YGO_SEEDED_KEY, identity.userId);
+        await get().refreshDecks();
+      }
+    } catch {
+      // Offline or a server hiccup: no marker, so the next sign-in retries.
     }
   };
 

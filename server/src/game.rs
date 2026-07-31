@@ -40,16 +40,28 @@ impl Zone {
             Zone::Command => "the command zone",
         }
     }
+
+    /// The " from X" clause for a move, or nothing when the card never left the
+    /// zone it started in - reordering a library should not read as "puts a
+    /// card from their library on top of their library".
+    fn origin_of(self, to: Zone) -> String {
+        if self == to {
+            String::new()
+        } else {
+            format!(" from {}", self.desc())
+        }
+    }
 }
 
 const PHASES: [&str; 7] = ["upkeep", "main1", "attack", "block", "damage", "main2", "end"];
 
-/// Opening-hand size per game: Cyberpunk deals 6 (cyberpunktcg.com), Magic 7.
+/// Opening-hand size per game: Cyberpunk deals 6 (cyberpunktcg.com), Yu-Gi-Oh
+/// deals 5, Magic 7.
 pub fn opening_hand(game: &str) -> usize {
-    if game == "cyberpunk" {
-        6
-    } else {
-        7
+    match game {
+        "cyberpunk" => 6,
+        "yugioh" => 5,
+        _ => 7,
     }
 }
 
@@ -68,6 +80,12 @@ pub fn is_vancouver(room: &crate::rooms::Room) -> bool {
 }
 
 pub const CMD_CHOICE_MS: i64 = 30_000;
+/// Table markers are an annotation, not a mechanic: a generous cap that still
+/// keeps a stuck client from filling the room state with pucks.
+const MAX_MARKS: usize = 128;
+/// How long a fired trigger prompt waits for its controller before it
+/// dismisses (the printed text stays performable by hand).
+pub const TRIGGER_CHOICE_MS: i64 = 30_000;
 /// Legacy single-slot undo window. The live undo path is now the snapshot
 /// timeline (see rooms::Room history/cursor); this and apply_undo below are
 /// kept dormant to avoid churning the 40+ action arms that still record a
@@ -90,11 +108,23 @@ pub enum Action {
         y: Option<f64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         index: Option<i64>,
+        /// Land face-down (battlefield only): a Yu-Gi-Oh Set. The card is
+        /// placed hidden IN THE SAME ACT, so its identity is never broadcast -
+        /// moving face-up and flipping afterwards would leak it to everyone.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        face_down: bool,
     },
     #[serde(rename = "card.pos", rename_all = "camelCase")]
     CardPos { iid: String, x: f64, y: f64 },
     #[serde(rename = "card.tap", rename_all = "camelCase")]
-    CardTap { iid: String, tapped: bool },
+    CardTap {
+        iid: String,
+        tapped: bool,
+        /// Enforced rooms: which color a multi-producing land adds when tapped
+        /// for mana ("W".."C"). Ignored elsewhere; absent = pick for me.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mana: Option<String>,
+    },
     #[serde(rename = "card.face", rename_all = "camelCase")]
     CardFace { iid: String, face_down: bool },
     #[serde(rename = "card.transform", rename_all = "camelCase")]
@@ -158,6 +188,11 @@ pub enum Action {
     LifeSet { value: i64 },
     #[serde(rename = "life.add")]
     LifeAdd { delta: i64 },
+    /// Card effects that hit ANOTHER player: burn, drain, lifegain given
+    /// away. Loudly logged with both names so the table always sees who did
+    /// what to whom; undo covers misclicks like any other action.
+    #[serde(rename = "life.deal", rename_all = "camelCase")]
+    LifeDeal { seat: usize, delta: i64 },
     #[serde(rename = "cmd.damage", rename_all = "camelCase")]
     CmdDamage {
         from_seat: usize,
@@ -228,6 +263,47 @@ pub enum Action {
     #[serde(rename = "combat.end")]
     CombatEnd,
 
+    // --- enforced rooms only (rules.rs gates these; see PROTOCOL.md) ---
+    /// Cast a spell from hand paying its real cost: the server spends floating
+    /// mana, taps lands (auto-chosen, or exactly `payment` when the player
+    /// picked their own), and puts the card where its type says it goes.
+    #[serde(rename = "cast", rename_all = "camelCase")]
+    Cast {
+        iid: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        payment: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        x: Option<f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        y: Option<f64>,
+    },
+    /// Attackers are final; defenders may now declare blocks.
+    #[serde(rename = "combat.lock")]
+    CombatLock,
+    /// Blocks are final; the engine computes and broadcasts the damage preview.
+    #[serde(rename = "combat.ready")]
+    CombatReady,
+    /// Apply the previewed outcome: damage, deaths, life, commander damage.
+    #[serde(rename = "combat.resolve")]
+    CombatResolve,
+    /// Pass priority: no response to the current stack. Cleared whenever the
+    /// stack changes; the top spell resolves once everyone else has passed.
+    #[serde(rename = "stack.pass")]
+    StackPass,
+    /// Answer a fired trigger prompt (owner only). `apply: true` has the
+    /// engine perform the parsed effects (or, for a manual trigger, simply
+    /// acknowledges); `false` dismisses - the text is still the table's to
+    /// resolve by hand.
+    #[serde(rename = "trigger.answer", rename_all = "camelCase")]
+    TriggerAnswer { id: String, apply: bool },
+    /// Cascade for `n` (enforced rooms): the server reveals from the top of
+    /// your library until a nonland card with mana value < n, puts the hit
+    /// on the stack revealed and free to cast, and bottoms the rest in a
+    /// random order. Also fired automatically when a spell with cascade
+    /// (n = its mana value) or "discover N" (n = N+1) is cast.
+    #[serde(rename = "cascade", rename_all = "camelCase")]
+    Cascade { n: i64 },
+
     // --- gameplay v2: commander machinery ---
     #[serde(rename = "cmd.cast", rename_all = "camelCase")]
     CmdCast { iid: String, x: f64, y: f64 },
@@ -252,6 +328,16 @@ pub enum Action {
     },
     #[serde(rename = "marker.storm")]
     MarkerStorm { delta: i64 },
+    /// Park a table marker on a card (`mark: null` lifts it). Shared table
+    /// state, not a rules effect: anyone at the table may mark anyone's card,
+    /// and the marker carries who placed it. (The field is `mark`, not `kind`:
+    /// `kind` is the action tag itself - the same reason `card.counter` names
+    /// its own field `counter`.)
+    #[serde(rename = "mark.set", rename_all = "camelCase")]
+    MarkSet { iid: String, mark: Option<String> },
+    /// Sweep every table marker off the board.
+    #[serde(rename = "mark.clear")]
+    MarkClear,
 
     // --- gameplay v2: zone viewers ---
     #[serde(rename = "library.peek")]
@@ -331,6 +417,17 @@ pub struct Applied {
 }
 
 type ActionError = (&'static str, String);
+
+/// A moment the rules coach may want to comment on. Recorded during `apply`
+/// and cashed in once the action has fully settled.
+enum CoachEvent {
+    LandPlayed,
+    /// Carries the creature's name and whether it was ALREADY tapped before the
+    /// declaration - declaring an attacker taps it, so reading the card
+    /// afterwards would report every attacker as tapped.
+    Attack { name: String, was_tapped: bool },
+    TurnPass,
+}
 
 fn zone_lists(p: &mut Player) -> [(Zone, &mut Vec<Card>); 6] {
     [
@@ -541,11 +638,59 @@ pub fn action_card_iid(action: &Action) -> Option<&str> {
     }
 }
 
-/// Clear an in-progress combat at a turn boundary or combat.end. Combat is now
+/// A card that left the battlefield takes its table marker with it: a puck
+/// still floating over a graveyard pile means nothing to anyone.
+fn drop_mark(room: &mut Room, iid: &str) {
+    room.marks.remove(iid);
+}
+
+/// Any stack change opens a fresh response window: passes are void and the
+/// timeout clock restarts. Freeform rooms carry the fields harmlessly.
+fn stack_changed(room: &mut Room) {
+    room.stack_passed.clear();
+    room.stack_changed_ms = crate::now_ms();
+}
+
+/// Enforced tables: mana pools empty at every phase boundary (CR 500.4).
+/// Freeform tables keep their pools - they are a manual tracker there.
+fn empty_pools_if_enforced(room: &mut Room) {
+    if !crate::rules::enforced(room) {
+        return;
+    }
+    for p in room.players.iter_mut() {
+        for v in p.mana.values_mut() {
+            *v = 0;
+        }
+    }
+}
+
+/// An instant resolved while a combat preview was showing: the board moved
+/// under the math, so recompute it (enforced rooms only).
+fn refresh_combat_preview(app: &crate::App, room: &mut Room) {
+    if !crate::rules::enforced(room) {
+        return;
+    }
+    let stale = room.combat.as_ref().map(|c| c.preview.is_some()).unwrap_or(false);
+    if stale {
+        let preview = crate::rules::compute_preview(app, room);
+        if let Some(combat) = room.combat.as_mut() {
+            combat.preview = Some(preview);
+        }
+    }
+}
+
+/// Clear an in-progress combat at a turn boundary or combat.end. Combat is
 /// purely informational bookkeeping, so clearing it just drops the overlay -
-/// any life/creature changes were made manually by the players.
+/// any life/creature changes were made manually by the players. A combat that
+/// actually had attackers is stashed as `room.last_combat` (stamped with the
+/// current seq) so bots can settle the damage it dealt them even when the
+/// whole combat fit between two scheduler ticks.
 pub fn clear_combat(room: &mut Room) {
-    room.combat = None;
+    if let Some(combat) = room.combat.take() {
+        if !combat.attackers.is_empty() {
+            room.last_combat = Some(crate::rooms::EndedCombat { seq: room.seq, combat });
+        }
+    }
 }
 
 /// The requester's peek window, if it still matches the top of their library
@@ -737,8 +882,9 @@ fn apply_undo(room: &mut Room, pi: usize, kind: UndoKind) -> Result<(), ActionEr
 }
 
 /// Apply a freeform action for `actor_id`. Mutates the room; returns payloads
-/// + log lines. Errors are (code, message) for a WS error frame.
-pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied, ActionError> {
+/// + log lines. Errors are (code, message) for a WS error frame. `app` is only
+/// consulted for oracle card facts when the room opted into enforcement.
+pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) -> Result<Applied, ActionError> {
     let pi = room
         .players
         .iter()
@@ -758,6 +904,11 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
     if room.match_result.is_some() && !is_recovery {
         return Err(("match_over", "the match is already over".to_string()));
     }
+    // An enforced table runs every action past the rules first; the freeform
+    // arms below then apply it unchanged. Rejections carry a human reason.
+    if crate::rules::enforced(room) && room.started {
+        crate::rules::check(app, room, pi, &action)?;
+    }
     turn_clock_interaction(room, actor_seat, now);
 
     let base = serde_json::to_value(&action).unwrap();
@@ -767,20 +918,37 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
     let mut extra_logs: Vec<String> = Vec::new();
     let mut private: Vec<(String, Value)> = Vec::new();
     let mut undo: Option<UndoKind> = None;
+    // What the rules coach should look at once the action has settled. Set
+    // inside the arms because `action`'s fields are partially moved by the
+    // match; evaluated afterwards so the coach reads final state, not the
+    // half-applied middle of a move.
+    let mut coach_event: Option<CoachEvent> = None;
     // Undo/redo/rewind move the cursor over existing history rather than
     // recording a new snapshot; every other action records.
     let mut record = true;
     let log: String;
 
     match action {
-        Action::CardMove { ref iid, to, x, y, index } => {
+        Action::CardMove { ref iid, to, x, y, index, face_down } => {
             let (from, from_idx, mut card) =
                 take_card(&mut room.players[pi], iid).ok_or_else(|| not_found(iid))?;
             if matches!(from, Zone::Hand | Zone::Library | Zone::Command) && to == Zone::Battlefield {
                 room.players[pi].cards_played += 1;
             }
+            if from == Zone::Battlefield && to != Zone::Battlefield {
+                drop_mark(room, iid);
+            }
             let snapshot = card.clone();
-            let was_hidden = from.hidden();
+            // Zone privacy is game-aware: Yu-Gi-Oh's Extra Deck rides the
+            // command slot and is hidden from opponents (rooms.rs masks it in
+            // snapshots), so events about it must not name the card either.
+            let extra_deck_hidden = room.game == "yugioh";
+            let zone_hidden =
+                move |zone: Zone| zone.hidden() || (extra_deck_hidden && zone == Zone::Command);
+            // A Set lands hidden, so its identity is as private as the hand it
+            // came from - the event may not carry the card either.
+            let lands_hidden = face_down && to == Zone::Battlefield;
+            let was_hidden = zone_hidden(from);
             let mut promoted = false;
             if from == Zone::Battlefield {
                 // Hand the pile down before the aura sweep: after this nothing
@@ -842,15 +1010,27 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                 });
                 resync = was_hidden || promoted;
             } else {
-                let to_hidden = to.hidden();
+                let to_hidden = zone_hidden(to) || lands_hidden;
                 card.tapped = false;
-                card.face_down = false;
+                card.face_down = lands_hidden;
                 card.revealed = false;
                 if to == Zone::Battlefield {
                     card.x = x.unwrap_or(0.5);
                     card.y = y.unwrap_or(0.5);
+                    // Stamped for the coach only; nothing gates on it.
+                    card.entered_turn = Some(room.turn_number);
+                    // Land classification: oracle facts first (covers every
+                    // deck in enforced rooms), precon attrs as the fallback.
+                    let is_land = crate::rules::facts(app, &card)
+                        .map(|f| f.is_land())
+                        .unwrap_or_else(|| crate::bot::is_land(&card));
+                    if is_land {
+                        room.players[pi].lands_this_turn += 1;
+                        coach_event = Some(CoachEvent::LandPlayed);
+                    }
                 } else {
                     card.counters.clear();
+                    card.entered_turn = None;
                 }
                 let name = card.name.clone();
                 let card_val = serde_json::to_value(&card).unwrap();
@@ -870,7 +1050,8 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                         -1 => "on the bottom of",
                         _ => "into",
                     };
-                    log = format!("{username} puts {display} {place} their library");
+                    let origin = from.origin_of(to);
+                    log = format!("{username} puts {display}{origin} {place} their library");
                 } else {
                     zone_list_mut(p, to).push(card);
                     for_actor["card"] = card_val.clone();
@@ -878,14 +1059,46 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                         // Public destination: everyone learns the card.
                         for_others["card"] = card_val;
                     }
-                    let name_public = !to_hidden || !was_hidden;
+                    // A card that lands FACE-DOWN is never named, whatever it
+                    // came from: the whole point of a Set is that the table
+                    // cannot tell which card it is.
+                    let name_public = (!to_hidden || !was_hidden) && !lands_hidden;
                     let display = if name_public { name } else { "a card".to_string() };
+                    // Name the source zone, and pick the verb that matches the
+                    // move: watching the log should tell you whether a creature
+                    // was cast, reanimated or fetched, not just that it "went
+                    // onto the battlefield". `display` is already privacy-safe,
+                    // so naming the origin never leaks more than the move did.
+                    let origin = from.origin_of(to);
                     log = match to {
-                        Zone::Hand => format!("{username} puts {display} into their hand"),
-                        Zone::Battlefield => format!("{username} puts {display} onto the battlefield"),
-                        Zone::Graveyard => format!("{username} puts {display} into their graveyard"),
-                        Zone::Exile => format!("{username} exiles {display}"),
-                        Zone::Command => format!("{username} puts {display} into the command zone"),
+                        Zone::Hand => match from {
+                            Zone::Library => {
+                                format!("{username} pulls {display} from their library into their hand")
+                            }
+                            _ => format!("{username} returns {display}{origin} to their hand"),
+                        },
+                        Zone::Battlefield if lands_hidden => {
+                            format!("{username} sets {display}{origin} face-down")
+                        }
+                        Zone::Battlefield => match from {
+                            Zone::Hand | Zone::Library => {
+                                format!("{username} plays {display}{origin} onto the battlefield")
+                            }
+                            Zone::Graveyard | Zone::Exile | Zone::Command => {
+                                format!("{username} returns {display}{origin} to the battlefield")
+                            }
+                            Zone::Battlefield => {
+                                format!("{username} puts {display} onto the battlefield")
+                            }
+                        },
+                        Zone::Graveyard => match from {
+                            Zone::Hand => format!("{username} discards {display}"),
+                            _ => format!("{username} puts {display}{origin} into their graveyard"),
+                        },
+                        Zone::Exile => format!("{username} exiles {display}{origin}"),
+                        Zone::Command => {
+                            format!("{username} puts {display}{origin} into the command zone")
+                        }
                         Zone::Library => unreachable!(),
                     };
                 }
@@ -898,6 +1111,58 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                     ceased: false,
                 });
                 resync = was_hidden || to_hidden || promoted;
+                // Enforced rooms: arriving on the battlefield applies enters
+                // replacements (tapped, counters) then fires ETB triggers,
+                // however it got there (cast, reanimated, fetched);
+                // battlefield -> graveyard is a death, unless the card's own
+                // replacement routes it to exile. A face-down Set stays
+                // silent - its identity is hidden.
+                if crate::rules::enforced(room) && !lands_hidden {
+                    if to == Zone::Battlefield && from != Zone::Battlefield {
+                        let repl = crate::rules::apply_enters_replacements(app, room, iid);
+                        resync |= !repl.is_empty();
+                        extra_logs.extend(repl);
+                        let fired = crate::rules::fire_card_triggers(
+                            app,
+                            room,
+                            crate::oracle::TriggerWhen::Etb,
+                            iid,
+                        );
+                        resync |= !fired.is_empty();
+                        extra_logs.extend(fired);
+                    } else if to == Zone::Graveyard && from == Zone::Battlefield {
+                        let exiled = {
+                            let p = &mut room.players[pi];
+                            let pos = p
+                                .graveyard
+                                .iter()
+                                .position(|c| c.iid == *iid && crate::rules::dies_to_exile(app, c));
+                            match pos {
+                                Some(pos) => {
+                                    let card = p.graveyard.remove(pos);
+                                    let name = card.name.clone();
+                                    p.exile.push(card);
+                                    Some(name)
+                                }
+                                None => None,
+                            }
+                        };
+                        if let Some(name) = exiled {
+                            extra_logs
+                                .push(format!("{name} is exiled instead of dying (replacement)"));
+                            resync = true;
+                        } else {
+                            let fired = crate::rules::fire_card_triggers(
+                                app,
+                                room,
+                                crate::oracle::TriggerWhen::Dies,
+                                iid,
+                            );
+                            resync |= !fired.is_empty();
+                            extra_logs.extend(fired);
+                        }
+                    }
+                }
             }
         }
 
@@ -927,13 +1192,37 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             undo = Some(UndoKind::Pos { iid: iid.clone(), x: prev_x, y: prev_y });
         }
 
-        Action::CardTap { ref iid, tapped } => {
+        Action::CardTap { ref iid, tapped, ref mana } => {
+            // Enforced rooms: tapping your own land floats its mana into the
+            // pool (the manual-payment flow: tap lands, then cast).
+            let mut floated: Option<char> = None;
+            if crate::rules::enforced(room) && tapped {
+                let p = &room.players[pi];
+                if let Some(card) = p.battlefield.iter().find(|c| c.iid == *iid) {
+                    if let Some(f) = crate::rules::facts(app, card) {
+                        if f.is_land() && !f.produced.is_empty() {
+                            let want = mana.as_deref().and_then(|m| m.chars().next());
+                            let color = want
+                                .filter(|c| f.produced.contains(c))
+                                .unwrap_or(f.produced[0]);
+                            floated = Some(color);
+                        }
+                    }
+                }
+            }
             let p = &mut room.players[pi];
             let (_, card) = find_card_mut(p, iid).ok_or_else(|| not_found(iid))?;
             let prev = card.tapped;
             card.tapped = tapped;
+            let name = visible_name(card);
             let verb = if tapped { "taps" } else { "untaps" };
-            log = format!("{username} {verb} {}", visible_name(card));
+            if let Some(color) = floated {
+                *p.mana.entry(color.to_string()).or_insert(0) += 1;
+                resync = true; // the pool travels via state_for
+                log = format!("{username} taps {name} for {{{color}}}");
+            } else {
+                log = format!("{username} {verb} {name}");
+            }
             undo = Some(UndoKind::Tap { iid: iid.clone(), tapped: prev });
         }
 
@@ -1202,6 +1491,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                 is_commander: false,
                 revealed: false,
                 transformed: false,
+                entered_turn: Some(room.turn_number),
             };
             let cv = serde_json::to_value(&token).unwrap();
             for_actor["card"] = cv.clone();
@@ -1212,27 +1502,47 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
         }
 
         Action::TokenClone { ref iid, x, y } => {
-            let p = &mut room.players[pi];
-            let src = p
-                .battlefield
-                .iter()
-                .find(|c| c.iid == *iid)
-                .ok_or_else(|| ("card_not_found", format!("No card {iid} on your battlefield")))?;
-            let mut copy = src.clone();
-            copy.iid = crate::hex_id(8);
-            copy.is_token = true;
-            copy.tapped = false;
-            copy.attached_to = None;
-            copy.piled = false;
-            copy.is_commander = false;
-            copy.revealed = false;
-            copy.x = x;
-            copy.y = y;
-            let cv = serde_json::to_value(&copy).unwrap();
-            for_actor["card"] = cv.clone();
-            for_others["card"] = cv;
-            log = format!("{username} creates a token copy of {}", copy.name);
-            p.battlefield.push(copy);
+            // A battlefield permanent clones onto the battlefield; a spell on
+            // the shared stack copies onto the stack (pass C copy effects) -
+            // the copy is a token, so declining it to any other zone simply
+            // evaporates it through the usual token rule.
+            let on_stack = room.stack.iter().find(|e| e.card.iid == *iid).map(|e| e.card.clone());
+            if let Some(src) = on_stack {
+                let mut copy = src;
+                copy.iid = crate::hex_id(8);
+                copy.is_token = true;
+                copy.is_commander = false;
+                copy.revealed = true;
+                let cv = serde_json::to_value(&copy).unwrap();
+                for_actor["card"] = cv.clone();
+                for_others["card"] = cv;
+                log = format!("{username} copies {} on the stack", copy.name);
+                room.stack.push(StackEntry { owner: actor_id.to_string(), card: copy });
+                stack_changed(room);
+                resync = true;
+            } else {
+                let p = &mut room.players[pi];
+                let src = p
+                    .battlefield
+                    .iter()
+                    .find(|c| c.iid == *iid)
+                    .ok_or_else(|| ("card_not_found", format!("No card {iid} on your battlefield")))?;
+                let mut copy = src.clone();
+                copy.iid = crate::hex_id(8);
+                copy.is_token = true;
+                copy.tapped = false;
+                copy.attached_to = None;
+                copy.piled = false;
+                copy.is_commander = false;
+                copy.revealed = false;
+                copy.x = x;
+                copy.y = y;
+                let cv = serde_json::to_value(&copy).unwrap();
+                for_actor["card"] = cv.clone();
+                for_others["card"] = cv;
+                log = format!("{username} creates a token copy of {}", copy.name);
+                p.battlefield.push(copy);
+            }
         }
 
         Action::Draw { count } => {
@@ -1386,6 +1696,20 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             log = format!("{username} sets their life to {value}");
         }
 
+        Action::LifeDeal { seat, delta } => {
+            let Some(target) = room.players.iter_mut().find(|p| p.seat == seat) else {
+                return Err(("no_such_seat", format!("seat {seat} is not occupied")));
+            };
+            target.life += delta;
+            let target_name = target.username.clone();
+            log = if delta < 0 {
+                format!("{username} deals {} damage to {target_name}", -delta)
+            } else {
+                format!("{username} gives {target_name} {delta} life")
+            };
+            resync = true;
+        }
+
         Action::LifeAdd { delta } => {
             let p = &mut room.players[pi];
             p.life += delta;
@@ -1498,6 +1822,17 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
         // --- turns + phases ---
 
         Action::TurnPass => {
+            // The passing player's end step happens now whether or not they
+            // visited the end phase - fire its triggers once per turn.
+            if room.end_fired != Some((room.turn_number, room.active_seat)) {
+                room.end_fired = Some((room.turn_number, room.active_seat));
+                extra_logs.extend(crate::rules::fire_phase_triggers(
+                    app,
+                    room,
+                    crate::oracle::TriggerWhen::EndStep,
+                    room.active_seat,
+                ));
+            }
             let (next, wrapped) = next_occupied(room, room.active_seat);
             if wrapped {
                 room.turn_number += 1;
@@ -1506,9 +1841,16 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             room.active_seat = next;
             turn_clock_begin(room, next, now);
             clear_combat(room);
+            empty_pools_if_enforced(room);
             if room.auto_turn {
                 room.phase = "main1".to_string();
                 extra_logs.extend(auto_turn_begin(room, next));
+                extra_logs.extend(crate::rules::fire_phase_triggers(
+                    app,
+                    room,
+                    crate::oracle::TriggerWhen::Upkeep,
+                    next,
+                ));
             }
             let target = seat_username(room, next);
             for v in [&mut for_actor, &mut for_others] {
@@ -1518,6 +1860,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             }
             log = format!("{username} passes the turn to {target} (turn {})", room.turn_number);
             resync = true;
+            coach_event = Some(CoachEvent::TurnPass);
         }
 
         Action::TurnSet { seat } => {
@@ -1556,6 +1899,17 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                 return Err(("invalid_phase", format!("unknown phase {phase}")));
             }
             room.phase = phase.clone();
+            // Entering the end phase fires end-step triggers (once per turn;
+            // turn.pass fires them for players who never visit the phase).
+            if phase == "end" && room.end_fired != Some((room.turn_number, room.active_seat)) {
+                room.end_fired = Some((room.turn_number, room.active_seat));
+                extra_logs.extend(crate::rules::fire_phase_triggers(
+                    app,
+                    room,
+                    crate::oracle::TriggerWhen::EndStep,
+                    room.active_seat,
+                ));
+            }
             log = format!("{username} sets the phase to {phase}");
             resync = true;
         }
@@ -1594,8 +1948,11 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             let cv = serde_json::to_value(&card).unwrap();
             for_actor["card"] = cv.clone();
             for_others["card"] = cv;
-            log = format!("{username} puts {} on the stack", card.name);
+            // The stack is not a Zone, so there is no same-zone case to suppress
+            // here: every push genuinely comes from somewhere else.
+            log = format!("{username} puts {} from {} on the stack", card.name, from.desc());
             room.stack.push(StackEntry { owner: actor_id.to_string(), card });
+            stack_changed(room);
             if matches!(from, Zone::Hand | Zone::Library | Zone::Command) {
                 room.players[pi].cards_played += 1;
             }
@@ -1604,11 +1961,63 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
 
         Action::StackResolve { ref iid, to, x, y } => {
             log = resolve_from_stack(room, &username, iid, to, x, y, false, now, &mut private)?;
+            if to == Zone::Battlefield {
+                extra_logs.extend(crate::rules::apply_enters_replacements(app, room, iid));
+                extra_logs.extend(crate::rules::fire_card_triggers(
+                    app,
+                    room,
+                    crate::oracle::TriggerWhen::Etb,
+                    iid,
+                ));
+            }
+            stack_changed(room);
+            refresh_combat_preview(app, room);
             resync = true;
         }
 
         Action::StackCounter { ref iid, to } => {
             log = resolve_from_stack(room, &username, iid, to, None, None, true, now, &mut private)?;
+            stack_changed(room);
+            refresh_combat_preview(app, room);
+            resync = true;
+        }
+
+        Action::StackPass => {
+            if !room.stack_passed.contains(&actor_seat) {
+                room.stack_passed.push(actor_seat);
+            }
+            log = format!("{username} passes");
+            resync = true;
+        }
+
+        Action::TriggerAnswer { ref id, apply } => {
+            if !crate::rules::enforced(room) {
+                return Err(("not_enforced", "trigger prompts only exist on enforced tables".to_string()));
+            }
+            let Some(pos) = room.pending_triggers.iter().position(|t| t.id == *id) else {
+                return Err(("no_trigger", "that trigger prompt is gone".to_string()));
+            };
+            if room.pending_triggers[pos].owner != actor_id {
+                return Err(("forbidden", "that trigger is not yours to answer".to_string()));
+            }
+            let trigger = room.pending_triggers.remove(pos);
+            if apply && trigger.auto {
+                extra_logs = crate::rules::apply_trigger_effects(room, &trigger);
+                // Life or counters may have moved under a showing preview.
+                refresh_combat_preview(app, room);
+                log = format!(
+                    "{username} applies {}'s trigger: {}",
+                    trigger.source_name,
+                    crate::rules::effects_summary(&trigger.effects)
+                );
+            } else if apply {
+                log = format!(
+                    "{username} resolves {}'s trigger by hand — {}",
+                    trigger.source_name, trigger.text
+                );
+            } else {
+                log = format!("{username} dismisses {}'s trigger", trigger.source_name);
+            }
             resync = true;
         }
 
@@ -1617,6 +2026,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
         Action::CombatBegin => {
             room.combat = Some(Combat::default());
             room.phase = "attack".to_string();
+            empty_pools_if_enforced(room);
             log = format!("{username} begins combat");
             resync = true;
         }
@@ -1649,7 +2059,16 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                 log = format!("{card_name} no longer attacks");
             } else {
                 let mut tapped_note = "";
-                if !was_tapped {
+                // Enforced rooms honor vigilance: attacking does not tap.
+                let vigilant = crate::rules::enforced(room)
+                    && room.players[pi]
+                        .battlefield
+                        .iter()
+                        .find(|c| c.iid == *iid)
+                        .and_then(|c| crate::rules::facts(app, c))
+                        .map(|f| f.has("vigilance"))
+                        .unwrap_or(false);
+                if !was_tapped && !vigilant {
                     if let Some(c) = room.players[pi].battlefield.iter_mut().find(|c| c.iid == *iid) {
                         c.tapped = true;
                     }
@@ -1666,6 +2085,7 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                     Some(d) => format!("{card_name} attacks {d}{tapped_note}"),
                     None => format!("{card_name} attacks{tapped_note}"),
                 };
+                coach_event = Some(CoachEvent::Attack { name: card_name.clone(), was_tapped });
             }
             resync = true;
         }
@@ -1716,7 +2136,157 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
         Action::CombatEnd => {
             clear_combat(room);
             room.phase = "main2".to_string();
+            empty_pools_if_enforced(room);
             log = format!("{username} ends combat");
+            resync = true;
+        }
+
+        // --- enforced rooms: pay-and-place casting + the combat machine ---
+
+        Action::Cast { ref iid, ref payment, x, y } => {
+            if !crate::rules::enforced(room) {
+                return Err(("not_enforced", "casting with payment needs an enforced table".to_string()));
+            }
+            // rules::check verified timing and affordability; pay and place.
+            let (taps, pool_spend) = {
+                let p = &room.players[pi];
+                let card = p.hand.iter().find(|c| c.iid == *iid).ok_or_else(|| not_found(iid))?;
+                let f = crate::rules::facts(app, card)
+                    .ok_or(("illegal", "that card has no rules data yet".to_string()))?;
+                let generic = crate::rules::reduced_generic(app, p, &f, f.generic);
+                crate::rules::solve_payment(app, p, generic, &f.pips, payment.as_deref())?
+            };
+            let goes_to_stack = {
+                let p = &room.players[pi];
+                let card = p.hand.iter().find(|c| c.iid == *iid).unwrap();
+                let f = crate::rules::facts(app, card).unwrap();
+                f.is_instant() || f.is_sorcery()
+            };
+            {
+                let p = &mut room.players[pi];
+                for land in &taps {
+                    if let Some(c) = p.battlefield.iter_mut().find(|c| c.iid == *land) {
+                        c.tapped = true;
+                    }
+                }
+                for (color, n) in &pool_spend {
+                    if let Some(v) = p.mana.get_mut(&color.to_string()) {
+                        *v = (*v - n).max(0);
+                    }
+                }
+            }
+            let (_, _, mut card) = take_card(&mut room.players[pi], iid).ok_or_else(|| not_found(iid))?;
+            card.tapped = false;
+            card.face_down = false;
+            let name = card.name.clone();
+            room.players[pi].cards_played += 1;
+            if goes_to_stack {
+                // The spell rides the stack; its EFFECT is still the caster's
+                // to perform by hand before resolving it to the graveyard.
+                card.revealed = true;
+                let cv = serde_json::to_value(&card).unwrap();
+                for_actor["card"] = cv.clone();
+                for_others["card"] = cv;
+                room.stack.push(StackEntry { owner: actor_id.to_string(), card });
+                stack_changed(room);
+            } else {
+                card.x = x.unwrap_or(0.5);
+                card.y = y.unwrap_or(0.5);
+                card.entered_turn = Some(room.turn_number);
+                let cv = serde_json::to_value(&card).unwrap();
+                for_actor["card"] = cv.clone();
+                for_others["card"] = cv;
+                let entered_iid = card.iid.clone();
+                room.players[pi].battlefield.push(card);
+                extra_logs.extend(crate::rules::apply_enters_replacements(app, room, &entered_iid));
+                extra_logs.extend(crate::rules::fire_card_triggers(
+                    app,
+                    room,
+                    crate::oracle::TriggerWhen::Etb,
+                    &entered_iid,
+                ));
+            }
+            let paid = taps.len() as i64 + pool_spend.values().sum::<i64>();
+            // Cascade / discover fire on the CAST, whichever place the spell
+            // itself went (battlefield or stack).
+            {
+                let p = &room.players[pi];
+                let dig = p
+                    .battlefield
+                    .iter()
+                    .chain(room.stack.iter().map(|e| &e.card))
+                    .find(|c| c.iid == *iid)
+                    .and_then(|c| crate::rules::facts(app, c))
+                    .and_then(|f| {
+                        if f.has("cascade") {
+                            Some((f.mv, "cascade"))
+                        } else {
+                            f.discover.map(|n| (n + 1, "discover"))
+                        }
+                    });
+                if let Some((n, kw)) = dig {
+                    let source = format!("{name}, {kw}");
+                    extra_logs.extend(crate::rules::run_cascade(app, room, pi, n, &source));
+                }
+            }
+            log = format!("{username} casts {name} (paying {paid})");
+            resync = true;
+        }
+
+        Action::Cascade { n } => {
+            if !crate::rules::enforced(room) {
+                return Err(("not_enforced", "cascade needs an enforced table (oracle data)".to_string()));
+            }
+            if n <= 0 {
+                return Err(("bad_cascade", "cascade for at least 1".to_string()));
+            }
+            extra_logs = crate::rules::run_cascade(app, room, pi, n, "manual");
+            log = format!("{username} cascades for {n}");
+            resync = true;
+        }
+
+        Action::CombatLock => {
+            let Some(combat) = room.combat.as_mut() else {
+                return Err(("no_combat", "combat has not begun".to_string()));
+            };
+            combat.locked = true;
+            let n = combat.attackers.len() as i64;
+            // Locking is the declaration becoming final: attack triggers fire.
+            let attacker_iids: Vec<String> = combat.attackers.iter().map(|a| a.iid.clone()).collect();
+            for iid in attacker_iids {
+                extra_logs.extend(crate::rules::fire_card_triggers(
+                    app,
+                    room,
+                    crate::oracle::TriggerWhen::Attacks,
+                    &iid,
+                ));
+            }
+            log = format!("{username} attacks with {n} {}", plural(n, "creature", "creatures"));
+            resync = true;
+        }
+
+        Action::CombatReady => {
+            let preview = crate::rules::compute_preview(app, room);
+            let Some(combat) = room.combat.as_mut() else {
+                return Err(("no_combat", "combat has not begun".to_string()));
+            };
+            combat.blocks_ready = true;
+            combat.preview = Some(preview);
+            log = format!("{username} locks in blocks");
+            resync = true;
+        }
+
+        Action::CombatResolve => {
+            let preview = room
+                .combat
+                .as_ref()
+                .and_then(|c| c.preview.clone())
+                .ok_or(("no_combat", "no combat outcome to resolve".to_string()))?;
+            extra_logs = crate::rules::apply_preview(app, room, &preview);
+            clear_combat(room);
+            room.phase = "main2".to_string();
+            empty_pools_if_enforced(room);
+            log = format!("{username} resolves combat");
             resync = true;
         }
 
@@ -1726,11 +2296,42 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             if !crate::rooms::format_has_commander(&room.format) {
                 return Err(("not_commander_format", "this table is not a commander game".to_string()));
             }
+            // Enforced tables pay the commander's real cost plus tax first
+            // (rules::check already verified it is affordable and timely).
+            if crate::rules::enforced(room) {
+                let payment = {
+                    let p = &room.players[pi];
+                    let card = p.command.iter().find(|c| c.iid == *iid);
+                    match card.and_then(|c| crate::rules::facts(app, c)) {
+                        Some(f) => {
+                            let tax = p.commander_tax.get(iid).copied().unwrap_or(0);
+                            let generic =
+                                crate::rules::reduced_generic(app, p, &f, f.generic + tax);
+                            Some(crate::rules::solve_payment(app, p, generic, &f.pips, None)?)
+                        }
+                        None => None, // unknown commander stays permissive
+                    }
+                };
+                if let Some((taps, pool_spend)) = payment {
+                    let p = &mut room.players[pi];
+                    for land in &taps {
+                        if let Some(c) = p.battlefield.iter_mut().find(|c| c.iid == *land) {
+                            c.tapped = true;
+                        }
+                    }
+                    for (color, n) in &pool_spend {
+                        if let Some(v) = p.mana.get_mut(&color.to_string()) {
+                            *v = (*v - n).max(0);
+                        }
+                    }
+                }
+            }
             let p = &mut room.players[pi];
             let Some(pos) = p.command.iter().position(|c| c.iid == *iid) else {
                 return Err(("card_not_found", format!("No card {iid} in your command zone")));
             };
             let mut card = p.command.remove(pos);
+            card.entered_turn = Some(room.turn_number);
             card.tapped = false;
             card.face_down = false;
             card.revealed = false;
@@ -1744,6 +2345,13 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             p.battlefield.push(card);
             p.cards_played += 1;
             p.commander_tax.insert(iid.clone(), prior_tax.saturating_add(2));
+            extra_logs.extend(crate::rules::apply_enters_replacements(app, room, iid));
+            extra_logs.extend(crate::rules::fire_card_triggers(
+                app,
+                room,
+                crate::oracle::TriggerWhen::Etb,
+                iid,
+            ));
             log = format!("{username} casts {name} (tax {prior_tax})");
             resync = true; // commanderTax changed
         }
@@ -1891,6 +2499,61 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
         Action::MarkerStorm { delta } => {
             room.markers.storm = (room.markers.storm + delta).max(0);
             log = format!("{username} sets the storm count to {}", room.markers.storm);
+            resync = true;
+        }
+
+        Action::MarkSet { ref iid, mark: ref kind } => {
+            // The card must be somewhere on the table: marking an iid nobody
+            // can see would leave a puck with nothing to sit on.
+            let card_name = room
+                .players
+                .iter()
+                .flat_map(|p| {
+                    p.battlefield.iter().chain(p.graveyard.iter()).chain(p.exile.iter()).chain(p.command.iter())
+                })
+                .chain(room.stack.iter().map(|e| &e.card))
+                .find(|c| c.iid == *iid)
+                .map(|c| c.name.clone());
+            let Some(card_name) = card_name else {
+                return Err(("card_not_found", format!("No card {iid} on the table")));
+            };
+            match kind {
+                Some(kind) => {
+                    // The kind is the client's vocabulary; the server only
+                    // bounds it so a marker can never become a payload.
+                    if kind.is_empty() || kind.len() > 24 {
+                        return Err(("bad_mark", "that marker is not a marker".to_string()));
+                    }
+                    if !room.marks.contains_key(iid) && room.marks.len() >= MAX_MARKS {
+                        return Err(("too_many_marks", "clear some markers first".to_string()));
+                    }
+                    room.marks.insert(
+                        iid.clone(),
+                        crate::rooms::CardMark {
+                            kind: kind.clone(),
+                            by: actor_id.to_string(),
+                            seat: actor_seat,
+                            username: username.clone(),
+                            ts: now,
+                        },
+                    );
+                    log = format!("{username} marks {card_name}");
+                }
+                None => {
+                    room.marks.remove(iid);
+                    log = format!("{username} clears the marker on {card_name}");
+                }
+            }
+            resync = true;
+        }
+
+        Action::MarkClear => {
+            if room.marks.is_empty() {
+                return Err(("no_marks", "there are no markers to clear".to_string()));
+            }
+            let n = room.marks.len() as i64;
+            room.marks.clear();
+            log = format!("{username} clears {n} {}", plural(n, "marker", "markers"));
             resync = true;
         }
 
@@ -2070,7 +2733,16 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
             // Once every non-conceded seat has kept, the first turn begins:
             // clock reset + untap (a no-op) + draw, honoring the first-draw
             // skip. Conceded seats never keep, so they do not hold this up.
+            let first_turn_pending = !room.first_turn_begun;
             extra_logs.extend(maybe_begin_first_turn(room, now));
+            if first_turn_pending && room.first_turn_begun {
+                extra_logs.extend(crate::rules::fire_phase_triggers(
+                    app,
+                    room,
+                    crate::oracle::TriggerWhen::Upkeep,
+                    room.active_seat,
+                ));
+            }
             resync = true;
         }
 
@@ -2179,12 +2851,27 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
                     if room.auto_turn && room.first_turn_begun && mull_done {
                         room.phase = "main1".to_string();
                         extra_logs.extend(auto_turn_begin(room, next));
+                        extra_logs.extend(crate::rules::fire_phase_triggers(
+                            app,
+                            room,
+                            crate::oracle::TriggerWhen::Upkeep,
+                            next,
+                        ));
                     }
                 }
             }
             // This concede may have been the mulligan window's closing event.
             if survivors > 1 {
+                let first_turn_pending = !room.first_turn_begun;
                 extra_logs.extend(maybe_begin_first_turn(room, now));
+                if first_turn_pending && room.first_turn_begun {
+                    extra_logs.extend(crate::rules::fire_phase_triggers(
+                        app,
+                        room,
+                        crate::oracle::TriggerWhen::Upkeep,
+                        room.active_seat,
+                    ));
+                }
             }
             log = format!("{username} concedes");
             resync = true;
@@ -2196,5 +2883,28 @@ pub fn apply(room: &mut Room, actor_id: &str, action: Action) -> Result<Applied,
     }
     let battlefield_size = room.players[pi].battlefield.len() as u64;
     room.players[pi].peak_battlefield = room.players[pi].peak_battlefield.max(battlefield_size);
+
+    // The rules coach reads the settled state and speaks only to the player who
+    // made the move, and only if they asked to be taught. It can never change
+    // the outcome above - by this point the action has already been applied.
+    if let Some(event) = coach_event {
+        let p = &room.players[pi];
+        if crate::coach::wants_coaching(p) {
+            let notes = match event {
+                CoachEvent::LandPlayed => crate::coach::on_land_played(room, p),
+                CoachEvent::Attack { ref name, was_tapped } => {
+                    crate::coach::on_attack(room, p, name, was_tapped)
+                }
+                CoachEvent::TurnPass => crate::coach::on_turn_pass(room, p),
+            };
+            for note in notes {
+                private.push((
+                    p.user_id.clone(),
+                    json!({"type": "coach", "rule": note.rule, "text": note.text, "ts": now}),
+                ));
+            }
+        }
+    }
+
     Ok(Applied { for_actor, for_others, log, extra_logs, resync, private, record })
 }

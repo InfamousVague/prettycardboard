@@ -22,17 +22,15 @@ import {
 import {
   Crown,
   Dices,
+  Eye,
   Flag,
-  Gem,
   Landmark,
   Layers,
-  Milestone,
   PackageOpen,
-  PiggyBank,
   Shield,
-  Sparkles,
   Swords,
   Ticket,
+  Users,
   Zap,
 } from '@glacier/icons';
 import type { IconProps } from '@glacier/icons';
@@ -44,6 +42,7 @@ import * as ws from '../net/ws.ts';
 import type { MatchRow, MyRoom } from '../net/types.ts';
 import { useVisibleGames } from '../hooks/useVisibleGames.ts';
 import { FORMATS, formatFor } from '../data/formats.ts';
+import { getGame, type GameId } from '../data/games.ts';
 import { GameTag, GameBadge } from '../components/GameTag.tsx';
 import { MatchHistory, relativeWhen } from '../components/MatchHistory.tsx';
 import './play.css';
@@ -52,8 +51,16 @@ import './play.css';
 interface QuickStart {
   id: string;
   Icon: ComponentType<IconProps>;
-  /** A `FORMATS` id - the name, life total and rules all come from there. */
-  format: string;
+  /** Which game the table opens under; every card wears its game's tag. */
+  game: GameId;
+  /**
+   * A `FORMATS` id - the name, life total and rules all come from there.
+   * Magic only: other games have no format, and the server picks its own for
+   * them, so their cards must not send one.
+   */
+  format?: string;
+  /** The card's name for a game with no `FORMATS` entry to name it. */
+  label?: MessageKey;
   seats: number;
   /**
    * A line or two on what the evening is like. Two cards can share a format
@@ -68,12 +75,13 @@ interface QuickStart {
 /**
  * The tables people actually sit down at, as one click each.
  *
- * Every format the builder understands has a card here, so the strip is the
- * whole menu rather than a shortlist - nobody has to learn that Pauper exists
- * by finding it in the form's dropdown. Ordered by how likely someone is to
- * want it: the current constructed formats, then draft, which is the only
- * table you can sit down at owning nothing at all, then the older formats,
- * then the singleton ones and the sandbox.
+ * A shortlist now, not the whole menu: the Magic formats with a quieter
+ * following (Pioneer, Vintage, Pauper, Brawl) live only in the create form's
+ * format dropdown below, which keeps the strip scannable. Ordered by how
+ * likely someone is to want it: the current constructed formats, then draft,
+ * which is the only table you can sit down at owning nothing at all, then the
+ * singleton tables, the Yu-Gi-Oh duels, and the sandbox. Every card wears its
+ * game's tag, since the strip is no longer all Magic.
  *
  * Named for what the server will really build: seats are capped at 2-6 and
  * there is no team model anywhere in the room code, so a card promising "2v2"
@@ -84,22 +92,16 @@ const QUICK_STARTS: QuickStart[] = [
   {
     id: 'standard',
     Icon: Swords,
+    game: 'mtg',
     format: 'standard',
     seats: 2,
     blurb: 'plQuickBlurbStandard',
     tint: 'oklch(0.72 0.14 250)',
   },
   {
-    id: 'pioneer',
-    Icon: Milestone,
-    format: 'pioneer',
-    seats: 2,
-    blurb: 'plQuickBlurbPioneer',
-    tint: 'oklch(0.71 0.15 275)',
-  },
-  {
     id: 'modern',
     Icon: Zap,
+    game: 'mtg',
     format: 'modern',
     seats: 2,
     blurb: 'plQuickBlurbModern',
@@ -110,6 +112,7 @@ const QUICK_STARTS: QuickStart[] = [
     // pod below is the same format with a deeper pool, not a different idea.
     id: 'draftDuel',
     Icon: Layers,
+    game: 'mtg',
     format: 'draft',
     seats: 2,
     blurb: 'plQuickBlurbDraftDuel',
@@ -118,6 +121,7 @@ const QUICK_STARTS: QuickStart[] = [
   {
     id: 'draftPod',
     Icon: PackageOpen,
+    game: 'mtg',
     format: 'draft',
     seats: 6,
     blurb: 'plQuickBlurbDraftPod',
@@ -126,30 +130,16 @@ const QUICK_STARTS: QuickStart[] = [
   {
     id: 'legacy',
     Icon: Landmark,
+    game: 'mtg',
     format: 'legacy',
     seats: 2,
     blurb: 'plQuickBlurbLegacy',
     tint: 'oklch(0.71 0.15 330)',
   },
   {
-    id: 'vintage',
-    Icon: Gem,
-    format: 'vintage',
-    seats: 2,
-    blurb: 'plQuickBlurbVintage',
-    tint: 'oklch(0.68 0.17 15)',
-  },
-  {
-    id: 'pauper',
-    Icon: PiggyBank,
-    format: 'pauper',
-    seats: 2,
-    blurb: 'plQuickBlurbPauper',
-    tint: 'oklch(0.74 0.13 135)',
-  },
-  {
     id: 'duelCommander',
     Icon: Shield,
+    game: 'mtg',
     format: 'commander',
     seats: 2,
     blurb: 'plQuickBlurbDuelCommander',
@@ -158,30 +148,52 @@ const QUICK_STARTS: QuickStart[] = [
   {
     id: 'pod',
     Icon: Crown,
+    game: 'mtg',
     format: 'commander',
     seats: 4,
     blurb: 'plQuickBlurbPod',
     tint: 'oklch(0.8 0.14 85)',
   },
   {
-    // Brawl seats two because our own format data starts it at 25 life, which
-    // is the duel number - a pod would be playing to the wrong total.
-    id: 'brawl',
-    Icon: Sparkles,
-    format: 'brawl',
+    // The classic 1v1 at 8000 LP. No format field at all: the server forces
+    // its own on every non-Magic game, so the card sends none.
+    id: 'ygoDuel',
+    Icon: Eye,
+    game: 'yugioh',
+    label: 'plQuickYgoDuel',
     seats: 2,
-    blurb: 'plQuickBlurbBrawl',
-    tint: 'oklch(0.76 0.14 350)',
+    blurb: 'plQuickBlurbYgoDuel',
+    tint: 'oklch(0.78 0.14 75)',
+  },
+  {
+    // Battle Royal is what Yu-Gi-Oh itself calls the free-for-all table.
+    id: 'ygoBattleRoyal',
+    Icon: Users,
+    game: 'yugioh',
+    label: 'plQuickYgoBattleRoyal',
+    seats: 4,
+    blurb: 'plQuickBlurbYgoBattleRoyal',
+    tint: 'oklch(0.68 0.15 45)',
   },
   {
     id: 'freeform',
     Icon: Dices,
+    game: 'mtg',
     format: 'freeform',
     seats: 4,
     blurb: 'plQuickBlurbFreeform',
     tint: 'oklch(0.73 0.12 215)',
   },
 ];
+
+/**
+ * The headline vital a non-Magic game starts at - "8000 LP" - straight from
+ * the game registry, so the card and the table it opens can never disagree.
+ */
+function vitalHint(gameId: GameId): string {
+  const vital = getGame(gameId).resources.find((resource) => resource.primary);
+  return vital && typeof vital.start === 'number' ? `${vital.start} ${vital.label}` : '';
+}
 
 
 /**
@@ -235,13 +247,17 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
   // point of the evening, not the price of admission.
   const drafting = game === 'mtg' && format === 'draft';
 
-  // Quick starts are Magic tables whatever the form above is set to, so they
-  // pick from Magic decks rather than from `gameDecks`.
-  const mtgDecks = decks.filter((deck) => (deck.game || 'mtg') === 'mtg');
+  // A quick start ignores the form above entirely, so it picks from its OWN
+  // game's decks - a Yu-Gi-Oh card wants a Yu-Gi-Oh deck whatever the form says.
+  const decksFor = (gameId: GameId) => decks.filter((deck) => (deck.game || 'mtg') === gameId);
 
   /** How a table of this size is described: a duel, or a count of players. */
   const seatLabel = (count: number) =>
     count === 2 ? '1v1' : `${count} ${t('tblPlayers').toLowerCase()}`;
+
+  /** A card's name: the format's printed name for Magic, its own label otherwise. */
+  const presetName = (preset: QuickStart) =>
+    preset.label ? t(preset.label) : formatFor(preset.format).name;
 
   const refreshRooms = useCallback(async () => {
     try {
@@ -289,14 +305,15 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
    * what the card it was on says.
    */
   const create = async (preset?: QuickStart) => {
-    const useGame = preset ? 'mtg' : game;
+    const useGame = preset ? preset.game : game;
     const useFormat = preset ? preset.format : format;
     const useSeats = preset ? preset.seats : Number(seats);
     const useDraft = useGame === 'mtg' && useFormat === 'draft';
-    // A deck built for this exact format if there is one - otherwise any Magic
-    // deck, which is what the form's own picker would have defaulted to.
+    // A deck built for this exact format if there is one - otherwise any deck
+    // for the card's game, which is what the form's own picker would default to.
+    const presetDecks = preset ? decksFor(preset.game) : [];
     const useDeck = preset
-      ? ((mtgDecks.find((deck) => deck.format === preset.format) ?? mtgDecks[0])?.id ?? '')
+      ? ((presetDecks.find((deck) => deck.format === preset.format) ?? presetDecks[0])?.id ?? '')
       : chosenDeck;
 
     if (preset) setQuickBusy(preset.id);
@@ -304,14 +321,16 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
     try {
       const room = await api.createRoom(
         preset
-          ? `${formatFor(preset.format).name} · ${seatLabel(preset.seats)}`
+          ? `${presetName(preset)} · ${seatLabel(preset.seats)}`
           : tableName || `${t('playTitle')} - ${new Date().toLocaleTimeString()}`,
         useSeats,
         // A quick table is still a lobby: persistent, so wandering off to build
         // a deck for it does not throw it away.
         preset ? true : persistent,
-        // The format preset drives starting life + commander machinery server-side.
-        { game: useGame, ...(useGame === 'mtg' ? { format: useFormat } : {}) },
+        // The format preset drives starting life + commander machinery
+        // server-side. Only Magic sends one: the server forces its own format
+        // on every other game.
+        { game: useGame, ...(useGame === 'mtg' && useFormat ? { format: useFormat } : {}) },
       );
       join(room.roomId, useDraft ? undefined : useDeck || undefined);
       void refreshRooms();
@@ -327,7 +346,12 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
     setBusy(true);
     try {
       const room = await api.getRoomByCode(code.trim().toUpperCase());
-      join(room.roomId, chosenDeck || undefined);
+      // Bring a deck for the TABLE's game, not for whichever game the create
+      // form above happens to be showing — the seat rejects a mismatch, which
+      // used to dead-end anyone joining a Yu-Gi-Oh duel from an MTG picker.
+      const forRoom = decks.filter((deck) => (deck.game || 'mtg') === (room.game || 'mtg'));
+      const deck = forRoom.some((d) => d.id === chosenDeck) ? chosenDeck : forRoom[0]?.id;
+      join(room.roomId, deck || undefined);
     } catch {
       toast({ tone: 'danger', message: t('playCodeBad') });
     } finally {
@@ -359,10 +383,11 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
 
       {starting && (
       <>
-      {/* The shortcut past the form: every format the builder knows, each one
-          already knowing its seats and its life total. Above the builder
-          rather than beside it, because the builder is what you fall back to
-          when none of these is the evening you wanted. */}
+      {/* The shortcut past the form: the popular tables across every game,
+          each one already knowing its game, its seats and its life total.
+          Above the builder rather than beside it, because the builder is what
+          you fall back to when none of these is the evening you wanted - the
+          quieter formats still live in its dropdown. */}
       <section className="quickStarts">
         <div className="quickStartsHead">
           <Heading level={2} noMargin>
@@ -374,11 +399,10 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
         </div>
         <div className="quickGrid">
           {QUICK_STARTS.map((preset) => {
-            const spec = formatFor(preset.format);
+            const isDraft = preset.game === 'mtg' && preset.format === 'draft';
             // Draft is the one table you can sit down at with nothing; every
-            // other card needs something to bring.
-            const needsDeck = preset.format !== 'draft';
-            const blocked = needsDeck && mtgDecks.length === 0;
+            // other card needs a deck built for its own game.
+            const blocked = !isDraft && decksFor(preset.game).length === 0;
             const opening = quickBusy === preset.id;
             return (
               <button
@@ -393,16 +417,21 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
                 title={blocked ? t('plQuickNeedDeck') : undefined}
                 onClick={() => void create(preset)}
               >
-                <span className="quickCardIcon" aria-hidden>
-                  {opening ? <Spinner size="sm" /> : <preset.Icon size={20} />}
+                <span className="quickCardTop">
+                  <span className="quickCardIcon" aria-hidden>
+                    {opening ? <Spinner size="sm" /> : <preset.Icon size={20} />}
+                  </span>
+                  {/* Which game this table opens under - the strip is no
+                      longer all Magic, so every card says. */}
+                  <GameTag game={preset.game} className="quickCardGame" />
                 </span>
                 <span className="quickCardName">
-                  {spec.name}
+                  {presetName(preset)}
                   {/* The format is called Limited, but nobody says "let's play
                       Limited" - they say draft. Both names are on the card so
                       the strip is scannable by the word people actually use
                       without renaming the format everywhere else. */}
-                  {preset.format === 'draft' && (
+                  {isDraft && (
                     <span className="quickCardAlias"> ({t('plQuickDraft')})</span>
                   )}
                 </span>
@@ -414,9 +443,11 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
                   <span className="quickCardHint">
                     {blocked
                       ? t('plQuickNeedDeck')
-                      : preset.format === 'draft'
+                      : isDraft
                         ? t('playDraftHint')
-                        : `${spec.startingLife} ${t('tblLife').toLowerCase()}`}
+                        : preset.game === 'mtg'
+                          ? `${formatFor(preset.format).startingLife} ${t('tblLife').toLowerCase()}`
+                          : vitalHint(preset.game)}
                   </span>
                 </span>
               </button>

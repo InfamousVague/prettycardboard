@@ -1182,6 +1182,35 @@
   z-index: 40;
 }
 
+/* ---------- deck filter row (narrows what's already in the deck) ---------- */
+
+.deckFilterBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-2);
+  margin-block: var(--glacier-space-3) var(--glacier-space-2);
+}
+
+/* Give the field a home of its own so it never stretches to eat the row, but
+   still grows past its default on a narrow deck with few type chips. */
+.deckFilterField {
+  flex: 0 1 16rem;
+  min-width: 9rem;
+}
+
+.deckFilterChips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  min-width: 0;
+}
+
+.deckFilterClear {
+  margin-inline-start: auto;
+}
+
 .cardSearch {
   position: relative;
 }

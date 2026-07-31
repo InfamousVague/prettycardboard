@@ -34,6 +34,7 @@ import { featuredDecks } from '../data/catalog.ts';
 import { useVisibleGames } from '../hooks/useVisibleGames.ts';
 import { useMobileLayout } from '../hooks/useIsPhone.ts';
 import { cyberpunkImage, cyberpunkStarters } from '../data/cyberpunk.ts';
+import { yugiohImage, yugiohStarters } from '../data/yugioh.ts';
 import { deckSummaryArt, deckSummaryCover } from '../data/deckCover.ts';
 import { DeckStack } from '../components/DeckStack.tsx';
 import { GameTag } from '../components/GameTag.tsx';
@@ -130,7 +131,8 @@ export function HomePage() {
       <QuickPlay order={2} />
       <RecentDecks order={3} />
       <Featured order={4} />
-      {showCyber && <CyberpunkStarters order={5} />}
+      <YugiohStarters order={5} />
+      {showCyber && <CyberpunkStarters order={6} />}
     </div>
   );
 }
@@ -528,6 +530,39 @@ function Featured({ order }: { order: number }) {
                   {commander.name}
                 </Text>
               )}
+            </div>
+          );
+        })}
+      </Carousel>
+    </Section>
+  );
+}
+
+/** Discover shelf for Yu-Gi-Oh: the bundled starter decks, linking into the
+ * Browse page's Yu-Gi-Oh tab. */
+function YugiohStarters({ order }: { order: number }) {
+  const t = useT();
+  const starters = useMemo(() => yugiohStarters(), []);
+  const goBrowse = () => {
+    sessionStorage.setItem('pc_browse_game', 'yugioh');
+    window.location.hash = '/browse';
+  };
+  if (starters.length === 0) return null;
+  return (
+    <Section order={order}>
+      <SectionHead title={t('hmYugiohStarters')} onViewAll={goBrowse} viewAllLabel={t('hmViewAll')} />
+      <Carousel className="homeCarousel" gap="var(--glacier-space-4)" aria-label={t('hmYugiohStarters')}>
+        {starters.map((starter) => {
+          const coverName = starter.cards.find((card) => card.scryfallId === starter.cover)?.name ?? starter.name;
+          return (
+            <div key={starter.id} className="homeStackItem">
+              <DeckStack name={coverName} imageUrl={yugiohImage(starter.cover)} width={150} onClick={goBrowse} />
+              <Text size={Size.Small} className="homeStackName">
+                <GameTag game="yugioh" showName={false} /> {starter.name}
+              </Text>
+              <Text size={Size.XSmall} tone={TextTone.Subtle} className="homeStackSub">
+                {coverName}
+              </Text>
             </div>
           );
         })}

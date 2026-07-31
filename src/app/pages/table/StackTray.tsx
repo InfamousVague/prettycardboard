@@ -2,7 +2,9 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Button, MenuItem, SplitButton, Text, Size, TextTone } from '@glacier/react';
 import { Check, Layers, X } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
+import { useApp } from '../../state/appStore.ts';
 import { useGame } from '../../state/gameStore.ts';
+import { enforcedRoom, stackTargetKinds } from './enforce.ts';
 import { cardImage } from '../../data/cards.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
@@ -26,7 +28,18 @@ export function StackTray({ room, canAct }: { room: RoomState; canAct: boolean }
   const t = useT();
   const act = useGame((state) => state.act);
   const popup = useCardPopup();
+  const myId = useApp((state) => state.identity?.userId);
   const stack = room.stack ?? [];
+  // Enforced rooms run the Arena resolve loop: the TOP spell belongs to its
+  // caster, everyone else responds or passes, and it resolves only when all
+  // other live seats have passed.
+  const enforced = enforcedRoom(room);
+  const mySeat = room.players.find((p) => p.userId === myId)?.seat;
+  const passed = room.stackPassed ?? [];
+  const othersPassed = (ownerSeat: number | undefined) =>
+    room.players
+      .filter((p) => !p.conceded && p.seat !== ownerSeat)
+      .every((p) => passed.includes(p.seat));
 
   const resolve = (card: CardInst, to: Zone) => {
     if (to === 'battlefield') act({ kind: 'stack.resolve', iid: card.iid, to, x: 0.5, y: 0.45 });
@@ -51,6 +64,18 @@ export function StackTray({ room, canAct }: { room: RoomState; canAct: boolean }
             <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
               {stack.length}
             </Text>
+            {(() => {
+              const top = stack[stack.length - 1] as (CardInst & { ownerSeat?: number }) | undefined;
+              if (top && mySeat != null && top.ownerSeat === mySeat) {
+                const kinds = stackTargetKinds(top);
+                return (
+                  <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="stackAimHint">
+                    {kinds.length > 0 ? `${t('stChooseTarget')} ${top.name}` : t('stAimHint')}
+                  </Text>
+                );
+              }
+              return null;
+            })()}
           </div>
           <div className="stackFan" ref={(el) => setFlightAnchor('stack', el)}>
             <AnimatePresence mode="popLayout">
@@ -78,7 +103,40 @@ export function StackTray({ room, canAct }: { room: RoomState; canAct: boolean }
                         popup.open({ scryfallId: card.scryfallId, name: card.name, imageUrl: card.imageUrl })
                       }
                     />
-                    {canAct && (
+                    {canAct && enforced && (() => {
+                      if (fromTop !== 0) return null;
+                      const ownerSeat = (card as CardInst & { ownerSeat?: number }).ownerSeat;
+                      const mine = ownerSeat != null && ownerSeat === mySeat;
+                      if (mine) {
+                        return (
+                          <div className="stackActions">
+                            {othersPassed(ownerSeat) ? (
+                              <Button size="sm" variant="solid" onClick={() => resolve(card, 'graveyard')}>
+                                <Check size={13} /> {t('gpResolve')}
+                              </Button>
+                            ) : (
+                              <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+                                {t('stWaiting')}
+                              </Text>
+                            )}
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="stackActions">
+                          {mySeat != null && passed.includes(mySeat) ? (
+                            <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+                              {t('stPassed')}
+                            </Text>
+                          ) : (
+                            <Button size="sm" variant="solid" onClick={() => act({ kind: 'stack.pass' })}>
+                              <Check size={13} /> {t('stPass')}
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })()}
+                    {canAct && !enforced && (
                       <div className="stackActions">
                         <SplitButton
                           size="sm"

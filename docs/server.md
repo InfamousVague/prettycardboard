@@ -12,11 +12,12 @@ Run it locally with `cargo run` from `server/` (listens on `PC_PORT`, default
 
 | File | Responsibility |
 |------|----------------|
-| `main.rs` | Process entry: builds the `App` state, opens the DB, restores persisted rooms, mounts the axum router, and spawns the background `rooms::sweeper`. |
+| `main.rs` | Process entry: builds the `App` state, opens the DB, restores persisted rooms, mounts the axum router, and spawns the background `rooms::sweeper` and `bot::scheduler`. |
 | `api.rs` | The REST surface: register/login, decks, friends, rooms list/create/delete, match history, endorsements. Token auth middleware lives here. |
-| `ws.rs` | The WebSocket surface and the **fan-out pipeline**. One connection per socket; `dispatch_action` is the single choke point every game action flows through. Room membership, presence, join/leave/spectate, and message scoping live here. |
-| `game.rs` | The **rules engine**: the `Action` enum (the whole gameplay protocol), `apply()` (the authoritative dispatcher), combat resolution, and the shared card/zone/turn helpers. |
+| `ws.rs` | The WebSocket surface and the **fan-out pipeline**. One connection per socket; `dispatch_action` is the single choke point every game action flows through. Room membership, presence, join/leave/spectate, bot seating (`bot.add`/`bot.remove`), and message scoping live here. |
+| `game.rs` | The **rules engine**: the `Action` enum (the whole gameplay protocol), `apply()` (the authoritative dispatcher), the combat overlay, and the shared card/zone/turn helpers. |
 | `game/turns.rs` | Turn order, the per-seat turn clock, and auto-turn (untap + draw) bookkeeping. |
+| `bot.rs` | The AI opponents: the 800 ms scheduler, the heuristic brain (mulligans, casting, Forge-style attack/block math, threat targeting), damage settlement, and bot table talk. See PROTOCOL.md's Bots addendum. |
 | `rooms.rs` | The `Room`/`Player`/`Card`/`Combat` data model, per-viewer state filtering (`state_for`), persistence (write-behind to SQLite), and the room-expiry sweeper. |
 | `db.rs` | SQLite schema + queries: users, decks, friends, rooms, match history, endorsements. |
 
@@ -72,25 +73,26 @@ since its prior interaction, capped at 30 seconds per silent gap. Match rows als
 persist cards played/drawn and peak battlefield size; the stats API computes
 all-time active pace plus weighted deck cards-per-turn aggregates.
 
-## Combat v3 (the locked declare → respond → resolve loop)
+## Combat (the informational overlay)
 
-Combat is a small state machine layered on the freeform board. The **state**
-lives on `Combat` (`rooms.rs`); the **transitions** are `Action` variants
-handled in `game::apply`; the **resolution arithmetic** is `game/combat.rs`.
+Combat is a lightweight, fully public, UNENFORCED overlay on the freeform
+board. The **state** lives on `Combat` (`rooms.rs`: `attackers` + `blocks`);
+the **transitions** are `Action` variants handled in `game::apply`.
 
-1. `combat.begin` — the active player opens combat.
-2. `combat.attack` — declare an attacker (with a client-computed effective
-   power/toughness, since the server has no card stats) and an optional
-   `defenderSeat` (explicit only in 3+ player rooms).
-3. `combat.lock` — freeze the declaration. After this no more attackers.
-4. `combat.ready { prevent? }` — each targeted defender responds (declare
-   blocks first, then ready). The **last** ready triggers `resolve_combat`,
-   which applies life loss / blocker trades / deaths and broadcasts
-   `combat.results`.
+1. `combat.begin` — opens the overlay and sets the phase to `attack`.
+2. `combat.attack` — toggle an attacker (auto-tapping it), with a
+   client-computed effective power/toughness (the server has no card stats)
+   and an optional `defenderSeat` (explicit only in 3+ player rooms).
+3. `combat.block` — toggle a blocker/attacker pairing, also with declared
+   stats.
+4. `combat.end` — drops the overlay and sets the phase to `main2`.
 
-Invariant: a **locked** combat never stashes `room.last_combat` (it resolves
-server-side); only the legacy un-locked flow does. Breaking this double-applies
-damage.
+**The server never resolves damage.** Players inform each other and adjust
+life/creatures by hand (the client offers a one-click unblocked-damage
+helper). When a combat that had attackers is cleared (combat.end or a turn
+change), it is stashed as `room.last_combat` (server-side only, seq-stamped):
+that record is how bots settle the damage a combat dealt them, idempotently,
+even when the whole exchange fit between two scheduler ticks (see `bot.rs`).
 
 ## Testing
 

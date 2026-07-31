@@ -93,10 +93,17 @@
 
 .tableTop,
 .ribbonRow,
-.tableMain,
-.tableSide {
+.tableMain {
   position: relative;
   z-index: 1;
+}
+
+/* No z-index of its own: with the aside at `auto` it creates no stacking
+   context, so the nav pill below can claim a root-level z-index above the
+   floating pack dock (95) while the rail's cards stay under the hand fan
+   (.tableMain, z 2) exactly as before. */
+.tableSide {
+  position: relative;
 }
 
 /* ---- top strip ---- */
@@ -332,32 +339,39 @@
 
 .tableMain[data-lobby] {
   padding-inline-end: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 
 /* ---- pregame lobby ---- */
 
+/* One screen, no page scroll: a grid with the roster + rules + controls in
+   the main column and the chat filling a fixed side column. Only the seat
+   grid scrolls internally when a short window genuinely cannot hold it.
+   Narrow windows fall back to the stacked, page-scrolling flow (see the
+   900px media query below). */
 .pregameLobby {
   flex: 1;
-  /* Seat cards now carry deck artwork, so they need real width - and the lobby
-     scrolls itself rather than growing the page off the bottom. */
   width: min(90rem, 100%);
   min-height: 0;
   margin-inline: auto;
-  padding: var(--glacier-space-5) var(--glacier-space-6) var(--glacier-space-6);
-  display: flex;
-  flex-direction: column;
-  gap: var(--glacier-space-5);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  padding: var(--glacier-space-3) var(--glacier-space-5) var(--glacier-space-2);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 21rem);
+  /* The roster keeps a real minimum so a tall rules card can never squeeze
+     it out; if a short window truly cannot hold everything, the lobby
+     scrolls as a whole rather than clipping. */
+  grid-template-rows: auto minmax(9rem, 1fr) auto auto auto;
+  gap: var(--glacier-space-2) var(--glacier-space-4);
+  overflow: hidden auto;
 }
 
 .pregameHero {
+  grid-column: 1 / -1;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--glacier-space-4);
-  padding-block-end: var(--glacier-space-4);
+  padding-block-end: var(--glacier-space-1);
   border-block-end: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
 }
 
@@ -365,7 +379,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--glacier-space-1);
+  gap: 2px;
 }
 
 .pregameKicker {
@@ -382,16 +396,27 @@
   margin: 0;
   color: var(--glacier-text);
   font-family: var(--glacier-font-display, var(--glacier-font-sans));
-  font-size: 1.75rem;
+  font-size: 1.25rem;
   line-height: 1.1;
   letter-spacing: 0;
 }
 
 .pregameSeats {
+  grid-column: 1;
+  grid-row: 2;
+  min-height: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
-  gap: var(--glacier-space-4);
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  /* Rows keep their natural card height: without this, a definite-height
+     scroll container lets the tracks split its height and crush the cards. */
+  grid-auto-rows: max-content;
+  gap: var(--glacier-space-3);
   align-content: start;
+  /* The one region allowed to scroll when the window is genuinely short. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding-inline-end: 2px;
 }
 
 .pregameSeat {
@@ -500,20 +525,55 @@
   background: color-mix(in oklch, var(--glacier-accent-solid) 8%, var(--glacier-surface-sunken));
 }
 
+/* The host's empty seat splits into two fills: invite a friend, or seat one
+   of the AI opponents. The card itself stops being clickable; its two inner
+   actions take over. */
+.pregameSeatChoices {
+  cursor: default;
+  gap: var(--glacier-space-2);
+}
+
+.pregameSeatChoices:hover {
+  border-color: var(--glacier-border);
+  background: color-mix(in oklch, var(--glacier-surface-sunken) 50%, transparent);
+}
+
+.pregameSeatAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--glacier-space-2);
+  inline-size: 100%;
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border-radius: var(--glacier-radius-lg);
+  border: var(--glacier-hairline) dashed var(--glacier-border);
+  background: transparent;
+  color: var(--glacier-text-subtle);
+  font: inherit;
+  font-size: var(--glacier-font-size-sm);
+  cursor: pointer;
+}
+
+.pregameSeatAction:hover {
+  color: var(--glacier-text);
+  border-color: var(--glacier-accent-border);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 8%, var(--glacier-surface-sunken));
+}
+
 .pregameControls {
-  margin-block-start: auto;
-  padding-block-start: var(--glacier-space-5);
+  grid-column: 1;
+  grid-row: 4;
+  padding-block-start: var(--glacier-space-2);
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(16rem, 0.75fr);
-  gap: var(--glacier-space-5);
+  gap: var(--glacier-space-4);
   border-block-start: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
 }
 
 .pregameDeckSetup {
   position: relative;
   isolation: isolate;
-  min-height: 8rem;
-  padding: var(--glacier-space-4);
+  padding: var(--glacier-space-3);
   display: flex;
   align-items: flex-end;
   gap: var(--glacier-space-4);
@@ -562,7 +622,7 @@
 }
 
 .pregameWatching {
-  min-height: 8rem;
+  min-height: 4.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -599,7 +659,23 @@
   font-weight: var(--glacier-font-weight-semibold);
 }
 
+/* The chat owns the side column top-to-bottom, ending above the floating
+   nav pill so the two stack in the same visual lane without overlapping. */
+.pregameLobby > .lobbyChat {
+  grid-column: 2;
+  grid-row: 2 / 5;
+  min-height: 0;
+  margin-block-end: calc(2.75rem + var(--glacier-space-3));
+}
+
+.pregameLobby > .lobbyChat .lobbyChatScroll {
+  flex: 1;
+  min-height: 0;
+}
+
 .pregameSpectators {
+  grid-column: 1 / -1;
+  grid-row: 5;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -611,9 +687,11 @@
 
 /* ---- pregame table rules ---- */
 .pregameSettings {
+  grid-column: 1;
+  grid-row: 3;
   display: grid;
-  gap: var(--glacier-space-3);
-  padding: var(--glacier-space-4);
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-2) var(--glacier-space-3) var(--glacier-space-3);
   border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
   border-radius: 10px;
   background: color-mix(in oklch, var(--glacier-surface) 55%, transparent);
@@ -643,8 +721,8 @@
 
 .pregameSettingsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: var(--glacier-space-3);
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--glacier-space-2) var(--glacier-space-3);
 }
 
 .pregameSetting {
@@ -664,8 +742,34 @@
 }
 
 @media (max-width: 900px) {
+  /* Narrow windows: back to the stacked, page-scrolling flow - a side chat
+     column has no room, and "fits on one screen" stops being meaningful. */
+  .tableMain[data-lobby] {
+    overflow: auto;
+  }
+
   .pregameLobby {
+    display: flex;
+    flex-direction: column;
+    gap: var(--glacier-space-4);
+    overflow: visible;
     padding-inline: var(--glacier-space-4);
+  }
+
+  .pregameLobby > .lobbyChat {
+    margin-block-end: 0;
+  }
+
+  /* In the stacked flow the roster is ordinary content: full height, no
+     internal scroll, never squeezed by the flex column. */
+  .pregameSeats {
+    flex-shrink: 0;
+    overflow: visible;
+  }
+
+  .pregameLobby > .lobbyChat .lobbyChatScroll {
+    flex: none;
+    max-height: 15rem;
   }
 
   .pregameControls {
@@ -842,8 +946,11 @@
   isolation: isolate;
   /* The playmat sits INSIDE a glowing card floating on the (black) felt: it
      shows the player's selected playmat artwork, with a subtle gradient over it
-     for depth. The hand/deck/HUD float over its lower band. */
-  margin: var(--glacier-space-3);
+     for depth. The hand/deck/HUD float over its lower band. The side and
+     bottom gutters match the floating rail's inset (space-3) so the mat and
+     the sidebar read as evenly-spaced cards on the same felt; only the top
+     stays tight against the ribbon. */
+  margin: var(--glacier-space-1) var(--glacier-space-3) var(--glacier-space-3);
   border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
   border-radius: var(--pc-mat-radius);
   overflow: hidden;
@@ -2700,6 +2807,51 @@
   justify-items: center;
 }
 
+/* ---- the chat aside (opened from the nav row's chat toggle) ---- */
+
+/* Same fixed slide-over recipe as .libSidebar, one slot narrower so both can
+   coexist without a full eclipse. LobbyChat fills it (data-variant=table). */
+.chatAside {
+  position: fixed;
+  inset-block: 4.4rem var(--glacier-space-3);
+  inset-inline-end: var(--glacier-space-3);
+  width: 20rem;
+  max-width: 92vw;
+  z-index: 58;
+  display: flex;
+  flex-direction: column;
+  animation: libSidebarIn 220ms var(--pc-settle);
+}
+
+.chatAside .lobbyChat {
+  flex: 1;
+  box-shadow: -12px 0 40px oklch(0.05 0.02 265 / 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chatAside {
+    animation: none;
+  }
+}
+
+.chatNavWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Unread chat while the aside is closed: a small accent dot on the toggle,
+   the same recipe as the pack dock's pill dot. */
+.chatNavDot {
+  position: absolute;
+  inset-block-start: -1px;
+  inset-inline-end: -1px;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: var(--glacier-radius-full);
+  background: var(--glacier-accent-solid);
+  pointer-events: none;
+}
+
 /* ---- library as a scrollable side panel (search + drag to play) ---- */
 
 .libSidebar {
@@ -2907,6 +3059,44 @@
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
 }
 
+/* ---- trigger prompts (enforced rooms, rules pass A) ---- */
+
+.triggerPrompts {
+  position: fixed;
+  bottom: 23%;
+  inset-inline-end: 1rem;
+  z-index: 66;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 320px;
+}
+
+.triggerPrompt {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: var(--glacier-radius-lg);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border));
+  background: color-mix(in oklch, oklch(0.17 0.02 265) 90%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+.triggerPromptText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.triggerPromptActions {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
 /* ---- flight clones (appended to body) ---- */
 
 .pcFlight {
@@ -2971,6 +3161,9 @@
   display: flex;
   align-items: center;
   justify-content: space-around;
+  /* A crowded row wraps inside the pill rather than spilling buttons out
+     past its rounded border. */
+  flex-wrap: wrap;
   gap: var(--glacier-space-1);
   padding: var(--glacier-space-1);
   border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
@@ -2979,6 +3172,10 @@
   backdrop-filter: blur(var(--glacier-blur-md));
   box-shadow: 0 10px 28px rgb(0 0 0 / 0.38);
   pointer-events: auto;
+  /* The table's own chrome outranks floating extras (the pack dock pill sits
+     at z 95): the nav must never be buried under a pastime. */
+  position: relative;
+  z-index: 96;
 }
 
 /* The log card fills whatever height the life + players cards leave. */
@@ -3017,6 +3214,26 @@
 .sideLine strong {
   color: var(--glacier-text);
 }
+
+/* Rules-coach advice. Only the acting player ever sees these, so they are set
+   apart from the shared log rather than blended into it. */
+.sideLineCoach {
+  display: flex;
+  gap: var(--glacier-space-2);
+  align-items: flex-start;
+  padding: var(--glacier-space-2);
+  border-inline-start: 3px solid var(--glacier-accent-8);
+  border-radius: var(--glacier-radius-sm);
+  background: var(--glacier-surface-raised);
+  color: var(--glacier-text);
+}
+
+.sideLineCoachIcon {
+  flex: none;
+  margin-block-start: 0.1em;
+  color: var(--glacier-accent-9);
+}
+
 
 .sideEmpty {
   margin: 0;
@@ -4842,15 +5059,19 @@
 /* ---- desktop grid overview ----
    Every seat's playmat at once. Cells are read-only previews sized to the
    available space; clicking one stages that board and leaves the grid. */
+/* The grid seats the table the way a real one does: everyone else across from
+   you on the top row, your own board full width along the bottom. Two rows, and
+   the column count follows the number of OPPONENTS. */
 .playerGrid {
   flex: 1;
   min-height: 0;
   display: grid;
-  gap: var(--glacier-space-1);
-  padding: var(--glacier-space-1);
-  /* Two across from three seats up; a duel stays side by side. */
+  /* Every pixel here comes off the mats, and with two boards stacked the mats
+     are what is hard to read - so the grid keeps only a hairline between them. */
+  gap: 2px;
+  padding: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   /* Each cell lays its board out at full stage width and draws it shrunk, so a
      quadrant is a true miniature of the staged view rather than a reflow of it.
      Track the column count: 1 / columns keeps the mini's layout viewport the
@@ -4858,20 +5079,44 @@
   --pc-grid-zoom: 0.5;
 }
 
+.playerGridCell {
+  order: 1;
+}
+
+/* My board takes the whole bottom row: it is the one I actually play from, so
+   it gets the width even when three opponents share the row above. */
+.playerGridCell[data-mine] {
+  order: 2;
+  grid-column: 1 / -1;
+}
+
 .playerGrid[data-seats='1'] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  --pc-grid-zoom: 1;
+}
+
+/* A duel stacks one above the other, so each board spans the full width and a
+   zoom of 1 lays it out against exactly its own cell - which is what makes the
+   cards read at full size rather than as a thumbnail. */
+.playerGrid[data-seats='2'] {
   grid-template-columns: minmax(0, 1fr);
   --pc-grid-zoom: 1;
 }
 
-.playerGrid[data-seats='2'] {
+.playerGrid[data-seats='3'] {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: minmax(0, 1fr);
+}
+
+.playerGrid[data-seats='4'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  --pc-grid-zoom: 0.3334;
 }
 
 .playerGrid[data-seats='5'],
 .playerGrid[data-seats='6'] {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  --pc-grid-zoom: 0.3334;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  --pc-grid-zoom: 0.25;
 }
 
 .playerGridCell {
@@ -4882,8 +5127,11 @@
   /* Name plate, then the miniature under it. */
   flex-direction: column;
   padding: 0;
+  /* The cell frame is a turn indicator, not a picture frame: it keeps the
+     hairline (and its accent glow on the active seat) but gives its inset
+     back to the mat, which is what the player is actually reading. */
   border: var(--glacier-hairline) solid var(--glacier-border-subtle);
-  border-radius: var(--pc-mat-radius);
+  border-radius: var(--glacier-radius-sm);
   background: none;
   overflow: hidden;
   cursor: pointer;
@@ -4907,24 +5155,14 @@
   border-color: color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border));
 }
 
-/* An overhead map: nothing in a grid cell is rotated, even when the
-   across-the-table mirror preference is on for the single staged board. */
-.playerGridCell .seatFrame[data-stage][data-mirror] .zonePiles:not([data-mine]) {
-  position: static;
-  transform: none;
-  padding: var(--glacier-space-2) var(--glacier-space-3);
-  order: 3;
-  align-self: flex-start;
-}
-
-.playerGridCell .seatFrame[data-stage][data-mirror] .oppField {
-  transform: none;
-}
-
-/* A seat that used the mat editor wraps its piles in .matZones, which carries
-   its own 180deg mirror - un-rotate that too or those cells stay upside down. */
-.playerGridCell .seatFrame[data-stage][data-mirror] .matZones {
-  transform: none;
+/* Opponent cells sit across the table from mine, so they keep the staged
+   view's 180deg mirror rather than being flattened into an overhead map (see
+   the [data-mirror] rules above; TablePage forces it on for grid cells).
+   The zone piles already counter-rotate themselves, but the zone grid printed
+   on the felt does not - its captions would hang upside down, so they flip
+   back and stay readable from my side of the table. */
+.seatFrame[data-stage][data-mirror] .ygoZoneCaption {
+  transform: rotate(180deg);
 }
 
 /* The preview fills the cell; the hit target overlays it so one click stages
@@ -4948,6 +5186,17 @@
   min-width: 0;
   min-height: 0;
   margin: 0;
+}
+
+/* Stacked boards are already competing for height, so inside a grid cell the
+   mats give up the rest of their framing and run to the cell edges. */
+.playerGridCell .myField {
+  margin: 1px;
+}
+
+.playerGridCell .oppBoard,
+.playerGridCell .myField {
+  border-radius: var(--glacier-radius-sm);
 }
 
 /* ...except my own cell, which is the live board rather than a preview of one.
@@ -5672,3 +5921,285 @@
 
 /* ---- rotate-to-landscape overlay ---- */
 
+
+/* ---- Yu-Gi-Oh LP quick steps (Vitals) ---- */
+
+/* The ±500/±1000 chips under the LP readout: life in this game moves in
+   attack-sized bites, so the single-step buttons alone would be 30 clicks. */
+.lifeQuick {
+  display: flex;
+  justify-content: center;
+  gap: var(--glacier-space-1);
+  margin-top: calc(-1 * var(--glacier-space-1));
+}
+.lifeQuickBtn {
+  border: 1px solid var(--glacier-border-subtle);
+  background: var(--glacier-surface-2);
+  color: var(--glacier-text-muted);
+  border-radius: var(--glacier-radius-sm);
+  font: inherit;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  padding: 0.1rem 0.4rem;
+  cursor: pointer;
+}
+.lifeQuickBtn:hover {
+  background: var(--glacier-surface-3);
+  color: var(--glacier-text);
+}
+
+/* ---- enforced mode: playable glow + combat preview ---- */
+
+/* Arena's "you can play this": a warm gold rim that breathes. Applied to hand
+   cards the client-side legality mirror says are playable right now. */
+/* The glow rides .handCardZoom - the element the fan actually scales and
+   lifts - so it hugs the card through the whole animation instead of sitting
+   on the wrapper's static hit-area. */
+.handCard[data-playable] .handCardZoom {
+  --pc-playable: oklch(0.83 0.14 85);
+  box-shadow:
+    0 0 0 2px color-mix(in oklch, var(--pc-playable) 85%, transparent),
+    0 0 18px color-mix(in oklch, var(--pc-playable) 55%, transparent);
+  border-radius: var(--glacier-radius-md);
+  animation: playableBreath 1.6s ease-in-out infinite;
+}
+
+@keyframes playableBreath {
+  0%, 100% { box-shadow: 0 0 0 2px color-mix(in oklch, var(--pc-playable) 85%, transparent), 0 0 14px color-mix(in oklch, var(--pc-playable) 45%, transparent); }
+  50% { box-shadow: 0 0 0 2px color-mix(in oklch, var(--pc-playable) 95%, transparent), 0 0 24px color-mix(in oklch, var(--pc-playable) 70%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .handCard[data-playable] .handCardZoom { animation: none; }
+}
+
+/* The engine's combat outcome, floating under the ribbon until resolved. */
+.combatPreviewCard {
+  position: fixed;
+  top: 4.6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+  padding: var(--glacier-space-3) var(--glacier-space-4);
+  max-width: min(34rem, 92vw);
+  border-radius: var(--glacier-radius-xl);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-border));
+  background: color-mix(in oklch, oklch(0.16 0.02 265) 94%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-lg));
+  box-shadow: 0 12px 40px oklch(0.05 0.02 265 / 0.5);
+}
+
+.combatPreviewTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--glacier-accent-text);
+}
+
+.combatPreviewRows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--glacier-font-size-sm);
+  color: var(--glacier-text);
+}
+
+.combatPreviewHit { color: var(--glacier-text-muted); }
+.combatPreviewDeath { color: oklch(0.72 0.19 25); }
+
+/* The enforced-rules switch row in the lobby settings grid. */
+.pregameSettingWide { grid-column: 1 / -1; }
+.pregameEnforcedRow {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+}
+
+/* ---- targeting indicator: the whole table sees where a spell points ---- */
+.fieldCard[data-aimed] {
+  --pc-aim: oklch(0.66 0.23 25);
+  box-shadow:
+    0 0 0 3px color-mix(in oklch, var(--pc-aim) 90%, transparent),
+    0 0 22px color-mix(in oklch, var(--pc-aim) 60%, transparent);
+  border-radius: var(--glacier-radius-md);
+  animation: aimPulse 0.9s ease-in-out infinite;
+}
+
+@keyframes aimPulse {
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in oklch, var(--pc-aim) 90%, transparent), 0 0 16px color-mix(in oklch, var(--pc-aim) 45%, transparent); }
+  50% { box-shadow: 0 0 0 4px var(--pc-aim), 0 0 30px color-mix(in oklch, var(--pc-aim) 75%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fieldCard[data-aimed] { animation: none; }
+}
+
+/* Cards that could satisfy the top spell's target ("target creature", ...):
+   a soft dashed invitation, quieter than the solid ring an actual aim gets. */
+.fieldCard[data-targetable] {
+  --pc-target: oklch(0.66 0.23 25);
+  outline: 2px dashed color-mix(in oklch, var(--pc-target) 65%, transparent);
+  outline-offset: 3px;
+  border-radius: var(--glacier-radius-md);
+}
+
+/* ---- table markers: a puck in the colour of the seat that placed it ---- */
+.cardMark {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  pointer-events: none;
+}
+
+.cardMarkFlag {
+  top: -1.1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.6rem;
+  block-size: 1.6rem;
+  border-radius: var(--glacier-radius-full);
+  color: oklch(0.99 0 0);
+  /* The seat's own colour, with the icon's meaning carried by the glyph. One
+     player's markers therefore read as a set however many kinds they use. */
+  background: linear-gradient(160deg, var(--pc-mark-color, oklch(0.55 0.12 265)), var(--pc-mark-deep, oklch(0.32 0.06 265)));
+  border: 1px solid color-mix(in oklch, var(--pc-mark-color, oklch(0.75 0.08 265)) 75%, white 25%);
+  box-shadow:
+    0 4px 10px oklch(0.05 0.02 265 / 0.55),
+    0 0 12px color-mix(in oklch, var(--pc-mark-color, transparent) 45%, transparent),
+    inset 0 1px 0 oklch(1 0 0 / 0.3);
+  /* A marker landing is worth a glance; it never loops. */
+  animation: markDrop 260ms var(--pc-settle, ease-out);
+}
+
+@keyframes markDrop {
+  0% { transform: translateX(-50%) scale(0.3) translateY(-0.5rem); opacity: 0; }
+  100% { transform: translateX(-50%) scale(1) translateY(0); opacity: 1; }
+}
+
+/* The seat picker's marker row: the same pucks, as buttons. */
+.markChipRow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.3rem;
+}
+
+.markChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.9rem;
+  block-size: 1.9rem;
+  padding: 0;
+  border-radius: var(--glacier-radius-md);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 70%, transparent);
+  background: color-mix(in oklch, var(--glacier-surface-raised) 80%, transparent);
+  color: var(--glacier-text-muted);
+  cursor: pointer;
+  transition: color 120ms ease-out, border-color 120ms ease-out, background 120ms ease-out;
+}
+
+.markChip:hover {
+  color: var(--glacier-text);
+  border-color: var(--glacier-accent-border);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 12%, var(--glacier-surface-raised));
+}
+
+/* The marker this card already wears: picking it again lifts it. */
+.markChip[data-active] {
+  color: oklch(0.99 0 0);
+  border-color: var(--glacier-accent-border);
+  background: linear-gradient(160deg, var(--glacier-accent-solid), color-mix(in oklch, var(--glacier-accent-solid) 55%, black));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cardMarkFlag { animation: none; }
+}
+
+/* The seat's colour key, so a player can read whose arrow and whose marker
+   is whose without being told. */
+.playerSeatDot {
+  flex: none;
+  inline-size: 0.4rem;
+  block-size: 1.5rem;
+  border-radius: var(--glacier-radius-full);
+  background: var(--pc-seat-color, transparent);
+  box-shadow: 0 0 8px color-mix(in oklch, var(--pc-seat-color, transparent) 55%, transparent);
+}
+
+/* ---- pointing arrows (AimLayer): one drawn arc per pointer ---- */
+.aimLayer {
+  position: fixed;
+  inset: 0;
+  /* Over the boards and the rail, under the modals/popovers (110+) that the
+     player deliberately opened. Never a hit target. */
+  z-index: 101;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.aimArrow {
+  transition: opacity 140ms linear;
+}
+
+.aimGlow {
+  stroke-width: 9;
+  stroke-linecap: round;
+  opacity: 0.22;
+  filter: blur(3px);
+}
+
+.aimStroke {
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-dasharray: 10 7;
+  /* The dashes crawl toward the target: which end is the source never has to
+     be guessed. */
+  animation: aimCrawl 620ms linear infinite;
+}
+
+@keyframes aimCrawl {
+  to { stroke-dashoffset: -17; }
+}
+
+.aimLabelText {
+  font-family: var(--glacier-font-sans);
+  font-size: 0.68rem;
+  font-weight: var(--glacier-font-weight-semibold);
+  text-anchor: middle;
+  dominant-baseline: middle;
+  paint-order: stroke;
+  /* Legible over art, felt, or another card, without a plate behind it. */
+  stroke: oklch(0.12 0.02 265 / 0.85);
+  stroke-width: 3.5px;
+  stroke-linejoin: round;
+}
+
+/* My own arrow is confirmation, not news: quieter than everyone else's. */
+.aimArrow[data-mine] .aimStroke { opacity: 0.75; }
+.aimArrow[data-mine] .aimLabelText { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .aimStroke { animation: none; stroke-dasharray: none; }
+}
+
+.oppLifeBtn {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline dotted color-mix(in oklch, currentColor 50%, transparent);
+  text-underline-offset: 3px;
+}

@@ -19,7 +19,8 @@ export interface MatPos {
 
 /** Public deck metrics for the matchup splash, computed by the deck OWNER's
  * client (the server stores decks as bare card ids and can't derive these).
- * MTG decks fill colors/avgMv/type counts; Cyberpunk fills ram/avgCost. */
+ * MTG decks fill colors/avgMv/type counts; Cyberpunk fills ram/avgCost;
+ * Yu-Gi-Oh fills monsters/traps/extra/avgAtk (spells is shared). */
 export interface DeckMeta {
   size: number;
   /** The deck's cover card id, so every seat at the table can show the deck's
@@ -33,6 +34,10 @@ export interface DeckMeta {
   other?: number;
   ram?: number;
   avgCost?: number;
+  monsters?: number;
+  traps?: number;
+  extra?: number;
+  avgAtk?: number;
 }
 
 export interface DeckCard {
@@ -57,7 +62,7 @@ export interface DeckSummary {
   id: string;
   name: string;
   format: string;
-  /** Which card game this deck is for ("mtg" | "cyberpunk"). */
+  /** Which card game this deck is for ("mtg" | "cyberpunk" | "yugioh"). */
   game: string;
   commander: string;
   cardCount: number;
@@ -80,7 +85,7 @@ export interface Deck {
   id: string;
   name: string;
   format: string;
-  /** Which card game this deck is for ("mtg" | "cyberpunk"). */
+  /** Which card game this deck is for ("mtg" | "cyberpunk" | "yugioh"). */
   game: string;
   cards: DeckCard[];
   /** Scryfall id of the chosen header/cover card, when customized. */
@@ -115,6 +120,9 @@ export interface RoomInfo {
   roomId: string;
   name: string;
   seats: number;
+  /** Which card game the table plays; pick a deck for THIS, not for whatever
+   *  game the joiner's own form happened to be showing. */
+  game?: string;
   /** The table's format. 'draft' means seats are filled by drafting a deck at
    *  the table, so an invitee is NOT asked to bring one. */
   format?: string | null;
@@ -222,6 +230,8 @@ export interface CardInst {
   /** A double-faced card flipped to its back face; the client resolves the back
    *  art from the card's Scryfall faces. */
   transformed?: boolean;
+  /** Turn round this card entered the battlefield (summoning sickness). */
+  enteredTurn?: number;
 }
 
 /** A Cyberpunk Gig die: one of the six d4-d20 in the Fixer. `inGig` = rolled
@@ -287,6 +297,11 @@ export interface TablePlayer {
   /** The deck id this seat plays (own seat only) - used to look up which tokens
    * the deck can produce. */
   deckId?: string | null;
+  /** A server-driven AI opponent (seated via `bot.add`). */
+  isBot?: boolean;
+  /** Lands this seat has played in the current turn round (enforced rooms
+   * gate the drop; the coach reads it too). */
+  landsThisTurn?: number;
 }
 
 /** One seat's line in a finished match (part of RoomState.matchResult). */
@@ -355,10 +370,11 @@ export interface MatchStatsPlayer {
 /** Host-configurable pre-game rules, negotiated in the lobby before the game
  * starts. The server fills unset (null) fields from format/game defaults. */
 export interface GameSettings {
-  /** Life every seat starts with; null for the format default (commander 40,
-   * standard 20). Ignored for Cyberpunk. */
+  /** Life every seat starts with; null for the game/format default (commander
+   * 40, standard 20, Yu-Gi-Oh 8000). Ignored for Cyberpunk. */
   startingLife?: number | null;
-  /** Opening-hand size; null for the game default (MTG 7, Cyberpunk 6). */
+  /** Opening-hand size; null for the game default (MTG 7, Cyberpunk 6,
+   * Yu-Gi-Oh 5). */
   startingHand?: number | null;
   /** Free mulligans before hands shrink; null for the classic rule. */
   freeMulligans?: number | null;
@@ -372,6 +388,9 @@ export interface GameSettings {
   firstSeat?: number | null;
   /** Force the starting player's first-draw skip; null for the classic rule. */
   skipFirstDraw?: boolean | null;
+  /** Arena-lite rules enforcement for this table (MTG only): real costs,
+   * land drops, summoning sickness, legal combat, previewed damage. */
+  enforced?: boolean;
 }
 
 /** One card in a draft pack or pool. */
@@ -447,7 +466,7 @@ export interface RoomState {
   hostUserId: string;
   players: TablePlayer[];
   spectators: { userId: string; username: string }[];
-  /** Which card game this table plays ("mtg" | "cyberpunk"); drives zone labels,
+  /** Which card game this table plays ("mtg" | "cyberpunk" | "yugioh"); drives zone labels,
    * vitals, phases, and card-art resolution. Absent on pre-multigame snapshots
    * (treat as "mtg"). */
   game?: string;
@@ -463,6 +482,12 @@ export interface RoomState {
   phase?: Phase;
   autoTurn?: boolean;
   stack?: CardInst[];
+  /** Enforced rooms: seats that passed priority on the current stack. */
+  stackPassed?: number[];
+  /** Enforced rooms: fired triggered abilities awaiting their controller. */
+  pendingTriggers?: PendingTrigger[];
+  /** Table markers parked on cards, by card iid. Fully public. */
+  marks?: Record<string, CardMarkState>;
   combat?: CombatState | null;
   markers?: TableMarkers;
   matchResult?: MatchResult | null;
@@ -472,11 +497,49 @@ export interface RoomState {
 
 export type Zone = 'library' | 'hand' | 'battlefield' | 'graveyard' | 'exile' | 'command';
 
+/** A table marker parked on a card, carrying who placed it (the client colours
+ *  the puck by that seat). Lives in room state, so it survives reconnects and
+ *  every spectator sees it. */
+export interface CardMarkState {
+  kind: string;
+  by: string;
+  seat: number;
+  username: string;
+  ts: number;
+}
+
+/** One parsed trigger effect (enforced rooms; see PROTOCOL.md pass A). */
+export type TriggerEffect =
+  | { kind: 'draw'; n: number }
+  | { kind: 'gainLife'; n: number }
+  | { kind: 'loseLife'; n: number }
+  | { kind: 'eachOpponentLoses'; n: number }
+  | { kind: 'selfCounters'; counter: string; n: number }
+  | { kind: 'token'; name: string; power: number; toughness: number; count: number; tapped: boolean }
+  | { kind: 'manual' };
+
+/** A fired triggered ability waiting on its controller (fully public). */
+export interface PendingTrigger {
+  id: string;
+  owner: string;
+  seat: number;
+  sourceIid: string;
+  sourceName: string;
+  when: 'etb' | 'dies' | 'attacks' | 'upkeep' | 'endStep';
+  effects: TriggerEffect[];
+  text: string;
+  /** True = the engine can apply the parsed effects itself. */
+  auto: boolean;
+  deadline: number;
+}
+
 /** Freeform table actions (client → server inside game.action). */
 export type GameAction =
-  | { kind: 'card.move'; iid: string; to: Zone; x?: number; y?: number; index?: number }
+  /** `faceDown` lands the card hidden in the same act (a Yu-Gi-Oh Set) —
+   *  moving face-up and flipping afterwards would broadcast its identity. */
+  | { kind: 'card.move'; iid: string; to: Zone; x?: number; y?: number; index?: number; faceDown?: boolean }
   | { kind: 'card.pos'; iid: string; x: number; y: number }
-  | { kind: 'card.tap'; iid: string; tapped: boolean }
+  | { kind: 'card.tap'; iid: string; tapped: boolean; mana?: string }
   | { kind: 'card.face'; iid: string; faceDown: boolean }
   | { kind: 'card.transform'; iid: string; transformed: boolean }
   | { kind: 'card.counter'; iid: string; counter: string; delta: number }
@@ -488,6 +551,7 @@ export type GameAction =
   | { kind: 'untap.all' }
   | { kind: 'life.set'; value: number }
   | { kind: 'life.add'; delta: number }
+  | { kind: 'life.deal'; seat: number; delta: number }
   | { kind: 'cmd.damage'; fromSeat: number; delta: number }
   | { kind: 'poison.add'; delta: number }
   | { kind: 'reveal.hand' }
@@ -528,6 +592,24 @@ export type ServerMessage =
       roomId: string;
     }
   | { type: 'log'; seq: number; text: string; ts: number; roomId: string }
+  | {
+      type: 'aim';
+      fromUserId: string;
+      username: string;
+      /** The pointer's seat, so the arrow can wear that seat's colour. */
+      fromSeat?: number | null;
+      fromIid?: string | null;
+      toIid?: string | null;
+      toSeat?: number | null;
+      kind?: string | null;
+      /** Enforced rooms: the target's printed ward cost, if it has one. */
+      ward?: string | null;
+      ts: number;
+      roomId: string;
+    }
+  // Private rules advice, sent only to the player who made the move and only
+  // while they have the coach turned on. Advisory - the move already happened.
+  | { type: 'coach'; rule: string; text: string; ts: number }
   | { type: 'decks.changed' }
   | { type: 'room.closed'; roomId: string }
   | { type: 'error'; code: string; message: string }
@@ -547,6 +629,31 @@ export type Phase = 'upkeep' | 'main1' | 'attack' | 'block' | 'damage' | 'main2'
 export interface CombatState {
   attackers: { iid: string; defenderSeat?: number; power?: string; toughness?: string }[];
   blocks: { blockerIid: string; attackerIid: string; power?: string; toughness?: string }[];
+  /** Enforced rooms: attackers are final; blocks may be declared. */
+  locked?: boolean;
+  /** Enforced rooms: blocks are final; `preview` awaits combat.resolve. */
+  blocksReady?: boolean;
+  preview?: CombatPreview | null;
+}
+
+/** The engine's computed combat outcome (enforced rooms), shown before the
+ * active player applies it with combat.resolve. */
+export interface CombatPreview {
+  rows: PreviewRow[];
+  /** Life change per seat (negative = damage taken), lifelink included. */
+  life: Record<string, number>;
+  /** Commander damage dealt: [defending seat, commander iid, amount]. */
+  commander?: [number, string, number][];
+}
+
+export interface PreviewRow {
+  attackerIid: string;
+  attackerName: string;
+  defenderSeat: number;
+  playerDamage: number;
+  attackerDies: boolean;
+  deadBlockers: string[];
+  deadBlockerNames: string[];
 }
 
 /** One recorded move on the event timeline: who did it, its log label, when,
@@ -591,6 +698,9 @@ export type GameActionV2 =
   | { kind: 'marker.set'; marker: 'monarch' | 'initiative'; seat: number }
   | { kind: 'marker.day'; value: 'day' | 'night' | null }
   | { kind: 'marker.storm'; delta: number }
+  /** Park a table marker on a card; `mark: null` lifts it. */
+  | { kind: 'mark.set'; iid: string; mark: string | null }
+  | { kind: 'mark.clear' }
   | { kind: 'library.play'; x: number; y: number }
   | { kind: 'gig.roll'; sides: number }
   | { kind: 'gig.return'; sides: number }
@@ -604,6 +714,14 @@ export type GameActionV2 =
   | { kind: 'card.give'; iid: string; toUser: string }
   | { kind: 'mull.take' }
   | { kind: 'mull.keep'; bottomIids: string[] }
+  // Enforced rooms only (see PROTOCOL.md Enforced addendum):
+  | { kind: 'cast'; iid: string; payment?: string[]; x?: number; y?: number }
+  | { kind: 'combat.lock' }
+  | { kind: 'combat.ready' }
+  | { kind: 'combat.resolve' }
+  | { kind: 'stack.pass' }
+  | { kind: 'trigger.answer'; id: string; apply: boolean }
+  | { kind: 'cascade'; n: number }
   | { kind: 'undo' }
   | { kind: 'redo' }
   | { kind: 'rewindTo'; index: number }

@@ -23,7 +23,16 @@ export type ClientMessage =
   | { type: 'cardback.set'; id?: string }
   | { type: 'deckmeta.set'; meta: DeckMeta | null }
   | { type: 'auto.set'; untap: boolean; draw: boolean }
+  | { type: 'coach.set'; on: boolean }
   | { type: 'chat.send'; text: string }
+  /** The pointing gesture (an arrow the table watches, then forgets). The
+   *  persistent cousin is the `mark.set` ACTION - markers live in room state,
+   *  arrows never do. */
+  | { type: 'aim'; fromIid?: string; toIid?: string; toSeat?: number; kind?: 'target' | 'point' }
+  // Seat/unseat an AI opponent (host only, pre-start). deckCode picks one of
+  // the server's embedded precons; absent = random.
+  | { type: 'bot.add'; deckCode?: string; style?: 'casual' | 'aggro' | 'defensive'; difficulty?: 'easy' | 'normal' | 'hard' }
+  | { type: 'bot.remove'; seat: number }
   | { type: 'invite.send'; toUserId: string; roomId: string }
   | { type: 'game.action'; action: GameAction | GameActionV2 }
   // "Look what I just cracked": a notable pull from the pack dock, relayed to

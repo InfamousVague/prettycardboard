@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Avatar, Button, Pill, Text, Size, TextTone, Tooltip } from '@glacier/react';
-import { BookCopy, Check, Cpu, Crown, Hand as HandIcon, Shield, Skull, Zap } from '@glacier/icons';
+import { Avatar, Button, Menu, MenuItem, Pill, Text, Size, TextTone, Tooltip } from '@glacier/react';
+import { BookCopy, Bot as BotIcon, Check, Cpu, Crown, Hand as HandIcon, Shield, Skull, Zap } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
+import { send } from '../../net/ws.ts';
 import { cardImage } from '../../data/cards.ts';
 import { isFoilInst } from '../../data/foil.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import type { CardInst, RoomState, TablePlayer } from '../../net/types.ts';
 import { selectCardScale, useTableUi } from './tableUi.ts';
-import { AttackBadge, BlockCluster, CounterBadges, DEFAULT_MAT_LAYOUT, ZonePiles, groupAttachments, splitPile } from './bits.tsx';
+import { AttackBadge, BlockCluster, CardMark, CounterBadges, DEFAULT_MAT_LAYOUT, MARK_KINDS, ZonePiles, groupAttachments, markIcon, splitPile } from './bits.tsx';
+import { MARK_LABEL } from './marks.ts';
+import { YUGIOH_PILE_LAYOUT, YugiohZoneGrid } from './yugiohZones.tsx';
 import { ambientDelay, restTilt } from './juice.ts';
 import { PILE_MAX_EDGES, PILE_STEP_PX, effectivePT, isCreature, ptTotalLabel } from './boardModes.ts';
+import { canPairBlock, enforcedRoom, matchesTargetKind, stackTargetKinds } from './enforce.ts';
 import { playmatBackground } from '../../data/playmats.ts';
 import { cardBackUrl, effectiveCardBack } from '../../data/cardBacks.ts';
 import { useEdgeColor } from '../../data/edgeColor.ts';
@@ -35,6 +39,7 @@ export function SeatFrame({
   canAct,
   onHover,
   stage,
+  mirror,
 }: {
   room: RoomState;
   player: TablePlayer;
@@ -43,9 +48,20 @@ export function SeatFrame({
   onHover: (card: CardInst | null) => void;
   /** Full-size main-stage rendering (vs the compact strip). */
   stage?: boolean;
+  /** Force the across-the-table 180° flip on or off, overriding the viewer's
+   *  preference. The grid seats opponents facing you, where the mirror is a
+   *  property of the layout rather than a taste. */
+  mirror?: boolean;
 }) {
   const t = useT();
   const act = useGame((state) => state.act);
+  const aim = useGame((state) => state.aim);
+  const marks = useGame((state) => state.room?.marks);
+  const topSpell = (room.stack ?? [])[(room.stack ?? []).length - 1] as
+    | (CardInst & { ownerSeat?: number })
+    | undefined;
+  const aimingKinds =
+    topSpell && me && topSpell.ownerSeat === me.seat ? stackTargetKinds(topSpell) : [];
   const popup = useCardPopup();
   const blockerIid = useTableUi((state) => state.blockerIid);
   const setBlocker = useTableUi((state) => state.setBlocker);
@@ -57,9 +73,16 @@ export function SeatFrame({
   // card resolves through the faces cache, so watch that too.
   usePrintedPtVersion();
   useFacesVersion();
-  const mtg = room.game !== 'cyberpunk';
+  // "Is Magic" (not "is not cyberpunk"): Yu-Gi-Oh must not inherit MTG-only
+  // chrome, but its ATK/DEF chip rides the same ptTotalLabel path (game-aware).
+  const mtg = (room.game ?? 'mtg') === 'mtg';
   const mirrorOpponent = usePreference('mirrorOpponent');
   const ambientCards = usePreference('ambientCards');
+  // Yu-Gi-Oh seats draw the printed zone grid, with their piles in its cells.
+  const ygoField = room.game === 'yugioh';
+  // Their cards render at the staged size or the mini-seat size; the zone
+  // outlines match, so an empty cell is exactly one of their cards.
+  const oppCardWidth = stage ? Math.round(120 * cardScale) : 56;
 
   const combat = room.combat;
   // Opponent vitals are game-driven: Cyberpunk relabels the life/poison slots as
@@ -89,12 +112,15 @@ export function SeatFrame({
     if (!entry || me === undefined) return false;
     return room.players.length === 2 || entry.defenderSeat === me.seat || entry.defenderSeat == null;
   };
+  const enforced = enforcedRoom(room);
   const iAmDefender =
     canAct &&
     me !== undefined &&
     combat != null &&
     room.activeSeat !== me.seat &&
-    combat.attackers.some((a) => attackerHitsMe(a.iid));
+    combat.attackers.some((a) => attackerHitsMe(a.iid)) &&
+    // Enforced machine: blocks only open between lock and ready.
+    (!enforced || (Boolean(combat.locked) && !combat.blocksReady));
 
   // Unblocked power aimed at me; the one-click "take damage" helper subtracts it
   // from my life. Creature deaths stay manual (drag them to the graveyard).
@@ -107,6 +133,13 @@ export function SeatFrame({
 
   // Attacker → blocker picker (assign a block from the staged attacker board).
   const [blockPick, setBlockPick] = useState<{ attackerIid: string; x: number; y: number } | null>(null);
+  const [markPick, setMarkPick] = useState<{ iid: string; x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!markPick) return;
+    const close = () => setMarkPick(null);
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [markPick]);
   useEffect(() => {
     if (!blockPick) return;
     const close = () => setBlockPick(null);
@@ -116,6 +149,14 @@ export function SeatFrame({
   const myBlockers = me ? me.battlefield.filter((c) => !c.tapped && !c.attachedTo && isCreature(c)) : [];
 
   const clickCard = (card: CardInst, event: React.MouseEvent) => {
+    // My spell tops the stack: clicking an opponent card points at it.
+    const top = (room.stack ?? [])[(room.stack ?? []).length - 1] as
+      | (CardInst & { ownerSeat?: number })
+      | undefined;
+    if (top && me && top.ownerSeat === me.seat) {
+      send({ type: 'aim', fromIid: top.iid, toIid: card.iid });
+      return;
+    }
     // Legacy pairing: a blocker pre-selected on my own board + their attacker.
     if (canAct && blockerIid && combat && attackerEntry(card.iid)) {
       const blocker = me?.battlefield.find((c) => c.iid === blockerIid);
@@ -142,7 +183,9 @@ export function SeatFrame({
     pileCount = 0,
   ) => {
     const attacker = attackerEntry(card.iid);
-    if (cardTotals && mtg) primePrintedPT(card);
+    // Always primed for MTG - the lookup also learns type lines, which drive
+    // blocker eligibility and attacker classification, not just the P/T chip.
+    if (mtg) primePrintedPT(card);
     const ptTotal = cardTotals ? ptTotalLabel(card, mtg) : '';
     const baseX = host ? host.x : card.x;
     const baseY = host ? host.y : card.y;
@@ -165,6 +208,8 @@ export function SeatFrame({
         data-preview-src={cardPreview}
         data-preview-name={cardPreview ? card.name : undefined}
         data-attacker={attacker ? '' : undefined}
+        data-aimed={aim?.toIid === card.iid || undefined}
+        data-targetable={(aimingKinds.length > 0 && matchesTargetKind(aimingKinds, card)) || undefined}
         data-attachment={host ? (card.piled ? 'pile' : 'aura') : undefined}
         data-pile={pileCount > 0 ? pileCount : undefined}
         data-block-target={canAct && blockerIid && attacker ? '' : undefined}
@@ -184,7 +229,12 @@ export function SeatFrame({
         onPointerEnter={() => onHover(card)}
         onPointerLeave={() => onHover(null)}
         onClick={(event) => clickCard(card, event)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          setMarkPick({ iid: card.iid, x: event.clientX, y: event.clientY });
+        }}
       >
+        {marks?.[card.iid] && <CardMark mark={marks[card.iid]!} />}
         <GameCard
           name={card.name}
           imageUrl={faceImage(card)}
@@ -216,9 +266,12 @@ export function SeatFrame({
   return (
     <section
       className="oppBoard seatFrame"
+      // An arrow aimed at a PLAYER lands here (see AimLayer's anchorOf).
+      data-seat-anchor={player.seat}
+      data-game={room.game || 'mtg'}
       data-active={isActiveSeat || undefined}
       data-stage={stage || undefined}
-      data-mirror={mirrorOpponent || undefined}
+      data-mirror={(mirror ?? mirrorOpponent) || undefined}
       style={{
         ['--pc-card-back' as string]: `url("${seatBackSrc}")`,
         ['--pc-card-back-edge' as string]: seatBackEdge,
@@ -234,7 +287,7 @@ export function SeatFrame({
           <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="combatHint">
             {t('gpBlockPrompt')}
           </Text>
-          {incomingUnblocked > 0 && (
+          {incomingUnblocked > 0 && !enforced && (
             <Button size="sm" variant="solid" onClick={() => act({ kind: 'life.add', delta: -incomingUnblocked })}>
               {t('cbTakeDamage')} · {incomingUnblocked}
             </Button>
@@ -246,6 +299,13 @@ export function SeatFrame({
         <Text as="span" size={Size.Small} weight="semibold" className="seatName">
           {player.username}
         </Text>
+        {player.isBot && (
+          <Tooltip content={t('preBotTagline')}>
+            <span className="seatMarker">
+              <BotIcon size={12} />
+            </span>
+          </Tooltip>
+        )}
         {markers.monarch === player.seat && (
           <Tooltip content={t('gpMonarch')}>
             <span className="seatMarker">
@@ -269,7 +329,7 @@ export function SeatFrame({
             {player.mulligan.state === 'kept' ? t('gpMullKeep') : `${t('tblMulligan')}…`}
           </Pill>
         )}
-        <span className="oppLife" title={cyber ? lifeLabel : t('tblLife')}>
+        <span className="oppLife" title={mtg ? t('tblLife') : lifeLabel}>
           {player.life}
         </span>
         {player.poison > 0 && (
@@ -277,11 +337,11 @@ export function SeatFrame({
             {cyber ? <Cpu size={11} /> : <Skull size={11} />} {player.poison}
           </span>
         )}
-        {!cyber && <ManaPoolReadout mana={player.mana} />}
+        {mtg && <ManaPoolReadout mana={player.mana} />}
         <span className="oppHandCount" title={t('tblHand')}>
           <HandIcon size={11} /> {player.handCount}
         </span>
-        <span className="oppHandCount" title={cyber ? zoneLabel(room.game, 'library') : t('tblLibrary')}>
+        <span className="oppHandCount" title={mtg ? t('tblLibrary') : zoneLabel(room.game, 'library')}>
           <BookCopy size={11} /> {player.libraryCount}
         </span>
       </header>
@@ -289,6 +349,15 @@ export function SeatFrame({
           TablePage) so it can hang off the very bottom edge exactly like mine,
           rather than being trapped inside this board's border. */}
       <div className="oppField" data-mat-seat={player.seat}>
+        {/* Their side of the duel field, drawn the same way mine is — a seat
+            reads as a playmat with zones, not a scatter of cards. Their piles
+            ride the same printed cells (below). */}
+        {ygoField && <YugiohZoneGrid cardWidth={oppCardWidth} labels={stage} />}
+        {ygoField && (
+          <div className="matZones">
+            <ZonePiles player={player} big={stage} onHover={onHover} layout={YUGIOH_PILE_LAYOUT} />
+          </div>
+        )}
         {hosts.map((card) => {
           const { piled, auras } = splitPile(attachments.get(card.iid) ?? []);
           return (
@@ -302,18 +371,78 @@ export function SeatFrame({
           );
         })}
       </div>
-      {(() => {
-        // The seat's custom mat layout (if any) lifts their piles into the same
-        // free-placement overlay used on my board; the staged mirror's 180°
-        // rotation maps (x,y)->(1-x,1-y) for free. Mini seats keep the strip.
-        const custom =
-          stage && room.game !== 'cyberpunk' && player.matLayout && Object.keys(player.matLayout).length > 0
-            ? { ...DEFAULT_MAT_LAYOUT, ...player.matLayout }
-            : undefined;
-        const piles = <ZonePiles player={player} big={stage} onHover={onHover} layout={custom} />;
-        return custom ? <div className="matZones">{piles}</div> : piles;
-      })()}
+      {!ygoField &&
+        (() => {
+          // The seat's custom mat layout (if any) lifts their piles into the same
+          // free-placement overlay used on my board; the staged mirror's 180°
+          // rotation maps (x,y)->(1-x,1-y) for free. Mini seats keep the strip.
+          const custom =
+            stage && mtg && player.matLayout && Object.keys(player.matLayout).length > 0
+              ? { ...DEFAULT_MAT_LAYOUT, ...player.matLayout }
+              : undefined;
+          const piles = <ZonePiles player={player} big={stage} onHover={onHover} layout={custom} />;
+          return custom ? <div className="matZones">{piles}</div> : piles;
+        })()}
 
+      {markPick && (
+        <div
+          className="defenderPick"
+          style={{ left: Math.min(markPick.x, window.innerWidth - 180), top: Math.max(60, markPick.y - 10) }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <Text as="span" size={Size.XSmall} weight="semibold">
+            {t('mkTitle')}
+          </Text>
+          {/* Pointing is a gesture (an arrow the table watches travel); the
+              rest are markers that stay put until someone lifts them. */}
+          <button
+            type="button"
+            className="defenderChip"
+            onClick={() => {
+              send({ type: 'aim', toIid: markPick.iid, kind: 'point' });
+              setMarkPick(null);
+            }}
+          >
+            {t('mkPoint')}
+          </button>
+          <div className="markChipRow">
+            {MARK_KINDS.map((kind) => {
+              const active = marks?.[markPick.iid]?.kind === kind;
+              return (
+                <button
+                  key={kind}
+                  type="button"
+                  className="markChip"
+                  data-kind={kind}
+                  data-active={active || undefined}
+                  aria-label={t(MARK_LABEL[kind])}
+                  title={t(MARK_LABEL[kind])}
+                  onClick={() => {
+                    // Picking the marker a card already wears lifts it: one
+                    // gesture both ways, no separate "clear" hunt.
+                    act({ kind: 'mark.set', iid: markPick.iid, mark: active ? null : kind });
+                    setMarkPick(null);
+                  }}
+                >
+                  {markIcon(kind, 15)}
+                </button>
+              );
+            })}
+          </div>
+          {marks?.[markPick.iid] && (
+            <button
+              type="button"
+              className="defenderChip"
+              onClick={() => {
+                act({ kind: 'mark.set', iid: markPick.iid, mark: null });
+                setMarkPick(null);
+              }}
+            >
+              {t('mkClear')}
+            </button>
+          )}
+        </div>
+      )}
       {blockPick && me && (
         <div
           className="defenderPick"
@@ -328,19 +457,24 @@ export function SeatFrame({
               {t('gpNoCreatures')}
             </Text>
           ) : (
-            myBlockers.map((creature) => (
-              <button
-                key={creature.iid}
-                type="button"
-                className="defenderChip"
-                onClick={() => {
-                  act({ kind: 'combat.block', blockerIid: creature.iid, attackerIid: blockPick.attackerIid, ...effectivePT(creature) });
-                  setBlockPick(null);
-                }}
-              >
-                {creature.name}
-              </button>
-            ))
+            myBlockers
+              .filter((creature) => {
+                const atk = player.battlefield.find((c) => c.iid === blockPick.attackerIid);
+                return !atk || canPairBlock(room, creature, atk);
+              })
+              .map((creature) => (
+                <button
+                  key={creature.iid}
+                  type="button"
+                  className="defenderChip"
+                  onClick={() => {
+                    act({ kind: 'combat.block', blockerIid: creature.iid, attackerIid: blockPick.attackerIid, ...effectivePT(creature) });
+                    setBlockPick(null);
+                  }}
+                >
+                  {creature.name}
+                </button>
+              ))
           )}
         </div>
       )}
