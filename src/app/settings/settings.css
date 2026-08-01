@@ -1,0 +1,141 @@
+/* ===========================================================================
+   Settings layout - the short-but-wide escape hatch (decision 10)
+   ===========================================================================
+
+   The phone shell collapses Settings into a master-detail flow: the section
+   list first (.pcPaneList), then the picked section fullscreen with a back row
+   (.pcPaneSection). Measured in portrait at 375x812 that flow fits exactly
+   (panel scrollHeight 810 == clientHeight 810), so portrait keeps it.
+
+   In LANDSCAPE it fails. At 812x375 the section rail needs 461px and gets 373,
+   nothing in the chain scrolls, and the modal footer paints straight on top of
+   the last two section rows (Done's centre hit-tests to a rail item). The
+   cause is a standoff: app.css gives the phone rail `overflow: visible` while
+   the kit pins the modal panel to `overflow-y: hidden` whenever its content
+   root is `data-modal-overflow=contained`. Neither side scrolls, so the
+   overflow just spills - and the rail's rows are positioned, so they paint
+   over the un-positioned footer.
+
+   The fix is not to make the collapsed flow scroll - it is to stop collapsing.
+   812px is wider than plenty of desktop windows the kit was tuned for, and the
+   kit's own TabbedModal already switches to its vertical rail above 40rem. So
+   whenever the viewport is SHORT BUT WIDE we hand the two-pane layout back and
+   let each pane scroll itself.
+
+   Everything here is a media query - no component swap, no remount. A rotation
+   mid-Settings reflows the panes and keeps the modal, the section and any open
+   control exactly where they were (decision 6).
+
+   Why the selectors are shaped the way they are: app.css owns the collapse
+   rules and is not ours to edit, so every rule below carries one extra
+   compound - [role='dialog'], which the kit always portals around the panel -
+   to outrank it regardless of stylesheet order. `:is()` matches whichever pane
+   class React happens to have stamped, because in two-pane mode the
+   list/section distinction stops meaning anything.
+   =========================================================================== */
+
+/* 40rem is the kit's own TabbedModal breakpoint: above it the rail is already
+   vertical and keyboard nav is already up/down, so the two-pane layout is the
+   shape the kit is asking for. 480px of height is the phone detector's own
+   short-side threshold (PHONE_QUERY in hooks/useIsPhone.ts). */
+@media (min-width: 40rem) and (max-height: 480px) {
+  /* Two panes again: a fixed rail and a detail column that each scroll. The
+     grid replaces app.css's `flex-direction: column` stack. The explicit
+     `minmax(0, 1fr)` row is what makes the panes scrollable - an `auto` row
+     would size to its content and overflow the panel all over again. */
+  :root[data-phone='on'] [role='dialog'] .pcSettings:is(.pcPaneList, .pcPaneSection) {
+    display: grid;
+    grid-template-columns: minmax(0, 9.5rem) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: var(--glacier-space-3);
+    min-height: 0;
+  }
+
+  /* The rail: visible in BOTH pane states, scrolling itself. `overflow-y:auto`
+     is the whole point - app.css's `overflow: visible` is what let the section
+     list spill over the footer. */
+  :root[data-phone='on'] [role='dialog'] .pcSettings:is(.pcPaneList, .pcPaneSection) [role='tablist'] {
+    display: flex;
+    flex-direction: column;
+    width: auto;
+    max-width: none;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-inline-end: var(--glacier-space-3);
+    border-inline-end: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  }
+
+  /* Rows shed the thumb-sized padding the drill-in list needed: at 375px tall
+     the rail has up to nine rows to fit and height is the scarce axis. They
+     stay reachable because the rail scrolls now. */
+  :root[data-phone='on'] [role='dialog'] .pcSettings:is(.pcPaneList, .pcPaneSection) [role='tablist'] [role='tab'] {
+    width: 100%;
+    justify-content: flex-start;
+    padding-block: var(--glacier-space-2);
+  }
+
+  /* The detail pane: visible in both states, scrolling itself, uncapped. */
+  :root[data-phone='on'] [role='dialog'] .pcSettings:is(.pcPaneList, .pcPaneSection) [role='tabpanel'] {
+    display: block;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* The back row belongs to the drill-in flow. With the rail permanently on
+     screen there is nothing to go back to, so it stops being a control -
+     `display: none` also takes it out of the tab order, which is right,
+     because the rail is now the way between sections. */
+  :root[data-phone='on'] [role='dialog'] .pcSettings:is(.pcPaneList, .pcPaneSection) .setMobileBack {
+    display: none;
+  }
+
+  /* The fullscreen phone modal keeps its safe-area padding but loses the tall
+     block padding: 375px cannot spare 2x space-4 on a modal that now has to
+     show a rail, a pane AND a footer at once. The extra [aria-modal] compound
+     outranks app.css's own padding-top/padding-bottom on the same element. */
+  :root[data-phone='on'] [role='dialog'][aria-modal='true']:has(.pcSettings) {
+    padding-block: calc(var(--glacier-space-2) + env(safe-area-inset-top, 0px))
+      calc(var(--glacier-space-2) + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* The kit's modal header carries a space-6 bottom margin sized for a desktop
+     dialog; the footer a matching top margin. Landscape needs that height for
+     the panes. */
+  :root[data-phone='on'] [role='dialog'][aria-modal='true']:has(.pcSettings) > header {
+    margin-block-end: var(--glacier-space-3);
+  }
+
+  :root[data-phone='on'] [role='dialog'][aria-modal='true']:has(.pcSettings) > footer {
+    margin-block-start: var(--glacier-space-3);
+  }
+}
+
+/* Narrow-and-short - a small phone on its side, under the kit's 40rem rail
+   breakpoint, where two panes genuinely will not fit. The drill-in flow stays,
+   but the spill is the same bug, so give the collapsed list its own scroll
+   instead of `overflow: visible`. */
+@media (max-width: 39.999rem) and (max-height: 480px) {
+  :root[data-phone='on'] [role='dialog'] .pcSettings.pcPaneList [role='tablist'] {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  :root[data-phone='on'] [role='dialog'] .pcSettings.pcPaneList [role='tablist'] [role='tab'] {
+    padding-block: var(--glacier-space-2);
+  }
+
+  :root[data-phone='on'] [role='dialog'][aria-modal='true']:has(.pcSettings) > header {
+    margin-block-end: var(--glacier-space-3);
+  }
+
+  :root[data-phone='on'] [role='dialog'][aria-modal='true']:has(.pcSettings) > footer {
+    margin-block-start: var(--glacier-space-3);
+  }
+}

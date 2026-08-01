@@ -1,12 +1,14 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import {
   Avatar,
+  Drawer,
   HapticsProvider,
   IconButton,
   LocaleProvider,
   NavBar,
   NavBarItem,
   Pill,
+  SidebarItem,
   Spinner,
   TitleBar,
   ToastProvider,
@@ -26,6 +28,7 @@ import {
 } from '@glacier/icons';
 import { PlayingCardPack, PlayingCardStack, PlayingCardSwap } from './icons/cards.ts';
 import {
+  applyPanelDock,
   applyPreferences,
   loadPreferences,
   savePreferences,
@@ -39,20 +42,22 @@ import { useApp } from './state/appStore.ts';
 import { useGame } from './state/gameStore.ts';
 import { useUi } from './state/uiStore.ts';
 import { joinCodeFromHash, rememberPendingJoin } from './data/pendingJoin.ts';
-import { releasesSince, type ChangelogRelease } from './data/changelog.ts';
-import { WhatsNew } from './components/WhatsNew.tsx';
-import pkg from '../../package.json' with { type: 'json' };
 import { motion, MotionConfig } from 'motion/react';
 import { CardPopupProvider } from './components/CardPopup.tsx';
 import { HoverCardLayer } from './components/HoverCard.tsx';
 import { Notifier } from './components/Notifier.tsx';
 import { InvitePopup } from './components/InvitePopup.tsx';
+import { WhatsNewHost } from './components/WhatsNewHost.tsx';
+import UpdateHost from './components/UpdateHost.tsx';
 import { DownloadBanner } from './components/DownloadBanner.tsx';
-import { RotateOverlay } from './pages/table/RotateOverlay.tsx';
-import { useMobileLayout, usePhoneViewport, usePortrait } from './hooks/useIsPhone.ts';
+import { useMobileLayout } from './hooks/useIsPhone.ts';
 import { usePreference } from './hooks/usePreference.ts';
 import { loadAltArtCatalog } from './data/scryfall.ts';
 import { DEFAULT_PLAYMAT, isCustomPlaymat, playmatUrl } from './data/playmats.ts';
+// The base rules every docked panel is styled against. Loaded with the shell
+// rather than by a component, because the panels that use them live in lazy
+// route chunks and the contract has to exist before any of them arrives.
+import './components/panels.css';
 
 // Route pages, the whole table engine, the deck builder, the modals, and the
 // command palette load on first use rather than up front - so the initial
@@ -77,11 +82,10 @@ const JoinTablePage = lazy(() => import('./pages/JoinTablePage.tsx').then((m) =>
 const DownloadPage = lazy(() => import('./pages/DownloadPage.tsx').then((m) => ({ default: m.DownloadPage })));
 const SettingsModal = lazy(() => import('./SettingsModal.tsx').then((m) => ({ default: m.SettingsModal })));
 
-/** One-time flag: on first launch, Settings opens on the Customize tab. */
+/** One-time flag: on first launch, Settings opens on the Customize tab.
+ *  WhatsNewHost reads this too, to tell a fresh install from a returning
+ *  player - App is the only writer. */
 const CUSTOMIZED_KEY = 'pc.customized';
-
-/** The app version this player last saw the changelog for. */
-const SEEN_VERSION_KEY = 'pc.lastSeenVersion';
 
 /**
  * Ask the floating pack dock to come back after a dismiss - `open` also pops
@@ -172,26 +176,99 @@ function SidebarToggle({
   );
 }
 
-/** The far-left activity rail; Settings pinned to the bottom. */
+/** The routes that live behind the phone nav's "You" sheet - the item lights
+ *  up for all of them, so the shell never shows a page with nothing selected. */
+const YOU_ROUTES: readonly Route[] = ['browse', 'collection', 'friends', 'profile', 'download'];
+
+/**
+ * The app's primary navigation, in both of its shapes.
+ *
+ * On a desktop it is the far-left activity rail, every destination on it and
+ * Settings pinned to the bottom. On a phone it is five slots and a You sheet -
+ * mounted TWICE, once vertical and once horizontal, because which of the two
+ * is displayed is a media query (portrait gets the bottom bar, landscape the
+ * leading-edge rail) and a rotation must reflow the chrome rather than swap
+ * components under an open menu.
+ */
 function AppRail({
   route,
   onNavigate,
   onOpenSettings,
   onOpenCustomize,
+  onOpenYou,
   horizontal,
+  phone,
 }: {
   route: Route;
   onNavigate: (route: Route) => void;
   onOpenSettings: () => void;
   onOpenCustomize: () => void;
+  /** Opens the phone nav's "You" sheet (Browse, Collection, Friends, Profile,
+   *  Matches, Settings) - the five-slot bar's overflow. */
+  onOpenYou: () => void;
   /** The phone bottom tab bar: the same items, horizontal, full width. The
    * kit NavBar supports both orientations, so one component serves both and
    * CSS swaps which is visible at the phone breakpoint. */
   horizontal?: boolean;
+  /** The phone item set: five slots plus the You sheet. Nine destinations and
+   *  a Settings gear need 449px of bar and a phone gives 346px, so five is not
+   *  a taste call - it is what fits. Keyed off the phone BREAKPOINT, never off
+   *  orientation: rotating a phone must not change which items exist. */
+  phone?: boolean;
 }) {
   const t = useT();
   const incoming = useApp((state) => state.friends.incoming.length);
   const wip = usePreference('enableWip');
+  if (phone) {
+    return (
+      <NavBar
+        orientation={horizontal ? 'horizontal' : 'vertical'}
+        aria-label={t('navPrimary')}
+        className={horizontal ? 'appTabBar' : 'appRail'}
+      >
+        <NavBarItem
+          icon={<House size={20} />}
+          label={t('navHome')}
+          active={route === 'home'}
+          onClick={() => onNavigate('home')}
+        />
+        {/* One Play slot for both table routes: it opens the way IN to a game,
+            and stays lit while you are reading your own tables, which the You
+            sheet reaches. */}
+        <NavBarItem
+          icon={<Play size={20} />}
+          label={t('navNew')}
+          active={route === 'new' || route === 'play'}
+          onClick={() => onNavigate('new')}
+        />
+        <NavBarItem
+          icon={<PlayingCardStack size={20} />}
+          label={t('navDecks')}
+          active={route === 'decks'}
+          onClick={() => onNavigate('decks')}
+        />
+        {/* Packs is a real destination here, not a WIP entry: the floating pill
+            is gone on phones, so this slot is the only way into boosters. */}
+        <NavBarItem
+          icon={<PlayingCardPack size={20} />}
+          label={t('navBoosters')}
+          active={route === 'boosters'}
+          onClick={() => onNavigate('boosters')}
+        />
+        {/* Everything else, behind one slot - including the friend requests
+            badge, which would otherwise have nowhere to show on a phone. */}
+        <NavBarItem
+          icon={<User size={20} />}
+          // "You" - the existing sidebar key carries exactly that word in all
+          // four locales, so the slot needs no new string.
+          label={t('sbProfileYou')}
+          active={YOU_ROUTES.includes(route)}
+          badge={incoming > 0 ? incoming : undefined}
+          onClick={onOpenYou}
+        />
+      </NavBar>
+    );
+  }
   return (
     <NavBar
       orientation={horizontal ? 'horizontal' : 'vertical'}
@@ -293,15 +370,18 @@ function Shell({
 }) {
   const t = useT();
   const [route, navigate] = useRoute();
-  const phone = usePhoneViewport();
-  const landscape = !usePortrait();
   // The whole shell's phone layout keys off this one attribute rather than a
   // media query, so the Mobile-layout preference can force it either way -
   // otherwise a short desktop window puts you in the phone shell for good.
   const phoneLayout = useMobileLayout();
   useEffect(() => {
     document.documentElement.dataset.phone = phoneLayout ? 'on' : 'off';
-  }, [phoneLayout]);
+    // The dock axis resolves from the preferences AND this breakpoint, and the
+    // shell is the only place that knows the breakpoint - so restamp it here
+    // whenever either moves. applyPreferences covers the preference side on
+    // its own by reading the flag this line just wrote.
+    applyPanelDock(preferences, phoneLayout);
+  }, [phoneLayout, preferences]);
   // Load the curated alt-art catalog once at boot. Cards already sitting on one
   // of our arts cannot resolve an image URL until it lands, so the bump forces a
   // single re-render when it does rather than leaving those cards blank. Failure
@@ -320,27 +400,6 @@ function Shell({
   // playmat and card back; afterwards it lives behind the Customize rail button.
   const firstRun = useRef(localStorage.getItem(CUSTOMIZED_KEY) == null);
   const [settingsOpen, setSettingsOpen] = useState(firstRun.current);
-  // What's-new: announce releases newer than the version cached on this device.
-  // A brand-new player (first run) skips the announcement - everything is new to
-  // them anyway - and just seeds the cache; returning players see what changed.
-  const [whatsNew, setWhatsNew] = useState<ChangelogRelease[]>(() => {
-    const seen = localStorage.getItem(SEEN_VERSION_KEY);
-    if (seen === pkg.version) return [];
-    if (firstRun.current || !seen) {
-      // First run, or the feature just shipped: returning players (already
-      // customized) get the full backlog once; fresh installs seed silently.
-      if (firstRun.current) {
-        localStorage.setItem(SEEN_VERSION_KEY, pkg.version);
-        return [];
-      }
-      return releasesSince(null);
-    }
-    return releasesSince(seen);
-  });
-  const closeWhatsNew = () => {
-    localStorage.setItem(SEEN_VERSION_KEY, pkg.version);
-    setWhatsNew([]);
-  };
   const [settingsSection, setSettingsSection] = useState<string | undefined>(
     firstRun.current ? 'customize' : undefined,
   );
@@ -350,8 +409,14 @@ function Shell({
   settingsSeen.current ||= settingsOpen;
   const identity = useApp((state) => state.identity);
   const connected = useApp((state) => state.connected);
+  const incoming = useApp((state) => state.friends.incoming.length);
   const inRoom = useGame((state) => state.room !== null);
   const pendingJoin = useUi((state) => state.pendingJoin);
+  // The phone nav's overflow sheet. It lives HERE, not inside AppRail, because
+  // both nav bars (the portrait tab bar and the landscape rail) open the same
+  // one: rotating the phone swaps which bar is displayed, and an open sheet
+  // must survive that untouched.
+  const [youOpen, setYouOpen] = useState(false);
 
   // Deep surfaces (the in-game toolbar) open settings via window events,
   // avoiding prop-drilling through the whole table tree.
@@ -385,6 +450,12 @@ function Shell({
   const closeSettings = () => {
     localStorage.setItem(CUSTOMIZED_KEY, '1');
     setSettingsOpen(false);
+  };
+
+  /** A row in the You sheet: navigate, then close the sheet behind you. */
+  const goYou = (next: Route) => {
+    navigate(next);
+    setYouOpen(false);
   };
 
   // A share link brings the player to the join screen (unless they're already
@@ -461,7 +532,9 @@ function Shell({
         {!inRoom && (
           <AppRail
             route={route}
+            phone={phoneLayout}
             onNavigate={navigate}
+            onOpenYou={() => setYouOpen(true)}
             onOpenSettings={() => {
               setSettingsSection(undefined);
               setSettingsOpen(true);
@@ -490,14 +563,25 @@ function Shell({
             <Suspense fallback={<PageFallback />}>{page}</Suspense>
           </motion.div>
         </main>
+        {/* The shell's dock slot: panels that follow the app rather than the
+            table portal in here when docked, and take real width beside the
+            content instead of covering it. Empty it is not laid out at all
+            (see .appDock in app.css). */}
+        <div id="pc-dock-shell" className="appDock" />
       </div>
-      {/* Phone bottom tab bar: same items as the rail, horizontal, swapped in
-          by CSS at the phone breakpoint (rail+sidebar hide there). */}
+      {/* Phone bottom tab bar: same items as the rail, horizontal, full width.
+          Both bars stay mounted; a media query picks which one is displayed -
+          the bar in portrait, the rail in landscape (a bottom bar costs 85px
+          of a 375px-tall screen, 22.7% of it; the rail measures 58px of the
+          812px there is plenty of). A rotation therefore reflows the chrome
+          without unmounting anything. */}
       {!inRoom && (
         <AppRail
           horizontal
           route={route}
+          phone={phoneLayout}
           onNavigate={navigate}
+          onOpenYou={() => setYouOpen(true)}
           onOpenSettings={() => {
             setSettingsSection(undefined);
             setSettingsOpen(true);
@@ -508,9 +592,70 @@ function Shell({
           }}
         />
       )}
-      {/* Away from the table the app is a portrait document: a phone turned
-          sideways gets the mirror of the board's rotate ask. */}
-      {phone && landscape && !inRoom && <RotateOverlay to="portrait" />}
+      {/* The five-slot bar's overflow. A kit Drawer, entered from the bottom;
+          in landscape app CSS re-lays it as a full-height sheet on the trailing
+          edge. Same component, same open state, both orientations. */}
+      {!inRoom && (
+        <Drawer
+          open={youOpen}
+          onClose={() => setYouOpen(false)}
+          side="bottom"
+          size="md"
+          className="youSheet"
+          title={t('sbProfileYou')}
+        >
+          <div className="youSheetNav">
+            <SidebarItem
+              icon={<Compass size={18} />}
+              active={route === 'browse'}
+              onClick={() => goYou('browse')}
+            >
+              {t('navBrowse')}
+            </SidebarItem>
+            <SidebarItem
+              icon={<Library size={18} />}
+              active={route === 'collection'}
+              onClick={() => goYou('collection')}
+            >
+              {t('navCollection')}
+            </SidebarItem>
+            {/* The tables you have already sat at. It has no bar slot of its
+                own - the Play slot opens a NEW table - so this row is the only
+                way back to the log on a phone. */}
+            <SidebarItem
+              icon={<PlayingCardSwap size={18} />}
+              active={route === 'play'}
+              onClick={() => goYou('play')}
+            >
+              {t('navPlay')}
+            </SidebarItem>
+            <SidebarItem
+              icon={<Users size={18} />}
+              active={route === 'friends'}
+              onClick={() => goYou('friends')}
+            >
+              {incoming > 0 ? `${t('navFriends')} (${incoming})` : t('navFriends')}
+            </SidebarItem>
+            <SidebarItem
+              icon={<User size={18} />}
+              active={route === 'profile'}
+              onClick={() => goYou('profile')}
+            >
+              {t('navProfile')}
+            </SidebarItem>
+            <SidebarItem
+              icon={<Settings size={18} />}
+              onClick={() => {
+                setYouOpen(false);
+                setSettingsSection(undefined);
+                setSettingsOpen(true);
+              }}
+            >
+              {t('navSettings')}
+            </SidebarItem>
+          </div>
+        </Drawer>
+      )}
       {settingsSeen.current && (
         <Suspense fallback={null}>
           <SettingsModal
@@ -522,7 +667,7 @@ function Shell({
           />
         </Suspense>
       )}
-      <WhatsNew releases={whatsNew} open={whatsNew.length > 0} onClose={closeWhatsNew} />
+      <WhatsNewHost />
     </div>
   );
 }
@@ -609,6 +754,7 @@ export function App() {
                   </Suspense>
                   <Notifier />
                   <InvitePopup />
+                  <UpdateHost />
                   <Suspense fallback={null}>
                     <PackDock />
                   </Suspense>

@@ -76,6 +76,14 @@ select,
   z-index: 60;
 }
 
+/* The title bar has no data-layout variant on purpose. A detached, inset
+   "floating" title bar would strand macOS's OS-drawn traffic lights outside
+   it (the TitleBar is mounted with trafficLightInset, and the OS places those
+   buttons at the window's own corner, not the bar's), and 'floating' is the
+   default - so inventing that look would change every existing player's shell
+   rather than adding a mode they opt into. The phone tab bar's variant below
+   is the one that carries the chrome axis onto new surfaces. */
+
 .appBody {
   flex: 1;
   min-height: 0;
@@ -110,6 +118,23 @@ select,
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* The shell's dock slot: the column beside the content that a panel portals
+   into when it is docked (THE DOCK CONTRACT - see components/panels.css).
+   Deliberately bare. No z-index, so it never becomes a stacking context and
+   nothing inside it changes rank; no backdrop-filter, so it never becomes a
+   containing block for a fixed descendant. Flexbox reserves the width, so the
+   shell needs no space token. Empty, it is not laid out at all - which is what
+   makes a shell with nothing docked identical to one with no slot. */
+.appDock {
+  flex: none;
+  display: flex;
+  min-height: 0;
+}
+
+.appDock:empty {
+  display: none;
 }
 
 /* Floating layout: the rail and the contextual sidebar both detach into
@@ -1336,11 +1361,19 @@ select,
    raw media query: the Mobile-layout preference has to be able to force this
    either way, and a short desktop window must not trap anyone in the phone
    shell with no way out. 'auto' resolves to the same breakpoint in JS. */
-/* The 240px sidebar + icon rail leave ~100px of content at 390px - on
-   phones navigation moves to the bottom tab bar and pages own the width. */
-:root[data-phone='on'] .appRail,
+/* The 240px contextual sidebar leaves ~100px of content at 390px, and it is
+   just as impossible at 812x375 once the rail and the page gutters are paid
+   for - so it is off on phones in BOTH orientations and pages own the width. */
 :root[data-phone='on'] .appSidebar {
   display: none !important;
+}
+
+/* PORTRAIT phone: navigation is the bottom tab bar; the vertical rail is off.
+   (Both bars stay MOUNTED either way - see the landscape block below.) */
+@media (orientation: portrait) {
+  :root[data-phone='on'] .appRail {
+    display: none !important;
+  }
 }
 
 :root[data-phone='on'] .appTabBar {
@@ -1357,6 +1390,20 @@ select,
   box-shadow: var(--glacier-shadow-4);
 }
 
+/* Full layout: the tab bar stops being a detached pill and becomes a flush
+   edge-to-edge bar, the same move the rail and the sidebar make. The floating
+   pill above is the default and is untouched. The bottom safe-area inset moves
+   from the margin into the padding, so the bar itself still reaches the very
+   edge while its items clear the home bar. */
+:root[data-phone='on'] .appWindow[data-layout='full'] .appTabBar {
+  margin: 0;
+  padding-block-end: env(safe-area-inset-bottom, 0px);
+  border: none;
+  border-block-start: var(--glacier-hairline) solid var(--glacier-glass-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
 /* Full-width, full-height surfaces on phones: the floating layout's
    detached-card margins waste width the screen doesn't have. */
 :root[data-phone='on'] .appWindow[data-layout='floating'] .appRail,
@@ -1366,6 +1413,109 @@ select,
   border: none;
   border-radius: 0;
   box-shadow: none;
+}
+
+/* LANDSCAPE phone: the nav becomes a vertical rail on the leading edge.
+   A bottom bar costs 85px of a 375px-tall screen - 22.7% of everything the
+   player has - while the rail measures 58px of the 812px there is plenty of.
+   Nothing swaps components: BOTH nav bars are mounted in either orientation
+   and this only chooses which one is displayed, so a rotation can never
+   unmount an open menu (decision 6).
+   The second selector repeats the floating-layout shape above so it wins on
+   specificity as well as order - otherwise `border: none` there would strip
+   the rail's separator right back off. */
+@media (orientation: landscape) {
+  :root[data-phone='on'] .appTabBar {
+    display: none !important;
+  }
+
+  :root[data-phone='on'] .appWindow .appRail,
+  :root[data-phone='on'] .appWindow[data-layout='floating'] .appRail {
+    display: flex;
+    margin: 0;
+    height: 100%;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    /* Logical, so the rail sits on the leading edge under RTL too. The glass
+       itself is left to the shell's own rule above - the phone rail is the
+       same piece of chrome as the desktop one, not a second material. */
+    border-inline-end: var(--glacier-hairline) solid var(--glacier-glass-border);
+    padding-block: var(--glacier-space-2);
+    /* Five 48px targets and their gaps come to ~256px of a 375px-tall screen,
+       so this never scrolls in practice - it is the guard for a 320px-tall
+       browser window, where a clipped nav would be unreachable. */
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+/* Five slots, spread. The phone item set has no end slot, so the bar holds a
+   single row of items; letting that row grow turns a left-huddled cluster into
+   a real tab bar. Targeted as "the bar's own children" rather than by position,
+   because the kit's own class names are hashed. */
+:root[data-phone='on'] .appTabBar > * {
+  flex: 1;
+  justify-content: space-around;
+}
+
+/* ---- the phone nav's "You" sheet ----------------------------------------
+   Browse, Collection, Matches, Friends, Profile and Settings - everything the
+   five-slot bar cannot carry. One kit Drawer, entered from the bottom edge;
+   in landscape the rules below re-lay the SAME open drawer as a full-height
+   sheet on the trailing edge. No component swaps, so rotating with the sheet
+   open reflows it instead of closing it. */
+.youSheetNav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+}
+
+/* Comfortable touch rows: the kit's sidebar row is sized for a mouse. */
+@media (pointer: coarse) {
+  .youSheetNav > * {
+    min-block-size: 2.75rem;
+  }
+}
+
+/* Landscape: a trailing-edge side sheet, full height. min(26rem, 42vw) is the
+   same measure the table's panel menus use, so the two read as one system.
+   Specificity (0,3,0) clears the kit's own .panel.bottom pair (0,2,0), and
+   every edge is logical so RTL puts the sheet - and its rounded corners - on
+   the mirrored side. */
+@media (orientation: landscape) {
+  :root[data-phone='on'] .youSheet {
+    inline-size: min(26rem, 42vw);
+    block-size: 100%;
+    max-block-size: 100%;
+    /* Pushes the panel to the trailing edge of the drawer's flex overlay
+       without taking it out of flow. */
+    margin-inline-start: auto;
+    border-block: 0;
+    border-inline-start: var(--glacier-hairline) solid var(--glacier-glass-border);
+    border-inline-end: 0;
+    border-start-start-radius: var(--glacier-radius-2xl);
+    border-end-start-radius: var(--glacier-radius-2xl);
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+  }
+
+  /* Floating layout: the kit detaches every drawer into a card with a gutter
+     on all four edges, so squaring the trailing corners would leave a card
+     with two flat sides in mid-air. It keeps its whole border and radius; the
+     rule above is for the flush, edge-to-edge 'full' layout. */
+  :root[data-layout='floating'][data-phone='on'] .youSheet {
+    border: var(--glacier-hairline) solid var(--glacier-glass-border);
+    border-radius: var(--glacier-radius-2xl);
+  }
+}
+
+/* Phones never reserve an inline dock gutter - their docked form of a side
+   panel is a full-width sheet, not a column. The resolver already forces every
+   panel to float here (resolvePanelDock); this pins the slot shut as well, so
+   a stray docked panel can never widen the shell on a phone. */
+:root[data-phone='on'] .appDock {
+  display: none;
 }
 
 /* The notch / Dynamic Island: viewport-fit=cover extends the app under it,

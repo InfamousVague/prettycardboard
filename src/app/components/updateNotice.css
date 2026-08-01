@@ -1,0 +1,101 @@
+/* UpdateNotice - the global "an update is waiting" card. Pure Glacier tokens. */
+
+/* Same corner and same z-band as .invitePopup (app.css:488): the shell already
+   has ONE notification corner and the dock contract forbids inventing a second
+   band for a docked-or-floating surface. Logical insets, so Arabic mirrors it;
+   the safe-area env() does not flip, but a bottom inset has no side to flip to. */
+.updNotice {
+  position: fixed;
+  inset-block-end: 1rem;
+  inset-inline-end: 1rem;
+  z-index: 200;
+  display: flex;
+  max-width: min(92vw, 24rem);
+  padding-block-end: env(safe-area-inset-bottom, 0px);
+}
+
+/* An invite needs a decision now; an update has waited hours already and its
+   state lives in the store, so hiding the card costs nothing. Same body:has()
+   yielding idiom the pack dock uses for this corner (packDock.css:42-52). */
+body:has(.invitePopup) .updNotice {
+  display: none;
+}
+
+.updNoticeCard {
+  display: grid;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-4);
+  animation: updNoticeIn 240ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes updNoticeIn {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .updNoticeCard {
+    animation: none;
+  }
+}
+
+.updNoticeHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-3);
+}
+
+/* Seated, the card is passive: no Restart, so the row is a line of copy with a
+   single dismiss and it should read as one sentence, not a button bar. */
+.updNoticeActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  justify-content: flex-end;
+}
+
+.updNotice[data-seated] .updNoticeActions {
+  justify-content: space-between;
+}
+
+/* ---- the shared highlight list (notice + Settings > About) ---- */
+
+.updHighlights {
+  display: grid;
+  gap: var(--glacier-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.updHighlight {
+  display: flex;
+  gap: var(--glacier-space-2);
+  align-items: flex-start;
+}
+
+/* The changelog's own accent tile, one step down: these rows sit inside a
+   corner card, not a modal (whatsnew.css:32 is the 2rem original). */
+.updHighlightIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--glacier-radius-md);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 14%, transparent);
+  color: var(--glacier-accent-solid);
+}
+
+.updHighlightText {
+  display: grid;
+  gap: 2px;
+}

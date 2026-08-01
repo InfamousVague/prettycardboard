@@ -263,6 +263,52 @@ export function PregameLobby({
         </span>
       </header>
 
+      {/* ---- which deck, at the top: it is the first decision you make here,
+           and it was previously buried in the floor bar under the stage ---- */}
+      {me && !spectating ? (
+        <div
+          className="pregameLaunchSetup"
+          data-has-art={Boolean(selectedArt) || undefined}
+          style={selectedArt ? { ['--pregame-deck-art' as string]: `url("${selectedArt}")` } : undefined}
+        >
+          <label className="pregameDeckLabel" htmlFor="pregame-deck">{t('playPickDeck')}</label>
+          {deckLocked ? (
+            // A locked draft table plays what it drafted. The server refuses
+            // the swap either way; this just stops the picker from offering
+            // a choice that is not one.
+            <Text size={Size.Small} tone={TextTone.Muted}>
+              {me.deckName ?? t('dfLockOn')}
+            </Text>
+          ) : gameDecks.length > 0 ? (
+            <Select
+              id="pregame-deck"
+              value={me.deckId ?? ''}
+              onValueChange={(deckId) => send({ type: 'room.deck.set', deckId })}
+              options={gameDecks.map((deck) => ({ value: deck.id, label: deck.name }))}
+              placeholder={t('playPickDeck')}
+              aria-label={t('playPickDeck')}
+            />
+          ) : (
+            <Button variant="soft" onClick={() => { window.location.hash = '/decks'; }}>
+              <PlayingCardDeck size={15} /> {t('preBuildDeck')}
+            </Button>
+          )}
+          <Button
+            className="pregameReadyButton"
+            variant={me.ready ? 'soft' : 'solid'}
+            disabled={!me.deckId}
+            onClick={() => send({ type: 'room.ready', ready: !me.ready })}
+          >
+            {me.ready ? <Circle size={14} /> : <Check size={16} />}
+            {me.ready ? t('preUnready') : t('preReadyUp')}
+          </Button>
+        </div>
+      ) : (
+        // A spectator has nothing to set up, and the stage already says they
+        // are watching - a second copy of the line here is just noise.
+        null
+      )}
+
       {/* ---- the versus stage: me, the verdict, the far side ---- */}
       <div className="pregameStage">
         <div className="pregameStageSide">
@@ -597,52 +643,8 @@ export function PregameLobby({
         )}
       </ul>
 
-      {/* ---- the floor: which deck, and go ---- */}
+      {/* ---- the floor: go ---- */}
       <footer ref={launchRef} className="pregameLaunch" data-ready={canStart || undefined}>
-        {me && !spectating ? (
-          <div
-            className="pregameLaunchSetup"
-            data-has-art={Boolean(selectedArt) || undefined}
-            style={selectedArt ? { ['--pregame-deck-art' as string]: `url("${selectedArt}")` } : undefined}
-          >
-            <label className="pregameDeckLabel" htmlFor="pregame-deck">{t('playPickDeck')}</label>
-            {deckLocked ? (
-              // A locked draft table plays what it drafted. The server refuses
-              // the swap either way; this just stops the picker from offering
-              // a choice that is not one.
-              <Text size={Size.Small} tone={TextTone.Muted}>
-                {me.deckName ?? t('dfLockOn')}
-              </Text>
-            ) : gameDecks.length > 0 ? (
-              <Select
-                id="pregame-deck"
-                value={me.deckId ?? ''}
-                onValueChange={(deckId) => send({ type: 'room.deck.set', deckId })}
-                options={gameDecks.map((deck) => ({ value: deck.id, label: deck.name }))}
-                placeholder={t('playPickDeck')}
-                aria-label={t('playPickDeck')}
-              />
-            ) : (
-              <Button variant="soft" onClick={() => { window.location.hash = '/decks'; }}>
-                <PlayingCardDeck size={15} /> {t('preBuildDeck')}
-              </Button>
-            )}
-            <Button
-              className="pregameReadyButton"
-              variant={me.ready ? 'soft' : 'solid'}
-              disabled={!me.deckId}
-              onClick={() => send({ type: 'room.ready', ready: !me.ready })}
-            >
-              {me.ready ? <Circle size={14} /> : <Check size={16} />}
-              {me.ready ? t('preUnready') : t('preReadyUp')}
-            </Button>
-          </div>
-        ) : (
-          // A spectator has nothing to set up, and the stage already says they
-          // are watching - a second copy of the line here is just noise.
-          null
-        )}
-
         <div className="pregameLaunchGo">
           {isHost && spectating && room.players.length >= 2 && room.players.every((p) => p.isBot) ? (
             <Button size="lg" disabled={!canStart} onClick={start}>

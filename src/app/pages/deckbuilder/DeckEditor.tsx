@@ -57,6 +57,8 @@ import { CardBackPicker, PlaymatPicker, PlaymatUpload } from '../../components/P
 import { PLAYMATS } from '../../data/playmats.ts';
 import { CARD_BACKS } from '../../data/cardBacks.ts';
 import { useLongPress } from '../../hooks/useLongPress.ts';
+import { useMobileLayout } from '../../hooks/useIsPhone.ts';
+import { useCardWindow, useHeroCollapse, WINDOW_MIN_CARDS } from './useDeckScroll.ts';
 import { CardSearch } from './CardSearch.tsx';
 import { CyberpunkCardSearch } from './CyberpunkCardSearch.tsx';
 import { YugiohCardSearch } from './YugiohCardSearch.tsx';
@@ -560,6 +562,16 @@ export function DeckEditor({ deckId }: { deckId: string }) {
 
   const heroLongPress = useLongPress(() => setHeaderPicking(true));
 
+  // --- decision 11: the hero gives its height back once you start reading ---
+  // Phone layouts only. On a desktop window the hero costs a fraction of the
+  // viewport and its stats shelf is the reason people scroll back up; on a
+  // 375px-tall phone it IS the viewport. The element arrives through state
+  // rather than a ref so the measuring effect re-runs when the deck finishes
+  // loading and the hero finally mounts.
+  const phone = useMobileLayout();
+  const [heroEl, setHeroEl] = useState<HTMLElement | null>(null);
+  const heroCollapsed = useHeroCollapse(heroEl, phone);
+
   if (loadFailed) {
     return (
       <div className="page deckEditorPage">
@@ -627,7 +639,11 @@ export function DeckEditor({ deckId }: { deckId: string }) {
       {/* hero - the commander's art IS the header */}
       <header
         className="deckHero"
+        ref={setHeroEl}
         data-has-art={headerCard ? '' : undefined}
+        /* Presentation only - a CSS switch off one attribute, so a rotation or
+           a scroll never unmounts anything inside the hero (decision 6). */
+        data-collapsed={heroCollapsed ? '' : undefined}
         {...heroLongPress}
         onContextMenu={(event) => {
           if ((event.target as HTMLElement).closest('input, button')) return;
@@ -1482,28 +1498,44 @@ function CardGrid({
   onToSide?: (card: DeckCard) => void;
   onToMain?: (card: DeckCard) => void;
 }) {
+  // Decision 11's windowing. The grid element arrives through state so the
+  // measuring effect starts the moment it mounts; below WINDOW_MIN_CARDS the
+  // hook stands down and this is the grid it always was.
+  const [gridEl, setGridEl] = useState<HTMLDivElement | null>(null);
+  const win = useCardWindow(gridEl, cards.length);
+  const slice = win.active ? cards.slice(win.start, win.end) : cards;
+
+  const cells = slice.map((card) => (
+    <CardCell
+      key={`${card.board}-${card.scryfallId}`}
+      card={card}
+      foil={foil}
+      game={game}
+      warns={violations.has(card.scryfallId)}
+      /* A windowed cell mounts and unmounts because the page scrolled, not
+         because the deck changed, so it must not fade in - and a layout
+         animation would chase the filler rows as they resize. */
+      animated={!win.active}
+      onQuantity={onQuantity}
+      onRemove={onRemove}
+      onHover={onHover}
+      onLeave={onLeave}
+      onArt={onArt}
+      onSetCommander={onSetCommander}
+      canCommander={canCommander}
+      onToSide={onToSide}
+      onToMain={onToMain}
+    />
+  ));
+
   return (
-    <div className="deckCardGrid">
-      <AnimatePresence initial={false}>
-        {cards.map((card) => (
-          <CardCell
-            key={`${card.board}-${card.scryfallId}`}
-            card={card}
-            foil={foil}
-            game={game}
-            warns={violations.has(card.scryfallId)}
-            onQuantity={onQuantity}
-            onRemove={onRemove}
-            onHover={onHover}
-            onLeave={onLeave}
-            onArt={onArt}
-            onSetCommander={onSetCommander}
-            canCommander={canCommander}
-            onToSide={onToSide}
-            onToMain={onToMain}
-          />
-        ))}
-      </AnimatePresence>
+    <div className="deckCardGrid" ref={setGridEl}>
+      {/* Full-width filler rows standing in for everything outside the window,
+          so the grid keeps the exact height it would have had and the
+          scrollbar never twitches as the window slides. */}
+      {win.padStart > 0 && <div className="deckGridPad" style={{ height: win.padStart }} aria-hidden />}
+      {win.active ? cells : <AnimatePresence initial={false}>{cells}</AnimatePresence>}
+      {win.padEnd > 0 && <div className="deckGridPad" style={{ height: win.padEnd }} aria-hidden />}
     </div>
   );
 }
@@ -1513,6 +1545,7 @@ function CardCell({
   foil,
   warns,
   game,
+  animated = true,
   onQuantity,
   onRemove,
   onHover,
@@ -1527,6 +1560,8 @@ function CardCell({
   foil?: boolean;
   warns: boolean;
   game?: string;
+  /** False inside a windowed grid, where mounting is a scroll artefact. */
+  animated?: boolean;
   onQuantity: (card: DeckCard, delta: number) => void;
   onRemove: (card: DeckCard) => void;
   onHover: (card: DeckCard) => (event: PointerEvent<HTMLElement>) => void;
@@ -1574,9 +1609,9 @@ function CardCell({
   return (
     <>
     <motion.div
-      layout="position"
-      initial={{ opacity: 0, scale: 0.94 }}
-      animate={{ opacity: 1, scale: 1 }}
+      layout={animated ? 'position' : false}
+      initial={animated ? { opacity: 0, scale: 0.94 } : false}
+      animate={animated ? { opacity: 1, scale: 1 } : undefined}
       exit={{ opacity: 0, scale: 0.94 }}
       transition={{ duration: 0.16, ease: 'easeOut' }}
       className="deckCardCell"

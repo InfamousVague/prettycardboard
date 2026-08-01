@@ -130,7 +130,7 @@ export function LibraryViewer() {
       description={`${t('tblLibrary')} · ${order.length}`}
     >
       {mode === 'peek' ? (
-        <div className="libPeek pcMobileFull">
+        <div className="libPeek pcMobileFull pcSideSheet">
           <Reorder.Group
             axis="x"
             values={order}
@@ -193,7 +193,7 @@ export function LibraryViewer() {
           </div>
         </div>
       ) : (
-        <div className="libSearch pcMobileFull">
+        <div className="libSearch pcMobileFull pcSideSheet">
           <SearchField
             size="sm"
             value={filter}
@@ -357,7 +357,7 @@ export function PileViewer({ room, me, canAct }: { room: RoomState; me: TablePla
       // number read as a stray digit under the title.
       description={`${cards.length} ${t('dsCards')}`}
     >
-      <ScrollArea className="pileScroll pcMobileFull">
+      <ScrollArea className="pileScroll pcMobileFull pcSideSheet">
         <div className="pileGrid">
           {[...cards].reverse().map((card) => (
             <div key={card.iid} className="pileCard">

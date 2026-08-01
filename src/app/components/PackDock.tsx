@@ -14,7 +14,7 @@ import {
   Text,
   TextTone,
 } from '@glacier/react';
-import { Percent, Sparkles, X } from '@glacier/icons';
+import { PanelRight, Percent, PictureInPicture2, Sparkles, X } from '@glacier/icons';
 import { PlayingCardPack } from '../icons/cards.ts';
 import { useT, type MessageKey } from '../i18n.ts';
 import { cardImage } from '../data/cards.ts';
@@ -49,7 +49,8 @@ import {
   type PackIndex,
   type SealedProduct,
 } from '../data/packs.ts';
-import { usePhoneViewport } from '../hooks/useIsPhone.ts';
+import { useMobileLayout } from '../hooks/useIsPhone.ts';
+import { usePanelDock } from '../hooks/usePanelDock.ts';
 import * as api from '../net/api.ts';
 import * as ws from '../net/ws.ts';
 import { useApp } from '../state/appStore.ts';
@@ -66,10 +67,15 @@ import './packDock.css';
  *
  * Three rules shape everything below:
  *
- *   1. It must never cost anyone a game. The dock lives on the inline-START
- *      edge at mid-height, clear of the phone's thumb corners: End turn owns
- *      bottom-inline-end, the zone piles own bottom-inline-start. Incoming
- *      notifications are pointer-events:none, so a cheer can never eat a tap.
+ *   1. It must never cost anyone a game. ON A PHONE THERE IS NO PILL AT ALL
+ *      (decision 13 in docs/mobile-orientation.md): packs are a navigation
+ *      destination there, reached from the Packs nav item, because a floating
+ *      launcher on a 375px screen owns a corner something else already needs -
+ *      measured, `elementFromPoint(764, 340)` at 812x375 returned "Open the
+ *      pack dock", and returned "End turn" the moment the dock was dismissed.
+ *      Only the PANEL is left on a phone, and it is pinned by the stylesheet.
+ *      On a desktop the pill stays exactly as it was. Incoming notifications
+ *      are pointer-events:none in both, so a cheer can never eat a tap.
  *   2. The pack maths is not reimplemented here. `specFor`/`openPack` and the
  *      Scryfall pools are the booster page's, imported as-is - one collation
  *      model for the whole app.
@@ -500,6 +506,24 @@ export default function PackDock() {
   // back from the CSS in `settle` rather than re-declared here, so the two can
   // never drift apart.
   const [anchored, setAnchored] = useState(false);
+  // Docked, the panel stops being an 88vw window over everything and becomes a
+  // flush full-height column down the inline-end edge. NO slot id and NO
+  // portal: this dock is a root-level sibling of the shell, so moving it into
+  // the shell's dock slot would drop it below .appBody's z-1 cap and cost it
+  // ~100 ranks - THE DOCK CONTRACT's first invariant. It docks where it is.
+  const packDock = usePanelDock('packs');
+  /**
+   * The phone presentation, for BOTH the layout below and the stylesheet.
+   *
+   * `useMobileLayout` rather than the raw media query, because this is a thing
+   * the player can turn off: `mobileLayout: off` asks for the desktop dock on a
+   * small screen, pill included, and one flag has to drive the pill, the panes
+   * and the CSS together or they contradict each other - a three-pane desktop
+   * panel inside a 341px sheet, say. It is stamped onto `.pdDock` as
+   * `data-phone` and packDock.css hangs every phone rule off THAT rather than
+   * off a media query of its own, so the two can never disagree.
+   */
+  const phone = useMobileLayout();
   const [tab, setTab] = useState<'pack' | 'feed'>('pack');
 
   const [sets, setSets] = useState<BoosterSet[] | null>(null);
@@ -558,6 +582,16 @@ export default function PackDock() {
    *  drag handler, which both run outside the render that set it. */
   const posRef = useRef(pos);
   posRef.current = pos;
+  /** Read by `settle`, which runs from window listeners and ref callbacks: a
+   *  ref rather than a dependency so toggling the dock does not rebuild every
+   *  callback that holds `settle` (and re-fire the ref callbacks with it). */
+  const dockedRef = useRef(packDock.docked);
+  dockedRef.current = packDock.docked;
+  /** Same deal for the phone flag: `settle` runs from window listeners and ref
+   *  callbacks, and making it a dependency would rebuild every callback that
+   *  holds it - and re-fire the ref callbacks - on every rotation. */
+  const phoneRef = useRef(phone);
+  phoneRef.current = phone;
   /** A drag that ends on a pill button still fires a native click - motion
    *  does not suppress it - so that click is swallowed after a real drag. */
   const draggedRef = useRef(false);
@@ -642,6 +676,16 @@ export default function PackDock() {
   const settle = useCallback(() => {
     const dock = dockRef.current;
     if (!dock) return;
+    // A phone has nothing that floats: there is no pill (decision 13) and the
+    // panel is pinned to the viewport by the stylesheet, so the dock must carry
+    // no transform at all - a transformed ancestor becomes the containing block
+    // for a fixed descendant, which is what used to resolve the sheet's insets
+    // against this zero-width box and slide it off the screen edge. Nothing
+    // left to measure, so this is the whole of it.
+    if (phoneRef.current) {
+      setAnchored(true);
+      return;
+    }
     const view = viewportSize();
     // The offset everything below is measured against: `posRef` is written
     // during render, so it is the offset the DOM in front of us was rendered
@@ -649,10 +693,14 @@ export default function PackDock() {
     const from = posRef.current;
     const panel = panelRef.current;
     if (panel) {
-      // Phone: the stylesheet pins the panel to the viewport itself, so a
-      // transformed dock would become its containing block - the dock drops its
-      // offset instead, and there is nothing left here to clamp.
-      const pinned = window.getComputedStyle(panel).position === 'fixed';
+      // Docked: the dock IS the column, pinned to an edge by the stylesheet, so
+      // it drops the offset - a drag offset is a position for a floating window
+      // and means nothing for a column. The `position: fixed` half of the test
+      // is the backstop for any OTHER rule that pins the panel to the viewport
+      // itself: a transformed dock would become its containing block, and the
+      // insets would resolve against this zero-width box instead. The phone
+      // sheet is exactly that, and it returned above.
+      const pinned = window.getComputedStyle(panel).position === 'fixed' || dockedRef.current;
       setAnchored(pinned);
       if (pinned) return;
       if (panel.offsetWidth > 0 && panel.offsetHeight > 0) {
@@ -763,9 +811,37 @@ export default function PackDock() {
   // transform, so the box measured on the way through is not the box that
   // lands: settle once more after the flip has been committed. `anchored`
   // follows the stylesheet alone, so this cannot oscillate.
+  //
+  // Docking pins the dock to an edge, which is the same situation and takes the
+  // same exit: `settle` sees it, `anchored` goes true and the dock renders
+  // `translate: none`. Those offsets are PHYSICAL viewport pixels, so a docked
+  // column that kept them would sit wherever the pill was last dropped - and
+  // mirrored the wrong way under RTL, where the offset does not flip but the
+  // column does. Listed here rather than left to the ResizeObserver so the
+  // correction never depends on the panel happening to change size.
   useLayoutEffect(() => {
     settle();
-  }, [anchored, settle]);
+  }, [anchored, packDock.docked, phone, settle]);
+
+  /**
+   * Hand back the size the player dragged the FLOATING panel to, the moment it
+   * becomes a phone sheet.
+   *
+   * `resize: both` does not merely style the box - the browser writes the
+   * dragged width and height into the element's own inline style, and inline
+   * style outranks every author rule, the sheet's insets included. Without this
+   * a panel that was ever resized on a desktop would keep that box after the
+   * window narrowed to a phone, hanging off both edges of a sheet that is
+   * supposed to span the gutters. Cleared rather than re-keyed on purpose: a
+   * fresh element would UNMOUNT an open panel on rotation, which is exactly
+   * what decision 6 forbids.
+   */
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel || !phone) return;
+    panel.style.width = '';
+    panel.style.height = '';
+  }, [phone, open]);
 
   useEffect(() => () => sizeRef.current?.disconnect(), []);
 
@@ -781,7 +857,10 @@ export default function PackDock() {
       sizeRef.current = null;
       panelRef.current = node;
       if (!node) {
-        setAnchored(false);
+        // A phone stays anchored with the panel gone: there is no pill to clamp
+        // and no offset to carry, so re-arming the transform would only make
+        // `settle` undo it again on the next commit.
+        setAnchored(phoneRef.current);
         return;
       }
       if (bootedRef.current) node.focus();
@@ -1213,8 +1292,6 @@ export default function PackDock() {
   // tearing state keys off "no cards yet", not off `busy`.
   const ripping = busy && !pack;
 
-  const phone = usePhoneViewport();
-
   // The dock is an account feature: packs land in a collection, and pulls are
   // announced under a name. Signed out, there is nothing to mount.
   if (!identity) return null;
@@ -1384,18 +1461,38 @@ export default function PackDock() {
         ref={dockRef}
         data-open={open || undefined}
         data-dismissed={dismissed || undefined}
-        // While the phone panel is up the dock carries NO transform at all.
-        // The panel is position:fixed there, and a transformed ancestor becomes
-        // the containing block for fixed descendants - which is what resolved
-        // its insets against this zero-width box, put its edge off screen and
-        // slid it around with an offset that was only ever meant for the pill.
+        // The phone presentation, for the stylesheet. Every phone rule in
+        // packDock.css hangs off this attribute rather than a media query of
+        // its own, so `mobileLayout: off` really does give a small screen the
+        // desktop dock, and so a rotation only ever REFLOWS what is already
+        // mounted - decision 6 rules out swapping a component per orientation.
+        data-phone={phone || undefined}
+        // Only while the PANEL is up: docking says nothing about where the
+        // pill parks, and the pill is still draggable in either mode.
+        data-docked={(open && packDock.docked) || undefined}
+        // While the phone panel is up - or the panel is docked - the dock
+        // carries NO transform at all. The panel is position:fixed on a phone,
+        // and a transformed ancestor becomes the containing block for fixed
+        // descendants, which is what resolved its insets against this
+        // zero-width box, put its edge off screen and slid it around with an
+        // offset that was only ever meant for the pill. Docked, the dock itself
+        // is the pinned column and the offset means nothing to it.
         style={{ translate: anchored ? 'none' : `${pos.x}px ${pos.y}px` }}
       >
         <AnimatePresence initial={false} mode="wait">
-          {dismissed ? null : open ? (
+          {open ? (
             <motion.div
-              key="panel"
-              className="pdPanel"
+              // Re-keyed by the dock mode, so flipping it builds a FRESH
+              // element. `resize: both` lets the browser store a dragged size
+              // on this node, and that stored size outranks every author rule -
+              // including the docked column's - and is not given up by setting
+              // `resize: none`. Measured: an element-level size override
+              // survives the rule change and only goes when the element does.
+              // Without this, anyone who had ever resized the floating panel
+              // would dock it and get their old box inside the new column.
+              key={packDock.docked ? 'panel-docked' : 'panel'}
+              className="pdPanel pcPanel"
+              data-dock={packDock.docked ? 'dock' : 'float'}
               role="dialog"
               aria-label={t('pdTitle')}
               ref={attachPanel}
@@ -1407,7 +1504,10 @@ export default function PackDock() {
                 // having none here. Focus is inside the panel, so this fires.
                 if (event.key !== 'Escape') return;
                 event.stopPropagation();
-                restoreRef.current = true;
+                // Nothing to hand focus back to on a phone - there is no pill -
+                // so the request is not armed at all rather than left standing
+                // for whichever pill mounts next.
+                restoreRef.current = !phone;
                 setOpen(false);
               }}
               initial={{ opacity: 0, scale: 0.94, x: -10 }}
@@ -1423,13 +1523,29 @@ export default function PackDock() {
                   </Text>
                 </span>
                 <IconButton
+                  // Hidden by the stylesheet on a phone rather than dropped
+                  // from the tree: docking is suppressed in the RESOLVER there,
+                  // so the button would toggle a preference with no visible
+                  // effect - and a rotation must reflow the header, not rebuild
+                  // it (decision 6).
+                  className="pdDockToggle"
+                  aria-label={packDock.docked ? t('floatPanel') : t('dockPanel')}
+                  aria-pressed={packDock.docked}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => packDock.setMode(packDock.docked ? 'float' : 'dock')}
+                >
+                  {packDock.docked ? <PictureInPicture2 size={16} /> : <PanelRight size={16} />}
+                </IconButton>
+                <IconButton
                   aria-label={t('pdCloseDock')}
                   variant="ghost"
                   size="sm"
                   onClick={() => {
                     // This button is about to unmount with the panel; focus
-                    // goes back to the pill that opened it.
-                    restoreRef.current = true;
+                    // goes back to the pill that opened it - where there is
+                    // one. A phone has no pill to return to (decision 13).
+                    restoreRef.current = !phone;
                     setOpen(false);
                   }}
                 >
@@ -1804,7 +1920,14 @@ export default function PackDock() {
                 )}
               </div>
             </motion.div>
-          ) : (
+          ) : dismissed || phone ? null : (
+            // No pill on a phone, ever - not dismissed, not hidden, not
+            // rendered (decision 13). It used to cover End turn, Attack, the
+            // lobby's seat strip and the tab bar, and the two `body:has()`
+            // corner-clear rules that were supposed to move it out of the way
+            // never fired on the mat, which has neither of those hooks. Packs
+            // are reached from the nav instead, which still arrives here as
+            // `pc:open-packdock` and opens the panel below.
             <motion.div
               key="fab"
               initial={{ opacity: 0, scale: 0.8 }}

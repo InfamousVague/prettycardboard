@@ -1,17 +1,52 @@
 /* WhatsNew - the version announcement. Pure Glacier tokens. */
 
+/* ---- width ----
+   The kit's Modal tops out at xl = 48rem, which the component keeps as an
+   honest floor: if this rule ever stops matching, the modal is still a correct
+   xl dialog rather than a broken one. Going past the ceiling goes through the
+   kit's stable ARIA contract, the same escape hatch app.css uses for
+   .pcMobileFull, because kit class names are hashed at build time.
+
+   `--pc-wn-max` is the one number to retune. Past ~72rem the longer
+   descriptions stop being paragraphs and start being ribbons.
+
+   PHONES ARE DELIBERATELY UNAFFECTED, and that is specificity arithmetic
+   rather than a guarantee: app.css's
+   `:root[data-phone='on'] [role='dialog']:has(.pcMobileFull)` scores four
+   class-level components against this rule's two, so fullscreen still wins.
+   Anything that flattens either selector changes which one applies. */
+[role='dialog']:has(.wnBody) {
+  max-inline-size: min(96vw, var(--pc-wn-max, 64rem));
+}
+
 .wnBody {
   display: grid;
-  gap: var(--glacier-space-4);
+  gap: var(--glacier-space-5);
   align-content: start;
   /* Fullscreen on phones (.pcMobileFull): the release list scrolls inside the
-     panel instead of running off the bottom of a short landscape screen. */
+     panel instead of running off the bottom of a short landscape screen. On
+     desktop nothing constrains this element's height, so it is inert and the
+     kit panel is the scroller - keep it that way, because giving .wnBody a
+     height here puts a second scrollbar inside the widened modal. */
   overflow-y: auto;
+  /* Columns come from this element's own width, never the viewport's: the same
+     markup renders inside a 64rem desktop panel and a 100dvw phone sheet.
+     (`@container tabletop` in table.css is the same move.) */
+  container-type: inline-size;
+  container-name: whatsnew;
 }
 
 .wnRelease {
   display: grid;
   gap: var(--glacier-space-3);
+  align-items: start;
+}
+
+/* Version, date and headline. One column wide, it is just a heading block;
+   two columns wide it becomes the sticky rail beside the entries. */
+.wnRail {
+  display: grid;
+  gap: var(--glacier-space-1);
   justify-items: start;
 }
 
@@ -27,14 +62,28 @@
   display: flex;
   gap: var(--glacier-space-3);
   align-items: flex-start;
+  padding: var(--glacier-space-3);
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-lg);
+  /* Half-strength so the cards read as a set on the modal's glass instead of
+     stacking a second opaque surface on top of it. */
+  background: color-mix(in oklch, var(--glacier-surface-raised) 55%, transparent);
+}
+
+/* The release's headline change: it takes the whole row wherever there is more
+   than one column, and stays a normal card where there is not. */
+.wnItem[data-featured] {
+  grid-column: 1 / -1;
+  border-color: var(--glacier-accent-border);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 8%, transparent);
 }
 
 .wnIcon {
   flex: none;
   display: grid;
   place-items: center;
-  width: 2rem;
-  height: 2rem;
+  width: 2.25rem;
+  height: 2.25rem;
   border-radius: var(--glacier-radius-md);
   background: color-mix(in oklch, var(--glacier-accent-solid) 14%, transparent);
   color: var(--glacier-accent-solid);
@@ -42,5 +91,50 @@
 
 .wnText {
   display: grid;
-  gap: 2px;
+  gap: var(--glacier-space-1);
+  /* Flex item: without this a long unbroken word widens the card. */
+  min-inline-size: 0;
+}
+
+/* Title plus its kind and area chips, wrapping to a second line rather than
+   squeezing the title in the narrow column. */
+.wnHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+.wnOlderList {
+  display: grid;
+  gap: var(--glacier-space-5);
+  padding-block: var(--glacier-space-2);
+}
+
+/* ---- two-column ----
+   46rem is where a 10rem rail plus two entry columns each still clear a
+   readable measure. An explicit 2-cap, not auto-fill: at 64rem auto-fill would
+   find room for a third column and turn the longer descriptions into ribbons. */
+@container whatsnew (min-width: 46rem) {
+  .wnRelease {
+    grid-template-columns: 10rem minmax(0, 1fr);
+    column-gap: var(--glacier-space-4);
+  }
+
+  /* The version stays put while a long release scrolls past it. The scroller
+     is the kit's modal panel; sticky is clamped by .wnRelease, so the rail
+     never escapes its own release. */
+  .wnRail {
+    position: sticky;
+    inset-block-start: 0;
+  }
+
+  /* The divider hangs off the entries, not the rail: the rail is only as tall
+     as three lines, so a border on it would be a stub next to a full-height
+     release. */
+  .wnList {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-inline-start: var(--glacier-space-4);
+    border-inline-start: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  }
 }

@@ -289,6 +289,52 @@
   }
 }
 
+/* ---------- the collapsed hero (decision 11) ----------
+
+   On a phone the hero IS the viewport: 13.5rem of art, a floating commander
+   and a stats shelf, against 375px of landscape height. Once you have started
+   reading the list none of that is what you came for, so it folds down to a
+   band that still says which deck this is and whether it saved.
+
+   This is one attribute (`data-collapsed`, stamped by useHeroCollapse) driving
+   pure CSS, so nothing in the hero unmounts - not when you scroll, and not
+   when you rotate mid-scroll (decision 6). Everything hidden here is a
+   duplicate of something the stats shelf shows again the moment you reach the
+   top, so nothing is lost, only deferred. Desktop never sets the attribute:
+   there the stats shelf is the reason people scroll back up. */
+
+.deckHero[data-collapsed] {
+  min-height: 0;
+}
+
+.deckHero[data-collapsed] .deckHeroContent {
+  align-items: center;
+  padding: var(--glacier-space-2) var(--glacier-space-4);
+}
+
+/* The card, the curve, the chip shelf and the mat/sleeve pickers: the parts
+   that exist to be looked at rather than read past. */
+.deckHero[data-collapsed] .deckHeroCard,
+.deckHero[data-collapsed] .deckCurveBand,
+.deckHero[data-collapsed] .deckStats,
+.deckHero[data-collapsed] .deckMatButton,
+.deckHero[data-collapsed] .deckHeroCommander {
+  display: none;
+}
+
+/* The name steps down a size rather than out: it is the one thing that has to
+   survive, because it is also the input you rename the deck in. */
+.deckHero[data-collapsed] .deckNameInput {
+  font-size: var(--glacier-font-size-lg);
+  line-height: var(--glacier-leading-lg);
+}
+
+/* What is left - format, card count, save state - is a single line. */
+.deckHero[data-collapsed] .deckHeaderMeta {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
 .deckHeaderMain {
   flex: 1;
   min-width: 0;
@@ -1022,6 +1068,16 @@
   gap: var(--glacier-space-4);
 }
 
+/* Windowing filler (decision 11): one full-width row standing in for every
+   card row outside the mounted slice, so a grid that only has thirty cells in
+   it is still exactly as tall as its whole list. `1 / -1` is safe because
+   auto-fill resolves to explicit tracks. The height is set inline by
+   useCardWindow - it is measured, not authored. */
+.deckGridPad {
+  grid-column: 1 / -1;
+  pointer-events: none;
+}
+
 .deckCardCell {
   position: relative;
 }
@@ -1175,11 +1231,62 @@
 }
 
 
-/* ---------- search bar (full width, above the decklist) ---------- */
+/* ---------- search bar (full width, above the decklist) ----------
+
+   Decision 11: pinned. The editor measured thirty-one screens tall on a
+   landscape phone with nothing sticky, so the one control you use over and
+   over - "find a card to add" - was gone after the first flick and only came
+   back by scrolling to the top. It already carried z-index 40, above the
+   decklist's badges (3) and tool strips (2) and below the hover preview (80)
+   and the card menu (200), as though this had always been the intent.
+
+   The scrollport is .appContent (the shell's "only thing that scrolls"), so
+   inset-block-start: 0 pins it there. It bleeds to the page gutter on both
+   sides - logical margins, so RTL is the same code - because a translucent bar
+   that stops short of the edge lets rows scroll through the corners. */
+
+.deckEditorPage {
+  /* Mirrors .page's own inline padding so the sticky bar can cancel it. */
+  --deck-gutter: var(--glacier-space-6);
+}
 
 .deckSearchBar {
-  position: relative;
+  position: sticky;
+  inset-block-start: 0;
   z-index: 40;
+  margin-inline: calc(var(--deck-gutter) * -1);
+  padding-inline: var(--deck-gutter);
+  padding-block: var(--glacier-space-2);
+  background: color-mix(in oklch, var(--glacier-bg) 86%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  -webkit-backdrop-filter: blur(var(--glacier-blur-md));
+}
+
+/* The hairline only earns its keep once the bar is actually floating over
+   content, which is exactly when the page has scrolled - and `animation-
+   timeline: scroll()` is the only way to know that without JS, so instead the
+   line is always there but reads as part of the header band at rest. */
+.deckSearchBar::after {
+  content: '';
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline: 0;
+  block-size: var(--glacier-hairline);
+  background: color-mix(in oklch, var(--glacier-border) 60%, transparent);
+}
+
+/* The phone shell narrows .page's gutter, so the bleed has to narrow with it
+   or the bar overhangs the viewport and .appContent grows a sideways scroll. */
+:root[data-phone='on'] .deckEditorPage {
+  --deck-gutter: var(--glacier-space-3);
+}
+
+/* Landscape phone: 375px of height, and the pinned bar is spending some of it
+   on every screen. Trim its own padding rather than the field. */
+@media (max-height: 480px) {
+  .deckSearchBar {
+    padding-block: var(--glacier-space-1);
+  }
 }
 
 /* ---------- deck filter row (narrows what's already in the deck) ---------- */

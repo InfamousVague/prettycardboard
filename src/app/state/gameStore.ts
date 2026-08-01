@@ -49,6 +49,40 @@ export interface LogLine {
  * descending ids - guaranteed not to collide with real log seqs. */
 let coachSeq = 0;
 
+/**
+ * Something happened at a table you still hold a seat at but are not looking
+ * at. The server already delivers these - room events fan out by USER id, to
+ * every socket that user has, wherever they are in the app - so this is the
+ * one class of notification that costs the server nothing at all. They used to
+ * be dropped on the floor.
+ *
+ * Routed out as a window event rather than into this store: the surface is a
+ * toast, and the store has no toast context (the same reason `pc:action-error`
+ * is a window event). Notifier listens.
+ */
+export interface TableAlert {
+  /** 'turn' - the table is waiting on you; 'chat' - someone spoke; 'ping' - someone poked you. */
+  kind: 'turn' | 'chat' | 'ping';
+  roomId: string;
+  /** The table's name; only 'turn' can promise one (it comes off a snapshot). */
+  table?: string;
+  /** Who did it; only 'chat' and 'ping' carry one. */
+  name?: string;
+}
+
+function alertTable(detail: TableAlert): void {
+  window.dispatchEvent(new CustomEvent('pc:table-alert', { detail }));
+}
+
+/** Our own user id, learned from the socket's `welcome`. Kept here rather than
+ * read off appStore so this store stays free of the app store. */
+let selfUserId: string | null = null;
+
+/** Last `turn:seat` seen per non-viewed room, so the alert fires on the CHANGE
+ * rather than on every snapshot. A room's first snapshot only seeds the map -
+ * reconnecting to a table where it has been your turn for a while is not news. */
+const turnKeys = new Map<string, string>();
+
 /** Server life lines read "<name> gains/loses N life (total)". Consecutive
  * life changes by the same player within a short window fold into one line so
  * eight quick −1 taps read "loses 8 life" instead of eight "loses 1" rows. */
@@ -322,16 +356,37 @@ export const useGame = create<GameState>((set, get) => {
   });
 
   ws.onMessage((message: ServerMessage) => {
-    if (message.type === 'room.state') {
+    if (message.type === 'welcome') {
+      selfUserId = message.userId;
+    } else if (message.type === 'room.state') {
       // Only the room we're actively in owns the table view. Snapshots for a
       // room we've left (bots playing on) just bump its activity indicator so
       // the Play page can show turns are happening - without yanking us back.
       if (message.state.roomId === get().joinedRoomId) {
         set({ room: message.state });
       } else {
+        // ...and if the turn just came round to a seat we still hold there,
+        // that is worth saying out loud: the table is waiting on a player who
+        // is somewhere else in the app.
+        const snapshot = message.state;
+        const turnKey = `${snapshot.turnNumber ?? 0}:${snapshot.activeSeat ?? -1}`;
+        const seeded = turnKeys.has(snapshot.roomId);
+        if (turnKeys.get(snapshot.roomId) !== turnKey) {
+          turnKeys.set(snapshot.roomId, turnKey);
+          const mySeat = snapshot.players.find((player) => player.userId === selfUserId)?.seat;
+          if (seeded && snapshot.started && mySeat != null && snapshot.activeSeat === mySeat) {
+            alertTable({ kind: 'turn', roomId: snapshot.roomId, table: snapshot.name });
+          }
+        }
         set((state) => ({
-          activity: { ...state.activity, [message.state.roomId]: message.state.turnNumber ?? 0 },
+          activity: { ...state.activity, [snapshot.roomId]: snapshot.turnNumber ?? 0 },
         }));
+      }
+    } else if (message.type === 'room.ping') {
+      // The table on screen owns its own ping (TablePage plays the sound with
+      // it); this is the poke aimed at a seat you are not currently watching.
+      if (message.roomId !== get().joinedRoomId && message.to.userId === selfUserId) {
+        alertTable({ kind: 'ping', roomId: message.roomId, name: message.from.username });
       }
     } else if (message.type === 'cmd.choice') {
       // Every room-scoped event below is ignored unless it belongs to the table
@@ -383,6 +438,9 @@ export const useGame = create<GameState>((set, get) => {
     } else if (message.type === 'chat') {
       if (message.roomId === get().joinedRoomId)
         set((state) => ({ chat: [...state.chat.slice(-199), { from: message.from, text: message.text, ts: message.ts }] }));
+      else if (message.from.userId !== selfUserId)
+        // Not our own line echoed back after we navigated away.
+        alertTable({ kind: 'chat', roomId: message.roomId, name: message.from.username });
     } else if (message.type === 'pull') {
       // Notable pulls land in the same transcript as conversation, so the
       // reaction and the card sit next to each other instead of in two places.
@@ -440,6 +498,7 @@ export const useGame = create<GameState>((set, get) => {
       const { room, activity } = get();
       const nextActivity = { ...activity };
       delete nextActivity[message.roomId];
+      turnKeys.delete(message.roomId);
       if (room && room.roomId === message.roomId) {
         set({ room: null, spectating: false, chat: [], log: [], joinedRoomId: null, closedRoomId: message.roomId, cmdChoice: null, libraryCards: null, revealTray: null, activity: nextActivity, replay: { active: false, index: 0, head: 0, frame: null }, undoState: { canUndo: false, canRedo: false, cursor: 0, head: 0, isHost: false }, timeline: [] });
       } else {

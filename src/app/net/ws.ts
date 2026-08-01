@@ -68,6 +68,10 @@ type StatusListener = (connected: boolean) => void;
 let socket: WebSocket | null = null;
 let currentToken: string | null = null;
 let retryDelay = 500;
+/** The pending reconnect attempt, tracked so at most one is ever in flight -
+ *  an untracked setTimeout would let reconnectNow() and the backoff both call
+ *  open(), and the loser's onclose would null out the winner's live socket. */
+let retryTimer: number | null = null;
 let closedByUs = false;
 const listeners = new Set<Listener>();
 const statusListeners = new Set<StatusListener>();
@@ -93,11 +97,27 @@ export function connect(token: string): void {
   }
   currentToken = token;
   closedByUs = false;
+  cancelRetry();
+  retryDelay = 500;
   open();
 }
 
+function cancelRetry(): void {
+  if (retryTimer === null) return;
+  clearTimeout(retryTimer);
+  retryTimer = null;
+}
+
+function scheduleRetry(delay: number): void {
+  if (retryTimer !== null) return;
+  retryTimer = window.setTimeout(() => {
+    retryTimer = null;
+    open();
+  }, delay);
+}
+
 function open(): void {
-  if (!currentToken) return;
+  if (!currentToken || socket) return;
   socket = new WebSocket(wsUrl(currentToken));
   socket.onopen = () => {
     retryDelay = 500;
@@ -116,16 +136,30 @@ function open(): void {
     socket = null;
     statusListeners.forEach((fn) => fn(false));
     if (!closedByUs && currentToken) {
-      setTimeout(open, retryDelay);
+      scheduleRetry(retryDelay);
       retryDelay = Math.min(retryDelay * 2, 8000);
     }
   };
   socket.onerror = () => socket?.close();
 }
 
+/**
+ * Try again right now instead of waiting out the backoff. Called when the OS
+ * says the network is back: the socket that died on a sleeping laptop should
+ * not leave the app offline for another 8 seconds. A no-op while a socket is
+ * live or connecting, and while signed out.
+ */
+export function reconnectNow(): void {
+  if (closedByUs || !currentToken || socket) return;
+  cancelRetry();
+  retryDelay = 500;
+  open();
+}
+
 export function disconnect(): void {
   closedByUs = true;
   currentToken = null;
+  cancelRetry();
   socket?.close();
   socket = null;
 }

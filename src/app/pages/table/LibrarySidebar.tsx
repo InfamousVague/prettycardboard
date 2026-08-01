@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Button, IconButton, ScrollArea, SearchField, Select, Text, Size, TextTone } from '@glacier/react';
-import { X } from '@glacier/icons';
+import { createPortal } from 'react-dom';
+import { Button, IconButton, ScrollArea, SearchField, Select, Text, Size, TextTone, Tooltip } from '@glacier/react';
+import { PanelRight, PictureInPicture2, X } from '@glacier/icons';
 import { PlayingCardHand } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
@@ -8,7 +9,8 @@ import { cardImage } from '../../data/cards.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import type { CardInst } from '../../net/types.ts';
-import { useTableUi } from './tableUi.ts';
+import { TABLE_DOCK_ID, useTableUi } from './tableUi.ts';
+import { usePanelDock } from '../../hooks/usePanelDock.ts';
 import { oracleFacts, primePrintedPT } from '../../data/printedPt.ts';
 import { typeLineOf } from './boardModes.ts';
 import { flightAnchor } from './juice.ts';
@@ -30,6 +32,12 @@ export function LibrarySidebar() {
   const libIntent = useTableUi((state) => state.libIntent);
   const setLibIntent = useTableUi((state) => state.setLibIntent);
   const popup = useCardPopup();
+  // Floating, this panel covers the inline-end quarter of the board - including
+  // the battlefield edge you are dragging cards ONTO. Docked, the board narrows
+  // instead and the whole field stays visible while you search. Phone-safe by
+  // construction: usePanelDock never reports docked under the phone layout.
+  const dock = usePanelDock('library', TABLE_DOCK_ID);
+  const slot = dock.docked ? dock.slot : null;
 
   const [filter, setFilter] = useState('');
   const [sort, setSort] = useState<'library' | 'name' | 'mv' | 'type'>('library');
@@ -138,61 +146,91 @@ export function LibrarySidebar() {
     // Released outside the field/hand: no-op (the card stays in the library).
   };
 
+  // ONE panel, two homes: floating over the board, or portalled into the column
+  // the table reserved for it. The wrapper travels with it rather than being
+  // split off, so `end`'s release-over-the-panel cancel keeps measuring the
+  // right box in both.
+  const panel = (
+    <aside
+      ref={asideRef}
+      className="libSidebar pcPanel"
+      data-dock={slot ? 'dock' : 'float'}
+      onPointerMove={move}
+      onPointerUp={end}
+    >
+      <div className="libSidebarHead">
+        <span className="libSidebarTitle">
+          {t('gpSearchLib')} · {results.length}
+        </span>
+        <Tooltip content={dock.docked ? t('floatPanel') : t('dockPanel')}>
+          <IconButton
+            size="sm"
+            variant="ghost"
+            aria-pressed={dock.docked}
+            aria-label={dock.docked ? t('floatPanel') : t('dockPanel')}
+            onClick={() => dock.setMode(dock.docked ? 'float' : 'dock')}
+          >
+            {dock.docked ? <PictureInPicture2 size={15} /> : <PanelRight size={15} />}
+          </IconButton>
+        </Tooltip>
+        <IconButton size="sm" variant="ghost" aria-label={t('cpClose')} onClick={close}>
+          <X size={15} />
+        </IconButton>
+      </div>
+      <SearchField size="sm" value={filter} onValueChange={setFilter} placeholder={t('libSearchPh')} glass />
+      <Select
+        size="sm"
+        fullWidth
+        value={sort}
+        onValueChange={(value) => setSort(value as typeof sort)}
+        aria-label={t('libSortLabel')}
+        options={[
+          { value: 'library', label: t('libSortOrder') },
+          { value: 'name', label: t('libSortName') },
+          { value: 'mv', label: t('libSortMv') },
+          { value: 'type', label: t('libSortType') },
+        ]}
+      />
+      <Text size={Size.XSmall} tone={TextTone.Subtle} className="libSidebarHint">
+        {t('gpLibDragHint')}
+      </Text>
+      <ScrollArea className="libSidebarScroll">
+        <div className="libSidebarGrid">
+          {results.map((card) => (
+            <div key={card.iid} className="libSidebarCard">
+              <div className="libSidebarGrab" onPointerDown={(event) => begin(event, card)}>
+                <GameCard name={card.name} imageUrl={card.imageUrl || cardImage(card.scryfallId)} width={128} tilt={0} />
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  act({ kind: 'card.move', iid: card.iid, to: 'hand' });
+                  pull(card.iid);
+                }}
+              >
+                <PlayingCardHand size={13} /> {t('tblHand')}
+              </Button>
+            </div>
+          ))}
+          {results.length === 0 && (
+            <Text size={Size.XSmall} tone={TextTone.Subtle}>
+              {t('gpNoCards')}
+            </Text>
+          )}
+        </div>
+      </ScrollArea>
+    </aside>
+  );
+
   return (
     <>
-      <aside ref={asideRef} className="libSidebar" onPointerMove={move} onPointerUp={end}>
-        <div className="libSidebarHead">
-          <span className="libSidebarTitle">
-            {t('gpSearchLib')} · {results.length}
-          </span>
-          <IconButton size="sm" variant="ghost" aria-label={t('cpClose')} onClick={close}>
-            <X size={15} />
-          </IconButton>
-        </div>
-        <SearchField size="sm" value={filter} onValueChange={setFilter} placeholder={t('libSearchPh')} glass />
-        <Select
-          size="sm"
-          fullWidth
-          value={sort}
-          onValueChange={(value) => setSort(value as typeof sort)}
-          aria-label={t('libSortLabel')}
-          options={[
-            { value: 'library', label: t('libSortOrder') },
-            { value: 'name', label: t('libSortName') },
-            { value: 'mv', label: t('libSortMv') },
-            { value: 'type', label: t('libSortType') },
-          ]}
-        />
-        <Text size={Size.XSmall} tone={TextTone.Subtle} className="libSidebarHint">
-          {t('gpLibDragHint')}
-        </Text>
-        <ScrollArea className="libSidebarScroll">
-          <div className="libSidebarGrid">
-            {results.map((card) => (
-              <div key={card.iid} className="libSidebarCard">
-                <div className="libSidebarGrab" onPointerDown={(event) => begin(event, card)}>
-                  <GameCard name={card.name} imageUrl={card.imageUrl || cardImage(card.scryfallId)} width={128} tilt={0} />
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    act({ kind: 'card.move', iid: card.iid, to: 'hand' });
-                    pull(card.iid);
-                  }}
-                >
-                  <PlayingCardHand size={13} /> {t('tblHand')}
-                </Button>
-              </div>
-            ))}
-            {results.length === 0 && (
-              <Text size={Size.XSmall} tone={TextTone.Subtle}>
-                {t('gpNoCards')}
-              </Text>
-            )}
-          </div>
-        </ScrollArea>
-      </aside>
+      {slot ? createPortal(panel, slot) : panel}
+      {/* The drag ghost stays OUT of the panel and out of the slot: it is
+          position: fixed and follows the pointer across the whole board, so a
+          glass ancestor (the panel's own backdrop-filter) would become its
+          containing block and pin it inside the panel it is being dragged out
+          of. */}
       {drag && origin.current.armed && (
         <div className="libDragGhost" style={{ left: drag.x, top: drag.y }} aria-hidden>
           <GameCard

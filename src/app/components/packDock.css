@@ -20,12 +20,16 @@
      .pdShowcaseArt and .pdControls. */
   --pd-showcase-h: 32vh;
   position: fixed;
-  inset-inline-end: calc(var(--glacier-space-2) + env(safe-area-inset-right, 0px));
+  inset-inline-end: calc(var(--glacier-space-2) + var(--pd-edge-clear) + env(safe-area-inset-right, 0px));
   inset-block-end: calc(var(--glacier-space-2) + var(--pd-corner-clear) + env(safe-area-inset-bottom, 0px));
   /* Under the command palette (110), card popup (120) and pickers (130): the
      dock is a pastime, so anything the player deliberately opened wins. */
   z-index: 95;
   --pd-corner-clear: 0px;
+  /* The corner clearance's inline twin. A docked side panel is a FULL-HEIGHT
+     column, so there is no "hop up one row" that clears it - the dock has to
+     step inboard of it instead. Zero everywhere else. */
+  --pd-edge-clear: 0px;
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
@@ -51,6 +55,20 @@ body:has(.pregameLaunch) .pdDock {
   --pd-corner-clear: calc(var(--pc-launch-h, 6.5rem) + var(--glacier-space-3));
 }
 
+/* A table panel is DOCKED and its column reaches the inline edge - which is any
+   table without an expanded rail beside it: the lobby, a draft, and the rail
+   collapsed to its pill. (With the rail up the column parks inside the rail's
+   gutter, roughly 20rem in, and the dock's corner is already clear of it.)
+   `.tableSideScroll` is exactly "the rail is a column right now", so it is the
+   test rather than a guess at the three states.
+
+   The 23.5rem mirrors --pc-dock-w (22rem) plus its two gutters in table.css,
+   the same way --pd-panel-edge above mirrors PANEL_EDGE in PackDock.tsx: change
+   one and change the other. */
+body:has(.tableDock:not(:empty)):not(:has(.tableSideScroll)) .pdDock {
+  --pd-edge-clear: 23.5rem;
+}
+
 /* Only the two things you can actually touch take pointers back - not
    `.pdDock > *`, which would re-arm the drag wrapper's whole box. */
 .pdPanel,
@@ -61,7 +79,7 @@ body:has(.pregameLaunch) .pdDock {
 /* RTL: the same logical corner, mirrored - the inset property flips for us, but
    the safe-area env() does not, so the left inset is read there. */
 :root[dir='rtl'] .pdDock {
-  inset-inline-end: calc(var(--glacier-space-2) + env(safe-area-inset-left, 0px));
+  inset-inline-end: calc(var(--glacier-space-2) + var(--pd-edge-clear) + env(safe-area-inset-left, 0px));
 }
 
 /* --- collapsed: a draggable, labelled pill ------------------------------- */
@@ -167,6 +185,48 @@ body:has(.pregameLaunch) .pdDock {
   background: var(--glacier-glass-regular);
   backdrop-filter: blur(var(--glacier-blur-lg)) saturate(var(--glacier-glass-saturate));
   box-shadow: 0 18px 50px rgb(0 0 0 / 0.45);
+}
+
+/* --- docked: a column instead of a window -------------------------------- */
+
+/* THE HOST takes the column, not the panel. .pdPanel has nowhere in the page to
+   portal into: this dock is a root-level sibling of the shell, and moving it
+   into the shell's dock slot would drop it under `.appBody { z-index: 1 }` and
+   cost it ~100 ranks against every modal in the app (THE DOCK CONTRACT's first
+   invariant). So the fixed box it already lives in becomes the reserved space
+   and the panel goes `position: static` inside it, exactly like every other
+   docked panel - see .pcPanel[data-dock='dock'] in components/panels.css.
+
+   PackDock.tsx drops the dock's drag translate at the same moment (`anchored`):
+   that offset is PHYSICAL viewport pixels, so a docked column that kept it
+   would sit wherever the pill was last dropped - and mirrored the wrong way
+   under RTL, where the offset does not flip but the column does. */
+.pdDock[data-docked] {
+  /* Flush is the `full` chrome; the floating rule below insets it instead. The
+     corner and edge clearances go with it - the column runs the whole height,
+     so there is nothing left to hop over or step around. */
+  --pd-dock-inset: 0px;
+  inset-block: var(--pd-dock-inset) calc(var(--pd-dock-inset) + env(safe-area-inset-bottom, 0px));
+  inset-inline-end: calc(var(--pd-dock-inset) + env(safe-area-inset-right, 0px));
+  inline-size: min(30rem, 92vw);
+  align-items: stretch;
+}
+
+/* env() does not flip, so the mirrored corner reads the other inset - the same
+   pairing as the base .pdDock rule above. */
+:root[dir='rtl'] .pdDock[data-docked] {
+  inset-inline-end: calc(var(--pd-dock-inset) + env(safe-area-inset-left, 0px));
+}
+
+:root[data-layout='floating'] .pdDock[data-docked] {
+  --pd-dock-inset: var(--glacier-space-2);
+}
+
+.pdDock[data-docked] .pdPanel {
+  /* The panel fills the column: panels.css already set the sizes, but .pdPanel
+     caps its own height for the free-floating case and grows a resize grip. */
+  max-block-size: none;
+  resize: none;
 }
 
 .pdHead {
@@ -1464,56 +1524,175 @@ body:has(.pregameLaunch) .pdDock {
   white-space: nowrap;
 }
 
-/* --- phones ------------------------------------------------------------- */
+/* --- phones ---------------------------------------------------------------
+ *
+ * There is no pill down here. Decision 13 (docs/mobile-orientation.md) makes
+ * packs a NAVIGATION destination on a phone: the Packs nav item asks for the
+ * panel, PackDock.tsx renders no pill at all, and the corner the pill used to
+ * own goes back to End turn, Attack, the seat strip and the tab bar it was
+ * measured sitting on top of. So everything below is about the PANEL.
+ *
+ * Every rule is hung off `.pdDock[data-phone]`, which PackDock.tsx stamps from
+ * `useMobileLayout()`, rather than off a media query of its own. Two reasons,
+ * and both matter:
+ *
+ *   - the flag is a PREFERENCE as well as a breakpoint (`mobileLayout: off`
+ *     asks a small screen for the desktop dock, pill included), and the panes
+ *     inside the panel are chosen in TSX from the same flag. A media query here
+ *     would let the two disagree - a three-pane desktop panel inside a 341px
+ *     sheet is what that looks like;
+ *   - it keeps a rotation a pure REFLOW. Nothing per-orientation is a component
+ *     swap, which is decision 6: an open panel must survive being turned.
+ *
+ * `position: fixed` means "anchored to the VIEWPORT", and that only holds while
+ * no ancestor is transformed - a transformed ancestor becomes the containing
+ * block for fixed descendants. So PackDock.tsx drops the dock's translate
+ * entirely while `data-phone` is on (`anchored`). Without that pair, these
+ * insets resolve against the dock's own zero-width, mid-height box: the panel
+ * hangs off the screen edge and slides around with an offset that belonged to
+ * a pill which no longer exists. */
 
-/* The button stays on the edge; the PANEL moves to the top of the screen.
-   Opening it must not bury the hand, the piles or the turn button, and on a
-   phone a mid-height panel would cover all three.
+/* PORTRAIT: a sheet hanging from the top of the screen. Opening it must not
+   bury the hand, the piles or the turn button, and a mid-height panel would
+   cover all three - so it takes the top half and stops. */
+.pdDock[data-phone] .pdPanel {
+  position: fixed;
+  inset-block-start: calc(var(--glacier-space-3) + env(safe-area-inset-top, 0px) + 2.75rem);
+  inset-inline: calc(var(--glacier-space-2) + env(safe-area-inset-left, 0px))
+    calc(var(--glacier-space-2) + env(safe-area-inset-right, 0px));
+  /* Both insets and NO width: the panel spans exactly the gutters, so it
+     cannot be wider than the screen it is pinned to. A width here would win
+     over the end inset and put that edge back off screen. */
+  width: auto;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  max-width: none;
+  max-height: min(26rem, 58vh);
+  /* No corner grip on touch: it would sit under the thumb during a scroll,
+     and the sheet is pinned to both gutters anyway. */
+  resize: none;
+}
 
-   `position: fixed` here means "anchored to the VIEWPORT", and that only holds
-   while no ancestor is transformed - a transformed ancestor becomes the
-   containing block for fixed descendants. So PackDock.tsx drops the dock's
-   translate entirely while the panel is up at these widths (`anchored`).
-   Without that pair, these insets resolve against the dock's own zero-width,
-   mid-height box: the panel hangs off the screen edge and slides around with a
-   drag offset that belongs to the pill. */
-@media (max-width: 700px), (max-height: 480px) {
-  .pdPanel {
-    position: fixed;
-    top: calc(var(--glacier-space-3) + env(safe-area-inset-top, 0px) + 2.75rem);
-    inset-inline: calc(var(--glacier-space-2) + env(safe-area-inset-left, 0px))
-      calc(var(--glacier-space-2) + env(safe-area-inset-right, 0px));
-    /* Both insets and NO width: the panel spans exactly the gutters, so it
-       cannot be wider than the screen it is pinned to. A width here would win
-       over the end inset and put that edge back off screen. */
-    width: auto;
-    min-width: 0;
-    height: auto;
-    min-height: 0;
-    max-width: none;
-    max-height: min(26rem, 58vh);
-    /* No corner grip on touch: it would sit under the thumb during a scroll,
-       and the sheet is pinned to both gutters anyway. */
-    resize: none;
+/* No divider to share with on a phone: the rail is the whole width of a
+   stacked band, so the desktop cap would just strand it in a corner. */
+.pdDock[data-phone] .pdControls {
+  max-width: none;
+  margin-inline-start: 0;
+}
+
+.pdDock[data-phone] .pdCards {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* Docking is suppressed in the resolver on a phone, so this toggle would flip a
+   preference with no visible effect - and the header of a 341px sheet has no
+   room to spend on it. Hidden rather than unmounted, so a rotation reflows the
+   header instead of rebuilding it. */
+.pdDock[data-phone] .pdDockToggle {
+  display: none;
+}
+
+/* --- the rail, on a screen that has no height to spare ---------------------
+ *
+ * The panel is not the only thing that was too short: at 812x375 `.pdControls`
+ * measured 29px of scrollport against 825px of content - "Open a pack", a
+ * nine-set list and a 5958px odds list all sharing it. Three things were
+ * fighting, and each is answered here rather than by making one of them win:
+ *
+ *   1. two vh-relative caps stacked. A 58vh panel holding a 32vh product shot
+ *      spends more than half of itself on the photograph;
+ *   2. the split gives the rail a FRACTION of the panel, so a short panel makes
+ *      a rail too short to scroll usefully;
+ *   3. the one control anyone came for sits at the very bottom of that scroll.
+ */
+
+/* (1) The product shot stops being a third of the screen. The rail is the full
+   width of a stacked band here, so the art crops wider rather than shrinking -
+   it loses nothing but the height it was taking from the picker. */
+.pdDock[data-phone] {
+  --pd-showcase-h: 6rem;
+}
+
+/* (2) A floor under the rail. The kit sizes the two panes as grid tracks from
+   its own `--split-start` (an inline style, set by the divider), so the ratio
+   still belongs to the divider and dragging still works - this only stops the
+   END pane being starved below something a thumb can use. `minmax(0, ...)` on
+   the stage is what lets it give the room up; without it the grid would simply
+   overflow its own `overflow: hidden` and the rail would be clipped instead of
+   short. Targeted through `[data-orientation]`, which the kit renders on the
+   element itself - its class names are hashed and are never a hook. */
+.pdDock[data-phone] .pdSplit[data-orientation='vertical'] {
+  grid-template-rows: minmax(0, var(--split-start)) auto minmax(min(11rem, 45%), 1fr);
+}
+
+/* The two lists inside the rail cap against the rail, not the viewport: a 44vh
+   result list inside a 115px pane is 300px of scrolling to reach a button. */
+.pdDock[data-phone] .pdResults {
+  max-height: 10rem;
+}
+
+.pdDock[data-phone] .pdControls .pdOddsList {
+  max-height: 8rem;
+}
+
+/* (3) Open a pack is the reason the panel is open, so it stops scrolling away:
+   pinned to the bottom of the rail's own scrollport with its own surface under
+   it. No z-index - sticky is positioned, so it already paints above the
+   in-flow rows it covers, and THE DOCK CONTRACT (panels.css) asks for no new
+   band. Deliberately not backdrop-filter: that would make this a containing
+   block for anything fixed inside it. */
+.pdDock[data-phone] .pdControlsFoot {
+  position: sticky;
+  inset-block-end: 0;
+  padding-block: var(--glacier-space-2);
+  border-block-start: var(--glacier-hairline) solid
+    color-mix(in oklch, var(--glacier-border) 45%, transparent);
+  background: color-mix(in oklch, var(--glacier-surface) 92%, transparent);
+}
+
+/* --- a phone turned sideways ----------------------------------------------
+ *
+ * Decision 5: a phone panel is a TRAILING-EDGE SIDE SHEET in landscape, not a
+ * short bottom one. At 812x375 the old sheet measured 793x218 - a 793px-wide
+ * reading surface 218px tall, which is the one shape this content cannot use.
+ * Turned on its side it gets the full height instead, and gives back the width
+ * it had no idea what to do with. Same elements, same tree: only the box moves,
+ * so a rotation with the panel open reflows it (decision 6). */
+@media (orientation: landscape) {
+  .pdDock[data-phone] .pdPanel {
+    /* Full height, both gutters. */
+    inset-block: calc(var(--glacier-space-2) + env(safe-area-inset-top, 0px))
+      calc(var(--glacier-space-2) + env(safe-area-inset-bottom, 0px));
+    /* Trailing edge: the START inset has to be given up, or the pair of insets
+       plus a width would over-constrain the box and the width would lose. */
+    inset-inline-start: auto;
+    inset-inline-end: calc(var(--glacier-space-2) + env(safe-area-inset-right, 0px));
+    inline-size: min(26rem, 42vw);
+    max-inline-size: calc(100vw - 2 * var(--pd-panel-edge));
+    /* The insets own the height now; the portrait cap would cut it back to a
+       short panel in a tall column. */
+    block-size: auto;
+    max-block-size: none;
   }
 
+  /* env() does not flip, so the mirrored edge reads the other inset - the same
+     pairing as .pdDock and .pdNotices above. */
+  :root[dir='rtl'] .pdDock[data-phone] .pdPanel {
+    inset-inline-end: calc(var(--glacier-space-2) + env(safe-area-inset-left, 0px));
+  }
+}
+
+/* The notices are a sibling of the dock rather than a child of it, so they
+   still key off the viewport - and they are pointer-events:none decoration,
+   which is not something a layout preference should be able to reshape. */
+@media (max-width: 700px), (max-height: 480px) {
   .pdNotices {
     bottom: calc(50% + 2.25rem);
   }
 
-  /* No divider to share with on a phone: the rail is the whole width of a
-     stacked band, so the desktop cap would just strand it in a corner. */
-  .pdControls {
-    max-width: none;
-    margin-inline-start: 0;
-  }
-
   .pdNotice {
     width: min(15rem, calc(100vw - 1.5rem));
-  }
-
-  .pdCards {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

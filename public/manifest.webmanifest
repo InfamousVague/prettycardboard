@@ -1,0 +1,23 @@
+{
+  "id": "/",
+  "name": "PrettyCardboard",
+  "short_name": "PrettyCardboard",
+  "description": "A freeform multiplayer tabletop for paper card games.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#0f0f10",
+  "background_color": "#0f0f10",
+  "lang": "en",
+  "dir": "auto",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    {
+      "src": "brand/logo.png",
+      "sizes": "1280x225",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

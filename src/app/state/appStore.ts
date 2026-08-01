@@ -211,6 +211,14 @@ export const useApp = create<AppState>((set, get) => {
       if (identity) {
         set({ identity });
         api.setToken(identity.token);
+        // Open the socket BEFORE validating the token, not after. api.me() has
+        // no timeout, and any failure that is not a 401 (server restarting,
+        // laptop offline at launch, DNS) used to skip goOnline() entirely - so
+        // ws.connect() was never called, ws.ts's reconnect backoff never
+        // existed to retry, and the app sat signed in and permanently
+        // socketless until relaunch. connect() is idempotent for the same
+        // token, so goOnline() below is a no-op second call.
+        ws.connect(identity.token);
         try {
           // Validate the stored token; a dead one (server reset, revoked)
           // must drop to the auth screen instead of a forever-offline shell.
@@ -224,11 +232,16 @@ export const useApp = create<AppState>((set, get) => {
           await goOnline(identity);
         } catch (cause) {
           if (cause instanceof api.ApiError && cause.status === 401) {
+            // The token is genuinely dead: tear the socket down too, or its
+            // backoff would retry a handshake the server will keep refusing.
             localStorage.removeItem(IDENTITY_KEY);
             api.setToken(null);
+            ws.disconnect();
             set({ identity: null });
           }
-          // Network errors: stay signed in; ws reconnect keeps trying.
+          // Network errors: stay signed in. The socket is already open (or
+          // retrying with backoff), and the notification backstop reconciles
+          // friends and decks the moment it comes up.
         }
       }
       set({ bootstrapped: true });

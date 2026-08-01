@@ -10,6 +10,23 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
     <title>PrettyCardboard</title>
+    <!-- The installed app. `orientation: any` in the manifest is the whole
+         point: the playmat asks for landscape itself, and every other surface
+         works both ways - so the OS must never lock the window to one of them.
+         Until this file existed, `@media (display-mode: standalone)` could not
+         match anywhere, on any platform. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- iOS honours the manifest for the home-screen launch, but only this
+         meta makes an installed launch report standalone on older versions.
+         black-translucent + the viewport-fit=cover above put the app under the
+         status bar, where the shell's env(safe-area-inset-*) padding takes
+         over. -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- Matches the pre-paint background below, so the OS chrome never flashes
+         a different colour than the first frame. -->
+    <meta name="theme-color" content="#0f0f10" />
     <style>
       /* Pre-tokens paint so the first frame is never a white flash. */
       html { background: #0f0f10; }

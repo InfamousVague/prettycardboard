@@ -1,0 +1,93 @@
+/*
+ * Docked panels - the CSS half of THE DOCK CONTRACT.
+ *
+ * A "panel" here is a persistent side surface that floats OVER the content it
+ * belongs to: the table's chat aside and library sidebar, the pack panel.
+ * Docking one means it stops overlaying and starts reserving real layout
+ * space, so the panel and the board are readable at the same time. It is a
+ * different axis from `data-layout`, which is chrome only (detached card vs
+ * flush edge) and never occludes anything.
+ *
+ * SHAPE. Every panel wears the app-owned marker `pcPanel` plus
+ * `data-dock="float" | "dock"` on its OWN wrapper, and renders
+ *
+ *   docked && slot
+ *     ? createPortal(body, slot)
+ *     : <div className="chatAside pcPanel" data-dock="float">{body}</div>
+ *
+ * which is the mechanism the lobby's nav dock already proves. App-owned class
+ * names and the ARIA contract are the only stable hooks here - kit class names
+ * are hashed at build time (`._md_yfagr_42`), so a kit override goes through
+ * `[role='dialog']:has(...)`, never through a kit class (see .pcMobileFull in
+ * app.css).
+ *
+ * INVARIANTS. Every group is bound by these:
+ *
+ *  a. A panel docks into a slot on the SAME side of the `.appBody` z-index
+ *     boundary it already lives on. `.appBody { position: relative; z-index: 1 }`
+ *     caps EVERY in-shell z-index - the table nav pill's 140 included - below
+ *     any root-level sibling of `.appWindow`. That is why the pack dock at
+ *     z 95 outranks that pill, and why packDock.css dodges it with `body:has()`
+ *     instead of z-index. Moving a panel across that line silently changes its
+ *     rank by ~100.
+ *
+ *  b. A docked panel drops `position: fixed`, every `inset-*`, its `z-index`
+ *     and its enter animation. It keeps only its surface styling and takes the
+ *     chrome axis from `data-layout`, like the rail and the sidebar do.
+ *
+ *  c. A docked panel must NOT carry `backdrop-filter` if it contains any
+ *     `position: fixed` descendant: backdrop-filter establishes both a
+ *     stacking context AND a containing block - the same trap packDock.css
+ *     already documents for transforms.
+ *
+ *  d. Logical properties only. The one exception is `env()` safe-area insets,
+ *     which do not flip and already carry explicit `:root[dir='rtl']` mirrors
+ *     (packDock.css) that must survive any docking rewrite.
+ *
+ *  e. No new z-index band is introduced. Docking works by LEAVING the fixed
+ *     layer, not by re-ranking within it.
+ *
+ * SPACE. The docking HOST publishes the width it gave the dock as
+ * `--pc-dock-w` (default 0px) and folds it into the clearance that layout
+ * ALREADY reserves - never a second gutter, and never set by the panel itself.
+ * The shell needs no token at all: `.appDock` is a flex child, and flexbox
+ * reserves it.
+ *
+ * PHONE. Docking is suppressed in the RESOLVER (resolvePanelDock in
+ * preferences.ts), never only in CSS. PHONE_QUERY carries a
+ * `(max-height: 480px)` clause, so a wide-but-short desktop window is a
+ * "phone"; a CSS-only guard would let such a window reserve a gutter with no
+ * panel in it.
+ */
+
+/* `data-dock="float"` deliberately declares nothing: floating IS the panel's
+   own existing styling, and the attribute is there for hosts, toggles and
+   `:has()` selectors to read. */
+
+.pcPanel[data-dock='dock'] {
+  /* (b) leave the fixed layer entirely - the slot places this now. */
+  position: static;
+  inset: auto;
+  z-index: auto;
+  animation: none;
+  /* The slot owns the width; the panel fills it and scrolls inside. */
+  inline-size: 100%;
+  max-inline-size: none;
+  block-size: 100%;
+  min-block-size: 0;
+}
+
+/* The chrome axis, inherited from the shell so a docked panel frames itself
+   exactly the way the rail and the contextual sidebar already do. */
+:root[data-layout='floating'] .pcPanel[data-dock='dock'] {
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  border-radius: var(--glacier-radius-xl);
+  box-shadow: var(--glacier-shadow-3);
+}
+
+:root[data-layout='full'] .pcPanel[data-dock='dock'] {
+  border: none;
+  border-inline-start: var(--glacier-hairline) solid var(--glacier-glass-border);
+  border-radius: 0;
+  box-shadow: none;
+}

@@ -29,6 +29,14 @@ import {
 
 export type LibIntent = 'peek' | 'search' | null;
 
+/**
+ * The table's dock slot - the column a side panel portals into when it is
+ * docked rather than floating over the board (THE DOCK CONTRACT, see
+ * components/panels.css). TablePage renders the div; every dockable table panel
+ * finds it by this id, so the two never have to import each other.
+ */
+export const TABLE_DOCK_ID = 'pc-dock-table';
+
 /** Floating-mana pool colors (WUBRG + colorless), the pip order in the bar. */
 interface TableUiState {
   boardMode: BoardMode;

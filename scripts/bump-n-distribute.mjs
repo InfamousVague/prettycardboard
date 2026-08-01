@@ -38,6 +38,7 @@
  *   --allow-branch      release from a branch other than main
  *   --allow-dirty       fold uncommitted changes into the release commit
  *   --allow-downgrade   permit a version lower than the current one
+ *   --allow-no-changelog  ship without an in-app changelog entry for this version
  *   --skip-checks       skip typecheck + web build (not recommended)
  *   --notes "text"      release notes (set before the manifest is built)
  *   --help, -h          this message
@@ -107,7 +108,8 @@ process.on('SIGINT', () => {
 const argv = process.argv.slice(2);
 const KNOWN_FLAGS = new Set([
   '--dry-run', '--yes', '-y', '--skip-mac', '--skip-ci', '--allow-branch',
-  '--allow-dirty', '--allow-downgrade', '--skip-checks', '--notes', '--help', '-h',
+  '--allow-dirty', '--allow-downgrade', '--allow-no-changelog', '--skip-checks',
+  '--notes', '--help', '-h',
 ]);
 // Reject anything unrecognized rather than ignoring it: a mistyped `--dryrun`
 // silently performing a real release is the worst failure this script has.
@@ -140,6 +142,7 @@ const SKIP_CI = flag('--skip-ci');
 const ALLOW_BRANCH = flag('--allow-branch');
 const ALLOW_DIRTY = flag('--allow-dirty');
 const ALLOW_DOWNGRADE = flag('--allow-downgrade');
+const ALLOW_NO_CHANGELOG = flag('--allow-no-changelog');
 const SKIP_CHECKS = flag('--skip-checks');
 const NOTES = opt('--notes');
 // The first non-flag argument is the bump kind or an explicit version. The
@@ -241,6 +244,23 @@ if (cmpSemver(version, current) <= 0 && !ALLOW_DOWNGRADE) {
   );
 }
 info(`version   ${current} → ${C.bold(version)}  (tag ${tag})`);
+
+// The in-app changelog must already name the version being shipped. The
+// what's-new modal only opens for releases NEWER than the version cached on the
+// device, and closing it is the only thing that advances that cache - so a
+// release with no entry here is not merely undocumented, it never opens the
+// modal at all, and every player stays pinned at the last version that did.
+// 0.5.1 through 0.5.3 shipped that way; this refusal is why it cannot recur.
+// A regex rather than an import: the table is TypeScript with JSX icon
+// references, and this script must not need a compiler to read one string.
+const CHANGELOG_TS = join(ROOT, 'src', 'app', 'data', 'changelog.ts');
+const newestEntry = readFileSync(CHANGELOG_TS, 'utf8').match(/version:\s*'([^']+)'/)?.[1];
+if (newestEntry !== version && !ALLOW_NO_CHANGELOG) {
+  fail(
+    `CHANGELOG's newest entry is ${newestEntry ?? 'unreadable'}, not ${version}`,
+    'add the release to src/app/data/changelog.ts first — without it the what\'s-new modal never opens, so this release ships invisible. Pass --allow-no-changelog to ship anyway.',
+  );
+}
 
 // git: branch, cleanliness, remote identity, remote sync
 const branch = capture('git', ['rev-parse', '--abbrev-ref', 'HEAD']);
