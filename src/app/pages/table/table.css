@@ -5020,6 +5020,11 @@
 .tbDock .ribbonRow {
   min-width: 0;
   flex-wrap: nowrap;
+  /* The base rule's padding is strip geometry - a bottom breath under the
+     ribbon and a rail-clearing end pad. In the bar's fixed row that bottom
+     pad shoved the turn plate and End turn ABOVE the vertical centre; the
+     kit's slot supplies all the framing a title bar needs. */
+  padding: 0;
   /* The unscoped `.ribbonRow { position: relative; z-index: 1 }` rule near the
      top of this file is about layering INSIDE the table; in the title bar it
      would let a squeezed ribbon paint over the side slots' controls. Static

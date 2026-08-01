@@ -566,7 +566,7 @@ function Shell({
               <div className="titleBarNav" data-no-drag>
                 <Tooltip content={t('tbBack')}>
                   <IconButton
-                    size="sm"
+                    size="md"
                     variant="ghost"
                     aria-label={t('tbBack')}
                     aria-disabled={inRoom || !nav.canBack || undefined}
@@ -574,12 +574,12 @@ function Shell({
                       if (!inRoom && nav.canBack) nav.back();
                     }}
                   >
-                    <ArrowLeft size={15} />
+                    <ArrowLeft size={19} />
                   </IconButton>
                 </Tooltip>
                 <Tooltip content={t('tbForward')}>
                   <IconButton
-                    size="sm"
+                    size="md"
                     variant="ghost"
                     aria-label={t('tbForward')}
                     aria-disabled={inRoom || !nav.canForward || undefined}
@@ -587,7 +587,7 @@ function Shell({
                       if (!inRoom && nav.canForward) nav.forward();
                     }}
                   >
-                    <ArrowRight size={15} />
+                    <ArrowRight size={19} />
                   </IconButton>
                 </Tooltip>
               </div>
