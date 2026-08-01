@@ -15,6 +15,7 @@
     "draft": "node scenarios/booster-draft.js",
     "sealed": "node scenarios/sealed.js",
     "aimatch": "node scenarios/ai-match.js",
+    "escape": "node scenarios/lobby-escape.js",
     "enforced": "node scenarios/enforced-duel.js",
     "triggers": "node scenarios/enforced-triggers.js",
     "statics": "node scenarios/enforced-statics.js",

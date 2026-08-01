@@ -34,6 +34,8 @@ export type ClientMessage =
   // the server's embedded precons; absent = random.
   | { type: 'bot.add'; deckCode?: string; style?: 'casual' | 'aggro' | 'defensive'; difficulty?: 'easy' | 'normal' | 'hard' }
   | { type: 'bot.remove'; seat: number }
+  /** Host clears a seated PLAYER before the game starts (bots use bot.remove). */
+  | { type: 'room.kick'; seat: number }
   | { type: 'invite.send'; toUserId: string; roomId: string }
   | { type: 'game.action'; action: GameAction | GameActionV2 }
   // "Look what I just cracked": a notable pull from the pack dock, relayed to

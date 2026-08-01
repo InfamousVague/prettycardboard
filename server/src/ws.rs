@@ -70,6 +70,12 @@ enum ClientMsg {
     /// Remove the bot holding `seat` (host only, pre-start).
     #[serde(rename = "bot.remove")]
     BotRemove { seat: usize },
+    /// Remove the PLAYER holding `seat` (host only, pre-start). The escape
+    /// hatch for a lobby that can never start: a seat that went offline, or
+    /// never picked a deck, or never readied, would otherwise hold the whole
+    /// table hostage with nobody able to do anything about it.
+    #[serde(rename = "room.kick")]
+    RoomKick { seat: usize },
     #[serde(rename = "invite.send", rename_all = "camelCase")]
     InviteSend { to_user_id: String, room_id: String },
     #[serde(rename = "game.action")]
@@ -324,6 +330,7 @@ fn handle_msg(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
         }
         ClientMsg::BotAdd { deck_code, style, difficulty } => bot_add(app, user, deck_code, style, difficulty, tx),
         ClientMsg::BotRemove { seat } => bot_remove(app, user, seat, tx),
+        ClientMsg::RoomKick { seat } => room_kick(app, user, seat, tx),
         ClientMsg::InviteSend { to_user_id, room_id } => invite_send(app, user, &to_user_id, &room_id),
         ClientMsg::GameAction { action } => game_action(app, user, action, tx),
         ClientMsg::PlaymatSet { id } => playmat_set(app, user, id),
@@ -1273,6 +1280,61 @@ fn bot_remove(app: &Arc<App>, user: &db::User, seat: usize, tx: &Tx) {
     rooms::touch(app, &mut room);
     room_send_states(app, &room);
     room_log(app, &room, seq, &format!("{} removes {}", user.username, bot_name));
+}
+
+/// Host removes a seated player before the game starts. Bots have their own
+/// verb (`bot.remove`); this is for humans, and it is what makes an
+/// unstartable lobby recoverable - the removed player keeps their socket and
+/// simply stops being seated, so they can take a seat again if the host
+/// wants them back.
+fn room_kick(app: &Arc<App>, user: &db::User, seat: usize, tx: &Tx) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        send_err(tx, "not_in_room", "you are not in a room");
+        return;
+    };
+    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
+        send_err(tx, "room_not_found", "no such room");
+        return;
+    };
+    if room.host != user.id {
+        send_err(tx, "forbidden", "only the host can remove players");
+        return;
+    }
+    if room.started {
+        send_err(tx, "already_started", "the game has already started");
+        return;
+    }
+    let Some(target) = room.players.iter().find(|p| p.seat == seat) else {
+        send_err(tx, "no_such_seat", &format!("seat {seat} is empty"));
+        return;
+    };
+    if target.user_id == user.id {
+        send_err(tx, "forbidden", "leave the table instead of removing yourself");
+        return;
+    }
+    let target_id = target.user_id.clone();
+    let target_name = target.username.clone();
+    let is_bot = target.is_bot;
+    room.players.retain(|p| p.user_id != target_id);
+    room.seq += 1;
+    let seq = room.seq;
+    let room_id = room.id.clone();
+    rooms::touch(app, &mut room);
+    room_send_states(app, &room);
+    room_log(
+        app,
+        &room,
+        seq,
+        &format!("{} removes {target_name} from the table", user.username),
+    );
+    drop(room);
+    // A removed human is no longer in this room: drop their membership and
+    // tell their sockets, so their client leaves the table view instead of
+    // sitting on a stale board.
+    if !is_bot {
+        app.user_rooms.remove(&target_id);
+        send_user(app, &target_id, &json!({"type": "room.closed", "roomId": room_id}));
+    }
 }
 
 fn room_ping(app: &Arc<App>, user: &db::User, target_user_id: &str, tx: &Tx) {

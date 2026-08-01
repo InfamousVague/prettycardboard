@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
+  AlertDialog,
   Avatar,
   Button,
   IconButton,
@@ -29,6 +30,7 @@ import {
   Flame,
   Gauge,
   Link2,
+  LogOut,
   Mountain,
   Play,
   Settings2,
@@ -37,6 +39,7 @@ import {
   Swords,
   ThumbsUp,
   Timer,
+  Trash2,
   Trophy,
   UserPlus,
   Users,
@@ -48,7 +51,7 @@ import { useT } from '../../i18n.ts';
 import { useApp } from '../../state/appStore.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { send } from '../../net/ws.ts';
-import { userStats } from '../../net/api.ts';
+import { closeRoom, userStats } from '../../net/api.ts';
 import { deckSummaryArt } from '../../data/deckCover.ts';
 import { rankFor, winRate } from '../../data/ranks.ts';
 import { GameTag } from '../../components/GameTag.tsx';
@@ -211,6 +214,33 @@ export function PregameLobby({
       ? [{ label: t('setEnforced'), value: settings.enforced ? t('setOn') : t('setOff') }]
       : []),
   ];
+
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const leaveRoom = useGame((state) => state.leave);
+
+  // Leaving the lobby is leaving the table: the store's own action, so
+  // joinedRoomId clears and the app routes back out.
+  const leaveTable = () => {
+    leaveRoom();
+  };
+
+  // Closing is the host's hammer for a table that can never start. The
+  // server pushes room.closed to everyone, which routes every seat out.
+  const closeTable = async () => {
+    if (closing) return;
+    setClosing(true);
+    try {
+      await closeRoom(room.roomId);
+    } catch {
+      // Already gone (or the socket beat us to it): leaving still gets the
+      // player out of a table they cannot use.
+      leaveRoom();
+    } finally {
+      setClosing(false);
+    }
+  };
 
   const offline = room.players.some((player) => player.online === false);
   const missingDeck = room.players.some((player) => !player.deckName);
@@ -652,6 +682,18 @@ export function PregameLobby({
       {/* ---- the floor: go ---- */}
       <footer ref={launchRef} className="pregameLaunch" data-ready={canStart || undefined}>
         <div className="pregameLaunchGo">
+          {/* Cancelling is as much a lobby action as starting: leaving is
+              always here, and the host can close the table outright when it
+              can never start. Both live beside Start rather than hidden in
+              the table nav. */}
+          <Button variant="ghost" onClick={() => setConfirmLeave(true)}>
+            <LogOut size={15} /> {isHost ? t('preLeaveHost') : t('preLeave')}
+          </Button>
+          {isHost && (
+            <Button variant="ghost" onClick={() => setConfirmClose(true)}>
+              <Trash2 size={15} /> {t('preCloseTable')}
+            </Button>
+          )}
           {isHost && spectating && room.players.length >= 2 && room.players.every((p) => p.isBot) ? (
             <Button size="lg" disabled={!canStart} onClick={start}>
               <Play size={16} /> {t('tblStart')}
@@ -688,6 +730,35 @@ export function PregameLobby({
           the slide-over, in the lobby and mid-match alike. The nav itself is
           portalled into the slot below (TablePage's SidePanel), so in the lobby
           it sits in the page's own bottom corner instead of floating over it. */}
+
+      <AlertDialog
+        open={confirmLeave}
+        onClose={() => setConfirmLeave(false)}
+        title={t('preLeaveTitle')}
+        description={t('preLeaveBody')}
+        actionLabel={t('preLeave')}
+        cancelLabel={t('preStay')}
+        dismissible
+        onAction={() => {
+          setConfirmLeave(false);
+          leaveTable();
+        }}
+      />
+      <AlertDialog
+        open={confirmClose}
+        onClose={() => setConfirmClose(false)}
+        title={t('preCloseTitle')}
+        description={t('preCloseBody')}
+        actionLabel={t('preCloseTable')}
+        cancelLabel={t('preStay')}
+        tone="danger"
+        dismissible
+        actionLoading={closing}
+        onAction={() => {
+          setConfirmClose(false);
+          void closeTable();
+        }}
+      />
 
       {room.spectators.length > 0 && (
         <div className="pregameSpectators">
@@ -811,6 +882,21 @@ function ScoutCard({
               variant="ghost"
               aria-label={t('preRemoveBot')}
               onClick={() => send({ type: 'bot.remove', seat: player.seat })}
+            >
+              <X size={14} />
+            </IconButton>
+          </Tooltip>
+        )}
+        {/* A human seat the host can clear: the escape hatch for a lobby that
+            can never start because someone went offline, never picked a deck,
+            or never readied. They keep their socket and can sit back down. */}
+        {!player.isBot && isHost && !spectating && player.userId !== room.hostUserId && (
+          <Tooltip content={t('preRemovePlayer')}>
+            <IconButton
+              size="sm"
+              variant="ghost"
+              aria-label={t('preRemovePlayer')}
+              onClick={() => send({ type: 'room.kick', seat: player.seat })}
             >
               <X size={14} />
             </IconButton>

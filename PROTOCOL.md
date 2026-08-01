@@ -909,6 +909,22 @@ stance as the other intents.
   prompts. Freeform rooms and solo tables advance exactly as before. Bots
   pass open windows within a tick and never draw rejections.
 
+### Lobby escape hatches (2026-08-01)
+
+A pregame lobby could become permanently unstartable - `room.start` refuses
+while any seat is offline, deckless, or unready, and nothing could clear such
+a seat. Three ways out now exist:
+
+- `{type: "room.kick", seat}` - host only, pre-start only, never your own
+  seat, real seats only. Bots keep their own `bot.remove`; this is for
+  humans. The removed player keeps their socket, gets a `room.closed` push
+  for that room, and may take a seat again.
+- The lobby launch bar carries an explicit "Leave table" for everyone
+  (cancel matchmaking) and, for the host, "Close table" - the existing
+  host-only `DELETE /api/rooms/{id}`, which pushes `room.closed` to every
+  seat. Both confirm first.
+- The host also sees a remove control on any other player's scouting card.
+
 ### Priority prompt + auto-pass (client, 2026-07-31)
 
 The client runs Arena-style priority: a single floating button surfaces

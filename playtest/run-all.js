@@ -20,6 +20,7 @@ const STEPS = [
   ['marks-arrows', join(HERE, 'scenarios', 'marks-arrows.js')],
   ['booster-draft', join(HERE, 'scenarios', 'booster-draft.js')],
   ['sealed', join(HERE, 'scenarios', 'sealed.js')],
+  ['lobby-escape', join(HERE, 'scenarios', 'lobby-escape.js')],
   ['enforced-duel', join(HERE, 'scenarios', 'enforced-duel.js')],
   ['enforced-triggers', join(HERE, 'scenarios', 'enforced-triggers.js')],
   ['enforced-statics', join(HERE, 'scenarios', 'enforced-statics.js')],
