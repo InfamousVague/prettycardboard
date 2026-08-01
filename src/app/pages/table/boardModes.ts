@@ -136,9 +136,9 @@ export function saveGridZoom(userId: string | undefined, zoom: number): void {
   }
 }
 
-/* The grid is the DEFAULT way to watch a table: every seat laid out at once,
-   opponents across from you and your own board along the bottom. Staging a
-   single board is the opt-out, and the choice is remembered per user. */
+/* The staged single board is the DEFAULT way to watch a table: the full
+   playmat owns the stage and the other seats ride the rail as minis. The
+   side-by-side grid is the opt-in, and the choice is remembered per user. */
 
 const gridViewKey = (userId: string | undefined) => `pc.gridview.${userId ?? 'anon'}`;
 
@@ -150,7 +150,7 @@ export function loadGridView(userId: string | undefined): boolean {
   } catch {
     /* storage unavailable - default */
   }
-  return true;
+  return false;
 }
 
 export function saveGridView(userId: string | undefined, on: boolean): void {

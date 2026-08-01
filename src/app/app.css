@@ -184,6 +184,28 @@ select,
   gap: var(--glacier-space-2);
 }
 
+/* The title bar's back / forward pair, first thing after the traffic lights. */
+.titleBarNav {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+}
+
+/* The table's title-bar slots (see titlebarDock.ts): the in-match top strip
+   docks its clusters here so the board never spends a second row of chrome.
+   Empty - any page but the table - a slot is not laid out at all, so the bar
+   reads exactly as it always has. */
+.tbDock {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  min-width: 0;
+}
+
+.tbDock:empty {
+  display: none;
+}
+
 
 
 /* A titled block: the kit Heading carries no margin, so space it from the

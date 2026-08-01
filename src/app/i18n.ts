@@ -41,6 +41,10 @@ export const messages = {
   navSettings: { en: 'Settings', es: 'Ajustes', fr: 'Réglages', ar: 'الإعدادات' },
   navCustomize: { en: 'Customize', es: 'Personalizar', fr: 'Personnaliser', ar: 'تخصيص' },
 
+  // desktop title bar
+  tbBack: { en: 'Back', es: 'Atrás', fr: 'Retour', ar: 'رجوع' },
+  tbForward: { en: 'Forward', es: 'Adelante', fr: 'Avancer', ar: 'تقدم' },
+
   // customize modal
   custTitle: { en: 'Set your table', es: 'Prepara tu mesa', fr: 'Dressez votre table', ar: 'جهّز طاولتك' },
   custLede: {
@@ -1559,8 +1563,6 @@ export const messages = {
   emThinking: { en: 'Hmm, thinking...', es: 'Mmm, pensando...', fr: 'Hmm, je réfléchis...', ar: 'همم، أفكر...' },
   emOops: { en: 'Oops.', es: 'Ups.', fr: 'Oups.', ar: 'عفوًا.' },
   emThreaten: { en: 'This will be over quickly.', es: 'Esto acabará rápido.', fr: 'Ce sera vite terminé.', ar: 'سينتهي هذا بسرعة.' },
-  emMute: { en: 'Mute this player', es: 'Silenciar a este jugador', fr: 'Rendre ce joueur muet', ar: 'كتم هذا اللاعب' },
-  emUnmute: { en: 'Unmute this player', es: 'Dejar de silenciar', fr: 'Réactiver ce joueur', ar: 'إلغاء الكتم' },
   botsRoomName: { en: 'Bot exhibition', es: 'Exhibición de bots', fr: 'Exhibition de bots', ar: 'عرض الروبوتات' },
   botsPresets: { en: 'Quick launches', es: 'Lanzamientos rápidos', fr: 'Lancements rapides', ar: 'تشغيل سريع' },
   botsPresetsHint: {

@@ -52,8 +52,6 @@ import {
   Minus,
   Trash2,
   Smile,
-  Volume2,
-  VolumeX,
 } from '@glacier/icons';
 import { PlayingCardBlank, PlayingCardHand, PlayingCardStack } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
@@ -66,7 +64,6 @@ import { useFaces } from '../data/faces.ts';
 import { cardBackUrl, effectiveCardBack } from '../data/cardBacks.ts';
 import { useEdgeColor } from '../data/edgeColor.ts';
 import { tableShareUrl } from '../data/pendingJoin.ts';
-import { isMuted, toggleMute } from '../data/mutes.ts';
 import { usePreference } from '../hooks/usePreference.ts';
 import { usePanelDock } from '../hooks/usePanelDock.ts';
 import { useMobileLayout, usePortrait } from '../hooks/useIsPhone.ts';
@@ -122,6 +119,13 @@ import { TimelineCard } from './table/TimelineCard.tsx';
 import { TurnCue } from './table/TurnCue.tsx';
 import { flightAnchor, flyCard } from './table/juice.ts';
 import { onMessage, onStatus, send } from '../net/ws.ts';
+import { isTauri } from '../tauri.ts';
+import {
+  TITLEBAR_DOCK_CENTER_ID,
+  TITLEBAR_DOCK_END_ID,
+  TITLEBAR_DOCK_START_ID,
+  useDockElement,
+} from '../titlebarDock.ts';
 import { playSound, primeSounds } from '../sounds.ts';
 import { DEFAULT_PREFERENCES, loadPreferences } from '../preferences.ts';
 import { formatFor } from '../data/formats.ts';
@@ -141,6 +145,10 @@ import './table/yugioh-mat.css';
  */
 
 type AnyAction = GameAction | GameActionV2;
+
+// The Tauri shell owns a title bar; the top strip's clusters dock into it
+// there instead of spending a second row of chrome (see titlebarDock.ts).
+const DESKTOP = isTauri();
 
 interface Menu {
   iid: string;
@@ -200,6 +208,13 @@ export function TablePage() {
   // rail folded into a bottom sheet, End turn in the thumb corner.
   const mobile = useMobileLayout();
   const portrait = usePortrait();
+  // Tauri desktop: the top strip's clusters ride the window title bar instead
+  // of a row of their own. The slots exist whenever the title bar does; the
+  // portals below only fill them while this page is mounted.
+  const chromeDocked = DESKTOP && !mobile;
+  const dockStart = useDockElement(TITLEBAR_DOCK_START_ID, chromeDocked);
+  const dockCenter = useDockElement(TITLEBAR_DOCK_CENTER_ID, chromeDocked);
+  const dockEnd = useDockElement(TITLEBAR_DOCK_END_ID, chromeDocked);
   useEffect(() => {
     // Marks the phone board so card sizing switches to its own scale ladder
     // (see selectCardScale); a desktop-tuned 1.6x means nothing on 390px.
@@ -693,6 +708,10 @@ export function TablePage() {
       className="table"
       data-replay={replay.active || undefined}
       data-mobile={mobile || undefined}
+      /* Top strip docked into the desktop title bar: everything anchored below
+         the strip (rail, dock, cues) rises to the top edge - see
+         --pc-strip-clear in table.css. */
+      data-chrome-docked={chromeDocked || undefined}
       /* Zeroes the rail's width and the gutter every board clears for it, in
          one place - see --pc-rail-w / --pc-rail-clear. */
       data-rail={railCollapsed ? 'hidden' : undefined}
@@ -731,104 +750,134 @@ export function TablePage() {
       {/* ---- top strip: room identity + controls ----
           Phones drop it once the match starts: the board owns every pixel, and
           its actions live in the dock sheet (Concede included). The lobby keeps
-          it - that's where the room code gets shared around. */}
-      {!(mobile && room.started) && (
-      <header className="tableTop">
-        <div className="tableMeta">
-          <Text as="span" weight="semibold">
-            {room.name}
-          </Text>
-          <Tooltip content={`${t('tblCode')}: ${room.code}`}>
-            <button
-              type="button"
-              className="tableCode"
-              onClick={() => navigator.clipboard?.writeText(room.code)}
-            >
-              <Kbd>{room.code}</Kbd>
-              <Copy size={13} />
-            </button>
-          </Tooltip>
-          {spectating && (
-            <Pill size="sm" tone="accent" icon={<Eye size={12} />}>
-              {t('tblSpectating')}
-            </Pill>
-          )}
-        </div>
-        {room.started && !mobile && <PhaseRibbon room={room} me={me} canAct={canAct} />}
-        {room.started && <CombatPreviewCard room={room} />}
-        <div className="tableTopActions">
-          {!spectating && onlineFriends.length > 0 && (
-            <Menu
-              aria-label={t('tblInviteFriends')}
-              trigger={
-                <Button size="sm" variant="soft">
-                  <UserPlus size={15} /> <span className="ttActionLabel">{t('tblInviteFriends')}</span>
-                </Button>
-              }
-            >
-              {onlineFriends.map((friend) => (
-                <MenuItem
-                  key={friend.userId}
-                  onSelect={() => {
-                    send({ type: 'invite.send', toUserId: friend.userId, roomId: room.roomId });
-                    toast({ tone: 'success', message: `${t('frInvite')} → ${friend.username}` });
-                  }}
+          it - that's where the room code gets shared around. On the Tauri
+          desktop the strip never gets a row of its own: the three clusters
+          portal into the title bar's slots (see titlebarDock.ts) and the board
+          keeps the height a second bar would have spent. */}
+      {!(mobile && room.started) &&
+        (() => {
+          const metaEl = (
+            <div className="tableMeta">
+              <Text as="span" weight="semibold">
+                {room.name}
+              </Text>
+              <Tooltip content={`${t('tblCode')}: ${room.code}`}>
+                <button
+                  type="button"
+                  className="tableCode"
+                  onClick={() => navigator.clipboard?.writeText(room.code)}
                 >
-                  <StatusDot tone="success" size="sm" /> {friend.username}
-                </MenuItem>
-              ))}
-            </Menu>
-          )}
-          {room.started && !mobile && (
-            <Tooltip content={gridView ? t('tblGridOff') : t('tblGridOn')}>
-              <Button
-                size="sm"
-                variant={gridView ? 'solid' : 'soft'}
-                aria-pressed={gridView}
-                onClick={() => setGridView(!gridView, identity?.userId)}
-              >
-                <LayoutGrid size={15} /> <span className="ttActionLabel">{t('tblGrid')}</span>
-              </Button>
-            </Tooltip>
-          )}
-          {/* Fit-to-cell is only a starting point: how much board a quadrant
-              should show is taste, so the grid carries its own zoom. */}
-          {gridActive && (
-            <div className="gridZoomer">
-              <Tooltip content={t('tblGridOut')}>
-                <IconButton
-                  size="sm"
-                  variant="soft"
-                  aria-label={t('tblGridOut')}
-                  disabled={gridZoom <= GRID_ZOOM_MIN}
-                  onClick={() => setGridZoom(gridZoom - GRID_ZOOM_STEP, identity?.userId)}
-                >
-                  <ZoomOut size={15} />
-                </IconButton>
+                  <Kbd>{room.code}</Kbd>
+                  <Copy size={13} />
+                </button>
               </Tooltip>
-              <Tooltip content={t('tblGridIn')}>
-                <IconButton
-                  size="sm"
-                  variant="soft"
-                  aria-label={t('tblGridIn')}
-                  disabled={gridZoom >= GRID_ZOOM_MAX}
-                  onClick={() => setGridZoom(gridZoom + GRID_ZOOM_STEP, identity?.userId)}
-                >
-                  <ZoomIn size={15} />
-                </IconButton>
-              </Tooltip>
+              {spectating && (
+                <Pill size="sm" tone="accent" icon={<Eye size={12} />}>
+                  {t('tblSpectating')}
+                </Pill>
+              )}
             </div>
-          )}
-          {room.started && me && !spectating && !me.conceded && !room.matchResult && (
-            <Tooltip content={t('tblConcede')}>
-              <Button size="sm" variant="ghost" onClick={() => setConfirmConcede(true)}>
-                <Flag size={15} /> <span className="ttActionLabel">{t('tblConcede')}</span>
-              </Button>
-            </Tooltip>
-          )}
-        </div>
-      </header>
-      )}
+          );
+          const ribbonEl =
+            room.started && !mobile ? <PhaseRibbon room={room} me={me} canAct={canAct} /> : null;
+          const actionsEl = (
+            <div className="tableTopActions">
+              {!spectating && onlineFriends.length > 0 && (
+                <Menu
+                  aria-label={t('tblInviteFriends')}
+                  trigger={
+                    <Button size="sm" variant="soft">
+                      <UserPlus size={15} /> <span className="ttActionLabel">{t('tblInviteFriends')}</span>
+                    </Button>
+                  }
+                >
+                  {onlineFriends.map((friend) => (
+                    <MenuItem
+                      key={friend.userId}
+                      onSelect={() => {
+                        send({ type: 'invite.send', toUserId: friend.userId, roomId: room.roomId });
+                        toast({ tone: 'success', message: `${t('frInvite')} → ${friend.username}` });
+                      }}
+                    >
+                      <StatusDot tone="success" size="sm" /> {friend.username}
+                    </MenuItem>
+                  ))}
+                </Menu>
+              )}
+              {room.started && !mobile && (
+                <Tooltip content={gridView ? t('tblGridOff') : t('tblGridOn')}>
+                  <Button
+                    size="sm"
+                    variant={gridView ? 'solid' : 'soft'}
+                    aria-pressed={gridView}
+                    onClick={() => setGridView(!gridView, identity?.userId)}
+                  >
+                    <LayoutGrid size={15} /> <span className="ttActionLabel">{t('tblGrid')}</span>
+                  </Button>
+                </Tooltip>
+              )}
+              {/* Fit-to-cell is only a starting point: how much board a quadrant
+                  should show is taste, so the grid carries its own zoom. */}
+              {gridActive && (
+                <div className="gridZoomer">
+                  <Tooltip content={t('tblGridOut')}>
+                    <IconButton
+                      size="sm"
+                      variant="soft"
+                      aria-label={t('tblGridOut')}
+                      disabled={gridZoom <= GRID_ZOOM_MIN}
+                      onClick={() => setGridZoom(gridZoom - GRID_ZOOM_STEP, identity?.userId)}
+                    >
+                      <ZoomOut size={15} />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip content={t('tblGridIn')}>
+                    <IconButton
+                      size="sm"
+                      variant="soft"
+                      aria-label={t('tblGridIn')}
+                      disabled={gridZoom >= GRID_ZOOM_MAX}
+                      onClick={() => setGridZoom(gridZoom + GRID_ZOOM_STEP, identity?.userId)}
+                    >
+                      <ZoomIn size={15} />
+                    </IconButton>
+                  </Tooltip>
+                </div>
+              )}
+              {room.started && me && !spectating && !me.conceded && !room.matchResult && (
+                <Tooltip content={t('tblConcede')}>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirmConcede(true)}>
+                    <Flag size={15} /> <span className="ttActionLabel">{t('tblConcede')}</span>
+                  </Button>
+                </Tooltip>
+              )}
+            </div>
+          );
+          // The combat card positions itself fixed at the viewport's top
+          // center, so it renders at the table root either way.
+          const combatEl = room.started ? <CombatPreviewCard room={room} /> : null;
+          if (chromeDocked) {
+            // The slots resolve one effect-tick after mount; rendering the row
+            // for that frame would flash a second bar, so wait it out instead.
+            if (!dockStart) return combatEl;
+            return (
+              <>
+                {createPortal(metaEl, dockStart)}
+                {ribbonEl && dockCenter ? createPortal(ribbonEl, dockCenter) : null}
+                {dockEnd ? createPortal(actionsEl, dockEnd) : null}
+                {combatEl}
+              </>
+            );
+          }
+          return (
+            <header className="tableTop">
+              {metaEl}
+              {ribbonEl}
+              {combatEl}
+              {actionsEl}
+            </header>
+          );
+        })()}
 
       {/* ---- concede confirm ---- */}
       {confirmConcede && (
@@ -2149,7 +2198,6 @@ function PlayersCard({
   const markers = room.markers ?? {};
   const players = [...room.players].sort((a, b) => a.seat - b.seat);
   // Squelch state is module-level; a local tick re-renders the toggles.
-  const [, bumpMutes] = useState(0);
   return (
     <div className="playersCard">
       {players.map((player) => {
@@ -2257,24 +2305,6 @@ function PlayersCard({
                   ),
                 )}
               </Menu>
-            )}
-            {!isMe && (
-              <Tooltip content={isMuted(player.userId) ? t('emUnmute') : t('emMute')}>
-                <IconButton
-                  className="playerPing"
-                  size="sm"
-                  variant="ghost"
-                  aria-label={isMuted(player.userId) ? t('emUnmute') : t('emMute')}
-                  data-muted={isMuted(player.userId) || undefined}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    toggleMute(player.userId);
-                    bumpMutes((n) => n + 1);
-                  }}
-                >
-                  {isMuted(player.userId) ? <VolumeX size={13} /> : <Volume2 size={13} />}
-                </IconButton>
-              </Tooltip>
             )}
             {!isMe && player.online !== false && !player.conceded && onPingPlayer && (
               <Tooltip content={t('tblPingPlayer').replace('{name}', player.username)}>

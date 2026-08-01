@@ -121,7 +121,7 @@ export const useTableUi = create<TableUiState>((set) => ({
     saveMobileScale(userId, clamped);
     set({ mobileScale: clamped });
   },
-  gridView: true,
+  gridView: false,
   hydrateGridView: (userId) => set({ gridView: loadGridView(userId) }),
   setGridView: (on, userId) => {
     saveGridView(userId, on);

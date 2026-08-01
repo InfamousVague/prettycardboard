@@ -3,6 +3,7 @@ import {
   Avatar,
   Drawer,
   HapticsProvider,
+  IconButton,
   LocaleProvider,
   NavBar,
   NavBarItem,
@@ -11,10 +12,13 @@ import {
   Spinner,
   TitleBar,
   ToastProvider,
+  Tooltip,
   VisualFeedbackProvider,
   direction,
 } from '@glacier/react';
 import {
+  ArrowLeft,
+  ArrowRight,
   Compass,
   House,
   Library,
@@ -34,6 +38,12 @@ import {
 } from './preferences.ts';
 import { useT } from './i18n.ts';
 import { useRoute, type Route } from './router.ts';
+import { useHistoryNav } from './historyNav.ts';
+import {
+  TITLEBAR_DOCK_CENTER_ID,
+  TITLEBAR_DOCK_END_ID,
+  TITLEBAR_DOCK_START_ID,
+} from './titlebarDock.ts';
 import { isTauri } from './tauri.ts';
 import { useApp } from './state/appStore.ts';
 import { useGame } from './state/gameStore.ts';
@@ -403,6 +413,10 @@ function Shell({
 }) {
   const t = useT();
   const [route, navigate] = useRoute();
+  // Desktop-only: the title bar's back / forward arrows. The hook stamps
+  // history entries to know where in the trail we are; in a browser the
+  // browser's own chrome does this job, so it stays inert there.
+  const nav = useHistoryNav(DESKTOP);
   // The whole shell's phone layout keys off this one attribute rather than a
   // media query, so the Mobile-layout preference can force it either way -
   // otherwise a short desktop window puts you in the phone shell for good.
@@ -542,13 +556,50 @@ function Shell({
           surface
           border
           trafficLightInset
-          end={
-            <div className="titleBarActions" data-no-drag>
-              {!connected && <Pill size="sm" tone="warning">offline</Pill>}
-              {identity && <Avatar name={identity.username} size="sm" />}
-            </div>
+          start={
+            <>
+              <div className="titleBarNav" data-no-drag>
+                <Tooltip content={t('tbBack')}>
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    aria-label={t('tbBack')}
+                    disabled={!nav.canBack}
+                    onClick={nav.back}
+                  >
+                    <ArrowLeft size={15} />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip content={t('tbForward')}>
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    aria-label={t('tbForward')}
+                    disabled={!nav.canForward}
+                    onClick={nav.forward}
+                  >
+                    <ArrowRight size={15} />
+                  </IconButton>
+                </Tooltip>
+              </div>
+              {/* The table's identity cluster docks here in a match. */}
+              <div id={TITLEBAR_DOCK_START_ID} className="tbDock" />
+            </>
           }
-        />
+          end={
+            <>
+              {/* The table's actions dock here, before the account chip. */}
+              <div id={TITLEBAR_DOCK_END_ID} className="tbDock" />
+              <div className="titleBarActions" data-no-drag>
+                {!connected && <Pill size="sm" tone="warning">offline</Pill>}
+                {identity && <Avatar name={identity.username} size="sm" />}
+              </div>
+            </>
+          }
+        >
+          {/* The phase ribbon docks center, where the title would sit. */}
+          <div id={TITLEBAR_DOCK_CENTER_ID} className="tbDock tbDockCenter" />
+        </TitleBar>
       )}
       {/* Web-only prompt to install the desktop app (self-guards to null under
           Tauri, and once dismissed). */}

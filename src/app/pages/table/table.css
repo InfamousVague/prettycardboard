@@ -3842,13 +3842,17 @@
    LobbyChat fills it (data-variant=table). Its floor clears the nav pill it is
    opened from: the two share this corner, and a chat that ran to the bottom
    edge would sit behind the pill (z 140) with its composer half-covered. */
+/* A third of the window, floating. 33vw is the number asked for and it drives
+   the size; the clamp only catches the two ends - a narrow window where a third
+   is too little to read a line of chat in, and an ultrawide one where a third
+   is an absurd amount of screen for a text column. */
 .chatAside {
   position: fixed;
   inset-block: 4.4rem
     calc(var(--pc-nav-h, 2.75rem) + var(--glacier-space-3) + var(--glacier-space-2) + var(--pc-safe-b, 0px));
   inset-inline-end: var(--glacier-space-3);
-  width: 24rem;
-  max-width: 92vw;
+  inline-size: clamp(18rem, 33vw, 40rem);
+  max-inline-size: 92vw;
   z-index: 58;
   display: flex;
   flex-direction: column;
@@ -3857,7 +3861,11 @@
 
 .chatAside .lobbyChat {
   flex: 1;
-  box-shadow: -12px 0 40px oklch(0.05 0.02 265 / 0.5);
+  /* A detached card casts its shadow in every direction. The old one was
+     `-12px 0`, which reads as a panel welded to the trailing edge - and being a
+     physical offset it pointed the wrong way in RTL, where the panel is on the
+     other side. */
+  box-shadow: 0 18px 50px oklch(0.05 0.02 265 / 0.55);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3889,22 +3897,26 @@
 /* The FLOATING form, as above: docked, .pcPanel[data-dock='dock'] drops the
    fixed positioning, the insets, the rank and the slide-in, and the chrome axis
    supplies the frame - only the glass surface below survives. */
+/* Same treatment as the chat aside: a third of the window, floating, and real
+   glass rather than the 94%-opaque slab this used to be - at that opacity the
+   felt underneath may as well not have been there. */
 .libSidebar {
   position: fixed;
   inset-block: 4.4rem var(--glacier-space-3);
   inset-inline-end: var(--glacier-space-3);
-  width: 22rem;
-  max-width: 92vw;
+  inline-size: clamp(18rem, 33vw, 40rem);
+  max-inline-size: 92vw;
   z-index: 60;
   display: flex;
   flex-direction: column;
   gap: var(--glacier-space-2);
   padding: var(--glacier-space-3);
-  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
   border-radius: var(--glacier-radius-xl);
-  background: color-mix(in oklch, oklch(0.16 0.02 265) 94%, transparent);
-  backdrop-filter: blur(var(--glacier-blur-lg));
-  box-shadow: -12px 0 40px oklch(0.05 0.02 265 / 0.5);
+  background: var(--glacier-glass-regular);
+  backdrop-filter: blur(var(--glacier-blur-lg)) saturate(var(--glacier-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glacier-blur-lg)) saturate(var(--glacier-glass-saturate));
+  box-shadow: 0 18px 50px oklch(0.05 0.02 265 / 0.55);
   animation: libSidebarIn 220ms var(--pc-settle);
 }
 
