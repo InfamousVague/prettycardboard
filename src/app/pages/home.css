@@ -40,13 +40,16 @@
   position: absolute;
   inset: 0;
   z-index: -1;
+  /* Dark toward BOTH columns now that the side stack owns the end edge; the
+     middle stays open so the art still breathes between them. */
   background:
     linear-gradient(
       90deg,
       color-mix(in oklch, var(--glacier-bg) 94%, transparent) 0%,
-      color-mix(in oklch, var(--glacier-bg) 80%, transparent) 38%,
-      color-mix(in oklch, var(--glacier-bg) 32%, transparent) 72%,
-      color-mix(in oklch, var(--glacier-bg) 8%, transparent) 100%
+      color-mix(in oklch, var(--glacier-bg) 80%, transparent) 34%,
+      color-mix(in oklch, var(--glacier-bg) 18%, transparent) 58%,
+      color-mix(in oklch, var(--glacier-bg) 58%, transparent) 88%,
+      color-mix(in oklch, var(--glacier-bg) 72%, transparent) 100%
     ),
     linear-gradient(180deg, transparent 55%, color-mix(in oklch, var(--glacier-bg) 52%, transparent) 100%);
 }
@@ -56,22 +59,45 @@
     linear-gradient(
       -90deg,
       color-mix(in oklch, var(--glacier-bg) 94%, transparent) 0%,
-      color-mix(in oklch, var(--glacier-bg) 80%, transparent) 38%,
-      color-mix(in oklch, var(--glacier-bg) 32%, transparent) 72%,
-      color-mix(in oklch, var(--glacier-bg) 8%, transparent) 100%
+      color-mix(in oklch, var(--glacier-bg) 80%, transparent) 34%,
+      color-mix(in oklch, var(--glacier-bg) 18%, transparent) 58%,
+      color-mix(in oklch, var(--glacier-bg) 58%, transparent) 88%,
+      color-mix(in oklch, var(--glacier-bg) 72%, transparent) 100%
     ),
     linear-gradient(180deg, transparent 55%, color-mix(in oklch, var(--glacier-bg) 52%, transparent) 100%);
 }
 
 /* --- the menu stack (inline-start column) --- */
 
+/* The nav landmark is layout-transparent: its two columns are flex children
+   of the band itself, spread to opposite edges with the art in between. */
+.gmNav {
+  display: contents;
+}
+
 .gmMenu {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--glacier-space-3);
-  inline-size: min(26rem, 58%);
+  inline-size: min(26rem, 46%);
   padding: var(--glacier-space-8) var(--glacier-space-8);
+  margin-inline-end: auto;
+}
+
+/* The side column: the small destinations and the code entry, pushed to the
+   band's end edge and bottom-anchored so the badge keeps the top corner and
+   the art keeps the middle. */
+.gmSide {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--glacier-space-3);
+  inline-size: min(23rem, 36%);
+  align-self: stretch;
+  padding: var(--glacier-space-8) var(--glacier-space-8) var(--glacier-space-8) 0;
+  padding-inline: 0 var(--glacier-space-8);
 }
 
 /* Staggered entrance. CSS-only with a safe end state: the base style is fully
@@ -88,13 +114,16 @@
   }
 }
 
-.gmMenu > * {
+.gmMenu > *,
+.gmSide > * {
   animation: gmRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
 }
 .gmMenu > :nth-child(1) { animation-delay: 0ms; }
 .gmMenu > :nth-child(2) { animation-delay: 60ms; }
 .gmMenu > :nth-child(3) { animation-delay: 120ms; }
-.gmMenu > :nth-child(4) { animation-delay: 180ms; }
+/* the side column arrives after the primaries, top to bottom */
+.gmSide > :nth-child(1) { animation-delay: 180ms; }
+.gmSide > :nth-child(2) { animation-delay: 240ms; }
 
 /* --- one menu item: a parallelogram with an accent leading edge --- */
 
@@ -413,6 +442,13 @@
   }
   .gmMenu {
     inline-size: 100%;
+    padding: 0;
+    margin-inline-end: 0;
+  }
+  /* Stacked band: the side column flows under the primaries, full width. */
+  .gmSide {
+    inline-size: 100%;
+    align-self: auto;
     padding: 0;
   }
   /* The 2x2 quarter grid survives on phones — four stacked rows would make

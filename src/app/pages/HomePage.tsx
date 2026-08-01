@@ -255,7 +255,11 @@ function GameMenu({
         </Pill>
       </div>
 
-      <nav className="gmMenu" aria-label={t('hmQuickPlay')}>
+      {/* One nav landmark, two columns: display:contents lets the primary
+          stack and the side stack lay out as band children while staying a
+          single list to assistive tech. */}
+      <nav className="gmNav" aria-label={t('hmQuickPlay')}>
+        <div className="gmMenu">
         <button type="button" className="gmItem gmPrimary" onClick={() => (window.location.hash = '/new')}>
           <span className="gmItemInner">
             <span className="gmItemText">
@@ -291,7 +295,11 @@ function GameMenu({
             <PlayingCardPack size={20} className="gmItemIcon" aria-hidden />
           </span>
         </button>
+        </div>
 
+        {/* The side column: destinations and the code entry, anchored to the
+            band's end edge under the player badge so the art keeps the middle. */}
+        <div className="gmSide">
         <div className="gmHalfRow">
           <button type="button" className="gmItem gmHalf" onClick={() => (window.location.hash = '/decks')}>
             <span className="gmItemInner">
@@ -338,6 +346,7 @@ function GameMenu({
               aria-label={t('playCodePlaceholder')}
             />
           </span>
+        </div>
         </div>
       </nav>
     </section>
