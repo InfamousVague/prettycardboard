@@ -187,29 +187,24 @@
   margin-top: 0.85rem;
 }
 
-/* Year/set jump row - phones only. Desktop already has the sidebar nav for
-   this; on phones the sidebar is gone, so a swipeable chip row replaces it. */
+/* Year/set jump row. Every viewport now: the contextual sidebar that used to
+   carry the catalog nav on desktop is gone from the shell, so this swipeable
+   chip row is the one jump-nav everywhere. */
 .browseJump {
+  display: flex;
+  gap: var(--glacier-space-2);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-block: var(--glacier-space-1);
+}
+
+.browseJump::-webkit-scrollbar {
   display: none;
 }
 
-@media (max-width: 700px), (max-height: 480px) {
-  .browseJump {
-    display: flex;
-    gap: var(--glacier-space-2);
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    padding-block: var(--glacier-space-1);
-  }
-
-  .browseJump::-webkit-scrollbar {
-    display: none;
-  }
-
-  .browseJump > button {
-    flex: none;
-  }
+.browseJump > button {
+  flex: none;
 }
 
 /* Below ~480px the side-by-side tile leaves the text column too narrow:

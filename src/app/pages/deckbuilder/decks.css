@@ -6,49 +6,417 @@
  * All box properties are logical (inline/block) for RTL.
  */
 
-/* ---------- library ---------- */
+/* ========================================================================
+   Library — the ARMORY. A full-bleed headline band (the latest deck's art
+   under a directional scrim) carries the big type, the NEW DECK primary and
+   the arsenal read-out plates; the grid below shows hero-scale loadout
+   tiles. The band's plates are NOTCHED (chamfered corner + vertical accent
+   edge) — an echo of the home page's skewed parallelograms, not a copy.
+   ======================================================================== */
 
-.decksPage {
-  /* width + padding come from .page */
+/* One entrance for the whole armory: base state IS the finished layout;
+   keyframes start offset and settle there (`backwards` covers the delay), so
+   reduced-motion and frozen-frame environments land on the final frame. */
+@keyframes dkRise {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
 }
 
-.decksHead > div:first-child {
-  display: grid;
-  gap: var(--glacier-space-2);
-}
-
-.decksHead {
+/* Scoped under .decksPage to beat the `.page section` scaffolding: the band
+   is its own composition, not a flex column of sections. */
+.decksPage .dkBand {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: flex;
+  flex-direction: row;
   align-items: flex-end;
   justify-content: space-between;
-  gap: var(--glacier-space-4);
+  gap: var(--glacier-space-6);
+  min-block-size: clamp(15rem, 32vh, 19rem);
+  padding: var(--glacier-space-6) var(--glacier-space-8);
+  border: 1px solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-2xl);
+  background: var(--glacier-surface);
+  box-shadow: var(--glacier-shadow-3);
+}
+
+.dkBandArt {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-size: cover;
+  background-position: center 20%;
+  filter: saturate(1.06);
+}
+
+/* Heavy on the text side, thinning over the art, plus a floor vignette so the
+   plates at the band's foot always read. */
+.dkBandScrim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--glacier-bg) 93%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-bg) 76%, transparent) 42%,
+      color-mix(in oklch, var(--glacier-bg) 28%, transparent) 74%,
+      color-mix(in oklch, var(--glacier-bg) 10%, transparent) 100%
+    ),
+    linear-gradient(180deg, transparent 45%, color-mix(in oklch, var(--glacier-bg) 58%, transparent) 100%);
+}
+
+[dir='rtl'] .dkBandScrim {
+  background:
+    linear-gradient(
+      -90deg,
+      color-mix(in oklch, var(--glacier-bg) 93%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-bg) 76%, transparent) 42%,
+      color-mix(in oklch, var(--glacier-bg) 28%, transparent) 74%,
+      color-mix(in oklch, var(--glacier-bg) 10%, transparent) 100%
+    ),
+    linear-gradient(180deg, transparent 45%, color-mix(in oklch, var(--glacier-bg) 58%, transparent) 100%);
+}
+
+/* --- the intro column (heavy side): kicker, big type, actions --- */
+
+.dkIntro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  max-inline-size: 34rem;
+  min-inline-size: 0;
+}
+
+.dkIntro > * {
+  animation: dkRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+}
+.dkIntro > :nth-child(1) { animation-delay: 0ms; }
+.dkIntro > :nth-child(2) { animation-delay: 60ms; }
+.dkIntro > :nth-child(3) { animation-delay: 120ms; }
+.dkIntro > :nth-child(4) { animation-delay: 180ms; }
+
+.dkKicker {
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--glacier-accent-text);
+}
+
+/* An h1 semantically; visually the page's big type. The two-class selector
+   outscores the kit's hashed heading class. */
+.decksPage .dkTitle {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: clamp(2.1rem, 4vw, 3rem);
+  line-height: 1.05;
+  font-weight: var(--glacier-font-weight-bold);
+}
+
+.dkLede {
+  max-inline-size: 30rem;
+}
+
+.dkActions {
+  display: flex;
+  align-items: stretch;
+  gap: var(--glacier-space-3);
+  margin-block-start: var(--glacier-space-4);
   flex-wrap: wrap;
 }
 
-.decksActions {
+/* NEW DECK: the page's one unmissable primary — a notched accent plate with
+   a leading edge and a sweep on hover. clip-path swallows box-shadow, so the
+   hover glow rides filter: drop-shadow (it follows the notched silhouette). */
+.dkForge {
+  appearance: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  text-align: start;
+  color: var(--glacier-text);
+  border: 1px solid color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-border));
+  background: color-mix(in oklch, var(--glacier-accent-soft) 85%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  padding: var(--glacier-space-4) var(--glacier-space-6) var(--glacier-space-4) var(--glacier-space-5);
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
+  transition:
+    scale var(--glacier-duration-fast) var(--glacier-ease-out),
+    filter var(--glacier-duration-fast) var(--glacier-ease-out),
+    background-color var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+[dir='rtl'] .dkForge {
+  padding: var(--glacier-space-4) var(--glacier-space-5) var(--glacier-space-4) var(--glacier-space-6);
+  clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
+}
+
+/* accent leading edge */
+.dkForge::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 5px;
+  background: var(--glacier-accent-solid);
+  transition: inline-size var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+/* the sweep that slides in from the leading edge on hover/focus */
+.dkForge::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    color-mix(in oklch, var(--glacier-accent-solid) 28%, transparent),
+    color-mix(in oklch, var(--glacier-accent-solid) 9%, transparent) 55%,
+    transparent 85%
+  );
+  opacity: 0;
+  translate: -16% 0;
+  transition:
+    opacity var(--glacier-duration-fast) var(--glacier-ease-out),
+    translate var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+[dir='rtl'] .dkForge::after {
+  translate: 16% 0;
+}
+
+.dkForge:hover,
+.dkForge:focus-visible {
+  scale: 1.02;
+  filter: drop-shadow(0 8px 22px rgb(0 0 0 / 0.4))
+    drop-shadow(0 0 14px color-mix(in oklch, var(--glacier-accent-solid) 35%, transparent));
+}
+
+/* Import: the same plate, one register quieter - hairline glass instead of
+   the accent wash, so New deck stays the primary of the pair. Geometry,
+   notch, edge and sweep all inherit from .dkForge. */
+.dkForgeQuiet {
+  border-color: color-mix(in oklch, var(--glacier-border) 80%, transparent);
+  background: color-mix(in oklch, var(--glacier-surface) 72%, transparent);
+}
+.dkForgeQuiet::before {
+  background: color-mix(in oklch, var(--glacier-accent-solid) 55%, var(--glacier-border));
+}
+.dkForgeQuiet:hover,
+.dkForgeQuiet:focus-visible {
+  filter: drop-shadow(0 8px 22px rgb(0 0 0 / 0.4))
+    drop-shadow(0 0 10px color-mix(in oklch, var(--glacier-accent-solid) 18%, transparent));
+}
+.dkForge:hover::before,
+.dkForge:focus-visible::before {
+  inline-size: 8px;
+}
+.dkForge:hover::after,
+.dkForge:focus-visible::after {
+  opacity: 1;
+  translate: 0 0;
+}
+[dir='rtl'] .dkForge:hover::after,
+[dir='rtl'] .dkForge:focus-visible::after {
+  translate: 0 0;
+}
+.dkForge:focus-visible {
+  outline: 2px solid var(--glacier-accent-solid);
+  outline-offset: -2px;
+}
+
+.dkForgeInner {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-4);
+}
+
+.dkForgeIcon {
+  flex: none;
+  color: var(--glacier-accent-text);
+}
+
+.dkForgeText {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.dkForgeTitle {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: var(--glacier-font-weight-bold);
+  font-size: clamp(1.25rem, 1.8vw, 1.6rem);
+  line-height: 1.15;
+}
+
+.dkForgeSub {
+  margin-block-start: 2px;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle);
+}
+
+/* --- the arsenal read-out (thin side): notched stat plates --- */
+
+.dkPlates {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(7.5rem, auto));
+  gap: var(--glacier-space-3);
+  align-self: flex-end;
+}
+
+.dkPlates > * {
+  animation: dkRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+}
+.dkPlates > :nth-child(1) { animation-delay: 200ms; }
+.dkPlates > :nth-child(2) { animation-delay: 260ms; }
+.dkPlates > :nth-child(3) { animation-delay: 320ms; }
+
+/* A notched plate: chamfered top corner on the trailing side, vertical accent
+   edge on the leading side — the armory's own shape, cousin to the home
+   page's skewed plates but never the same silhouette. */
+.dkPlate {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--glacier-space-3) var(--glacier-space-4);
+  border: 1px solid color-mix(in oklch, var(--glacier-border) 75%, transparent);
+  background: color-mix(in oklch, var(--glacier-surface) 78%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+}
+
+[dir='rtl'] .dkPlate {
+  clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%, 0 12px);
+}
+
+.dkPlate::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 3px;
+  background: var(--glacier-accent-solid);
+  opacity: 0.85;
+}
+
+.dkPlateWide {
+  grid-column: 1 / -1;
+}
+
+.dkPlateValue {
+  font-size: clamp(1.6rem, 2.2vw, 2.2rem);
+  font-weight: var(--glacier-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.dkPlateMain {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-4);
+  min-inline-size: 0;
+}
+
+.dkPlateText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+/* The most-played plate's value is a NAME, not a numeral. */
+.dkPlateDeckName {
+  font-size: clamp(1.05rem, 1.5vw, 1.35rem);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  max-inline-size: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dkPlateSub {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-accent-text);
+  white-space: nowrap;
+}
+
+.dkPlateLabel {
+  margin-block-start: var(--glacier-space-1);
   display: inline-flex;
-  gap: var(--glacier-space-2);
-  padding-block-end: var(--glacier-space-1);
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.66rem;
+  font-weight: var(--glacier-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--glacier-text-muted);
+  white-space: nowrap;
+}
+.dkPlateLabel svg {
+  flex: none;
+  color: var(--glacier-accent-text);
+  opacity: 0.85;
 }
 
-.decksActions button svg {
-  margin-inline-end: var(--glacier-space-1);
+/* Completion ring: the most-played deck's win rate as a conic dial. No mask —
+   the number's own solid disc covers the center, so it can never blank out. */
+.dkRing {
+  flex: none;
+  display: grid;
+  place-items: center;
+  inline-size: 3.4rem;
+  block-size: 3.4rem;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--glacier-accent-solid) var(--dk-ring, 0%),
+    color-mix(in oklch, var(--glacier-border) 55%, transparent) 0
+  );
 }
 
-/* Each tile is a card image plus a caption, so the tiles read as objects
-   rather than rows - they need enough air that two adjacent pieces of card art
-   don't blur into one. Column gap runs wider than row gap because the captions
-   already separate the rows. */
+.dkRingNum {
+  display: grid;
+  place-items: center;
+  inline-size: 2.7rem;
+  block-size: 2.7rem;
+  border-radius: 50%;
+  background: color-mix(in oklch, var(--glacier-surface) 96%, transparent);
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- the loadout grid --- */
+
+/* Hero-scale tiles need more air than the old 13rem shelf; the captions still
+   separate rows, so columns get the wider gap. */
 .deckGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
-  column-gap: var(--glacier-space-8);
+  grid-template-columns: repeat(auto-fill, minmax(14.5rem, 1fr));
+  column-gap: var(--glacier-space-6);
   row-gap: var(--glacier-space-6);
 }
 
-/* A tile is a plain button so the whole surface is one target. */
+/* A tile is a plain button so the whole surface is one target. Entrance is
+   CSS-only: base state is the finished tile, --dk-delay staggers by index. */
 .deckTile {
   appearance: none;
+  /* A nowrap deck name must ellipsize, not widen the grid track: without
+     this the item's min-content floor blows the column past the phone
+     viewport and the tiles clip. */
+  min-inline-size: 0;
   border: var(--glacier-hairline) solid var(--glacier-border-subtle);
   background: var(--glacier-surface);
   border-radius: var(--glacier-radius-xl);
@@ -61,21 +429,49 @@
   text-align: center;
   color: var(--glacier-text);
   font-family: var(--glacier-font-sans);
+  animation: dkRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+  animation-delay: var(--dk-delay, 0ms);
   transition:
     border-color var(--glacier-duration-fast) var(--glacier-ease-out),
     box-shadow var(--glacier-duration-fast) var(--glacier-ease-out),
     transform var(--glacier-duration-fast) var(--glacier-ease-out);
 }
 
+/* Hover lift with glow: the loadout-select treatment. */
 .deckTile:hover {
-  border-color: var(--glacier-border-strong);
-  box-shadow: var(--glacier-shadow-2);
-  transform: translateY(-2px);
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 55%, var(--glacier-border));
+  box-shadow:
+    0 12px 34px rgb(0 0 0 / 0.4),
+    0 0 22px color-mix(in oklch, var(--glacier-accent-solid) 25%, transparent);
+  transform: translateY(-4px);
 }
 
 .deckTile:focus-visible {
   outline: 2px solid var(--glacier-focus-ring);
   outline-offset: 2px;
+}
+
+/* The latest build spans wide and turns broadside: art on the leading side,
+   its name and record laid out like a briefing. Only where two columns
+   actually exist — everywhere else it degrades to the plain tile. */
+@media (min-width: 701px) and (min-height: 481px) {
+  .deckTile[data-showcase] {
+    grid-column: span 2;
+    flex-direction: row;
+    justify-content: flex-start;
+    text-align: start;
+    gap: var(--glacier-space-6);
+    padding-inline: var(--glacier-space-6);
+  }
+  .deckTile[data-showcase] .deckTileInfo {
+    align-items: flex-start;
+  }
+  .deckTile[data-showcase] .deckTileName {
+    font-size: clamp(1.4rem, 2.2vw, 1.9rem);
+  }
+  .deckTile[data-showcase] .deckTileMeta {
+    justify-content: flex-start;
+  }
 }
 
 /* Room for the GameCard's absolute-positioned layers. */
@@ -173,32 +569,88 @@
   flex-direction: column;
   align-items: center;
   gap: var(--glacier-space-1);
-  min-width: 0;
-  width: 100%;
+  min-inline-size: 0;
+  inline-size: 100%;
 }
 
+/* The deck's name in big tracked caps: the tile reads like a loadout card. */
 .deckTileName {
-  font-weight: var(--glacier-font-weight-semibold);
-  font-size: var(--glacier-font-size-sm);
-  line-height: var(--glacier-leading-sm);
+  font-weight: var(--glacier-font-weight-bold);
+  font-size: clamp(1.05rem, 1.5vw, 1.3rem);
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 100%;
+  max-inline-size: 100%;
 }
 
 .deckTileCommander {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 100%;
+  max-inline-size: 100%;
 }
 
 .deckTileMeta {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
   gap: var(--glacier-space-2);
   margin-block-start: var(--glacier-space-1);
+  max-inline-size: 100%;
+}
+
+/* Format / card count / record as small notched plates — same silhouette
+   family as the band's read-out. */
+.deckTilePlate {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--glacier-text-muted);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 80%, transparent);
+  background: color-mix(in oklch, var(--glacier-surface-sunken) 85%, transparent);
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 0 100%);
+  white-space: nowrap;
+}
+
+[dir='rtl'] .deckTilePlate {
+  clip-path: polygon(7px 0, 100% 0, 100% 100%, 0 100%, 0 7px);
+}
+
+.deckTileFormat {
+  color: var(--glacier-accent-text);
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 40%, transparent);
+  background: color-mix(in oklch, var(--glacier-accent-soft) 70%, transparent);
+}
+
+/* Records are always wins–losses: isolate the numerals so an RTL paragraph
+   can't reorder "3–1" into "1–3". */
+.deckTileRecord,
+.dkNum {
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.deckTileWr {
+  color: var(--glacier-accent-text);
+}
+
+/* The showcase kicker naming the most recent build. */
+.deckTileLatest {
+  font-size: 0.66rem;
+  font-weight: var(--glacier-font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--glacier-accent-text);
 }
 
 /* ---------- editor shell ---------- */
@@ -559,7 +1011,7 @@
   align-items: center;
   gap: 0.3rem;
   padding: 0.1rem 0.45rem;
-  border-radius: var(--glacier-radius-pill, 999px);
+  border-radius: var(--glacier-radius-full);
   background: var(--glacier-surface-sunken, var(--glacier-surface));
   border: var(--glacier-hairline) solid var(--glacier-border-subtle);
 }
@@ -1101,7 +1553,7 @@
   padding-inline: 0.3rem;
   border-radius: var(--glacier-radius-full);
   background: var(--glacier-accent-solid);
-  color: var(--glacier-accent-on-solid, #fff);
+  color: var(--glacier-accent-contrast);
   font-family: var(--glacier-font-mono);
   font-size: var(--glacier-font-size-xs);
   font-weight: var(--glacier-font-weight-bold);
@@ -1476,9 +1928,15 @@
   }
 }
 
-/* Game filter row above the deck grid. */
+/* Game filter row above the deck grid; it rises in after the band. On narrow
+   viewports the four game options scroll inside their own row rather than
+   running past the page edge. */
 .decksFilter {
-  margin-bottom: 1rem;
+  margin-block-end: 1rem;
+  max-inline-size: 100%;
+  overflow-x: auto;
+  animation: dkRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+  animation-delay: 120ms;
 }
 
 /* Game badge tucked into the corner of a deck tile's art. */
@@ -1487,32 +1945,35 @@
 }
 .deckTileGame {
   position: absolute;
-  top: 0.4rem;
-  left: 0.4rem;
+  inset-block-start: 0.4rem;
+  inset-inline-start: 0.4rem;
   z-index: 2;
   backdrop-filter: blur(6px);
 }
 
 /* The estimated Commander bracket, opposite the game badge: the editor's stat
-   panel squeezed down to a chip - same coloured numeral, same bracket name.
-   Absolutely positioned, so however narrow the tile gets it can never reflow
-   the tile's stack. Its own scrim + blur keep it readable over a deck's
-   playmat art. */
+   panel squeezed down to a notched plate - same coloured numeral, same bracket
+   name, the armory's silhouette. Absolutely positioned, so however narrow the
+   tile gets it can never reflow the tile's stack. Its own scrim + blur keep it
+   readable over a deck's playmat art. */
 .deckTileBracket {
   position: absolute;
-  top: 0.4rem;
-  right: 0.4rem;
+  inset-block-start: 0.4rem;
+  inset-inline-end: 0.4rem;
   z-index: 2;
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.15rem 0.45rem;
+  padding: 0.18rem 0.5rem;
   border: var(--glacier-hairline) solid var(--glacier-border-subtle);
-  border-radius: var(--glacier-radius-full, 999px);
   background: color-mix(in oklch, var(--glacier-surface) 82%, transparent);
   backdrop-filter: blur(6px);
-  box-shadow: var(--glacier-shadow-1);
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 0 100%);
   line-height: 1.25;
+}
+
+[dir='rtl'] .deckTileBracket {
+  clip-path: polygon(7px 0, 100% 0, 100% 100%, 0 100%, 0 7px);
 }
 
 .deckTileBracketNum {
@@ -1546,4 +2007,103 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+
+/* ---------- armory on phones (PHONE_QUERY): stacked band, tiles as
+   full-bleed rows, nothing notched off-screen. Both orientations: the
+   max-height arm catches landscape phones. ---------- */
+
+@media (max-width: 700px), (max-height: 480px) {
+  .decksPage .dkBand {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    min-block-size: 0;
+    gap: var(--glacier-space-5);
+    padding: var(--glacier-space-5);
+    border-radius: var(--glacier-radius-xl);
+  }
+  /* text spans the full art now: one even scrim */
+  .dkBandScrim,
+  [dir='rtl'] .dkBandScrim {
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--glacier-bg) 88%, transparent),
+      color-mix(in oklch, var(--glacier-bg) 72%, transparent)
+    );
+  }
+  .dkIntro {
+    max-inline-size: none;
+  }
+  .decksPage .dkTitle {
+    font-size: var(--glacier-font-size-2xl);
+  }
+  .dkActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .dkForge {
+    inline-size: 100%;
+  }
+  .dkPlates {
+    align-self: stretch;
+    inline-size: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dkPlateDeckName {
+    max-inline-size: 100%;
+  }
+
+  /* the grid becomes full-bleed loadout rows: art on the leading side */
+  .deckGrid {
+    grid-template-columns: 1fr;
+    row-gap: var(--glacier-space-3);
+  }
+  .deckTile {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: start;
+    gap: var(--glacier-space-4);
+    padding: var(--glacier-space-3);
+  }
+  .deckTileInfo {
+    align-items: flex-start;
+  }
+  .deckTileMeta {
+    justify-content: flex-start;
+  }
+  /* On a 116px card the bracket keeps its coloured numeral; the name would
+     swallow the art. */
+  .deckTileBracketName {
+    display: none;
+  }
+}
+
+/* ---------- reduced motion: the armory lands settled, nothing slides ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .dkIntro > *,
+  .dkPlates > *,
+  .decksFilter,
+  .deckTile {
+    animation: none;
+  }
+  .dkForge,
+  .dkForge::before,
+  .dkForge::after,
+  .deckTile {
+    transition: none;
+  }
+  .dkForge:hover,
+  .dkForge:focus-visible {
+    scale: none;
+  }
+  .dkForge::after,
+  [dir='rtl'] .dkForge::after {
+    translate: 0 0;
+  }
+  .deckTile:hover {
+    transform: none;
+  }
 }

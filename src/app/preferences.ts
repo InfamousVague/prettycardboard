@@ -49,7 +49,6 @@ export interface Preferences {
   visualFeedback: boolean;
   visualFeedbackVariant: VisualFeedbackVariant;
   visualFeedbackIntensity: VisualFeedbackIntensity;
-  sidebarCollapsed: boolean;
   /** The face-down card art, one of the bundled PrettyCardboard backs. */
   cardBack: string;
   /** The table/backdrop artwork, one of the bundled PrettyCardboard mats. */
@@ -139,7 +138,6 @@ export const DEFAULT_PREFERENCES: Preferences = {
   visualFeedback: false,
   visualFeedbackVariant: 'shockwave',
   visualFeedbackIntensity: 'subtle',
-  sidebarCollapsed: false,
   cardBack: DEFAULT_CARD_BACK,
   playmat: DEFAULT_PLAYMAT,
   diceSkin: DEFAULT_DICE_SKIN,

@@ -907,6 +907,12 @@ export const messages = {
     fr: 'Forgez votre prochain concurrent',
     ar: 'اصنع منافسك التالي',
   },
+  dkImportSub: {
+    en: 'Bring a list from anywhere',
+    es: 'Trae una lista de donde sea',
+    fr: 'Apportez une liste de n’importe où',
+    ar: 'أحضر قائمة من أي مكان',
+  },
   dkBattles: { en: 'Battles', es: 'Batallas', fr: 'Batailles', ar: 'معارك' },
   dkMostPlayed: { en: 'Most played', es: 'Más jugado', fr: 'Le plus joué', ar: 'الأكثر لعبًا' },
   dkNoBattles: { en: 'No battles yet', es: 'Aún sin batallas', fr: 'Pas encore de bataille', ar: 'لا معارك بعد' },

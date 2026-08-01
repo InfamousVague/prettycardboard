@@ -100,18 +100,6 @@ select,
   padding-block: var(--glacier-space-3);
 }
 
-/* The contextual sidebar: a fixed-width, full-height column with a trailing
-   hairline. The kit Sidebar fills it (width/height: 100%) and scrolls itself. */
-.appSidebar {
-  flex: none;
-  width: 15rem;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--glacier-surface);
-  border-inline-end: var(--glacier-hairline) solid var(--glacier-glass-border);
-}
-
 /* The content column: the only thing that scrolls. */
 .appContent {
   flex: 1;
@@ -142,25 +130,24 @@ select,
    and remains the scroll area. Logical margins keep the single gutter between
    the panels correct under RTL. */
 .appWindow[data-layout='floating'] .appRail,
-.appWindow[data-layout='floating'] .appSidebar {
-  margin-block: var(--glacier-space-4);
-  height: calc(100% - var(--glacier-space-4) * 2);
-  border: var(--glacier-hairline) solid var(--glacier-glass-border);
-  border-radius: var(--glacier-radius-xl);
-  box-shadow: var(--glacier-shadow-3);
-  overflow: hidden;
-}
 
 /* rail: outer gutter on the start edge, a single gutter to the sidebar */
 .appWindow[data-layout='floating'] .appRail {
   margin-inline: var(--glacier-space-4);
 }
 
-/* sidebar: sits against the rail's trailing gutter (start margin 0), its own
-   gutter to the content on the end edge */
-.appWindow[data-layout='floating'] .appSidebar {
-  margin-inline-start: 0;
-  margin-inline-end: var(--glacier-space-4);
+/* Floating layout: the content column is the third card in the row, so its
+   gutters have to be the SAME space-4 the rail and sidebar float on - the
+   page's own space-6/space-8 rhythm made the content start ~21px below the
+   cards' top edge and left a 32px right gutter against their 22px.
+   The inline-start side takes none: the sidebar's own margin-inline-end is
+   already the gap, and adding padding on top of it doubled the trough.
+   Phones are excluded - there the cards are full-bleed and .page keeps its
+   own slim gutters. */
+:root:not([data-phone='on']) .appWindow[data-layout='floating'] .page {
+  padding-block: var(--glacier-space-4);
+  padding-inline-start: 0;
+  padding-inline-end: var(--glacier-space-4);
 }
 
 .titleBarDrag {
@@ -195,61 +182,7 @@ select,
   gap: var(--glacier-space-2);
 }
 
-/* Collapsed sidebar: hidden, with the content taking its place. It stays
-   reachable through the title bar toggle's hover preview. */
-.appWindow[data-sidebar='collapsed'] .appSidebar {
-  display: none;
-}
 
-/* The toggle and its hover preview share one hover region, so the pointer can
-   travel from the button into the preview without it closing. */
-.sidebarToggleWrap {
-  position: relative;
-  display: inline-flex;
-}
-
-/* The preview flyout: a floating copy of the sidebar that fades in below the
-   toggle while the sidebar is collapsed. The transparent top padding keeps the
-   hover region continuous across the visual gap. */
-.sidebarPreview {
-  position: absolute;
-  top: 100%;
-  inset-inline-start: 0;
-  padding-top: var(--glacier-space-2);
-  z-index: 70;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-0.25rem);
-  pointer-events: none;
-  transition:
-    opacity var(--glacier-duration-fast) var(--glacier-ease-out),
-    transform var(--glacier-duration-fast) var(--glacier-ease-out),
-    visibility 0s linear var(--glacier-duration-fast);
-}
-
-.sidebarPreview[data-open] {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
-  pointer-events: auto;
-  transition-delay: 0s;
-}
-
-.sidebarPreviewCard {
-  width: 15rem;
-  height: min(26rem, calc(100vh - 5rem));
-  overflow: hidden;
-  background: var(--glacier-surface);
-  border: var(--glacier-hairline) solid var(--glacier-glass-border);
-  border-radius: var(--glacier-radius-xl);
-  box-shadow: var(--glacier-shadow-4);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sidebarPreview {
-    transition: none;
-  }
-}
 
 /* A titled block: the kit Heading carries no margin, so space it from the
    content that follows it (the timeline, the card group). */
@@ -264,25 +197,6 @@ select,
   max-width: 42rem;
 }
 
-/* A brand lockup for the sidebar header. */
-.brand {
-  display: flex;
-  align-items: center;
-  gap: var(--glacier-space-2);
-  padding-inline: var(--glacier-space-2);
-  font-weight: var(--glacier-font-weight-semibold);
-  color: var(--glacier-text);
-}
-
-.brandMark {
-  display: inline-grid;
-  place-items: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: var(--glacier-radius-md);
-  background: var(--glacier-accent-solid);
-  color: var(--glacier-accent-contrast);
-}
 
 /* A responsive metric row for the dashboard. Tiles carry an icon and a trailing
    hint, so the floor leaves room for the value between them before wrapping. */
@@ -563,53 +477,14 @@ select,
   justify-content: flex-end;
 }
 
-/* ---- friends ---- */
-
-.friendSearch {
-  max-width: 26rem;
-}
-
-.friendHits {
-  display: flex;
-  flex-direction: column;
-  gap: var(--glacier-space-2);
-}
-
-.friendRow {
-  display: flex;
-  align-items: center;
-  gap: var(--glacier-space-3);
-}
-
-.friendRowSpacer {
-  flex: 1;
-}
-
-/* Phones: friend rows and invite cards wrap their actions under the name. */
+/* Phones: invite cards wrap their actions under the name. */
 @media (max-width: 700px), (max-height: 480px) {
-  .friendRow,
   .inviteCard {
     flex-wrap: wrap;
-  }
-
-  .profileWho {
-    min-width: 0;
   }
 }
 
 /* ---- profile ---- */
-
-.profileHeader {
-  display: flex;
-  align-items: center;
-  gap: var(--glacier-space-4);
-}
-
-.profileWho {
-  flex: 1;
-  display: grid;
-  gap: var(--glacier-space-1);
-}
 
 .preconGrid {
   display: grid;
@@ -825,15 +700,6 @@ select,
 
 /* ---- brand logo ---- */
 
-.brandLogo {
-  /* The one place the wordmark lives (the title bar carries no logo), so it
-     gets room to breathe; capped by the sidebar width rather than a height. */
-  width: 100%;
-  max-width: 11rem;
-  height: auto;
-  display: block;
-  margin-block: var(--glacier-space-1);
-}
 
 .onboardingLogo {
   width: min(22rem, 82%);
@@ -901,21 +767,43 @@ select,
   background: transparent;
 }
 
-/* The rail, the contextual sidebar, and the title bar become glass so the mat
-   glows through. The kit components paint opaque `--glacier-surface` via their
-   own hashed classes; these double-class selectors outrank them. */
+/* The rail and the title bar become glass so the mat glows through. The kit
+   components paint opaque `--glacier-surface` via their own hashed classes;
+   these double-class selectors outrank them. */
 .appWindow .appRail,
-.appWindow .appSidebar,
 .appWindow .appTitleBar {
   background: var(--glacier-glass-regular);
   backdrop-filter: blur(var(--glacier-blur-lg)) saturate(var(--glacier-glass-saturate));
   -webkit-backdrop-filter: blur(var(--glacier-blur-lg)) saturate(var(--glacier-glass-saturate));
 }
 
-/* The kit Sidebar inside the shell repaints surface; let the shell's glass
-   show through instead. */
-.appSidebar > * {
-  background: transparent;
+/* The brand at the head of the rail: the app icon, sized to sit among the
+   rail's icon buttons, with a hairline under it so the nav reads as starting
+   below the mark rather than beside it. */
+.railBrand {
+  appearance: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding-block: var(--glacier-space-2) var(--glacier-space-3);
+  margin-block-end: var(--glacier-space-2);
+  border-block-end: var(--glacier-hairline) solid
+    color-mix(in oklch, var(--glacier-border) 55%, transparent);
+}
+
+.railBrand img {
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: var(--glacier-radius-md);
+  display: block;
+}
+
+.railBrand:focus-visible {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--glacier-radius-md);
 }
 
 /* ================= customize modal ================= */
@@ -1362,17 +1250,6 @@ select,
   display: none;
 }
 
-/* Phone shell. Driven by the data-phone attribute App puts on <html>, not by a
-   raw media query: the Mobile-layout preference has to be able to force this
-   either way, and a short desktop window must not trap anyone in the phone
-   shell with no way out. 'auto' resolves to the same breakpoint in JS. */
-/* The 240px contextual sidebar leaves ~100px of content at 390px, and it is
-   just as impossible at 812x375 once the rail and the page gutters are paid
-   for - so it is off on phones in BOTH orientations and pages own the width. */
-:root[data-phone='on'] .appSidebar {
-  display: none !important;
-}
-
 /* PORTRAIT phone: navigation is the bottom tab bar; the vertical rail is off.
    (Both bars stay MOUNTED either way - see the landscape block below.) */
 @media (orientation: portrait) {
@@ -1412,13 +1289,6 @@ select,
 /* Full-width, full-height surfaces on phones: the floating layout's
    detached-card margins waste width the screen doesn't have. */
 :root[data-phone='on'] .appWindow[data-layout='floating'] .appRail,
-:root[data-phone='on'] .appWindow[data-layout='floating'] .appSidebar {
-  margin: 0;
-  height: 100%;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-}
 
 /* LANDSCAPE phone: the nav becomes a vertical rail on the leading edge.
    A bottom bar costs 85px of a 375px-tall screen - 22.7% of everything the

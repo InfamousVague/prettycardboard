@@ -1,16 +1,19 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { motion } from 'motion/react';
-import { Button, EmptyState, Heading, Pill, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
-import { Download, Plus } from '@glacier/icons';
+import { Button, EmptyState, Heading, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
+import { Download, Plus, Swords, Trophy } from '@glacier/icons';
 import { PlayingCardDeck } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useUi } from '../state/uiStore.ts';
+import * as api from '../net/api.ts';
 import { bracketKey } from '../data/brackets.ts';
 import { resolveCardImage } from '../data/games.ts';
-import { playmatBackground } from '../data/playmats.ts';
+import { DEFAULT_PLAYMAT, playmatBackground } from '../data/playmats.ts';
+import { deckSummaryArt } from '../data/deckCover.ts';
+import { winRate } from '../data/ranks.ts';
 import { useVisibleGames } from '../hooks/useVisibleGames.ts';
-import type { DeckSummary } from '../net/types.ts';
+import { usePhoneViewport } from '../hooks/useIsPhone.ts';
+import type { DeckSummary, MyDeckStats } from '../net/types.ts';
 import { GameCard } from '../components/GameCard.tsx';
 import { GameTag } from '../components/GameTag.tsx';
 import { DeckEditor } from './deckbuilder/DeckEditor.tsx';
@@ -21,9 +24,12 @@ import '../components/gamecard.css';
 import './deckbuilder/decks.css';
 
 /**
- * Decks: the library grid when nothing is selected, the deck editor when the
- * contextual sidebar (or a tile) picks a deck. Selection lives in uiStore so
- * the sidebar and this page stay in step.
+ * Decks: the armory. A full-bleed headline band (the most recent deck's art
+ * behind a directional scrim) carries the big NEW DECK action and the arsenal
+ * read-out — deck count, battles fought, most-played deck; below it the
+ * library grid shows every deck as a hero-scale loadout tile, the most recent
+ * one spanning wide. Selection still lives in uiStore so the sidebar and this
+ * page stay in step; picking a deck opens the editor exactly as before.
  */
 export function DecksPage() {
   const selectedDeckId = useUi((state) => state.selectedDeckId);
@@ -40,6 +46,8 @@ function DeckLibrary() {
   const [newDeckOpen, setNewDeckOpen] = useState(false);
   // Right-click a deck to inspect its summary (stats/colors/bracket, not cards).
   const [inspecting, setInspecting] = useState<DeckSummary | null>(null);
+  // One fetch feeds the band's read-out and every tile's record.
+  const [deckStats, setDeckStats] = useState<Map<string, MyDeckStats> | null>(null);
   // WIP games' decks are hidden entirely unless the dev toggle is on.
   const games = useVisibleGames();
   const decks = allDecks.filter((deck) => games.some((g) => g.id === (deck.game || 'mtg')));
@@ -53,36 +61,38 @@ function DeckLibrary() {
     });
   }, [refreshDecks]);
 
-  // A "New deck" action from elsewhere (sidebar, home) opens the wizard here.
+  useEffect(() => {
+    let live = true;
+    api
+      .myDeckStats()
+      .then((rows) => {
+        if (live) setDeckStats(new Map(rows.map((row) => [row.deckId, row])));
+      })
+      .catch(() => {
+        // Offline: the band shows em dashes, the tiles skip their records.
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  // A "New deck" action from elsewhere clears the intent but deliberately does
+  // NOT open the wizard: landing on this page cold with a modal over it hid
+  // the armory it was navigating to. The big forge button is the next click.
   const newDeckIntent = useUi((state) => state.newDeckIntent);
   const clearNewDeckIntent = useUi((state) => state.clearNewDeckIntent);
   useEffect(() => {
-    if (newDeckIntent) {
-      setNewDeckOpen(true);
-      clearNewDeckIntent();
-    }
+    if (newDeckIntent) clearNewDeckIntent();
   }, [newDeckIntent, clearNewDeckIntent]);
 
   return (
     <div className="page decksPage">
-      <div className="decksHead">
-        <div>
-          <Heading level={1}>{t('decksTitle')}</Heading>
-          <Text size={Size.Large} tone={TextTone.Muted} className="lede">
-            {t('decksLede')}
-          </Text>
-        </div>
-        <div className="decksActions">
-          <Button variant="soft" onClick={() => setImportOpen(true)}>
-            <Download size={16} />
-            {t('decksImport')}
-          </Button>
-          <Button onClick={() => setNewDeckOpen(true)}>
-            <Plus size={16} />
-            {t('decksNew')}
-          </Button>
-        </div>
-      </div>
+      <ArmoryBand
+        decks={decks}
+        deckStats={deckStats}
+        onNewDeck={() => setNewDeckOpen(true)}
+        onImport={() => setImportOpen(true)}
+      />
 
       {decks.length > 0 && (
         <div className="decksFilter">
@@ -118,6 +128,10 @@ function DeckLibrary() {
               key={deck.id}
               deck={deck}
               index={index}
+              // The server lists decks most-recently-touched first, so the
+              // first tile is the latest build and earns the wide showcase.
+              showcase={index === 0}
+              stats={deckStats?.get(deck.id) ?? null}
               onOpen={() => selectDeck(deck.id)}
               onInspect={() => setInspecting(deck)}
             />
@@ -134,40 +148,192 @@ function DeckLibrary() {
   );
 }
 
+/**
+ * The headline band: the most recently touched deck's wide art (or the default
+ * felt) behind a directional scrim, the page's big type and the one unmissable
+ * NEW DECK action on the heavy side, the arsenal read-out plates on the thin
+ * side. Presentation only — the deck list and stats arrive from DeckLibrary's
+ * existing fetching.
+ */
+function ArmoryBand({
+  decks,
+  deckStats,
+  onNewDeck,
+  onImport,
+}: {
+  decks: DeckSummary[];
+  deckStats: Map<string, MyDeckStats> | null;
+  onNewDeck: () => void;
+  onImport: () => void;
+}) {
+  const t = useT();
+
+  // The most recently touched deck dresses the band; a fresh account gets the
+  // default felt the tables use.
+  const recent = [...decks].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  const wide = recent ? deckSummaryArt(recent) : '';
+  const art = wide ? `url("${wide}")` : playmatBackground(DEFAULT_PLAYMAT);
+
+  // Battles fought across every deck, and the deck that fought the most.
+  let battles = 0;
+  let mostPlayed: MyDeckStats | null = null;
+  if (deckStats) {
+    for (const row of deckStats.values()) {
+      battles += row.played;
+      if (row.played > 0 && (mostPlayed == null || row.played > mostPlayed.played)) mostPlayed = row;
+    }
+  }
+  const mostPlayedName =
+    mostPlayed == null
+      ? null
+      : mostPlayed.name ?? decks.find((deck) => deck.id === mostPlayed?.deckId)?.name ?? '—';
+  const mostPlayedWr = mostPlayed ? winRate(mostPlayed) : null;
+
+  return (
+    <section className="dkBand" aria-label={t('decksTitle')}>
+      <div className="dkBandArt" style={{ backgroundImage: art }} aria-hidden />
+      <div className="dkBandScrim" aria-hidden />
+
+      <div className="dkIntro">
+        <span className="dkKicker">{t('dkArmory')}</span>
+        <Heading level={1} noMargin className="dkTitle">
+          {t('decksTitle')}
+        </Heading>
+        <Text size={Size.Large} tone={TextTone.Muted} className="dkLede">
+          {t('decksLede')}
+        </Text>
+        <div className="dkActions">
+          <button type="button" className="dkForge" onClick={onNewDeck}>
+            <span className="dkForgeInner">
+              <Plus size={26} className="dkForgeIcon" aria-hidden />
+              <span className="dkForgeText">
+                <span className="dkForgeTitle">{t('decksNew')}</span>
+                <span className="dkForgeSub">{t('dkForgeSub')}</span>
+              </span>
+            </span>
+          </button>
+          {/* Import wears the same forge plate as New deck - quieter tone, same
+              family - instead of a kit button that read as an afterthought. */}
+          <button type="button" className="dkForge dkForgeQuiet" onClick={onImport}>
+            <span className="dkForgeInner">
+              <Download size={26} className="dkForgeIcon" aria-hidden />
+              <span className="dkForgeText">
+                <span className="dkForgeTitle">{t('decksImport')}</span>
+                <span className="dkForgeSub">{t('dkImportSub')}</span>
+              </span>
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <div className="dkPlates">
+        <div className="dkPlate">
+          <span className="dkPlateValue">{decks.length}</span>
+          <span className="dkPlateLabel">
+            <PlayingCardDeck size={13} aria-hidden />
+            {t('decksTitle')}
+          </span>
+        </div>
+        <div className="dkPlate">
+          <span className="dkPlateValue">{deckStats ? battles : '—'}</span>
+          <span className="dkPlateLabel">
+            <Swords size={13} aria-hidden />
+            {t('dkBattles')}
+          </span>
+        </div>
+        <div className="dkPlate dkPlateWide">
+          <span className="dkPlateMain">
+            <span className="dkPlateText">
+              <span className="dkPlateValue dkPlateDeckName">{mostPlayedName ?? '—'}</span>
+              <span className="dkPlateSub">
+                {mostPlayed ? (
+                  <>
+                    <span className="dkNum">{mostPlayed.played}</span> {t('dkGames')} ·{' '}
+                    <span className="dkNum">
+                      {mostPlayed.wins}–{mostPlayed.losses}
+                    </span>
+                  </>
+                ) : (
+                  t('dkNoBattles')
+                )}
+              </span>
+            </span>
+            {mostPlayedWr != null && (
+              <span
+                className="dkRing"
+                style={{ ['--dk-ring' as string]: `${mostPlayedWr}%` }}
+                role="img"
+                aria-label={`${t('hmWinRate')} ${mostPlayedWr}%`}
+              >
+                <span className="dkRingNum">{mostPlayedWr}%</span>
+              </span>
+            )}
+          </span>
+          <span className="dkPlateLabel">
+            <Trophy size={13} aria-hidden />
+            {t('dkMostPlayed')}
+          </span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function DeckTile({
   deck,
   index,
+  showcase,
+  stats,
   onOpen,
   onInspect,
 }: {
   deck: DeckSummary;
   index: number;
+  showcase: boolean;
+  stats: MyDeckStats | null;
   onOpen: () => void;
   onInspect: () => void;
 }) {
   const t = useT();
+  // Raw viewport state, in lockstep with the stylesheet's PHONE_QUERY rules
+  // (the table's mobile-layout preference must not desync art from CSS).
+  const phone = usePhoneViewport();
   // MTG ships a Scryfall cover URL; Cyberpunk resolves its bundled art from the
   // cover card id.
   const cover = deck.coverImageUrl || (deck.coverCardId ? resolveCardImage(deck.game, deck.coverCardId) : undefined);
+  const played = stats != null && stats.played > 0;
+  const pct = played && stats ? winRate(stats) : null;
   return (
-    <motion.button
+    <button
       type="button"
       className="deckTile"
+      data-showcase={showcase || undefined}
       // A deck that brings its own mat to the table wears it here too, so the
       // list shows at a glance which deck plays on what.
       data-mat={deck.playmat ? '' : undefined}
-      style={deck.playmat ? ({ ['--pc-deck-mat' as string]: playmatBackground(deck.playmat) } as CSSProperties) : undefined}
+      style={
+        {
+          // CSS-only staggered entrance; the delay caps so a long library
+          // doesn't keep late rows waiting.
+          ['--dk-delay' as string]: `${Math.min(index, 8) * 40}ms`,
+          ...(deck.playmat ? { ['--pc-deck-mat' as string]: playmatBackground(deck.playmat) } : null),
+        } as CSSProperties
+      }
       onClick={onOpen}
       onContextMenu={(event) => {
         event.preventDefault();
         onInspect();
       }}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.24, ease: 'easeOut', delay: Math.min(index, 8) * 0.035 }}
     >
       <div className="deckTileArt">
-        <GameCard name={deck.commander || deck.name} imageUrl={cover} width={168} foil tilt={7} />
+        <GameCard
+          name={deck.commander || deck.name}
+          imageUrl={cover}
+          width={phone ? 116 : showcase ? 250 : 190}
+          foil
+          glow={showcase}
+          tilt={7}
+        />
         <GameTag game={deck.game} showName={false} className="deckTileGame" />
         {/* The server sends a bracket only for MTG Commander decks; everything
             else gets no chip at all rather than an empty slot. */}
@@ -191,6 +357,7 @@ function DeckTile({
         )}
       </div>
       <div className="deckTileInfo">
+        {showcase && <span className="deckTileLatest">{t('dkLatest')}</span>}
         <span className="deckTileName">{deck.name}</span>
         {deck.commander && (
           <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="deckTileCommander">
@@ -198,14 +365,18 @@ function DeckTile({
           </Text>
         )}
         <span className="deckTileMeta">
-          <Pill size="sm" tone="accent" variant="soft">
-            {deck.format}
-          </Pill>
-          <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} mono>
+          <span className="deckTilePlate deckTileFormat">{deck.format}</span>
+          <span className="deckTilePlate">
             {deck.cardCount} {t('decksCards')}
-          </Text>
+          </span>
+          {played && stats && (
+            <span className="deckTilePlate deckTileRecord">
+              {stats.wins}–{stats.losses}
+              {pct != null && <span className="deckTileWr">{pct}%</span>}
+            </span>
+          )}
         </span>
       </div>
-    </motion.button>
+    </button>
   );
 }

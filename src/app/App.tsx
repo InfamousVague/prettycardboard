@@ -3,7 +3,6 @@ import {
   Avatar,
   Drawer,
   HapticsProvider,
-  IconButton,
   LocaleProvider,
   NavBar,
   NavBarItem,
@@ -19,7 +18,6 @@ import {
   Compass,
   House,
   Library,
-  PanelLeft,
   Paintbrush,
   Play,
   Settings,
@@ -37,7 +35,6 @@ import {
 import { useT } from './i18n.ts';
 import { useRoute, type Route } from './router.ts';
 import { isTauri } from './tauri.ts';
-import { RouteSidebar } from './RouteSidebar.tsx';
 import { useApp } from './state/appStore.ts';
 import { useGame } from './state/gameStore.ts';
 import { useUi } from './state/uiStore.ts';
@@ -118,60 +115,6 @@ function PageFallback() {
   return (
     <div className="pageFallback" role="status" aria-live="polite">
       <Spinner size="lg" />
-    </div>
-  );
-}
-
-const SIDEBAR_LABEL: Record<
-  Route,
-  | 'sbPlayTables'
-  | 'sbDecksLibrary'
-  | 'sbBrowseCatalog'
-  | 'sbBoosterSets'
-  | 'sbCollectionBinder'
-  | 'sbFriendsPeople'
-  | 'sbProfileYou'
-> = {
-  home: 'sbPlayTables',
-  new: 'sbPlayTables',
-  play: 'sbPlayTables',
-  decks: 'sbDecksLibrary',
-  browse: 'sbBrowseCatalog',
-  boosters: 'sbBoosterSets',
-  collection: 'sbCollectionBinder',
-  friends: 'sbFriendsPeople',
-  profile: 'sbProfileYou',
-  download: 'sbProfileYou',
-};
-
-/** Title-bar sidebar toggle with a hover flyout preview (see the starter). */
-function SidebarToggle({
-  route,
-  collapsed,
-  onToggle,
-}: {
-  route: Route;
-  collapsed: boolean;
-  onToggle: () => void;
-}) {
-  const t = useT();
-  const [hovering, setHovering] = useState(false);
-  const previewOpen = collapsed && hovering;
-  return (
-    <div
-      className="sidebarToggleWrap"
-      data-no-drag
-      onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => setHovering(false)}
-    >
-      <IconButton variant="ghost" size="sm" aria-label={t('toggleSidebar')} onClick={onToggle}>
-        <PanelLeft size={18} />
-      </IconButton>
-      <div className="sidebarPreview" data-open={previewOpen || undefined} aria-hidden={!previewOpen}>
-        <div className="sidebarPreviewCard">
-          <RouteSidebar key={route} route={route} desktop={false} />
-        </div>
-      </div>
     </div>
   );
 }
@@ -293,6 +236,19 @@ function AppRail({
         )
       }
     >
+      {/* The brand's only home now that the sidebar is gone: the app icon at
+          the head of the rail, doubling as a way back to Home. Desktop only -
+          the phone bars have no room for a fifth non-destination. */}
+      {!horizontal && (
+        <button
+          type="button"
+          className="railBrand"
+          aria-label={t('navHome')}
+          onClick={() => onNavigate('home')}
+        >
+          <img src={`${import.meta.env.BASE_URL}brand/icon-192.png`} alt="" draggable={false} />
+        </button>
+      )}
       <NavBarItem
         icon={<House size={20} />}
         label={t('navHome')}
@@ -568,17 +524,14 @@ function Shell({
     <ProfilePage />
   );
 
-  const collapsed = (DESKTOP && preferences.sidebarCollapsed) || inRoom;
-
   return (
     <div
       className="appWindow"
       data-layout={preferences.layout}
-      data-sidebar={collapsed ? 'collapsed' : 'open'}
       data-in-game={inRoom || undefined}
     >
-      {/* The chosen playmat backs the whole window; the shell's rail, sidebar,
-          and content panels float over it as glass. A scrim keeps text legible
+      {/* The chosen playmat backs the whole window; the shell's rail and
+          content panels float over it as glass. A scrim keeps text legible
           on even the brightest mats. */}
       <div className="appBackdrop" aria-hidden />
 
@@ -589,15 +542,6 @@ function Shell({
           surface
           border
           trafficLightInset
-          start={
-            !inRoom && (
-              <SidebarToggle
-                route={route}
-                collapsed={preferences.sidebarCollapsed}
-                onToggle={() => onPreferencesChange({ sidebarCollapsed: !preferences.sidebarCollapsed })}
-              />
-            )
-          }
           end={
             <div className="titleBarActions" data-no-drag>
               {!connected && <Pill size="sm" tone="warning">offline</Pill>}
@@ -625,11 +569,6 @@ function Shell({
               setSettingsOpen(true);
             }}
           />
-        )}
-        {!inRoom && (
-          <aside className="appSidebar" aria-label={t(SIDEBAR_LABEL[route])}>
-            <RouteSidebar key={route} route={route} desktop={DESKTOP} />
-          </aside>
         )}
         <main className="appContent" data-full-bleed={inRoom || undefined}>
           {/* Keyed remount gives the enter animation; no exit choreography so
