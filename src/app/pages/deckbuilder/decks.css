@@ -151,9 +151,13 @@
   border: 1px solid color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-border));
   background: color-mix(in oklch, var(--glacier-accent-soft) 85%, transparent);
   backdrop-filter: blur(var(--glacier-blur-sm));
-  /* Symmetric and generous: the parallelogram overhangs its layout box on both
-     inline sides, so even padding keeps the label off the leaning edge. */
-  padding: var(--glacier-space-4) var(--glacier-space-7);
+  /* This asked for --glacier-space-7, which does not exist: the scale is
+     1-6, 8, 10, 12, 16. An undefined custom property invalidates the WHOLE
+     shorthand at computed-value time, so the padding was 0 and both labels sat
+     flush against the edge - "Forge your next contender" was being clipped.
+     (The old comment justified the extra width by the parallelogram's lean;
+     the plates are plain rounded rectangles now, so 6 is the right step.) */
+  padding: var(--glacier-space-4) var(--glacier-space-6);
   border-radius: var(--glacier-radius-sm);
   transition:
     scale var(--glacier-duration-fast) var(--glacier-ease-out),
