@@ -35,6 +35,8 @@ import { cyberpunkImage, cyberpunkStarters } from '../data/cyberpunk.ts';
 import { yugiohImage, yugiohStarters } from '../data/yugioh.ts';
 import { deckSummaryArt, deckSummaryCover } from '../data/deckCover.ts';
 import { DEFAULT_PLAYMAT, playmatBackground } from '../data/playmats.ts';
+import { useShowcaseId } from '../data/showcase.ts';
+import { usePreference } from '../hooks/usePreference.ts';
 import { DeckStack } from '../components/DeckStack.tsx';
 import { GameTag } from '../components/GameTag.tsx';
 import { CardRowSkeleton, EmptyFan } from '../components/Skeletons.tsx';
@@ -204,13 +206,15 @@ function GameMenu({
     }
   };
 
-  // The most recently touched deck dresses the band; a fresh account gets the
-  // default felt the tables use.
+  // The band wears the same mat the player would sit down on: their showcase
+  // deck brings its own if it has one, otherwise their chosen mat - the rule
+  // the table already follows for a deck's playmat override.
+  const showcaseId = useShowcaseId();
+  const matPreference = usePreference('playmat');
   const art = useMemo(() => {
-    const recent = [...decks].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
-    const wide = recent ? deckSummaryArt(recent) : '';
-    return wide ? `url("${wide}")` : playmatBackground(DEFAULT_PLAYMAT);
-  }, [decks]);
+    const showcase = showcaseId ? decks.find((deck) => deck.id === showcaseId) : undefined;
+    return playmatBackground(showcase?.playmat || matPreference || DEFAULT_PLAYMAT);
+  }, [decks, showcaseId, matPreference]);
 
   const openPacks = () => {
     // Latch BEFORE the event: the pack dock chunk may still be streaming and

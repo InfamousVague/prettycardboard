@@ -27,6 +27,7 @@ import { SaltPile } from '../components/SaltPile.tsx';
 import { GameTag } from '../components/GameTag.tsx';
 import { RANKS, rankFor, winRate } from '../data/ranks.ts';
 import { deckSummaryArt } from '../data/deckCover.ts';
+import { useShowcaseId, writeShowcaseId } from '../data/showcase.ts';
 import { useMobileLayout } from '../hooks/useIsPhone.ts';
 import type { MatchRow, MyDeckStats, UserStats } from '../net/types.ts';
 import './social.css';
@@ -121,18 +122,11 @@ export function ProfilePage() {
   const selectDeck = useUi((state) => state.selectDeck);
   const popup = useCardPopup();
 
-  // The showcase pick persists per account.
-  const showcaseKey = identity ? `pc.showcase.${identity.userId}` : null;
-  const [showcaseId, setShowcaseId] = useState<string | null>(() =>
-    showcaseKey ? localStorage.getItem(showcaseKey) : null,
-  );
-  useEffect(() => {
-    setShowcaseId(showcaseKey ? localStorage.getItem(showcaseKey) : null);
-  }, [showcaseKey]);
-
+  // The showcase pick persists per account (see data/showcase.ts - the home
+  // page's backdrop reads the same value).
+  const showcaseId = useShowcaseId();
   const pickShowcase = (id: string) => {
-    setShowcaseId(id);
-    if (showcaseKey) localStorage.setItem(showcaseKey, id);
+    if (identity) writeShowcaseId(identity.userId, id);
   };
 
   // One profile fetch for the account age; omitted quietly when unreachable.
