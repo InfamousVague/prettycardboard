@@ -105,7 +105,7 @@ pub(crate) fn decide(app: &App, room: &Room, uid: &str, mind: &mut BotMind, now:
     // Own mulligan first; it blocks everything else this bot might do.
     if let Some(m) = &me.mulligan {
         if m.state == "deciding" {
-            let (action, line) = mulligan_action(room, me, m.taken);
+            let (action, line) = mulligan_action(room, me, m.taken, tier_of(me));
             if let Some(line) = line {
                 say.push(line);
             }
@@ -325,14 +325,53 @@ pub(crate) fn decide(app: &App, room: &Room, uid: &str, mind: &mut BotMind, now:
         return Decision { action: None, say, fast: false };
     }
 
-    // Someone's end-step window is open and the stack is empty: pass so the
-    // turn can end. (Held-trick responses belong to the stack branch above.)
+    // Someone's end-step window is open and the stack is empty: a hard bot
+    // with a held answer USES the window (that is what it held mana for);
+    // everyone else passes so the turn can end.
     if crate::rules::enforced(room)
         && room.end_window.is_some()
         && room.active_seat != me.seat
         && room.stack.is_empty()
         && !room.stack_passed.contains(&me.seat)
     {
+        if tier_of(me) > 0 && mind.responded_to.is_none() {
+            let opposing_board = room
+                .players
+                .iter()
+                .filter(|p| p.seat != me.seat && !p.conceded)
+                .flat_map(|p| p.battlefield.iter())
+                .any(|c| is_creature(c) || crate::rules::facts(app, c).map(|f| f.is_creature()).unwrap_or(false));
+            if opposing_board {
+                let trick = me.hand.iter().find(|c| {
+                    crate::rules::facts(app, c)
+                        .map(|f| {
+                            f.threat
+                                && f.is_instant()
+                                && crate::rules::can_afford(
+                                    app,
+                                    room,
+                                    me,
+                                    crate::rules::reduced_generic(app, me, &f, f.generic),
+                                    &f.pips,
+                                )
+                        })
+                        .unwrap_or(false)
+                });
+                if let Some(card) = trick {
+                    mind.responded_to = Some(format!("endstep:{}", room.turn_number));
+                    return Decision {
+                        action: Some(Action::Cast {
+                            iid: card.iid.clone(),
+                            payment: None,
+                            x: Some(0.5),
+                            y: Some(0.5),
+                        }),
+                        say,
+                        fast: false,
+                    };
+                }
+            }
+        }
         return Decision { action: Some(Action::StackPass), say, fast: true };
     }
 
@@ -419,8 +458,34 @@ pub(crate) fn own_turn(app: &App, room: &Room, me: &Player, mind: &mut BotMind, 
     }
     // Spells the bot pushed ride the stack one tick, then hit the graveyard.
     // (Enforced rooms handled this earlier in decide(), passes included.)
+    // A recognized removal/burn spell DECLARES ITS VICTIM first - the whole
+    // table sees "targets X with Y" and the owner settles it on resolution,
+    // exactly the freeform contract humans play by. Oracle facts are
+    // prefetched for every room, not just enforced ones.
     if !crate::rules::enforced(room) {
         if let Some(entry) = room.stack.iter().find(|e| e.owner == me.user_id) {
+            let is_threat = crate::rules::facts(app, &entry.card)
+                .map(|f| f.threat)
+                .unwrap_or(false);
+            if is_threat && entry.target_iid.is_none() {
+                let victim = room
+                    .players
+                    .iter()
+                    .filter(|p| p.seat != me.seat && !p.conceded)
+                    .flat_map(|p| p.battlefield.iter())
+                    .filter(|c| is_creature(c) || crate::rules::facts(app, c).map(|f| f.is_creature()).unwrap_or(false))
+                    .max_by_key(|c| eval_creature_at(app, room, c));
+                if let Some(victim) = victim {
+                    return Decision {
+                        action: Some(Action::StackTarget {
+                            iid: entry.card.iid.clone(),
+                            target_iid: Some(victim.iid.clone()),
+                        }),
+                        say: Vec::new(),
+                        fast: true,
+                    };
+                }
+            }
             return Decision::act(Action::StackResolve {
                 iid: entry.card.iid.clone(),
                 to: Zone::Graveyard,

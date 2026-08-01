@@ -42,10 +42,17 @@ pub(crate) fn cast_step(app: &App, room: &Room, me: &Player, mind: &mut BotMind,
                 fast: false,
             });
         }
-        // Biggest affordable spell, creatures breaking ties.
+        // Biggest affordable spell, creatures breaking ties. Reactive
+        // instants (counterspells, instant-speed removal) stay in hand for
+        // the response windows instead of being dumped at sorcery speed.
+        let opponents_alive = room.players.iter().any(|p| p.seat != me.seat && !p.conceded);
         let mut best: Option<(&Card, i64, bool)> = None;
         for c in &me.hand {
             let Some(f) = crate::rules::facts(app, c) else { continue };
+            let reactive = f.counters_spell || (f.threat && f.is_instant());
+            if opponents_alive && reactive {
+                continue;
+            }
             if f.is_land()
                 || !crate::rules::can_afford(
                     app,
@@ -65,7 +72,37 @@ pub(crate) fn cast_step(app: &App, room: &Room, me: &Player, mind: &mut BotMind,
                 best = Some((c, f.mv, f.is_creature()));
             }
         }
-        let (card, _, _) = best?;
+        let (card, best_mv, _) = best?;
+        // Instant-speed discipline (idea: hold up answers): keep the
+        // cheapest held trick's mana open. One trick, never more - a bot
+        // hoarding its whole hand reads as passive, not clever.
+        if tier >= 0 && opponents_alive {
+            let reserve = me
+                .hand
+                .iter()
+                .filter_map(|h| {
+                    let f = crate::rules::facts(app, h)?;
+                    let reactive = f.counters_spell || (f.threat && f.is_instant());
+                    reactive.then_some(f.mv)
+                })
+                .min()
+                .unwrap_or(0);
+            if reserve > 0 {
+                let sources = me
+                    .battlefield
+                    .iter()
+                    .filter(|s| {
+                        !s.tapped
+                            && crate::rules::facts(app, s)
+                                .map(|f| (f.is_land() || f.taps_for_mana) && !f.produced.is_empty())
+                                .unwrap_or(false)
+                    })
+                    .count() as i64;
+                if best_mv + reserve > sources {
+                    return None;
+                }
+            }
+        }
         mind.casts = (tn, mind.casts.1 + 1);
         mind.played_this_turn.push(card.iid.clone());
         return Some(Decision::act(Action::Cast {
@@ -99,10 +136,16 @@ pub(crate) fn cast_step(app: &App, room: &Room, me: &Player, mind: &mut BotMind,
         })
         .map(|p| (p, cost))
     });
+    let opponents_alive = room.players.iter().any(|p| p.seat != me.seat && !p.conceded);
     let target = commander.or_else(|| {
         me.hand
             .iter()
             .filter(|c| attr(c).is_some() && !is_land(c) && mana_value(c) <= lands)
+            .filter(|c| {
+                // Counterspells never main-phase in freeform either.
+                !(opponents_alive
+                    && crate::rules::facts(app, c).map(|f| f.counters_spell).unwrap_or(false))
+            })
             .max_by_key(|c| (mana_value(c), is_creature(c)))
             .map(|c| {
                 (

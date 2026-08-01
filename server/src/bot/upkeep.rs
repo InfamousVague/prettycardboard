@@ -23,14 +23,24 @@ pub(crate) fn free_mulls(room: &Room) -> u32 {
 /// XMage's one-line rule, scaled to the dealt hand: keep 2..=n-2 lands in a
 /// hand of n (minimum bound 1 for tiny hands); never mulligan below 5 cards.
 /// Returns the action plus an optional chat line.
-pub(crate) fn mulligan_action(room: &Room, me: &Player, taken: u32) -> (Action, Option<String>) {
+pub(crate) fn mulligan_action(room: &Room, me: &Player, taken: u32, tier: i32) -> (Action, Option<String>) {
     let hand = me.hand.len();
     let lands = me.hand.iter().filter(|c| is_land(c)).count();
-    let lo = if hand <= 5 { 1 } else { 2 };
-    let hi = hand.saturating_sub(2).max(lo);
+    // Easy bots keep almost anything (the widest land window and no curve
+    // check); normal wants an early play; hard wants a play by turn two or
+    // enough lands to make anything castable.
+    let lo = if tier < 0 || hand <= 5 { 1 } else { 2 };
+    let hi = if tier < 0 { hand.saturating_sub(1).max(1) } else { hand.saturating_sub(2).max(lo) };
+    let curve_ok = if tier < 0 || hand <= 5 {
+        true
+    } else if tier == 0 {
+        me.hand.iter().any(|c| !is_land(c) && mana_value(c) <= 3)
+    } else {
+        me.hand.iter().any(|c| !is_land(c) && mana_value(c) <= 2) || lands >= 4
+    };
     let full = crate::game::effective_hand_size(room);
     let can_dig = hand > 5 || room.settings.unlimited_mulligans;
-    if !(lo..=hi).contains(&lands) && can_dig && taken < 3 {
+    if (!(lo..=hi).contains(&lands) || !curve_ok) && can_dig && taken < 3 {
         // Vancouver draws one fewer next hand; London re-draws full then
         // bottoms, so "down to" reads off the owed count either way.
         let owed = (taken + 1).saturating_sub(free_mulls(room)) as usize;

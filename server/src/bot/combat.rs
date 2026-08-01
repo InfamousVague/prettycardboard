@@ -3,6 +3,16 @@
 
 use super::*;
 
+/// Oracle keyword read on an optional card - shared by block/attack planning
+/// so the bot PREDICTS with the same rules its settlement applies.
+pub(crate) fn has_keyword(app: &App, card: Option<&Card>, k: &str) -> bool {
+    card.and_then(|c| crate::rules::facts(app, c)).map(|f| f.has(k)).unwrap_or(false)
+}
+
+pub(crate) fn first_striker(app: &App, card: Option<&Card>) -> bool {
+    has_keyword(app, card, "first strike") || has_keyword(app, card, "double strike")
+}
+
 /// Enforced rooms: can this creature legally be declared an attacker?
 pub(crate) fn attack_legal(app: &App, room: &Room, card: &Card) -> bool {
     if !crate::rules::enforced(room) {
@@ -374,14 +384,28 @@ pub(crate) fn choose_block(
         })
     };
 
+    // The prediction helpers mirror settle_combat's model exactly: a block
+    // the bot declares must never be one its own settlement punishes.
+    let blocker_kills = |b: &Card, atk: &Atk| -> bool {
+        let b_dt = has_keyword(app, Some(b), "deathtouch");
+        atk.toughness > 0
+            && (power_of(app, room, b) >= atk.toughness || (b_dt && power_of(app, room, b) > 0))
+    };
+    let blocker_dies = |b: &Card, atk: &Atk| -> bool {
+        let a_fs = first_striker(app, atk.card);
+        let b_fs = first_striker(app, Some(b));
+        let a_dt = has_keyword(app, atk.card, "deathtouch");
+        // A lone first-strike blocker that fells the attacker is never hit.
+        if b_fs && !a_fs && blocker_kills(b, atk) {
+            return false;
+        }
+        atk.power > 0 && (a_dt || atk.power >= toughness(b))
+    };
+
     // Pass 1: free blocks. Kill it, keep the blocker.
     for atk in incoming.iter().filter(|x| !x.blocked) {
         for b in &free {
-            if atk.toughness > 0
-                && power_of(app, room, b) >= atk.toughness
-                && toughness(b) > atk.power
-                && pairable(b, atk, false)
-            {
+            if blocker_kills(b, atk) && !blocker_dies(b, atk) && pairable(b, atk, false) {
                 return declare(b, atk, mind, say);
             }
         }
@@ -393,11 +417,10 @@ pub(crate) fn choose_block(
     for atk in incoming.iter().filter(|x| !x.blocked) {
         let atk_eval = 100 + 15 * atk.power + 10 * atk.toughness;
         for b in free.iter().rev() {
-            // Smallest adequate blocker first.
-            let kills = atk.toughness > 0 && power_of(app, room, b) >= atk.toughness;
-            let dies = atk.power >= toughness(b);
-            if kills
-                && dies
+            // Smallest adequate blocker first (deathtouch trades UP; a
+            // first-strike survivor was already taken as a free block).
+            if blocker_kills(b, atk)
+                && blocker_dies(b, atk)
                 && atk_eval >= eval_creature_at(app, room, b) + margin
                 && pairable(b, atk, false)
             {
@@ -427,7 +450,14 @@ pub(crate) fn choose_block(
                 .blocks
                 .iter()
                 .filter(|b| b.attacker_iid == atk.a.iid)
-                .filter_map(|b| stat(b.power.as_deref()))
+                .map(|b| {
+                    stat(b.power.as_deref())
+                        .or_else(|| {
+                            find_on_battlefields(room, &b.blocker_iid)
+                                .map(|(_, c)| power_of(app, room, c))
+                        })
+                        .unwrap_or(0)
+                })
                 .sum();
             if atk.toughness > 0 && committed < atk.toughness {
                 if let Some(b) = free
@@ -606,15 +636,34 @@ pub(crate) fn plan_attack(app: &App, room: &Room, me: &Player, mind: &BotMind, s
     // attackers from level 1; even trades from level 3; sacrifices only at 5.
     let mut chosen: Vec<&Card> = Vec::new();
     for &c in &ready {
-        let class = if their_blockers.is_empty() {
+        // Only blockers that could LEGALLY block this attacker count (the
+        // evasion table: flying, fear, shadow, ...), and the danger math
+        // reads deathtouch and first strike the way settlement will.
+        let real_blockers: Vec<&&Card> = their_blockers
+            .iter()
+            .filter(|b| crate::rules::may_block(app, room, b, c).is_ok())
+            .collect();
+        let class = if real_blockers.is_empty() {
             0 // nothing can block: free damage
         } else {
+            let a_fs = first_striker(app, Some(c));
+            let a_dt = has_keyword(app, Some(c), "deathtouch");
             let mut killed_by_any = false;
             let mut all_trade_back = true;
-            for &b in &their_blockers {
-                if toughness(c) > 0 && power_of(app, room, b) >= toughness(c) {
+            for &&b in &real_blockers {
+                let b_dt = has_keyword(app, Some(b), "deathtouch");
+                let b_fs = first_striker(app, Some(b));
+                let b_kills = toughness(c) > 0
+                    && (power_of(app, room, b) >= toughness(c)
+                        || (b_dt && power_of(app, room, b) > 0));
+                // My first strike erases their blow when it fells them first.
+                let i_kill_b = toughness(b) > 0
+                    && (power_of(app, room, c) >= toughness(b)
+                        || (a_dt && power_of(app, room, c) > 0));
+                let b_actually_kills = b_kills && !(a_fs && !b_fs && i_kill_b);
+                if b_actually_kills {
                     killed_by_any = true;
-                    if !(toughness(b) > 0 && power_of(app, room, c) >= toughness(b)) {
+                    if !i_kill_b {
                         all_trade_back = false;
                     }
                 }
