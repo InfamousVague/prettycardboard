@@ -5011,9 +5011,12 @@
     text-overflow: ellipsis;
   }
 
-  /* The phase stops are the least load-bearing pixels left once the room name
-     is gone - a truly narrow bar sheds them whole rather than clipping icons
-     mid-glyph. */
+}
+
+/* At the floor itself (the Tauri minWidth is 64rem) the phase stops are the
+   least load-bearing pixels left once the room name is gone - shed them whole
+   rather than clipping icons mid-glyph. */
+@media (max-width: 68rem) {
   .tbDock .phaseRibbon {
     display: none;
   }
