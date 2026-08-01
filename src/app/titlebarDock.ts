@@ -28,9 +28,12 @@ export function useDockElement(id: string, want: boolean): HTMLElement | null {
 /* The bar is one fixed-height row with no wrap, so unlike the strip it
    replaces it cannot grow a second line when a match's chrome outgrows the
    window. Below this width the table keeps its own wrapping row instead -
-   docking must never make End turn unreachable. The dock-side shedding rules
-   in table.css hold until this floor is hit. */
-const WIDE_QUERY = '(min-width: 70rem)';
+   docking must never make End turn unreachable. 64rem is the Tauri window's
+   own minWidth, so in practice every desktop window docks; the floor only
+   bites if the shell ever allows narrower. The dock-side shedding rules in
+   table.css (labels, code text, chips, clock, phase stops) are what make the
+   bar actually fit down at that floor. */
+const WIDE_QUERY = '(min-width: 64rem)';
 
 /** True while the window is wide enough for the strip to ride the title bar. */
 export function useWideChrome(): boolean {

@@ -3877,24 +3877,6 @@
   }
 }
 
-.chatNavWrap {
-  position: relative;
-  display: inline-flex;
-}
-
-/* Unread chat while the aside is closed: a small accent dot on the toggle,
-   the same recipe as the pack dock's pill dot. */
-.chatNavDot {
-  position: absolute;
-  inset-block-start: -1px;
-  inset-inline-end: -1px;
-  inline-size: 0.5rem;
-  block-size: 0.5rem;
-  border-radius: var(--glacier-radius-full);
-  background: var(--glacier-accent-solid);
-  pointer-events: none;
-}
-
 /* ---- library as a scrollable side panel (search + drag to play) ---- */
 
 /* The FLOATING form, as above: docked, .pcPanel[data-dock='dock'] drops the
@@ -5022,15 +5004,18 @@
     display: none;
   }
 
-  .tbDock .tableMeta > span:first-child {
-    max-width: 9rem;
-  }
-
   .tbDock .turnPlateWho {
     max-inline-size: 7rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  /* The phase stops are the least load-bearing pixels left once the room name
+     is gone - a truly narrow bar sheds them whole rather than clipping icons
+     mid-glyph. */
+  .tbDock .phaseRibbon {
+    display: none;
   }
 }
 
@@ -5038,11 +5023,17 @@
   display: none;
 }
 
-.tbDock .tableMeta > span:first-child {
-  max-width: 14rem;
-  white-space: nowrap;
+/* If the bar still runs out of room, the phase stops give way FIRST and the
+   End turn cluster never shrinks - passing the turn must survive any width
+   the shedding ladder has not caught up with yet. */
+.tbDock .phaseRibbon {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.tbDock .turnCluster {
+  flex-shrink: 0;
 }
 
 /* Commander damage read-outs. Recording happens in the player's own vitals

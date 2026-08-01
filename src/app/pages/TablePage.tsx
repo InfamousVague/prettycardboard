@@ -26,7 +26,6 @@ import {
   Heart,
   LayoutGrid,
   LogOut,
-  MessageSquare,
   PanelRight,
   PanelRightClose,
   PanelRightOpen,
@@ -214,8 +213,11 @@ export function TablePage() {
   // of a row of their own. The slots exist whenever the title bar does; the
   // portals below only fill them while this page is mounted. Only while the
   // window is wide enough - the bar is one fixed row, and a narrow window
-  // needs the strip's own wrapping row back (see useWideChrome).
-  const chromeDocked = DESKTOP && !mobile && useWideChrome();
+  // needs the strip's own wrapping row back (see useWideChrome). The hook is
+  // called UNCONDITIONALLY: short-circuiting it behind `!mobile` would change
+  // the hook count the render the layout flips to phone.
+  const wideChrome = useWideChrome();
+  const chromeDocked = DESKTOP && !mobile && wideChrome;
   const dockStart = useDockElement(TITLEBAR_DOCK_START_ID, chromeDocked);
   const dockCenter = useDockElement(TITLEBAR_DOCK_CENTER_ID, chromeDocked);
   const dockEnd = useDockElement(TITLEBAR_DOCK_END_ID, chromeDocked);
@@ -760,11 +762,11 @@ export function TablePage() {
           keeps the height a second bar would have spent. */}
       {!(mobile && room.started) &&
         (() => {
+          // The room's NAME stays off the strip on purpose: the code chip is
+          // what a table-mate actually needs from up here, and the name was
+          // the widest thing in the bar.
           const metaEl = (
             <div className="tableMeta">
-              <Text as="span" weight="semibold">
-                {room.name}
-              </Text>
               <Tooltip content={`${t('tblCode')}: ${room.code}`}>
                 <button
                   type="button"
