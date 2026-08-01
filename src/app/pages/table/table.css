@@ -99,6 +99,16 @@
   position: absolute;
   inset: 0;
   z-index: 0;
+  /* Its own clip. `::before` is deliberately oversized (inset: -12%) so the
+     bloom never shows an edge, and with the felt left at `overflow: visible`
+     that 124%-wide box joined .table's scrollable overflow region: .table
+     measured scrollWidth 909 against clientWidth 812 at 812x375, and
+     scrollHeight 420 against 375 - a phantom escape from a box that paints
+     one gradient, takes no pointer and is aria-hidden. .table's own
+     `overflow: hidden` was already clipping it to exactly this rectangle, so
+     this changes no pixel; it just stops decoration from being measured as
+     layout. */
+  overflow: hidden;
   /* The table surface uses the app's theme background instead of the playmat
      art (which read as distracting under the cards); the gradients above keep
      the accent wash and enough depth for card readability on any theme. */
@@ -515,6 +525,60 @@
   }
 }
 
+/* ---- landscape phone: the lobby fits, it does not scroll ------------------
+   A phone on its side has ~330px of lobby to spend and the two columns are
+   ~456 and ~293 wide. Three things follow, and all three are height decisions
+   rather than width ones, so they hang off max-height and not off a phone
+   breakpoint:
+
+   1. THE ROSTER MOVES UP, beside the deck picker. Decision 12 says roster one
+      side, deck picker and launch the other - and on a screen this short only
+      the first row of each column is seen without scrolling, so the row that
+      answers "who is here / which deck / go" has to BE that first row. The
+      versus stage is the poster, not the answer; it takes the row below.
+   2. THE LOBBY STOPS SCROLLING and the stage scrolls instead. With the page as
+      the scroller the sticky launch bar had to ride up over the deck picker in
+      its own column (measured: bar top 239 against a picker ending at 277,
+      covering Ready up). Bounding the rows and giving the one elastic area its
+      own overflow puts every control in a fixed place and leaves the only
+      genuinely optional content - the portraits - as the thing that scrolls.
+   3. THE COVER CARDS SHRINK (below), because at ~146px per side the print-size
+      card was 201px of a 330px screen on its own. */
+@media (min-width: 44rem) and (max-height: 480px) {
+  .pregameLobby {
+    /* Bounded rows + no scroll of its own: row 3 is the elastic one and the
+       stage inside it carries the overflow. */
+    overflow: hidden;
+    grid-template-rows: min-content min-content minmax(0, 1fr);
+    grid-template-areas:
+      'hero   hero'
+      'roster setup'
+      'stage  launch';
+  }
+
+  .pregameLobby:has(.pregameSpectators) {
+    grid-template-rows: min-content min-content minmax(0, 1fr) min-content;
+    grid-template-areas:
+      'hero   hero'
+      'roster setup'
+      'stage  launch'
+      'watch  watch';
+  }
+
+  /* The one scroller, and the only content allowed to be off screen. */
+  .pregameStage {
+    min-block-size: 0;
+    overflow: hidden auto;
+    align-content: start;
+  }
+
+  /* Nothing scrolls past it any more, so it can stop floating - and a static
+     bar cannot ride up over the deck picker above it. */
+  .pregameLaunch {
+    position: static;
+  }
+}
+
 .pregameHero {
   display: flex;
   align-items: flex-end;
@@ -580,13 +644,20 @@
   inline-size: 100%;
 }
 
-/* Wide enough for the face-off: the two sides lean into the middle, so the VS
-   mark always sits between two portraits rather than floating in whatever gap
-   the columns left over. */
-@media (min-width: 64rem) {
+/* Wide enough for the face-off, OR too short to stack: the two sides lean into
+   the middle, so the VS mark always sits between two portraits rather than
+   floating in whatever gap the columns left over. The comma is an OR - a
+   landscape phone has width to spare and no height at all, so it takes the
+   side-by-side arrangement for the opposite reason a desktop does. */
+@media (min-width: 64rem), (max-height: 480px) {
   .pregameStage {
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     gap: var(--glacier-space-4);
+    /* Overrides the stacked layout's centring, and it has to: `justify-items:
+       center` sizes every grid item to fit-content, so a side whose max-content
+       was 269px sat in a 146px track and hung 37px off the leading edge of the
+       lobby (measured at 812x375). Stretched, a side is its track. */
+    justify-items: stretch;
   }
 
   .pregameStageSide {
@@ -644,11 +715,25 @@
    modest until the face-off layout gives it a column to grow into. */
 .pregameStageTile .pregameArt {
   min-height: clamp(7rem, 16vh, 11rem);
+  /* The cover renders `fluid`, so ITS width is this track and the card's height
+     follows the print ratio from there. A number in the JSX could not answer
+     the landscape phone, where a 130px card is 181px tall on a 330px lobby;
+     one line of CSS per breakpoint can. 8.125rem is the 130px it has always
+     been on a roomy screen. */
+  grid-template-columns: min(8.125rem, 100%);
+  justify-content: center;
 }
 
 @media (min-width: 64rem) {
   .pregameStageTile .pregameArt {
     min-height: clamp(8rem, 22vh, 14rem);
+  }
+}
+
+/* Landscape phone: the portrait is a thumbnail, not a print. */
+@media (max-height: 480px) {
+  .pregameStageTile .pregameArt {
+    grid-template-columns: min(5.5rem, 100%);
   }
 }
 
@@ -856,6 +941,51 @@
   background: color-mix(in oklch, var(--glacier-accent-solid) 8%, var(--glacier-surface-sunken));
 }
 
+/* Short screens: the face-off in miniature. Every number here is bought back as
+   stage height on a ~330px lobby, and the block sits at the FOOT of the stage's
+   rules on purpose - each of these overrides a base declaration written above
+   it, and at equal specificity the last one wins. */
+@media (max-height: 480px) {
+  .pregameStage {
+    gap: var(--glacier-space-2);
+    padding-block: 0;
+  }
+
+  /* The mark becomes the column between two portraits rather than a divider
+     laid across them, as it does in the 64rem face-off. */
+  .pregameVs {
+    flex-direction: column;
+    gap: var(--glacier-space-1);
+  }
+
+  /* Bounds the middle track, which is `auto`: without it the status sentence
+     sets the column width and the two portraits divide the remainder. */
+  .pregameVsStatus {
+    max-inline-size: 9rem;
+  }
+
+  .pregameStageTile {
+    padding-block-end: var(--glacier-space-2);
+  }
+
+  /* The band is the card now: a 7rem floor under a 5.5rem-wide cover is just
+     empty felt. */
+  .pregameStageTile .pregameArt {
+    min-height: 0;
+    padding-block: var(--glacier-space-1);
+  }
+
+  .pregameStageIdentity {
+    gap: var(--glacier-space-1);
+  }
+
+  .pregameStagePod,
+  .pregameStageEmpty,
+  .pregameStageWatch {
+    min-block-size: 6rem;
+  }
+}
+
 /* ---- the roster strip ---- */
 
 /* Every seat, one chip each, scrolling sideways rather than reflowing into
@@ -866,6 +996,11 @@
   padding: 0 0 2px;
   list-style: none;
   display: flex;
+  /* Chips keep their own height. The strip is a grid item beside the launch
+     bar, so it is as tall as whatever that bar wraps to (measured 137px), and
+     the default `stretch` handed every chip that height - a 52px chip drawn
+     135px tall. */
+  align-items: start;
   gap: var(--glacier-space-2);
   overflow-x: auto;
   overscroll-behavior-x: contain;
@@ -980,6 +1115,17 @@
   position: sticky;
   bottom: 0;
   z-index: 1;
+  /* THE BAR IS THE QUERY, NOT THE WINDOW. In the two-column layout this lives
+     in a ~293px column of an 812px-wide screen, so every viewport rule that
+     ever governed it fired the wrong way round: at 812px the "wide" branch
+     applied and `.pregameLaunchGo` sat there 457px wide with `flex: 0 0 auto`,
+     putting "Deal opening hands" at x 721.9-967.1 inside a lobby clipped at
+     812 - the primary CTA of the whole room, 37% visible and unscrollable to.
+     A container query asks the only question that was ever relevant: how wide
+     is THIS bar. The kit portals every overlay to document.body, so the
+     containment this turns on cannot strand a menu or a tooltip. */
+  container-type: inline-size;
+  container-name: pcLaunch;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1007,9 +1153,17 @@
   position: relative;
   isolation: isolate;
   min-width: 0;
+  /* Same reasoning as the launch bar: this row shares that ~293px column, and
+     on the viewport-width rules it laid out for 812px and overflowed by 272 -
+     Ready up drawn at x 906-1044 and clipped away by the `overflow: hidden`
+     this needs for its art wash. */
+  container-type: inline-size;
+  container-name: pcSetup;
   display: flex;
+  /* Wrapping is the default now, not a narrow-viewport special case. */
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--glacier-space-3);
+  gap: var(--glacier-space-2) var(--glacier-space-3);
   padding: var(--glacier-space-2) var(--glacier-space-3);
   overflow: hidden;
   border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 72%, transparent);
@@ -1048,9 +1202,36 @@
   font-weight: var(--glacier-font-weight-semibold);
 }
 
+/* Whatever the picker is in this room - the Select, the "build a deck" button,
+   or the locked draft deck's name. It is the row's elastic part at every size:
+   it takes the slack a wide bar has and gives it back on a narrow one, so
+   label + picker + Ready is ONE line from 1280px down to the 267px landscape
+   column. Left at its natural width the Select was 333px of a 291px column.
+   A small basis, not `auto`: flex line-breaking measures the hypothetical size,
+   so a picker asking for its content width would push Ready onto a second row
+   before it ever shrank. */
+.pregameDeckPicker {
+  flex: 1 1 6rem;
+  min-inline-size: 0;
+}
+
 .pregameReadyButton {
   flex: none;
   margin-inline-start: auto;
+}
+
+/* A column too narrow for label + picker + Ready on one line even with the
+   picker fully squeezed. Something has to go, and it is the label: the Select
+   carries the same words as its aria-label and (until a deck is chosen) as its
+   placeholder, so nothing is lost to a screen reader and the affordance
+   survives. The alternative - wrapping to three rows - measured 146px of a
+   330px lobby for one dropdown and pushed the launch bar into overlapping it.
+   24rem is where a picker still has a readable ~9rem left after the label and
+   Ready have taken theirs. */
+@container pcSetup (max-width: 24rem) {
+  .pregameDeckLabel {
+    display: none;
+  }
 }
 
 /* Leading edge, not trailing: with the deck picker moved to the top the bar
@@ -1058,10 +1239,55 @@
    the far end of an otherwise empty bar reads as unmoored. The bar's
    space-between still keeps the nav dock in its own corner. */
 .pregameLaunchGo {
-  flex: none;
+  /* Shrinkable and wrappable, where it used to be `flex: none`. That was the
+     declaration that put "Deal opening hands" 155px outside a lobby which
+     clips: a rigid 457px cluster in a 293px column had nowhere to go. Wrapping
+     is the floor - whatever the bar's width and whatever the translation, the
+     cluster folds instead of leaving. */
+  flex: 0 1 auto;
+  min-inline-size: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--glacier-space-2);
+}
+
+/* A bar too narrow for the cluster side by side. One control per line, Start
+   on top (column-REVERSE against a DOM order of watch-then-start), because a
+   ghost "watch instead" and a solid Start both want the full width; the wrap
+   above would fold them anyway, this makes the fold deliberate and full-bleed
+   rather than two ragged left-aligned buttons. */
+@container pcLaunch (max-width: 30rem) {
+  .pregameLaunchGo {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    inline-size: 100%;
+  }
+}
+
+/* Landscape phone: buy back the rows the stacked bar spends. On a phone the
+   nav docks into this bar too (SidePanel), so the launch column is picker +
+   Start + watch-instead + nav in one bounded column - 168px of the 178 its row
+   gets, measured. Every trim here is what keeps that from becoming an overlap:
+   at the untrimmed sizes the bar was 173 in a 160px row and rode up over the
+   deck picker, which is the exact failure the sticky bar used to have. */
+@media (max-height: 480px) {
+  .pregameLobby {
+    gap: var(--glacier-space-2);
+  }
+
+  .pregameHero {
+    padding-block-end: 0;
+  }
+
+  .pregameTitle {
+    font-size: 1.05rem;
+  }
+
+  .pregameLaunch {
+    padding: var(--glacier-space-2);
+    gap: var(--glacier-space-1) var(--glacier-space-2);
+  }
 }
 
 /* The table nav, docked into the launch bar's trailing corner. It is a real
@@ -1324,17 +1550,9 @@
     justify-content: space-between;
   }
 
-  .pregameLaunchSetup {
-    flex-wrap: wrap;
-  }
-
-  /* One control per line: side by side, Start and the ghost "watch instead"
-     both want the full width and end up overflowing the bar. */
-  .pregameLaunchGo {
-    flex-direction: column-reverse;
-    align-items: stretch;
-    inline-size: 100%;
-  }
+  /* The deck row's wrapping and the go cluster's one-control-per-line moved to
+     @container rules on their own boxes (above). They were the two rules that
+     a 293px column inside an 812px viewport got exactly backwards. */
 
   .pregameChip {
     inline-size: 12rem;
@@ -3093,6 +3311,101 @@
 
 .cardMenuCompact {
   width: min(13rem, calc(100vw - 1rem));
+}
+
+/* The actions, as their own column. On a desktop menu this is a transparent
+   wrapper that changes nothing (the grid it replaces had the same children in
+   the same order); on a phone it is the pane that scrolls beside the preview,
+   which is why the wrapper exists at all. */
+.menuActions {
+  display: grid;
+  min-inline-size: 0;
+}
+
+/* Not a pane by default: on a desktop the menu is a 15rem list and the header
+   thumbnail is the right amount of card. */
+.menuCardPreview {
+  display: none;
+}
+
+/* ---- decision 7: the finger-anchored preview -----------------------------
+   "press-and-hold gives a card preview plus an action column at the touch
+   point". The anchoring landed first (menuAnchor.tsx); this is the surface it
+   anchors. A 2rem thumbnail in a header is an icon, not a preview - you cannot
+   read a card off it, which is the entire point of holding a card down on a
+   phone where hovering does not exist.
+
+   1fr 2fr, deliberately the same split CardPopup uses for its landscape reader
+   (cardpopup.css, mirrored from isSplit(vw, vh) there): a card pane and a
+   content pane twice its width is already this app's answer to "card beside
+   text on a phone", and two different ratios for the same idea would just be
+   two things to keep in sync.
+
+   BOTH orientations, unlike CardPopup - it stacks in portrait because it owns
+   the whole screen and can afford to. This menu is anchored to a finger and
+   must stay small enough to sit near it, so it splits at every phone size and
+   spends its height on the action column instead.
+
+   Scoped to the phone composition rather than a raw media query: [data-mobile]
+   is the app's own answer (useMobileLayout - viewport OR the mobileLayout
+   preference), so forcing the phone layout on a desktop gets the phone menu,
+   which is what someone forcing it is asking for. */
+.table[data-mobile] .cardMenu[data-preview] {
+  /* FLEX, not the grid this menu uses everywhere else, and for one reason: the
+     action column has to scroll inside a box whose height is a CAP rather than
+     a measurement. A grid row is auto-sized to its content and simply overflows
+     the cap (measured: a 315px menu with 324px rows, the tail clipped and
+     unreachable); a flex row stretches its items to the container's used
+     height, which IS the capped one, so `min-block-size: 0` on the column then
+     means what it says. */
+  display: flex;
+  align-items: stretch;
+  inline-size: min(26rem, calc(100vw - 1rem));
+  gap: var(--glacier-space-1);
+  /* The menu itself stops scrolling: the column inside it does, so the preview
+     cannot scroll out from beside the actions it belongs to. */
+  overflow: hidden;
+  /* Short enough to still sit near the finger on a landscape phone: 84vh of a
+     375px screen is 315px, which the anchor can place above or below a touch
+     in the middle third instead of pinning to an edge. */
+  max-block-size: min(24rem, 84vh);
+}
+
+/* 1fr / 2fr, in flex terms. */
+.table[data-mobile] .cardMenu[data-preview] .menuCardPreview {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  padding: var(--glacier-space-1);
+}
+
+.table[data-mobile] .cardMenu[data-preview] .menuActions {
+  flex: 2 1 0;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* The long tail stays reachable rather than being cut to fit: everything the
+   desktop menu offers is in that scrolling column, and the two expanders that
+   open lists of their own (attach to, give to) keep their own inner scroll. */
+
+/* The header's thumbnail is redundant beside a full preview - the name and the
+   zone are not. Sticky, because the column it now heads scrolls: the close
+   button has to stay reachable from the bottom of a long action list. */
+.table[data-mobile] .cardMenu[data-preview] .menuCardHeader {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  background: var(--glacier-surface-raised);
+}
+
+.table[data-mobile] .cardMenu[data-preview] .menuCardThumb {
+  display: none;
 }
 
 .menuCardHeader {
@@ -7173,6 +7486,60 @@
   background: none;
   backdrop-filter: none;
   box-shadow: none;
+}
+
+/* The two mat cues that share the companion's own top band and say the same
+   thing it does: the turn pill (66) and the spectate cue (66) both outrank it,
+   so they would float over the head as duplicates - and the spectate cue's
+   card-size steppers are mat controls with no mat to act on. The companion
+   already carries the turn line and reports spectating in its foot.
+   Structural, not stateful: both are children of .table, as the companion is,
+   so its presence is the whole condition. */
+.table:has(> .portraitCompanion) .turnPill,
+.table:has(> .portraitCompanion) .spectateCue {
+  display: none;
+}
+
+/* ---- and every OTHER mat-anchored floating surface, same condition --------
+   The two above were the first cases found, not the whole class. Anything
+   anchored to the mat - to a card, to a finger on the mat, to a drag - outranks
+   the companion the moment the phone turns:
+
+     .cardMenu        90   the card context menu, and the board's create menu
+     .defenderPick    96   the blocker / marker pickers at the finger
+     .dragGhost       95   a card in flight out of the hand
+     .handScrubPeek   60   the hand-scrub preview above the fan
+     .aimLayer       101   pointing arrows drawn between board cards
+     .tablePresence  120   remote cursors and hovered-card rings
+
+   All of them beat the companion's 50, and `inert` on .tableMain does not save
+   the ones that live inside it: inert stops interaction, not painting, and on a
+   phone .tableMain drops to `z-index: auto` (see the note further up) so its
+   fixed children rank against .table directly. Measured before this rule:
+   rotating to portrait with a card menu open left it hit-testable over the
+   companion - elementFromPoint returned .cardMenu, not the life stepper under
+   it.
+
+   VISIBILITY, NOT DISPLAY, and that is decision 6 (nothing unmounts on a
+   rotation). A hidden-but-laid-out box keeps its measurements, so useMenuAnchor
+   is never asked to place a zero-sized menu and never has a frame at a stale
+   position when the phone turns back; the resize it hears on the way back
+   re-clamps it into the landscape viewport. visibility:hidden is also not
+   hit-testable and not in the a11y tree, so the dead menu stops answering for
+   the companion underneath it.
+
+   Deliberately NOT here: the prompts and panels the companion was designed to
+   sit under - trigger/discard prompts, mulligan, the chat aside, the library,
+   the timeline, the dock sheet. Those are surfaces a player opened or must
+   answer, and they work in portrait. */
+.table:has(> .portraitCompanion) .cardMenu,
+.table:has(> .portraitCompanion) .defenderPick,
+.table:has(> .portraitCompanion) .dragGhost,
+.table:has(> .portraitCompanion) .handScrubPeek,
+.table:has(> .portraitCompanion) .aimLayer,
+.table:has(> .portraitCompanion) .tablePresence {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .companionFoot {

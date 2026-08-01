@@ -225,6 +225,13 @@ function AppRail({
         orientation={horizontal ? 'horizontal' : 'vertical'}
         aria-label={t('navPrimary')}
         className={horizontal ? 'appTabBar' : 'appRail'}
+        /* Enrols this bar as screen-edge chrome: the shell measures whichever
+           of the two is displayed and publishes where it ends, so surfaces
+           that portal out of the shell (the kit's toasts land on body) can
+           stay off it. See useChromeInsets below. Phone-only - the desktop
+           rail is narrow enough that a 28rem toast never reaches it, and
+           desktop stays exactly as it was. */
+        data-pc-chrome={horizontal ? 'block-end' : 'inline-start'}
       >
         <NavBarItem
           icon={<House size={20} />}
@@ -259,9 +266,10 @@ function AppRail({
             badge, which would otherwise have nowhere to show on a phone. */}
         <NavBarItem
           icon={<User size={20} />}
-          // "You" - the existing sidebar key carries exactly that word in all
-          // four locales, so the slot needs no new string.
-          label={t('sbProfileYou')}
+          // The nav owns its own label rather than borrowing the sidebar's
+          // section heading: same word in all four locales today, but a slot in
+          // the primary bar and a heading inside a page are free to diverge.
+          label={t('navYou')}
           active={YOU_ROUTES.includes(route)}
           badge={incoming > 0 ? incoming : undefined}
           onClick={onOpenYou}
@@ -361,6 +369,75 @@ function AppRail({
   );
 }
 
+/**
+ * Publishes where the app's screen-edge chrome ends, in CSS pixels, on the
+ * root: `--pc-chrome-block-end` (how deep the bottom edge is spoken for) and
+ * `--pc-chrome-inline-start` (how far in the leading edge is). Both are 0
+ * whenever nothing is enrolled, so every desktop surface reads exactly what it
+ * read before.
+ *
+ * It exists because the surfaces that must respect the chrome are the ones
+ * that cannot see it: the kit's toast layer portals to `document.body`, a
+ * sibling of the shell, so nothing the shell sets on `.appWindow` reaches it -
+ * and it pins itself to the bottom edge, which in portrait is the tab bar. A
+ * live toast's pill (pointer-events: auto) hit-tested over ALL FIVE nav slots
+ * at 375x812. That is the same bug the floating pack pill had over End turn,
+ * and the answer is the same: one published measurement instead of a private
+ * offset per overlay.
+ *
+ * Measured, not tokenised. The bar's depth moves with density, the locale's
+ * label lengths, the layout preference (floating pill vs flush bar) and the
+ * device safe areas; any constant would be wrong on some phone. Enrolment is
+ * by `data-pc-chrome` (`block-end` / `inline-start`), so any surface that
+ * takes an edge - the shell's two nav bars today, the mat's own furniture if
+ * it ever needs it - opts in with one attribute and the deepest reading wins.
+ * Both nav bars stay mounted in either orientation (decision 6); the hidden
+ * one measures 0x0 and is skipped, so a rotation just republishes.
+ */
+function useChromeInsets(phone: boolean, inRoom: boolean, layout: Preferences['layout']): void {
+  useEffect(() => {
+    const root = document.documentElement;
+    const apply = () => {
+      // Physical rects, logical answer: under RTL the leading edge is the
+      // right one, so the rail's reading is measured from there.
+      const rtl = getComputedStyle(root).direction === 'rtl';
+      let blockEnd = 0;
+      let inlineStart = 0;
+      for (const el of document.querySelectorAll<HTMLElement>('[data-pc-chrome]')) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) continue; // not displayed in this orientation
+        const kinds = el.dataset.pcChrome ?? '';
+        // Against innerHeight/innerWidth rather than the visual viewport: the
+        // layers that read this are position:fixed, which resolves against the
+        // same initial containing block.
+        if (kinds.includes('block-end')) {
+          blockEnd = Math.max(blockEnd, window.innerHeight - rect.top);
+        }
+        if (kinds.includes('inline-start')) {
+          inlineStart = Math.max(inlineStart, rtl ? window.innerWidth - rect.left : rect.right);
+        }
+      }
+      root.style.setProperty('--pc-chrome-block-end', `${Math.max(0, Math.round(blockEnd))}px`);
+      root.style.setProperty('--pc-chrome-inline-start', `${Math.max(0, Math.round(inlineStart))}px`);
+    };
+    apply();
+    // The bar resizes without the window doing so (labels, badges, density),
+    // and the window resizes without the bar doing so (rotation, keyboard).
+    const observer = new ResizeObserver(apply);
+    for (const el of document.querySelectorAll('[data-pc-chrome]')) observer.observe(el);
+    window.addEventListener('resize', apply);
+    window.addEventListener('orientationchange', apply);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', apply);
+      window.removeEventListener('orientationchange', apply);
+    };
+    // Re-enrol whenever the set of bars on screen can have changed: the phone
+    // breakpoint mounts them, a seat at a table unmounts them, and the layout
+    // preference re-shapes the bar itself.
+  }, [phone, inRoom, layout]);
+}
+
 function Shell({
   preferences,
   onPreferencesChange,
@@ -417,6 +494,10 @@ function Shell({
   // one: rotating the phone swaps which bar is displayed, and an open sheet
   // must survive that untouched.
   const [youOpen, setYouOpen] = useState(false);
+
+  // Where the nav bars end, published for the layers that portal out of the
+  // shell and would otherwise land on top of them.
+  useChromeInsets(phoneLayout, inRoom, preferences.layout);
 
   // Deep surfaces (the in-game toolbar) open settings via window events,
   // avoiding prop-drilling through the whole table tree.
@@ -602,7 +683,7 @@ function Shell({
           side="bottom"
           size="md"
           className="youSheet"
-          title={t('sbProfileYou')}
+          title={t('navYou')}
         >
           <div className="youSheetNav">
             <SidebarItem

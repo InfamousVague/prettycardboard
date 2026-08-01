@@ -8,14 +8,6 @@
       "cwd": "/Users/matt/Development/Apps/PrettyCardboard",
       "port": 5240,
       "autoPort": true
-    },
-    {
-      "name": "worktree-web",
-      "runtimeExecutable": "env",
-      "runtimeArgs": ["VITE_PC_SERVER=http://127.0.0.1:8899", "npm", "run", "dev"],
-      "cwd": "/Users/matt/Development/Apps/PrettyCardboard/.claude/worktrees/nostalgic-ishizaka-7b047e",
-      "port": 5240,
-      "autoPort": true
     }
   ]
 }

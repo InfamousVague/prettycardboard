@@ -509,10 +509,15 @@ select,
 }
 
 /* Global actionable invite popup: floats bottom-inline-end over any route
-   (including mid-match) so a friend's invite can be accepted from anywhere. */
+   (including mid-match) so a friend's invite can be accepted from anywhere.
+   It is the shell's other bottom-anchored floating surface, so it clears the
+   chrome the same way the toast layer does: in portrait the bottom-inline-end
+   corner IS the tab bar's You slot, and a 22rem card with Accept / Decline on
+   it would sit right across the nav. --pc-chrome-block-end is 0 on desktop and
+   at the table (nothing is enrolled there), so both keep the plain 1rem. */
 .invitePopup {
   position: fixed;
-  inset-block-end: 1rem;
+  inset-block-end: calc(1rem + var(--pc-chrome-block-end, 0px));
   inset-inline-end: 1rem;
   z-index: 200;
   display: flex;
@@ -1537,6 +1542,36 @@ select,
   overflow-x: hidden;
 }
 
+/* ---- the toast layer keeps clear of the app's chrome --------------------
+   Toasts portal to document.body and pin themselves to the bottom edge - and
+   in portrait the bottom edge is the tab bar. A live toast's pill carries
+   pointer-events: auto, so elementFromPoint at the centre of all five nav
+   slots returned the toast, not the slot: Home, Play, Decks, Packs and You
+   were all unreachable for as long as it was up.
+
+   Not another one-off offset. The shell publishes where its chrome ends
+   (useChromeInsets in App.tsx) and the LAYER shrinks to the space that is
+   left, so the toast keeps the kit's own bottom offset and simply re-centres
+   in what remains - it moves clear, it never moves off screen. Everything
+   that portals beside the shell can read the same two properties.
+
+   Portrait: --pc-chrome-block-end is the tab bar's depth, so the layer stops
+   above it. Landscape: the bar is display:none and the leading-edge rail is
+   what is enrolled, so --pc-chrome-inline-start pulls the layer's start edge
+   past the rail instead (logical, so RTL mirrors with it). Desktop: nothing
+   is enrolled, both fall back to 0px, and the layer is exactly the kit's.
+
+   Reached through the kit's stable ARIA contract - a body-level layer whose
+   grandchild is the toast pill, a DIV with role="status" (or "alert" for
+   danger tones) - because the kit's class names are hashed. The div matters:
+   the kit's Spinner and CounterBadge are spans with role="status" too, and
+   one of those turning up under another body-level portal must not drag that
+   portal's edges around. */
+body > div:has(> div > div[role='status'], > div > div[role='alert']) {
+  inset-block-end: var(--pc-chrome-block-end, 0px);
+  inset-inline-start: var(--pc-chrome-inline-start, 0px);
+}
+
 /* ---- fullscreen modals ----
    Any modal whose content root carries .pcMobileFull takes the whole screen
    on phones. Targeted through the kit's stable ARIA contract (the panel is
@@ -1638,106 +1673,3 @@ select,
   -webkit-overflow-scrolling: touch;
 }
 
-
-/* ---- rotate-to-orientation cover (phones) --------------------------------
-   Mounted both by the table (asking for landscape) and by the shell (asking
-   for portrait), so it lives here rather than in table.css - the shell never
-   loads the table's stylesheet. */
-
-.rotateOverlay {
-  position: fixed;
-  inset: 0;
-  /* Above the board and chips, BELOW the dock (z-70): the sheet - and its
-     Leave button - must stay usable while the ask is up. */
-  z-index: 65;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: var(--glacier-space-3);
-  text-align: center;
-  padding: var(--glacier-space-6);
-  background: color-mix(in oklch, var(--glacier-bg) 94%, transparent);
-  backdrop-filter: blur(10px);
-}
-
-.rotatePhone {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 9.5rem;
-  height: 9.5rem;
-  margin-bottom: var(--glacier-space-2);
-}
-
-.rotatePhoneBody {
-  width: 3rem;
-  height: 5.25rem;
-  border: 3px solid var(--glacier-accent-solid);
-  border-radius: 0.7rem;
-  display: grid;
-  justify-items: center;
-  padding-top: 0.3rem;
-  animation: pcRotatePhone 2.6s ease-in-out infinite;
-}
-
-.rotatePhoneNotch {
-  width: 1rem;
-  height: 0.22rem;
-  border-radius: var(--glacier-radius-full);
-  background: var(--glacier-accent-solid);
-}
-
-/* Static, and sharing the phone body's centre of rotation, so it reads as a
-   glyph printed on the screen while the handset turns around it. */
-.rotateArrow {
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  color: var(--glacier-accent-solid);
-}
-
-@keyframes pcRotatePhone {
-  0%,
-  18% {
-    rotate: 0deg;
-  }
-  45%,
-  78% {
-    rotate: -90deg;
-  }
-  100% {
-    rotate: 0deg;
-  }
-}
-
-/* Asking for portrait: the glyph starts sideways and turns upright, mirroring
-   the motion the player should make. */
-.rotateOverlay[data-to='portrait'] .rotatePhoneBody {
-  animation-name: pcRotatePhoneBack;
-}
-
-@keyframes pcRotatePhoneBack {
-  0%,
-  18% {
-    rotate: -90deg;
-  }
-  45%,
-  78% {
-    rotate: 0deg;
-  }
-  100% {
-    rotate: -90deg;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rotatePhoneBody {
-    animation: none;
-    rotate: -90deg;
-  }
-
-  .rotateOverlay[data-to='portrait'] .rotatePhoneBody {
-    rotate: 0deg;
-  }
-
-}

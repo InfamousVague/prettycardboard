@@ -50,6 +50,8 @@ export function PortraitCompanion({
   spectating,
   onLeave,
   onConcede,
+  pane,
+  onPaneChange,
 }: {
   room: RoomState;
   me?: TablePlayer;
@@ -57,11 +59,16 @@ export function PortraitCompanion({
   onLeave: () => void;
   /** Absent when there is nothing to concede (spectator, already out, over). */
   onConcede?: () => void;
+  /** Lifted, because the companion is mounted only while portrait: turning the
+   *  phone to look at the board and back would otherwise drop you on the log
+   *  every time, mid-conversation. The owner outlives the rotation; this does
+   *  not. */
+  pane: 'log' | 'chat';
+  onPaneChange: (pane: 'log' | 'chat') => void;
 }) {
   const t = useT();
   const act = useGame((state) => state.act);
   const log = useGame((state) => state.log);
-  const [pane, setPane] = useState<'log' | 'chat'>('log');
   // Same contract as the rail's log: names are starred out until asked for, so
   // a companion left face-up on the table cannot spoil a tutor.
   const [spoilers, setSpoilers] = useState(false);
@@ -94,8 +101,7 @@ export function PortraitCompanion({
     new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
-    // i18n: tblCompanion - literal English until the string pass lands the key.
-    <section className="portraitCompanion" aria-label="Table companion">
+    <section className="portraitCompanion" aria-label={t('tblCompanion')}>
       <header className="companionHead">
         <span className="companionGlyph" aria-hidden>
           <span className="companionPhone" />
@@ -225,20 +231,24 @@ export function PortraitCompanion({
         <button
           type="button"
           role="tab"
+          id="pc-companion-tab-log"
+          aria-controls="pc-companion-pane"
           className="companionTab"
           aria-selected={pane === 'log'}
           data-active={pane === 'log' || undefined}
-          onClick={() => setPane('log')}
+          onClick={() => onPaneChange('log')}
         >
           <ScrollText size={14} /> {t('tblLog')}
         </button>
         <button
           type="button"
           role="tab"
+          id="pc-companion-tab-chat"
+          aria-controls="pc-companion-pane"
           className="companionTab"
           aria-selected={pane === 'chat'}
           data-active={pane === 'chat' || undefined}
-          onClick={() => setPane('chat')}
+          onClick={() => onPaneChange('chat')}
         >
           <MessageSquare size={14} /> {t('tblChat')}
         </button>
@@ -257,9 +267,16 @@ export function PortraitCompanion({
         )}
       </div>
 
-      <div className="companionPane" role="tabpanel">
+      <div
+        className="companionPane"
+        role="tabpanel"
+        id="pc-companion-pane"
+        aria-labelledby={pane === 'log' ? 'pc-companion-tab-log' : 'pc-companion-tab-chat'}
+      >
         {pane === 'log' ? (
-          <div ref={logRef} className="companionLog">
+          // tabIndex: a scroll container is not focusable on its own, so a
+          // keyboard-only reader could not scroll the log back.
+          <div ref={logRef} className="companionLog" tabIndex={0}>
             {log.length === 0 ? (
               <p className="sideEmpty">{t('tblLogEmpty')}</p>
             ) : (

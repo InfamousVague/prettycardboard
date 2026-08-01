@@ -16,6 +16,13 @@ import { classifyEventLine } from './eventLines.ts';
  * - The match result stays with the PostMatch overlay.
  * - A rate limiter keeps a fast bot chain from burying the screen; lines
  *   marked important (things done TO players) always get through.
+ *
+ * WHERE a toast lands is not decided here and must not be: every toast in the
+ * app shares one kit layer portalled onto document.body. It is kept off the
+ * app's chrome centrally - the shell publishes --pc-chrome-block-end /
+ * --pc-chrome-inline-start (useChromeInsets in App.tsx) and app.css shrinks
+ * that layer to fit - so a per-caller offset here would only desynchronise
+ * this table's toasts from every other one.
  */
 const WINDOW_MS = 3000;
 const SOFT_CAP = 4; // ordinary lines per window

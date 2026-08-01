@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { createPortal } from 'react-dom';
 import {
@@ -58,6 +67,11 @@ import { PLAYMATS } from '../../data/playmats.ts';
 import { CARD_BACKS } from '../../data/cardBacks.ts';
 import { useLongPress } from '../../hooks/useLongPress.ts';
 import { useMobileLayout } from '../../hooks/useIsPhone.ts';
+// Shared finger-anchoring for floating menus. It lives under pages/table
+// because that is where the four hand-rolled clamps it replaced lived; it
+// carries no table state, so the deck builder can use it as-is. See the note
+// in the report about giving it a home outside pages/table.
+import { useMenuAnchor } from '../table/menuAnchor.tsx';
 import { useCardWindow, useHeroCollapse } from './useDeckScroll.ts';
 import { CardSearch } from './CardSearch.tsx';
 import { CyberpunkCardSearch } from './CyberpunkCardSearch.tsx';
@@ -1540,6 +1554,46 @@ function CardGrid({
   );
 }
 
+/**
+ * The card cell's context menu, anchored by the shared helper so it opens at
+ * the finger and measures itself against the VISUAL viewport.
+ *
+ * It is a component rather than inline JSX for two reasons: mounting it only
+ * while the menu is open gives the hook fresh state per open (no stale
+ * placement from the previous card), and it is the one place that can hand the
+ * same node to both consumers. `useMenuAnchor` owns a ref because it measures
+ * the node; the outside-click listener in CardCell is registered on `window`
+ * with capture: true, so a React `stopPropagation` cannot hold it off and it
+ * genuinely needs the node to test `contains`. Both refs get the same element.
+ */
+function CardCellMenu({
+  x,
+  y,
+  menuRef,
+  children,
+}: {
+  x: number;
+  y: number;
+  menuRef: RefObject<HTMLDivElement | null>;
+  children: ReactNode;
+}) {
+  const anchor = useMenuAnchor<HTMLDivElement>(x, y);
+  return (
+    <div
+      className="deckCardMenu"
+      role="menu"
+      ref={(node) => {
+        anchor.ref.current = node;
+        menuRef.current = node;
+      }}
+      style={anchor.style}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      {children}
+    </div>
+  );
+}
+
 function CardCell({
   card,
   foil,
@@ -1675,16 +1729,7 @@ function CardCell({
     </motion.div>
     {menu &&
       createPortal(
-        <div
-          className="deckCardMenu"
-          role="menu"
-          ref={menuRef}
-          style={{
-            left: Math.min(menu.x, window.innerWidth - 200),
-            top: Math.min(menu.y, window.innerHeight - 100),
-          }}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
+        <CardCellMenu x={menu.x} y={menu.y} menuRef={menuRef}>
           {canPromote && (
             <button
               type="button"
@@ -1735,7 +1780,7 @@ function CardCell({
           >
             <Sparkles size={14} /> {(game ?? 'mtg') === 'mtg' ? t('dbChangeArt') : t('dbViewCard')}
           </button>
-        </div>,
+        </CardCellMenu>,
         document.body,
       )}
     </>

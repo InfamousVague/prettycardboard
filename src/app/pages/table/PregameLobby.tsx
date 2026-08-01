@@ -276,11 +276,17 @@ export function PregameLobby({
             // A locked draft table plays what it drafted. The server refuses
             // the swap either way; this just stops the picker from offering
             // a choice that is not one.
-            <Text size={Size.Small} tone={TextTone.Muted}>
+            <Text className="pregameDeckPicker" size={Size.Small} tone={TextTone.Muted}>
               {me.deckName ?? t('dfLockOn')}
             </Text>
           ) : gameDecks.length > 0 ? (
+            // fullWidth, and it matters: the trigger is an inline-flex box that
+            // sizes to its longest deck name (measured 333px), so in the
+            // landscape column it walked straight out of a bar that clips.
+            // Filling the picker instead hands the truncation to the kit.
             <Select
+              className="pregameDeckPicker"
+              fullWidth
               id="pregame-deck"
               value={me.deckId ?? ''}
               onValueChange={(deckId) => send({ type: 'room.deck.set', deckId })}
@@ -289,7 +295,7 @@ export function PregameLobby({
               aria-label={t('playPickDeck')}
             />
           ) : (
-            <Button variant="soft" onClick={() => { window.location.hash = '/decks'; }}>
+            <Button className="pregameDeckPicker" variant="soft" onClick={() => { window.location.hash = '/decks'; }}>
               <PlayingCardDeck size={15} /> {t('preBuildDeck')}
             </Button>
           )}
@@ -720,10 +726,13 @@ function StageTile({ room, player, you }: { room: RoomState; player: TablePlayer
         }
       >
         {player.deckMeta?.cover && (
+          // Sized by the art band's own grid track rather than a number here,
+          // so a landscape phone can print it at a thumbnail's width without a
+          // second component or a viewport hook (table.css, .pregameArt).
           <GameCard
             name={player.deckName || ''}
             imageUrl={resolveCardImage(room.game, player.deckMeta.cover)}
-            width={130}
+            fluid
             foil
             tilt={you ? -6 : 6}
           />

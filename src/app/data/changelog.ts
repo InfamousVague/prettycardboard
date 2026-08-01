@@ -72,6 +72,62 @@ export interface ChangelogRelease {
  *  load-bearing, but keep the literal in order for whoever reads it. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: '0.7.0',
+    date: '2026-08-01',
+    headline: 'clHeadline070',
+    entries: [
+      {
+        id: 'landscape-menus',
+        icon: Smartphone,
+        title: 'clLandscape',
+        desc: 'clLandscapeDesc',
+        kind: 'new',
+        category: 'clCatLayout',
+        featured: true,
+      },
+      {
+        id: 'portrait-companion',
+        icon: PanelRightOpen,
+        title: 'clCompanion',
+        desc: 'clCompanionDesc',
+        kind: 'new',
+        category: 'clCatTable',
+      },
+      {
+        id: 'phone-nav',
+        icon: LayoutGrid,
+        title: 'clPhoneNav',
+        desc: 'clPhoneNavDesc',
+        kind: 'improved',
+        category: 'clCatLayout',
+      },
+      {
+        id: 'card-menu',
+        icon: Hand,
+        title: 'clCardMenu',
+        desc: 'clCardMenuDesc',
+        kind: 'improved',
+        category: 'clCatTable',
+      },
+      {
+        id: 'install',
+        icon: Download,
+        title: 'clInstall',
+        desc: 'clInstallDesc',
+        kind: 'new',
+        category: 'clCatApp',
+      },
+      {
+        id: 'fixes-070',
+        icon: Wrench,
+        title: 'clFixes070',
+        desc: 'clFixes070Desc',
+        kind: 'fixed',
+        category: 'clCatTable',
+      },
+    ],
+  },
+  {
     version: '0.6.0',
     date: '2026-07-31',
     headline: 'clHeadline060',

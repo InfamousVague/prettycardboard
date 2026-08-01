@@ -33,6 +33,11 @@ export const messages = {
   navBoosters: { en: 'Boosters', es: 'Sobres', fr: 'Boosters', ar: 'العبوات' },
   navFriends: { en: 'Friends', es: 'Amigos', fr: 'Amis', ar: 'الأصدقاء' },
   navProfile: { en: 'Profile', es: 'Perfil', fr: 'Profil', ar: 'الملف الشخصي' },
+  // The phone nav's fifth slot and the sheet it opens (Home / Play / Decks /
+  // Packs / You). `sbProfileYou` says the same word as the sidebar section
+  // heading and is what those two call sites use today; this key is here so the
+  // nav can own its own label without borrowing a sidebar string.
+  navYou: { en: 'You', es: 'Tú', fr: 'Vous', ar: 'أنت' },
   navSettings: { en: 'Settings', es: 'Ajustes', fr: 'Réglages', ar: 'الإعدادات' },
   navCustomize: { en: 'Customize', es: 'Personalizar', fr: 'Personnaliser', ar: 'تخصيص' },
 
@@ -156,6 +161,15 @@ export const messages = {
     fr: 'La table se joue en paysage.',
     ar: 'تُلعب الطاولة بالوضع الأفقي.',
   },
+  /** Accessible name for the portrait companion - the panel a phone shows
+   *  beside the rotate ask, so a held-upright phone is still a useful seat
+   *  (life, turn, chat) instead of a dead-end "rotate me" screen. */
+  tblCompanion: {
+    en: 'Table companion',
+    es: 'Compañero de mesa',
+    fr: 'Compagnon de table',
+    ar: 'رفيق الطاولة',
+  },
   setMobileLayout: {
     en: 'Mobile layout',
     es: 'Diseño móvil',
@@ -167,18 +181,6 @@ export const messages = {
     es: 'Auto sigue el tamaño de pantalla; Sí y No lo fuerzan.',
     fr: "Auto suit la taille de l'écran ; Oui et Non l'imposent.",
     ar: 'تلقائي يتبع حجم الشاشة؛ تشغيل وإيقاف يفرضانه.',
-  },
-  tblRotateBackTitle: {
-    en: 'Turn your phone back',
-    es: 'Gira el teléfono de vuelta',
-    fr: 'Remettez votre téléphone droit',
-    ar: 'أعد إدارة هاتفك',
-  },
-  tblRotateBackHint: {
-    en: 'Everything outside the table reads best upright.',
-    es: 'Todo lo que no es la mesa se lee mejor en vertical.',
-    fr: "Hors de la table, tout se lit mieux à la verticale.",
-    ar: 'كل ما هو خارج الطاولة يُقرأ بشكل أفضل عموديًا.',
   },
   tblZonesOpen: {
     en: 'Open zones',
@@ -543,6 +545,87 @@ export const messages = {
   clCatLayout: { en: 'Layout', es: 'Disposición', fr: 'Disposition', ar: 'التخطيط' },
   clCatApp: { en: 'App', es: 'Aplicación', fr: 'Application', ar: 'التطبيق' },
   clCatSocial: { en: 'Social', es: 'Social', fr: 'Social', ar: 'اجتماعي' },
+  clCatTable: { en: 'Table', es: 'Mesa', fr: 'Table', ar: 'الطاولة' },
+
+  // --- 0.7.0: the phone stops asking you to turn it back ---
+  clHeadline070: {
+    en: 'Your phone works whichever way you hold it.',
+    es: 'Tu teléfono funciona lo sostengas como lo sostengas.',
+    fr: 'Votre téléphone fonctionne quel que soit le sens.',
+    ar: 'هاتفك يعمل بأي اتجاه تمسكه.',
+  },
+  clLandscape: {
+    en: 'Every menu works sideways',
+    es: 'Todos los menús funcionan de lado',
+    fr: 'Tous les menus fonctionnent à l’horizontale',
+    ar: 'كل القوائم تعمل بالعرض',
+  },
+  clLandscapeDesc: {
+    en: 'Turning your phone sideways used to cover the whole app with a "rotate back" screen. It is gone. Every page, menu and sheet now works in both orientations - only the playmat still asks for landscape, because a board needs the width.',
+    es: 'Girar el teléfono cubría toda la app con una pantalla de "vuelve a girar". Ya no. Cada página, menú y panel funciona en ambas orientaciones; solo el tapete pide horizontal, porque un tablero necesita el ancho.',
+    fr: 'Tourner votre téléphone recouvrait toute l’application d’un écran « remettez-le droit ». Terminé. Chaque page, menu et panneau fonctionne dans les deux sens ; seul le tapis demande l’horizontale, car un plateau a besoin de la largeur.',
+    ar: 'كان تدوير الهاتف يغطي التطبيق بالكامل بشاشة «أعد التدوير». لم يعد كذلك. كل صفحة وقائمة ولوحة تعمل في الاتجاهين، وحده البساط يطلب الوضع الأفقي لأن الطاولة تحتاج العرض.',
+  },
+  clCompanion: {
+    en: 'A second screen in portrait',
+    es: 'Una segunda pantalla en vertical',
+    fr: 'Un second écran en portrait',
+    ar: 'شاشة ثانية في الوضع الرأسي',
+  },
+  clCompanionDesc: {
+    en: 'Hold your phone upright at a running table and you get a companion view instead of a locked screen: life for every seat, whose turn it is, the roster, the log, chat, and the way out.',
+    es: 'Sostén el teléfono en vertical en una mesa en curso y obtienes una vista de acompañante en lugar de una pantalla bloqueada: vida de cada asiento, de quién es el turno, la lista, el registro, el chat y la salida.',
+    fr: 'Tenez votre téléphone à la verticale pendant une partie et vous obtenez une vue compagnon plutôt qu’un écran bloqué : les points de vie de chaque siège, le tour en cours, la liste, le journal, le chat et la sortie.',
+    ar: 'أمسك هاتفك رأسيًا أثناء المباراة فتحصل على شاشة مرافقة بدل شاشة مقفلة: نقاط حياة كل مقعد، ودور من الآن، والقائمة، والسجل، والدردشة، والخروج.',
+  },
+  clPhoneNav: {
+    en: 'Navigation that fits',
+    es: 'Navegación que cabe',
+    fr: 'Une navigation qui tient',
+    ar: 'تنقّل يتّسع للشاشة',
+  },
+  clPhoneNavDesc: {
+    en: 'The phone bar carried more destinations than it had room for, so the last two ran off the screen. It is five now - Home, Play, Decks, Packs and You - and it becomes a slim side rail when you turn sideways, where height is the scarce thing.',
+    es: 'La barra del teléfono llevaba más destinos de los que cabían y los dos últimos se salían de la pantalla. Ahora son cinco - Inicio, Jugar, Mazos, Sobres y Tú - y se convierte en un riel lateral al girar, donde la altura escasea.',
+    fr: 'La barre du téléphone portait plus de destinations qu’elle n’avait de place, et les deux dernières sortaient de l’écran. Elles sont cinq désormais - Accueil, Jouer, Decks, Boosters et Vous - et elle devient un rail latéral à l’horizontale, où la hauteur est rare.',
+    ar: 'كان شريط الهاتف يحمل وجهات أكثر مما يتّسع له فخرج آخر اثنتين عن الشاشة. صارت خمسًا - الرئيسية واللعب والمجموعات والعبوات وأنت - ويتحوّل إلى شريط جانبي عند الإمالة حيث الارتفاع هو النادر.',
+  },
+  clCardMenu: {
+    en: 'Card actions at your finger',
+    es: 'Acciones de carta bajo tu dedo',
+    fr: 'Les actions de carte sous votre doigt',
+    ar: 'إجراءات البطاقة عند إصبعك',
+  },
+  clCardMenuDesc: {
+    en: 'Press and hold a card and the menu opens where you touched, with the card itself previewed beside the actions. Sideways it used to detach and pin itself to the top edge of the screen.',
+    es: 'Mantén pulsada una carta y el menú se abre donde tocaste, con la carta en vista previa junto a las acciones. De lado, antes se despegaba y se fijaba al borde superior.',
+    fr: 'Appuyez longuement sur une carte et le menu s’ouvre là où vous avez touché, avec un aperçu de la carte à côté des actions. À l’horizontale, il se détachait et se collait au bord supérieur.',
+    ar: 'اضغط مطوّلًا على بطاقة فتُفتح القائمة عند موضع لمستك، مع معاينة للبطاقة بجانب الإجراءات. في الوضع الأفقي كانت تنفصل وتلتصق بالحافة العليا.',
+  },
+  clInstall: {
+    en: 'Install it from the browser',
+    es: 'Instálala desde el navegador',
+    fr: 'Installez-la depuis le navigateur',
+    ar: 'ثبّته من المتصفح',
+  },
+  clInstallDesc: {
+    en: 'PrettyCardboard can now be added to your home screen or dock as a proper app, with its own icon and no browser chrome.',
+    es: 'Ahora puedes añadir PrettyCardboard a tu pantalla de inicio o dock como una app de verdad, con su propio icono y sin la interfaz del navegador.',
+    fr: 'PrettyCardboard peut désormais être ajoutée à votre écran d’accueil ou à votre dock comme une vraie application, avec sa propre icône et sans l’interface du navigateur.',
+    ar: 'يمكن الآن إضافة PrettyCardboard إلى شاشتك الرئيسية أو شريط التطبيقات كتطبيق حقيقي، بأيقونته الخاصة ودون واجهة المتصفح.',
+  },
+  clFixes070: {
+    en: 'Nothing sits on top of the game',
+    es: 'Nada se pone encima del juego',
+    fr: 'Plus rien ne se pose sur la partie',
+    ar: 'لا شيء يعلو فوق اللعبة',
+  },
+  clFixes070Desc: {
+    en: 'The pack opener no longer covers End turn, notifications no longer cover the nav bar or the mulligan buttons, the lobby no longer pushes "Deal opening hands" off the edge of a sideways phone, and Settings no longer hides its own last sections.',
+    es: 'El abridor de sobres ya no cubre Terminar turno, las notificaciones ya no tapan la barra de navegación ni los botones de mulligan, la sala ya no empuja "Repartir manos iniciales" fuera del borde y Ajustes ya no oculta sus últimas secciones.',
+    fr: 'L’ouvreur de boosters ne recouvre plus Fin du tour, les notifications ne masquent plus la barre de navigation ni les boutons de mulligan, le salon ne pousse plus « Distribuer les mains » hors de l’écran, et les Réglages ne cachent plus leurs dernières sections.',
+    ar: 'لم يعد فاتح العبوات يغطي زر إنهاء الدور، ولا الإشعارات تغطي شريط التنقل أو أزرار المولغان، ولم تعد الردهة تدفع «وزّع الأيدي الافتتاحية» خارج الحافة، ولم تعد الإعدادات تخفي أقسامها الأخيرة.',
+  },
   clMatEditor: {
     en: 'Design your mat',
     es: 'Diseña tu tapete',

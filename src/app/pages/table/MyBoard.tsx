@@ -32,6 +32,7 @@ import { useCardPopup } from '../../components/CardPopup.tsx';
 import { handSlinky, paintSlinky, restFocus, slinkyOffsets } from '../../components/slinky.ts';
 import type { CardInst, MatPos, MatZone, RoomState, TablePlayer, Zone } from '../../net/types.ts';
 import { selectCardScale, useTableUi } from './tableUi.ts';
+import { AnchoredMenu } from './menuAnchor.tsx';
 import { AttackBadge, BlockCluster, CounterBadges, DEFAULT_MAT_LAYOUT, MAT_ZONES, ZonePiles, groupAttachments, splitPile, CardMark } from './bits.tsx';
 import {
   CARD_SCALE_MAX,
@@ -1917,12 +1918,10 @@ export function MyBoard({
 
       {/* right-click board menu: create a searched token, or a bare counter marker */}
       {boardMenu && (
-        <div
+        <AnchoredMenu
+          x={boardMenu.x}
+          y={boardMenu.y}
           className="cardMenu cardMenuCompact"
-          style={{
-            left: Math.min(boardMenu.x, window.innerWidth - 220),
-            top: Math.min(boardMenu.y, window.innerHeight - 140),
-          }}
           role="menu"
           aria-label={t('tkCreateToken')}
           onPointerDown={(event) => event.stopPropagation()}
@@ -1953,7 +1952,7 @@ export function MyBoard({
             <span className="menuItemIcon" aria-hidden><CircleDot size={15} /></span>
             <span>{t('tkNewCounter')}</span>
           </button>
-        </div>
+        </AnchoredMenu>
       )}
 
       {pickerAt && (

@@ -61,6 +61,7 @@ import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
 import { oracleFacts } from '../data/printedPt.ts';
 import { cardImage } from '../data/cards.ts';
+import { isFoilInst } from '../data/foil.ts';
 import { useFaces } from '../data/faces.ts';
 import { cardBackUrl, effectiveCardBack } from '../data/cardBacks.ts';
 import { useEdgeColor } from '../data/edgeColor.ts';
@@ -70,6 +71,7 @@ import { usePreference } from '../hooks/usePreference.ts';
 import { usePanelDock } from '../hooks/usePanelDock.ts';
 import { useMobileLayout, usePortrait } from '../hooks/useIsPhone.ts';
 import { PortraitCompanion } from './table/PortraitCompanion.tsx';
+import { useMenuAnchor } from './table/menuAnchor.tsx';
 import { maskLogNames } from './table/logMask.ts';
 import { resolveKeybinds, KEYBIND_DEF, type ActionId } from '../data/keybinds.ts';
 import { zoneLabel } from '../data/games.ts';
@@ -662,6 +664,17 @@ export function TablePage() {
   // Once the game starts, ONE board owns the stage: the active player's, or
   // whichever seat was pinned from a side-rail mini. Everyone else shrinks to
   // a mini board on the right rail.
+  // A portrait phone at a running table gets the companion instead of the mat
+  // (decision 2). The board below it is INERT while it is up rather than
+  // display:none: `inert` takes it out of the tab order and stops it eating
+  // pointer events without disturbing a single measurement (MyBoard sizes the
+  // hand from live geometry, and a hidden board would report zeroes and have to
+  // re-measure on every rotation).
+  const companion = mobile && portrait && room.started && !room.matchResult;
+  // The companion mounts only while portrait, so its tab has to be owned by
+  // something that outlives a rotation - otherwise glancing at the board and
+  // turning back drops you on the log in the middle of a conversation.
+  const [companionPane, setCompanionPane] = useState<'log' | 'chat'>('log');
   const stagedSeat = room.started ? (pinnedSeat ?? room.activeSeat) : null;
   const stagedPlayer = stagedSeat != null ? room.players.find((player) => player.seat === stagedSeat) : undefined;
   const stagedIsMe = me != null && stagedPlayer?.userId === me.userId;
@@ -698,7 +711,7 @@ export function TablePage() {
           SCREEN, not a portrait board - the old bare cover left every control
           on the mat sitting underneath it. The lobby and the post-match screen
           were always portrait-friendly and are untouched. */}
-      {mobile && portrait && room.started && !room.matchResult && (
+      {companion && (
         <PortraitCompanion
           room={room}
           me={me}
@@ -707,6 +720,8 @@ export function TablePage() {
           onConcede={
             me && !spectating && !me.conceded && !room.matchResult ? () => setConfirmConcede(true) : undefined
           }
+          pane={companionPane}
+          onPaneChange={setCompanionPane}
         />
       )}
 
@@ -832,7 +847,7 @@ export function TablePage() {
         />
       )}
 
-      <div className="tableMain" data-lobby={!room.started || undefined}>
+      <div className="tableMain" data-lobby={!room.started || undefined} inert={companion || undefined}>
         {/* A draft table spends its whole pre-game in the draft: set-up, packs,
             deckbuilding. Only once every seat has SAVED its deck does the
             ordinary lobby take over - and by then everyone is already seated
@@ -1002,6 +1017,7 @@ export function TablePage() {
       {mobile && room.started && (
         <button
           type="button"
+          inert={companion || undefined}
           className="seatChipsTrigger"
           aria-label={t('tblPlayers')}
           aria-expanded={playersOpen}
@@ -1055,12 +1071,12 @@ export function TablePage() {
       )}
       {/* History controls ride the top centre of the mat: undo, timeline, redo. */}
       {mobile && room.started && !spectating && (
-        <div className="mobileHistory">
+        <div className="mobileHistory" inert={companion || undefined}>
           <TimelineCard floating />
         </div>
       )}
       {mobile && room.started && (
-        <div className="mobileTurnDock">
+        <div className="mobileTurnDock" inert={companion || undefined}>
           <PhaseRibbon
             room={room}
             me={me}
@@ -1148,6 +1164,9 @@ function CardMenu({
 }) {
   const t = useT();
   const { toast } = useToast();
+  // Opens at the finger and measures itself to stay on screen - see
+  // menuAnchor.ts for what the hand-rolled clamp got wrong.
+  const anchor = useMenuAnchor<HTMLDivElement>(menu.x, menu.y);
   const [sub, setSub] = useState<'counter' | 'attach' | 'move' | 'give' | 'pile' | 'pileOnto' | null>(null);
   const [customCounter, setCustomCounter] = useState('');
   // Yu-Gi-Oh renames the shared gestures in its own vocabulary: tapping is
@@ -1266,15 +1285,40 @@ function CardMenu({
 
   return (
     <div
+      ref={anchor.ref}
       className="cardMenu"
-      style={{
-        left: Math.max(8, Math.min(menu.x, window.innerWidth - 256)),
-        top: Math.max(8, Math.min(menu.y, window.innerHeight - 440)),
-      }}
+      /* Decision 7: press-and-hold gives a card PREVIEW plus an action column,
+         both at the touch point. The attribute is the whole switch - one DOM,
+         one component, and table.css decides whether the preview is a pane
+         beside the actions (the phone composition, either orientation) or the
+         thumbnail in the header it has always been. A rotation therefore
+         changes a layout, never a tree (decision 6). */
+      data-preview={card ? '' : undefined}
+      style={anchor.style}
       role="menu"
       aria-label={card?.name || 'Card'}
       onPointerDown={(event) => event.stopPropagation()}
     >
+      {card && (
+        /* aria-hidden: the menu is already labelled with the card's name and
+           the header repeats it in text, so this is decoration to a reader.
+           `fluid` hands the size to CSS, which is what lets one pane be a
+           readable card on a phone and nothing at all on a desktop. */
+        <div className="menuCardPreview" aria-hidden>
+          <GameCard
+            name={card.name}
+            imageUrl={cardArt}
+            faceDown={card.faceDown}
+            foil={isFoilInst(card)}
+            tilt={0}
+            fluid
+          />
+        </div>
+      )}
+      {/* role="none": the actions keep their `menuitem` relationship to the
+          menu across this wrapper, which exists so the column can scroll on its
+          own while the preview stays put beside it. */}
+      <div className="menuActions" role="none">
       <div className="menuCardHeader">
         {cardArt ? (
           <img className="menuCardThumb" src={cardArt} alt="" draggable={false} />
@@ -1641,6 +1685,7 @@ function CardMenu({
           )}
         </>
       )}
+      </div>
     </div>
   );
 }
@@ -1958,9 +2003,20 @@ function SidePanel({
     if (!room.started) {
       return (
         <>
-          <div className="mobileDock" data-nav-only>
-            {navEl}
-          </div>
+          {/* Docked into the launch bar's corner, exactly as the desktop lobby
+              does below - the slot exists so table chrome never lands on a
+              lobby control, and a phone needs that more than a desktop does.
+              Floating it here put the pill over the bar's trailing end: at
+              812x375 it covered "Watch as spectator" from x 668 to the edge.
+              The floating pill remains the fallback for the one frame before
+              the slot resolves (and for a lobby that renders without one). */}
+          {lobbyDock ? (
+            createPortal(navEl, lobbyDock)
+          ) : (
+            <div className="mobileDock" data-nav-only>
+              {navEl}
+            </div>
+          )}
           {chatEl}
         </>
       );

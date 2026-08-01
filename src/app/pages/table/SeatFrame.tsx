@@ -11,6 +11,7 @@ import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import type { CardInst, RoomState, TablePlayer } from '../../net/types.ts';
 import { selectCardScale, useTableUi } from './tableUi.ts';
+import { AnchoredMenu } from './menuAnchor.tsx';
 import { AttackBadge, BlockCluster, CardMark, CounterBadges, DEFAULT_MAT_LAYOUT, MARK_KINDS, ZonePiles, groupAttachments, markIcon, splitPile } from './bits.tsx';
 import { MARK_LABEL } from './marks.ts';
 import { YUGIOH_PILE_LAYOUT, YugiohZoneGrid } from './yugiohZones.tsx';
@@ -394,9 +395,10 @@ export function SeatFrame({
         })()}
 
       {markPick && (
-        <div
+        <AnchoredMenu
+          x={markPick.x}
+          y={markPick.y}
           className="defenderPick"
-          style={{ left: Math.min(markPick.x, window.innerWidth - 180), top: Math.max(60, markPick.y - 10) }}
           onPointerDown={(event) => event.stopPropagation()}
         >
           <Text as="span" size={Size.XSmall} weight="semibold">
@@ -450,12 +452,13 @@ export function SeatFrame({
               {t('mkClear')}
             </button>
           )}
-        </div>
+        </AnchoredMenu>
       )}
       {blockPick && me && (
-        <div
+        <AnchoredMenu
+          x={blockPick.x}
+          y={blockPick.y}
           className="defenderPick"
-          style={{ left: Math.min(blockPick.x, window.innerWidth - 200), top: Math.max(60, blockPick.y - 10) }}
           onPointerDown={(event) => event.stopPropagation()}
         >
           <Text as="span" size={Size.XSmall} weight="semibold">
@@ -485,7 +488,7 @@ export function SeatFrame({
                 </button>
               ))
           )}
-        </div>
+        </AnchoredMenu>
       )}
     </section>
   );
