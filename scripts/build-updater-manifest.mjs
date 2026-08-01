@@ -73,12 +73,15 @@ function classify(name) {
   if (name.endsWith(".app.tar.gz")) {
     if (/x86_64|x64/.test(name)) return "darwin-x86_64";
     if (/aarch64|arm64/.test(name)) return "darwin-aarch64";
-    // Universal binary — Tauri's updater uses `darwin-aarch64`
-    // for both Apple Silicon and Intel users running an ARM build
-    // because the universal binary handles the architecture
-    // selection internally. Default to aarch64 unless the filename
-    // is explicit.
-    return "darwin-aarch64";
+    // Universal binary — publish it under BOTH darwin keys.
+    //
+    // The universal binary does pick its own slice at runtime, but that
+    // happens AFTER the download; the manifest lookup happens before, and the
+    // updater keys it on the arch of the machine asking. An Intel Mac asks for
+    // `darwin-x86_64`, finds nothing, and is quietly never offered the update
+    // - which is exactly what shipped in v0.6.0 until this was caught. Same
+    // artifact, same signature, two keys.
+    return ["darwin-aarch64", "darwin-x86_64"];
   }
   // Linux — full preference list. `.AppImage.tar.gz` (Tauri's
   // updater delta wrapper) is the canonical OTA format; raw
@@ -162,11 +165,13 @@ for (const a of orderedAssets) {
       { stdio: ["ignore", "ignore", "inherit"] },
     );
     const signature = readFileSync(sigPath, "utf8").trim();
-    platforms[key] = {
-      signature,
-      url: a.url || `https://github.com/${REPO}/releases/download/${tag}/${a.name}`,
-    };
-    console.log(`[updater] ${key} ← ${a.name}`);
+    const url = a.url || `https://github.com/${REPO}/releases/download/${tag}/${a.name}`;
+    // `classify` returns an array when one artifact serves several platform
+    // keys (a universal macOS build serves both darwin arches).
+    for (const k of Array.isArray(key) ? key : [key]) {
+      platforms[k] = { signature, url };
+      console.log(`[updater] ${k} ← ${a.name}`);
+    }
   } catch (e) {
     console.warn(`[updater] couldn't read sig for ${a.name}: ${e.message}`);
   } finally {
