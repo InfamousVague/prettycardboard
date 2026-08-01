@@ -18,6 +18,9 @@ import { PASSWORD } from '../seed.js';
 const CARDS = {
   preordain: { id: 'dd29a0e5-c1de-4e8a-8866-715e9f9cde1f', name: 'Preordain' },
   opt: { id: 'bbc99a51-1501-4525-a3cc-f48249b64bed', name: 'Opt' },
+  alarm: { id: '6c7c8527-55f6-494d-b4f7-c427a5735053', name: 'Raise the Alarm' },
+  revitalize: { id: '3a9fb75e-c8e5-417b-83d4-5105af9c66c1', name: 'Revitalize' },
+  plains: { id: '7b7c408b-8660-4db5-9a16-5003c11b4ac1', name: 'Plains' },
   butler: { id: '2c9b8582-8887-4652-82e2-f9b11ee21545', name: 'Undead Butler' },
   chandra: { id: '40cb22c8-cb03-45c9-bb0e-b8cabdcc43cd', name: 'Chandra, Torch of Defiance' },
   island: { id: 'c6aa89a8-3584-4906-b9a9-41ef2f021f8e', name: 'Island' },
@@ -34,11 +37,12 @@ async function main() {
     name: 'PT Scry Mill Lab',
     format: 'standard',
     cards: [
-      ...[CARDS.preordain, CARDS.opt, CARDS.butler, CARDS.chandra]
+      ...[CARDS.preordain, CARDS.opt, CARDS.butler, CARDS.chandra, CARDS.alarm, CARDS.revitalize]
         .map((c) => ({ scryfallId: c.id, name: c.name, quantity: 1, board: 'main' })),
-      { scryfallId: CARDS.island.id, name: 'Island', quantity: 19, board: 'main' },
-      { scryfallId: CARDS.swamp.id, name: 'Swamp', quantity: 19, board: 'main' },
-      { scryfallId: CARDS.mountain.id, name: 'Mountain', quantity: 18, board: 'main' },
+      { scryfallId: CARDS.island.id, name: 'Island', quantity: 15, board: 'main' },
+      { scryfallId: CARDS.swamp.id, name: 'Swamp', quantity: 15, board: 'main' },
+      { scryfallId: CARDS.mountain.id, name: 'Mountain', quantity: 14, board: 'main' },
+      { scryfallId: CARDS.plains.id, name: 'Plains', quantity: 10, board: 'main' },
     ],
   };
   const list = await me.api('GET', '/api/decks');
@@ -91,10 +95,13 @@ async function main() {
     return card.iid;
   };
   await fetchTo('Preordain', 'hand');
+  await fetchTo('Raise the Alarm', 'hand');
+  await fetchTo('Revitalize', 'hand');
   await fetchTo('Opt', 'hand');
   await fetchTo('Undead Butler', 'hand');
   await fetchTo('Chandra, Torch of Defiance', 'hand');
   for (let i = 0; i < 2; i++) await fetchTo('Island', 'battlefield', 0.06 + i * 0.06, 0.8);
+  for (let i = 0; i < 4; i++) await fetchTo('Plains', 'battlefield', 0.48 + i * 0.05, 0.8);
   for (let i = 0; i < 2; i++) await fetchTo('Swamp', 'battlefield', 0.2 + i * 0.06, 0.8);
   for (let i = 0; i < 4; i++) await fetchTo('Mountain', 'battlefield', 0.34 + i * 0.06, 0.8);
 
@@ -159,6 +166,33 @@ async function main() {
   await me.expectState(
     (s) => s.players[0].handCount === hand,
     'Opt drew its card',
+    6000,
+    { since: mark },
+  );
+
+  // ---- 3b) Raise the Alarm: a token SPELL builds its tokens on resolution.
+  mark = me.mark();
+  await castAndResolve('Raise the Alarm', 'graveyard');
+  await me.expectState(
+    (s) => s.players[0].battlefield.filter(
+      (c) => c.isToken && c.name === 'Soldier' && c.power === '1',
+    ).length === 2,
+    'two 1/1 Soldier tokens created by the spell',
+    6000,
+    { since: mark },
+  );
+  await me.expectLog(/pt_alice creates 2 1\/1 Soldier tokens \(Raise the Alarm\)/, 'token spell narrated', {
+    since: mark, timeoutMs: 5000,
+  });
+
+  // ---- 3c) Revitalize: lifegain + draw, both from parsed clauses.
+  const lifeBefore = myself().life;
+  hand = myself().handCount;
+  mark = me.mark();
+  await castAndResolve('Revitalize', 'graveyard');
+  await me.expectState(
+    (s) => s.players[0].life === lifeBefore + 3 && s.players[0].handCount === hand,
+    'Revitalize gained 3 and drew (net hand unchanged)',
     6000,
     { since: mark },
   );

@@ -20,7 +20,7 @@ use std::sync::Arc;
 /// Bumped whenever the parse below learns something new: cached rows stamped
 /// with an older version are treated as missing and refetched, so a deploy
 /// never leaves half the oracle table without the new fields.
-pub const ORACLE_VERSION: u32 = 8;
+pub const ORACLE_VERSION: u32 = 9;
 
 /// A characteristic-defining ability that sets power (and sometimes toughness)
 /// to a count of permanents - "...is equal to the number of artifacts you
@@ -50,6 +50,14 @@ pub enum StaticEffect {
     CostCut { filter: Option<String>, n: i64 },
 }
 
+/// One loyalty ability on a planeswalker: the +N/-N/0 cost and its text.
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct LoyaltyAbility {
+    pub delta: i64,
+    pub text: String,
+}
+
 /// When a parsed triggered ability fires (pass A of the rules roadmap).
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -64,6 +72,11 @@ pub enum TriggerWhen {
     Upkeep,
     /// "At the beginning of your end step, ..."
     EndStep,
+    /// "Whenever ~ deals combat damage to a player, ..." (saboteurs).
+    DealsPlayerDamage,
+    /// A loyalty ability the player just activated (not a trigger shape the
+    /// parser finds - the activation queues its text through the same prompt).
+    Activated,
 }
 
 /// One effect the engine can apply on the controller's behalf. `Manual` marks
@@ -205,6 +218,20 @@ pub struct OracleCard {
     /// "Scry N" in the spell's own text.
     #[serde(default)]
     pub scry_spell: Option<i64>,
+    /// A clean "{T}: Add ..." mana-ability line on a NONLAND permanent (rocks
+    /// and dorks; lands pay through `produced` alone). Lines with extra costs
+    /// ("{1}, {T}:", "Sacrifice ...:") or triggered adds do not count.
+    #[serde(default)]
+    pub taps_for_mana: bool,
+    /// A planeswalker's loyalty abilities: cost delta + the ability text.
+    /// X-cost abilities are skipped - the engine cannot price them.
+    #[serde(default)]
+    pub loyalty_abilities: Vec<LoyaltyAbility>,
+    /// Clause-initial engine-appliable spell effects beyond the dedicated
+    /// intent fields: token-making, lifegain, and self-mill. Per-clause on
+    /// purpose - unrecognized clauses stay the caster's to perform.
+    #[serde(default)]
+    pub spell_effects: Vec<TriggerEffect>,
     /// Parse-schema version this row was written with (see ORACLE_VERSION).
     #[serde(default)]
     pub v: u32,
@@ -546,7 +573,8 @@ fn parse_triggers(name: &str, text: &str) -> Vec<Trigger> {
             .or_else(|| cond.strip_prefix("when "));
         let Some(sv) = subject_verb else { continue };
         // Longest verb first so "enters the battlefield" wins over "enters".
-        let verbs: [(&str, &[TriggerWhen]); 6] = [
+        let verbs: [(&str, &[TriggerWhen]); 7] = [
+            ("deals combat damage to a player", &[TriggerWhen::DealsPlayerDamage]),
             ("enters the battlefield or attacks", &[TriggerWhen::Etb, TriggerWhen::Attacks]),
             ("enters or attacks", &[TriggerWhen::Etb, TriggerWhen::Attacks]),
             ("enters the battlefield", &[TriggerWhen::Etb]),
@@ -923,6 +951,72 @@ fn parse_spell_intent(
     (counters_spell, draws, discards, discards_random, discards_targeted, scry)
 }
 
+/// Parse a bare ability/effect clause ("You gain 2 life. Draw a card") with
+/// the trigger parser's closed effect set - used for loyalty activations,
+/// where the +N/-N is the cost and this text is the effect. Unknown parts
+/// collapse to [Manual], exactly like triggers.
+pub fn parse_ability_effects(text: &str, card_name: &str) -> Vec<TriggerEffect> {
+    let name_lower = card_name.to_lowercase();
+    let short_lower = name_lower.split(',').next().unwrap_or(&name_lower).to_string();
+    parse_effects(text, &name_lower, &short_lower)
+}
+
+/// A clean mana-ability line: "{T}: Add ..." with nothing before the tap
+/// symbol. "{1}, {T}: Add", "Sacrifice ...: Add", and triggered adds all fail
+/// the prefix test on purpose - a cost the engine cannot pay must not create
+/// mana it cannot charge for.
+fn parse_taps_for_mana(text: &str) -> bool {
+    text.lines().any(|l| strip_asides(l).trim().to_lowercase().starts_with("{t}: add "))
+}
+
+/// "+2: ...", "\u{2212}3: ...", "0: ..." loyalty lines (Scryfall templating
+/// is rigid here). Lines whose cost is not a plain signed number (X-costs,
+/// ability words) are skipped.
+fn parse_loyalty_abilities(text: &str) -> Vec<LoyaltyAbility> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let line = line.trim();
+        let Some((cost, body)) = line.split_once(':') else { continue };
+        let cost = cost.trim();
+        let delta = if cost == "0" {
+            Some(0)
+        } else if let Some(n) = cost.strip_prefix('+') {
+            n.parse::<i64>().ok()
+        } else if let Some(n) = cost.strip_prefix('\u{2212}').or_else(|| cost.strip_prefix('-')) {
+            n.parse::<i64>().ok().map(|v| -v)
+        } else {
+            None
+        };
+        if let Some(delta) = delta {
+            let body = body.trim();
+            if !body.is_empty() {
+                out.push(LoyaltyAbility { delta, text: body.to_string() });
+            }
+        }
+    }
+    out
+}
+
+/// Clause-initial spell effects the engine can apply on resolution, beyond
+/// the dedicated intent fields: token-making, lifegain, and self-mill.
+/// Deliberately per-clause (NOT all-or-nothing): "Destroy target creature.
+/// Draw a card." keeps its recognizable parts and leaves the rest manual.
+fn parse_spell_effects(text: &str, name: &str) -> Vec<TriggerEffect> {
+    let name_lower = name.to_lowercase();
+    let short_lower = name_lower.split(',').next().unwrap_or(&name_lower).to_string();
+    let t = strip_asides(&text.replace('\n', " ")).to_lowercase();
+    t.split(['.', ';'])
+        .flat_map(|sentence| sentence.split(", then "))
+        .filter_map(|part| parse_effect_part(part.trim(), &name_lower, &short_lower))
+        .filter(|e| {
+            matches!(
+                e,
+                TriggerEffect::Token { .. } | TriggerEffect::GainLife { .. } | TriggerEffect::Mill { .. }
+            )
+        })
+        .collect()
+}
+
 /// Does this text read as removal or burn aimed at creatures? Feeds the
 /// bot's threat table; deliberately coarse.
 fn parse_threat(text: &str) -> bool {
@@ -1056,6 +1150,13 @@ fn parse_card(raw: &ScryCard) -> Option<OracleCard> {
         .as_deref()
         .or_else(|| face.and_then(|f| f.loyalty.as_deref()))
         .and_then(|l| l.parse::<i64>().ok());
+    let taps_for_mana = parse_taps_for_mana(&oracle_text);
+    let loyalty_abilities = if type_line.contains("Planeswalker") {
+        parse_loyalty_abilities(&oracle_text)
+    } else {
+        Vec::new()
+    };
+    let spell_effects = parse_spell_effects(&oracle_text, &name);
     Some(OracleCard {
         name,
         type_line,
@@ -1089,6 +1190,9 @@ fn parse_card(raw: &ScryCard) -> Option<OracleCard> {
         opp_discards_random,
         opp_discards_targeted,
         scry_spell,
+        taps_for_mana,
+        loyalty_abilities,
+        spell_effects,
         colors,
         oracle_text,
         triggers,
@@ -1157,6 +1261,13 @@ pub async fn ensure(app: &Arc<App>, ids: Vec<String>) {
                         card.opp_discards_random = opp_discards_random;
                         card.opp_discards_targeted = opp_discards_targeted;
                         card.scry_spell = scry_spell;
+                        card.taps_for_mana = parse_taps_for_mana(&card.oracle_text);
+                        card.loyalty_abilities = if card.type_line.contains("Planeswalker") {
+                            parse_loyalty_abilities(&card.oracle_text)
+                        } else {
+                            Vec::new()
+                        };
+                        card.spell_effects = parse_spell_effects(&card.oracle_text, &card.name);
                         card.v = ORACLE_VERSION;
                         if let Ok(fresh) = serde_json::to_string(&card) {
                             crate::db::oracle_store(&conn, &id, &fresh);
@@ -1612,6 +1723,67 @@ mod tests {
         assert_eq!(discards, Some(1));
         assert!(!random);
         assert!(!targeted);
+    }
+
+    #[test]
+    fn mana_ability_lines_classify() {
+        assert!(parse_taps_for_mana("{T}: Add {C}{C}."));
+        assert!(parse_taps_for_mana("{T}: Add {G}."));
+        // A second, costed line does not spoil the clean first one.
+        assert!(parse_taps_for_mana(
+            "{T}: Add {C}.\n{1}, {T}, Sacrifice this artifact: Draw a card."
+        ));
+        // Extra costs before the tap, or triggered adds, are not mana the
+        // engine can charge for.
+        assert!(!parse_taps_for_mana("{2}, {T}: Add one mana of any color."));
+        assert!(!parse_taps_for_mana("Sacrifice a creature: Add {B}{B}."));
+        assert!(!parse_taps_for_mana("Whenever this creature becomes tapped, add {C}."));
+    }
+
+    #[test]
+    fn loyalty_abilities_parse() {
+        let text = "+1: Exile the top card of your library.\n0: Draw a card.\n\u{2212}3: Chandra deals 4 damage to target creature.\n\u{2212}X: Destroy X permanents.";
+        let abilities = parse_loyalty_abilities(text);
+        assert_eq!(abilities.len(), 3); // the X-cost line is skipped
+        assert_eq!(abilities[0].delta, 1);
+        assert_eq!(abilities[1].delta, 0);
+        assert_eq!(abilities[2].delta, -3);
+        assert!(abilities[2].text.starts_with("Chandra deals"));
+    }
+
+    #[test]
+    fn spell_effects_parse_per_clause() {
+        let effects = parse_spell_effects("Create two 1/1 white Soldier creature tokens.", "Raise the Alarm");
+        assert_eq!(
+            effects,
+            vec![TriggerEffect::Token { name: "Soldier".into(), power: 1, toughness: 1, count: 2, tapped: false }]
+        );
+        assert_eq!(
+            parse_spell_effects("You gain 4 life.", "Revitalize"),
+            vec![TriggerEffect::GainLife { n: 4 }]
+        );
+        assert_eq!(
+            parse_spell_effects("Mill three cards.", "Sift"),
+            vec![TriggerEffect::Mill { n: 3 }]
+        );
+        // Per-clause: the unrecognized clause stays manual, the known one lands.
+        assert_eq!(
+            parse_spell_effects("Destroy target creature. You gain 2 life.", "Murderous Cut"),
+            vec![TriggerEffect::GainLife { n: 2 }]
+        );
+        // An activated-ability line is not a spell effect.
+        assert!(parse_spell_effects("Sacrifice a creature: You gain 2 life.", "Altar").is_empty());
+    }
+
+    #[test]
+    fn saboteur_triggers_parse() {
+        let t = triggers(
+            "Thieving Magpie",
+            "Flying\nWhenever this creature deals combat damage to a player, draw a card.",
+        );
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].when, TriggerWhen::DealsPlayerDamage);
+        assert_eq!(t[0].effects, vec![TriggerEffect::Draw { n: 1 }]);
     }
 
     #[test]

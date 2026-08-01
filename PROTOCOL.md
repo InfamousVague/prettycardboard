@@ -861,6 +861,54 @@ spells.
 - `stack.counter` now logs "counters X with Y" when the countering player's
   own spell sits above the countered one on the stack.
 
+### Engine depth: mana sources, SBAs, targeting, loyalty, saboteurs, the
+### end step (rules pass E, 2026-07-31)
+
+Oracle v9 parses four new fact families (cached rows upgrade locally):
+a clean `{T}: Add ...` line on a nonland permanent (`taps_for_mana` - lines
+with extra costs or triggered adds do not count), a planeswalker's loyalty
+abilities (`+N/-N/0:` lines; X-costs skipped), the saboteur trigger shape
+(`Whenever ~ deals combat damage to a player`), and clause-initial spell
+effects (token-making, lifegain, self-mill) that ride the same per-clause
+stance as the other intents.
+
+- MANA SOURCES: `solve_payment` accepts untapped nonland permanents with
+  `taps_for_mana` (rocks and dorks; a summoning-sick creature cannot tap),
+  both in automatic payment and the manual `payment` override, and the
+  tap-to-float path does the same. One source still supplies ONE mana - a
+  Sol Ring pays a single pip of a cost, not two (a deliberate simplification
+  of the payment model).
+- STATE-BASED ACTIONS: after every enforced action the board is swept -
+  creatures whose effective toughness is 0 or less die (through the same
+  replacement/trigger machinery as combat deaths), planeswalkers with no
+  loyalty left die, and a player at <=0 life / >=10 poison / lethal
+  commander damage is FLAGGED loudly once ("... - the match awaits their
+  concession"), never auto-ejected. Face-down and double-faced cards are
+  skipped. A sweep that did anything forces a resync.
+- TARGETING LEGALITY: `stack.target` is validated - shroud refuses everyone,
+  hexproof refuses opponents, protection refuses spells sharing a color.
+  Unknown cards stay permissive. A pure-generic ward (`{2}`) is a REAL cost:
+  targeting an opponent's warded permanent auto-pays it through the payment
+  solver ("... paying ward {2}") or the aim is refused; colored and
+  life-pay wards stay reminder-only.
+- LOYALTY: `{kind: "loyalty.activate", iid, index}` activates a walker's
+  parsed ability - gated on your turn, main phase, empty stack, once per
+  walker per turn, and never below 0 loyalty. The counter moves and the
+  ability text queues as a prompt through the trigger machinery (auto when
+  the effect parser understands it, manual otherwise, `when:"activated"`).
+- SABOTEURS: enforced combat resolution fires `dealsPlayerDamage` triggers
+  for every attacker whose row dealt player damage.
+- END-STEP WINDOW: in an enforced room with other live seats, the first
+  `turn.pass` no longer completes the turn - it fires end-step triggers,
+  sets phase "end", and opens a response window (`room.state.endWindow` =
+  deadline, 30s). Instants may be cast into it; the turn completes when
+  every other live seat passes (`stack.pass` now works against an open
+  window with an empty stack - the LAST such pass advances the turn), or
+  when the window lapses (the sweeper advances it). `turn.pass` is also
+  refused while a fresh stack is live or the passer owns unanswered
+  prompts. Freeform rooms and solo tables advance exactly as before. Bots
+  pass open windows within a tick and never draw rejections.
+
 ### Bot brain (refactor, 2026-07-31)
 
 `server/src/bot.rs` became `server/src/bot/`: `knowledge.rs` (embedded

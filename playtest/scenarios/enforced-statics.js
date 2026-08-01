@@ -189,9 +189,17 @@ async function main() {
   t.ok(wardLog, 'ward tax reminder logged', '');
 
   // To combat: pass through bob's turn so alice's creatures shed sickness.
+  // Enforced turns now end through a response window: the passer announces
+  // the end step, the other seat passes, and THAT closes the turn.
+  let ewMark = bob.mark();
   alice.act({ kind: 'turn.pass' });
+  await bob.expectState((s) => s.endWindow != null, "alice's end window", 5000, { since: ewMark });
+  bob.act({ kind: 'stack.pass' });
   await alice.expectState((s) => s.activeSeat === seatOf(bob), "bob's turn", 6000);
+  ewMark = alice.mark();
   bob.act({ kind: 'turn.pass' });
+  await alice.expectState((s) => s.endWindow != null, "bob's end window", 5000, { since: ewMark });
+  alice.act({ kind: 'stack.pass' });
   await alice.expectState(
     (s) => s.activeSeat === seatOf(alice) && s.turnNumber === 2,
     "alice's second turn",

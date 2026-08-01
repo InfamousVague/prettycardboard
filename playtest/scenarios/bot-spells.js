@@ -176,7 +176,8 @@ async function main() {
       const s = me.lastState();
       if (s.activeSeat !== botSeat) return;
       const mySeat = me.me(s).seat;
-      if ((s.stack ?? []).length > 0 && !(s.stackPassed ?? []).includes(mySeat)) {
+      const windowOpen = (s.stack ?? []).length > 0 || s.endWindow != null;
+      if (windowOpen && !(s.stackPassed ?? []).includes(mySeat)) {
         me.act({ kind: 'stack.pass' });
       }
       await sleep(500);

@@ -1124,6 +1124,23 @@ pub struct Room {
     /// Forced discards awaiting their owners' picks (see PendingDiscard).
     #[serde(default)]
     pub pending_discards: Vec<PendingDiscard>,
+    /// Enforced rooms: players currently flagged in a loss state (life,
+    /// poison, commander damage) - announced once, cleared on recovery.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub loss_flagged: Vec<String>,
+    /// Enforced rooms: (turn, walker iid) loyalty activations, one per walker
+    /// per turn. Pruned to the current turn on each insert.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub loyalty_used: Vec<(u64, String)>,
+    /// Enforced rooms: the end-step response window's deadline. Some = the
+    /// active player has moved to end the turn and the table may respond;
+    /// the turn completes when everyone passes (or the window lapses) with
+    /// an empty stack.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_window: Option<i64>,
     /// Live cross-board permissions (see `BoardGrant`).
     #[serde(default)]
     pub board_grants: Vec<BoardGrant>,
@@ -1595,6 +1612,7 @@ impl Room {
             "stackPassed": self.stack_passed,
             "pendingTriggers": self.pending_triggers,
             "pendingDiscards": self.pending_discards,
+            "endWindow": self.end_window,
             // Grants are public - who is handling whose cards is exactly the
             // kind of thing a table needs to see. Unanswered REQUESTS are not:
             // they go to the two people the question is between.
@@ -1816,6 +1834,56 @@ const PERSISTENT_TTL_MS: i64 = 30 * 24 * 60 * 60 * 1000; // no action this long
 /// performable by hand, so a lapse never eats an effect silently.
 pub fn expire_pending(app: &App) {
     let now = crate::now_ms();
+    // Lapsed end-step windows: nobody responded in time, so the turn the
+    // active player asked to end finally ends (with the stack empty).
+    let lapsed_windows: Vec<String> = app
+        .rooms
+        .iter()
+        .filter(|r| {
+            r.end_window.map(|d| d <= now).unwrap_or(false)
+                && r.stack.is_empty()
+                // A room with nobody seated (or nobody alive) has no turn to
+                // advance - just drop the stale window.
+                && r.players.iter().any(|p| !p.conceded)
+        })
+        .map(|r| r.id.clone())
+        .collect();
+    // Stale windows in dead rooms are cleared without ceremony.
+    for mut r in app.rooms.iter_mut() {
+        if r.end_window.map(|d| d <= now).unwrap_or(false)
+            && !r.players.iter().any(|p| !p.conceded)
+        {
+            r.end_window = None;
+        }
+    }
+    for id in lapsed_windows {
+        let Some(mut room) = app.rooms.get_mut(&id) else { continue };
+        if !(room.end_window.map(|d| d <= now).unwrap_or(false) && room.stack.is_empty()) {
+            continue;
+        }
+        let passer = room
+            .players
+            .iter()
+            .find(|p| p.seat == room.active_seat)
+            .map(|p| p.username.clone())
+            .unwrap_or_else(|| "the active player".to_string());
+        let mut logs: Vec<String> = Vec::new();
+        let next = crate::game::advance_turn_core(app, &mut room, now, &mut logs);
+        let target = room
+            .players
+            .iter()
+            .find(|p| p.seat == next)
+            .map(|p| p.username.clone())
+            .unwrap_or_else(|| format!("seat {}", next + 1));
+        logs.push(format!("{passer} passes the turn to {target} (turn {})", room.turn_number));
+        for line in logs {
+            room.seq += 1;
+            let seq = room.seq;
+            ws::room_log(app, &room, seq, &line);
+        }
+        touch(app, &mut room);
+        ws::room_send_states(app, &room);
+    }
     let due_rooms: Vec<String> = app
         .rooms
         .iter()

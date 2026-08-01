@@ -26,6 +26,12 @@ pub type RuleError = (&'static str, String);
 /// without every pass. Bots pass within a tick; this guards silent humans.
 pub const RESPONSE_TIMEOUT_MS: i64 = 30_000;
 
+/// How long an END-STEP response window stays open when someone at the table
+/// never passes. Shorter than the stack window: an empty-handed table should
+/// not add half a minute to every turn (a cast into the window extends life
+/// through the stack machinery as usual).
+pub const END_WINDOW_MS: i64 = 10_000;
+
 /// Every non-conceded seat other than `owner_seat` has passed priority.
 pub fn all_passed(room: &Room, owner_seat: usize) -> bool {
     room.players
@@ -38,6 +44,30 @@ pub fn all_passed(room: &Room, owner_seat: usize) -> bool {
 pub fn stack_resolvable(room: &Room, owner_seat: usize) -> bool {
     all_passed(room, owner_seat)
         || crate::now_ms() - room.stack_changed_ms >= RESPONSE_TIMEOUT_MS
+}
+
+/// Would a turn.pass from the active seat COMPLETE right now (enforced
+/// end-step window rules)? None-window passes always "complete" usefully -
+/// they open the window. Bots consult this so a waiting window never draws
+/// rejected actions.
+pub fn turn_pass_completes(room: &Room) -> bool {
+    if !enforced(room) {
+        return true;
+    }
+    match room.end_window {
+        None => true,
+        Some(deadline) => {
+            if !room.stack.is_empty() {
+                return false;
+            }
+            let others_passed = room
+                .players
+                .iter()
+                .filter(|p| !p.conceded && p.seat != room.active_seat)
+                .all(|p| room.stack_passed.contains(&p.seat));
+            others_passed || crate::now_ms() >= deadline
+        }
+    }
 }
 
 /// Is this room playing under enforcement?
@@ -244,6 +274,11 @@ fn is_sick(app: &App, room: &Room, card: &Card) -> bool {
     card.entered_turn == Some(room.turn_number) && !has_kw(app, card, "haste")
 }
 
+/// `is_sick`, visible to game.rs's float path (a sick dork cannot tap).
+pub fn card_is_sick(app: &App, room: &Room, card: &Card) -> bool {
+    is_sick(app, room, card)
+}
+
 /// The seat an attacker is aimed at, resolved for damage purposes: explicit
 /// defender, else (1v1 or open swing) the lowest-seat non-conceded opponent.
 fn resolved_defender(room: &Room, attacker_owner: usize, declared: Option<usize>) -> Option<usize> {
@@ -275,6 +310,7 @@ fn seat_defends(room: &Room, combat: &Combat, seat: usize) -> bool {
 /// land choice to exactly those iids.
 pub fn solve_payment(
     app: &App,
+    room: &Room,
     player: &Player,
     generic: i64,
     pips: &BTreeMap<char, i64>,
@@ -314,7 +350,9 @@ pub fn solve_payment(
         }
     }
 
-    // Candidate lands: untapped, on the battlefield, oracle-known producers.
+    // Candidate sources: untapped, on the battlefield, oracle-known
+    // producers - lands, plus rocks and dorks with a clean "{T}: Add" line
+    // (a summoning-sick creature cannot tap for mana).
     let candidates: Vec<(&Card, Vec<char>)> = player
         .battlefield
         .iter()
@@ -322,7 +360,9 @@ pub fn solve_payment(
         .filter(|c| payment.map(|p| p.iter().any(|iid| *iid == c.iid)).unwrap_or(true))
         .filter_map(|c| {
             let f = facts(app, c)?;
-            if !f.is_land() || f.produced.is_empty() {
+            let mana_source = f.is_land()
+                || (f.taps_for_mana && !(f.is_creature() && is_sick(app, room, c)));
+            if !mana_source || f.produced.is_empty() {
                 return None;
             }
             Some((c, f.produced.clone()))
@@ -370,8 +410,8 @@ pub fn solve_payment(
 }
 
 /// Can this player afford a cost right now (dry run)?
-pub fn can_afford(app: &App, player: &Player, generic: i64, pips: &BTreeMap<char, i64>) -> bool {
-    solve_payment(app, player, generic, pips, None).is_ok()
+pub fn can_afford(app: &App, room: &Room, player: &Player, generic: i64, pips: &BTreeMap<char, i64>) -> bool {
+    solve_payment(app, room, player, generic, pips, None).is_ok()
 }
 
 // ------------------------------------------------------------------ checks
@@ -418,6 +458,64 @@ pub fn check(app: &App, room: &Room, pi: usize, action: &crate::game::Action) ->
             }
             Ok(())
         }
+        Action::LoyaltyActivate { iid, index } => {
+            if !my_turn {
+                return Err(err("loyalty abilities activate on your own turn"));
+            }
+            if !main_phase {
+                return Err(err("loyalty abilities activate at sorcery speed (main phase)"));
+            }
+            if !room.stack.is_empty() {
+                return Err(err("the stack must be empty first"));
+            }
+            let Some(card) = me.battlefield.iter().find(|c| c.iid == *iid) else {
+                return Err(err("that permanent is not on your battlefield"));
+            };
+            let Some(f) = facts(app, card) else {
+                return Err(err("that card has no rules data yet"));
+            };
+            let Some(ab) = f.loyalty_abilities.get(*index) else {
+                return Err(err("that card has no such loyalty ability"));
+            };
+            if room.loyalty_used.iter().any(|(t, i)| *t == room.turn_number && i == iid) {
+                return Err(err("one loyalty ability per planeswalker each turn"));
+            }
+            let current = card.counters.get("loyalty").copied().unwrap_or(0);
+            if current + ab.delta < 0 {
+                return Err(err("not enough loyalty for that ability"));
+            }
+            Ok(())
+        }
+        Action::StackTarget { iid, target_iid } => {
+            // Targeting legality: shroud refuses everyone, hexproof refuses
+            // opponents, protection refuses spells sharing a color. Unknown
+            // cards stay permissive, and clearing a target is always free.
+            let Some(tid) = target_iid else { return Ok(()) };
+            let Some(entry) = room.stack.iter().find(|e| e.card.iid == *iid) else {
+                return Ok(());
+            };
+            let spell_colors: Vec<char> =
+                facts(app, &entry.card).map(|f| f.colors.clone()).unwrap_or_default();
+            let target = room.players.iter().find_map(|p| {
+                p.battlefield
+                    .iter()
+                    .find(|c| c.iid == *tid)
+                    .map(|c| (p.user_id.clone(), c.name.clone(), facts(app, c)))
+            });
+            let Some((owner, name, Some(f))) = target else { return Ok(()) };
+            if f.keywords.contains("shroud") {
+                return Err(err(format!("{name} has shroud - it can't be targeted")));
+            }
+            if owner != me.user_id && f.keywords.contains("hexproof") {
+                return Err(err(format!("{name} has hexproof - opponents can't target it")));
+            }
+            if f.protection_from.iter().any(|c| spell_colors.contains(c)) {
+                return Err(err(format!(
+                    "{name} has protection from that spell's color - it can't be targeted"
+                )));
+            }
+            Ok(())
+        }
         Action::StackPush { iid } => {
             if let Some(card) = me.hand.iter().find(|c| c.iid == *iid) {
                 if facts(app, card).is_some() {
@@ -453,7 +551,7 @@ pub fn check(app: &App, room: &Room, pi: usize, action: &crate::game::Action) ->
             }
             let paylist = payment.as_deref();
             let generic = reduced_generic(app, me, &f, f.generic);
-            solve_payment(app, me, generic, &f.pips, paylist).map(|_| ())
+            solve_payment(app, room, me, generic, &f.pips, paylist).map(|_| ())
         }
         Action::CmdCast { iid, .. } => {
             let Some(card) = me.command.iter().find(|c| c.iid == *iid) else {
@@ -469,7 +567,7 @@ pub fn check(app: &App, room: &Room, pi: usize, action: &crate::game::Action) ->
                 Some(f) => {
                     let tax = me.commander_tax.get(iid).copied().unwrap_or(0);
                     let generic = reduced_generic(app, me, &f, f.generic + tax);
-                    solve_payment(app, me, generic, &f.pips, None).map(|_| ())
+                    solve_payment(app, room, me, generic, &f.pips, None).map(|_| ())
                 }
                 None => Ok(()), // unknown commander: permissive
             }
@@ -507,6 +605,19 @@ pub fn check(app: &App, room: &Room, pi: usize, action: &crate::game::Action) ->
                 if !combat.attackers.is_empty() {
                     return Err(err("resolve or cancel combat before ending the turn"));
                 }
+            }
+            // A FRESH stack blocks the pass (the staleness escape stops an
+            // absent caster from freezing the table forever), and so do your
+            // own unanswered prompts (they lapse within 30s on their own).
+            if !room.stack.is_empty()
+                && crate::now_ms() - room.stack_changed_ms < RESPONSE_TIMEOUT_MS
+            {
+                return Err(err("the stack must resolve before the turn ends"));
+            }
+            if room.pending_triggers.iter().any(|t| t.owner == me.user_id)
+                || room.pending_discards.iter().any(|d| d.owner == me.user_id)
+            {
+                return Err(err("answer your prompts before ending the turn"));
             }
             Ok(())
         }
@@ -676,7 +787,9 @@ pub fn check(app: &App, room: &Room, pi: usize, action: &crate::game::Action) ->
             Ok(())
         }
         Action::StackPass => {
-            if room.stack.is_empty() {
+            // An open end-step window is a thing to pass ON even with an
+            // empty stack - that pass is what lets the turn end.
+            if room.stack.is_empty() && room.end_window.is_none() {
                 return Err(err("nothing to respond to"));
             }
             if room.stack.last().map(|e| e.owner.as_str()) == Some(me.user_id.as_str()) {
@@ -869,6 +982,18 @@ pub fn fire_phase_triggers(
     logs
 }
 
+/// `push_trigger`, visible to game.rs's loyalty activation.
+pub fn queue_trigger(
+    room: &mut Room,
+    owner: &str,
+    seat: usize,
+    source_iid: &str,
+    source_name: &str,
+    trigger: &crate::oracle::Trigger,
+) -> String {
+    push_trigger(room, owner, seat, source_iid, source_name, trigger)
+}
+
 fn push_trigger(
     room: &mut Room,
     owner: &str,
@@ -987,6 +1112,8 @@ pub fn apply_spell_intent(
     if let Some(n) = f.scry_spell {
         effects.push(TriggerEffect::Scry { n });
     }
+    // Clause-parsed extras: token-making, lifegain, self-mill.
+    effects.extend(f.spell_effects.iter().cloned());
     if effects.is_empty() {
         return Vec::new();
     }
@@ -1562,8 +1689,27 @@ pub fn apply_preview(app: &App, room: &mut Room, preview: &CombatPreview) -> Vec
             *p.cmd_damage_by_commander.entry(commander_iid.clone()).or_insert(0) += amount;
         }
     }
-    // Deaths: move each card to its owner's graveyard (tokens evaporate;
-    // a dies-to-exile replacement routes to exile and silences the death).
+    // Saboteurs: every attacker that connected with a player fires its
+    // deals-combat-damage trigger (prompted like any other trigger).
+    let connected: Vec<String> = preview
+        .rows
+        .iter()
+        .filter(|row| row.player_damage > 0)
+        .map(|row| row.attacker_iid.clone())
+        .collect();
+    for iid in connected {
+        logs.extend(fire_card_triggers(app, room, TriggerWhen::DealsPlayerDamage, &iid));
+    }
+    logs.extend(kill_permanents(app, room, dead));
+    logs
+}
+
+/// Move each named permanent to its owner's graveyard as a DEATH: tokens
+/// evaporate, a dies-to-exile replacement routes to exile and silences the
+/// death, and dies triggers fire afterwards. Shared by combat resolution and
+/// the state-based sweep.
+pub fn kill_permanents(app: &App, room: &mut Room, dead: Vec<String>) -> Vec<String> {
+    let mut logs: Vec<String> = Vec::new();
     let mut died: Vec<String> = Vec::new();
     for iid in dead {
         // A dead card's table marker dies with it.
@@ -1603,5 +1749,79 @@ pub fn apply_preview(app: &App, room: &mut Room, preview: &CombatPreview) -> Vec
     for iid in died {
         logs.extend(fire_card_triggers(app, room, TriggerWhen::Dies, &iid));
     }
+    logs
+}
+
+/// State-based actions (enforced rooms): creatures whose effective toughness
+/// is 0 or less die, planeswalkers with no loyalty left die, and a player in
+/// a loss state is flagged LOUDLY exactly once - never auto-ejected. The
+/// server records; conceding stays the player's click (bots already concede
+/// themselves on these conditions).
+pub fn check_state_based(app: &App, room: &mut Room) -> Vec<String> {
+    if !enforced(room) {
+        return Vec::new();
+    }
+    let mut logs = Vec::new();
+    // A death can remove an anthem and doom more creatures: sweep to a fixed
+    // point, bounded defensively.
+    for _ in 0..4 {
+        let mut doomed: Vec<String> = Vec::new();
+        for p in &room.players {
+            for c in &p.battlefield {
+                // Face-down cards are morphs/manual mysteries; double-faced
+                // cards are face-dependent. Both stay the table's business.
+                if c.face_down {
+                    continue;
+                }
+                let Some(f) = facts(app, c) else { continue };
+                if f.type_line.contains("//") {
+                    continue;
+                }
+                if f.is_creature() {
+                    if effective_pt(app, room, c).1 <= 0 {
+                        doomed.push(c.iid.clone());
+                    }
+                } else if f.type_line.contains("Planeswalker")
+                    && c.counters.get("loyalty").copied().unwrap_or(0) <= 0
+                {
+                    // Counters at zero are removed from the map, so a walker
+                    // without a loyalty key in an enforced room IS at zero.
+                    doomed.push(c.iid.clone());
+                }
+            }
+        }
+        if doomed.is_empty() {
+            break;
+        }
+        logs.extend(kill_permanents(app, room, doomed));
+    }
+    // Loss states: flag once while the condition holds, loudly; clear the
+    // flag when it stops holding so a heal and a re-drop re-announce.
+    let mut newly: Vec<(String, String)> = Vec::new();
+    let mut cleared: Vec<String> = Vec::new();
+    for p in room.players.iter().filter(|p| !p.conceded && !p.is_bot) {
+        let cmd_dead = p.cmd_damage.values().any(|&d| d >= 21);
+        let reason = if p.life <= 0 {
+            Some(format!("{} is at {} life", p.username, p.life))
+        } else if p.poison >= 10 {
+            Some(format!("{} has {} poison", p.username, p.poison))
+        } else if cmd_dead {
+            Some(format!("{} has taken lethal commander damage", p.username))
+        } else {
+            None
+        };
+        match reason {
+            Some(r) if !room.loss_flagged.contains(&p.user_id) => {
+                newly.push((p.user_id.clone(), format!("{r} - the match awaits their concession")));
+            }
+            None if room.loss_flagged.contains(&p.user_id) => cleared.push(p.user_id.clone()),
+            _ => {}
+        }
+    }
+    for (uid, line) in newly {
+        room.loss_flagged.push(uid);
+        logs.push(line);
+    }
+    room.loss_flagged.retain(|uid| !cleared.contains(uid));
     logs
 }

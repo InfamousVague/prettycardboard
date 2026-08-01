@@ -239,6 +239,7 @@ pub(crate) fn decide(app: &App, room: &Room, uid: &str, mind: &mut BotMind, now:
                         (f.is_instant() || f.has("flash"))
                             && crate::rules::can_afford(
                                 app,
+                                room,
                                 me,
                                 crate::rules::reduced_generic(app, me, &f, f.generic),
                                 &f.pips,
@@ -324,6 +325,17 @@ pub(crate) fn decide(app: &App, room: &Room, uid: &str, mind: &mut BotMind, now:
         return Decision { action: None, say, fast: false };
     }
 
+    // Someone's end-step window is open and the stack is empty: pass so the
+    // turn can end. (Held-trick responses belong to the stack branch above.)
+    if crate::rules::enforced(room)
+        && room.end_window.is_some()
+        && room.active_seat != me.seat
+        && room.stack.is_empty()
+        && !room.stack_passed.contains(&me.seat)
+    {
+        return Decision { action: Some(Action::StackPass), say, fast: true };
+    }
+
     // Someone else's combat: declare blocks, one per tick.
     if let Some(combat) = &room.combat {
         if room.active_seat != me.seat {
@@ -348,6 +360,15 @@ pub(crate) fn decide(app: &App, room: &Room, uid: &str, mind: &mut BotMind, now:
     }
 
     if room.active_seat != me.seat {
+        return Decision { action: None, say, fast: false };
+    }
+    // My own end window is open: the turn is over except for the waiting.
+    // No new plays; the pass fires when the window closes. (Usually the last
+    // opposing StackPass advances the turn before this ever fires.)
+    if crate::rules::enforced(room) && room.end_window.is_some() {
+        if crate::rules::turn_pass_completes(room) {
+            return Decision { action: Some(Action::TurnPass), say, fast: false };
+        }
         return Decision { action: None, say, fast: false };
     }
     let mut d = own_turn(app, room, me, mind, style, now);

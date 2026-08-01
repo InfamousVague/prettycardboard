@@ -22,6 +22,7 @@ pub(crate) fn cast_step(app: &App, room: &Room, me: &Player, mind: &mut BotMind,
                     let tax = me.commander_tax.get(&c.iid).copied().unwrap_or(0);
                     crate::rules::can_afford(
                         app,
+                        room,
                         me,
                         crate::rules::reduced_generic(app, me, &f, f.generic + tax),
                         &f.pips,
@@ -48,6 +49,7 @@ pub(crate) fn cast_step(app: &App, room: &Room, me: &Player, mind: &mut BotMind,
             if f.is_land()
                 || !crate::rules::can_afford(
                     app,
+                    room,
                     me,
                     crate::rules::reduced_generic(app, me, &f, f.generic),
                     &f.pips,

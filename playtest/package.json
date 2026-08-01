@@ -21,6 +21,7 @@
     "cascade": "node scenarios/enforced-cascade.js",
     "discard": "node scenarios/enforced-discard.js",
     "scrymill": "node scenarios/enforced-scry-mill.js",
+    "engine": "node scenarios/enforced-engine.js",
     "walkers": "node scenarios/planeswalker-audit.js",
     "botspells": "node scenarios/bot-spells.js",
     "brawl": "node scenarios/enforced-brawl.js",

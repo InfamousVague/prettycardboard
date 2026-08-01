@@ -130,8 +130,19 @@ async function main() {
       break;
     }
     // The bot passed back to me with no combat pending: pass straight back.
-    if (s?.activeSeat === mySeat && !s.combat) {
+    // (Never into my own open end window - that pass would be rejected; the
+    // bot's response closes it.)
+    if (s?.activeSeat === mySeat && !s.combat && s.endWindow == null) {
       me.act({ kind: 'turn.pass' });
+    }
+    // The bot's own end window: pass so its turn ends without the lapse.
+    if (
+      s?.activeSeat !== mySeat &&
+      s?.endWindow != null &&
+      (s.stack ?? []).length === 0 &&
+      !(s.stackPassed ?? []).includes(mySeat)
+    ) {
+      me.act({ kind: 'stack.pass' });
     }
     await sleep(1200);
   }

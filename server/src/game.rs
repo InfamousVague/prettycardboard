@@ -299,6 +299,9 @@ pub enum Action {
     /// Answer a forced discard (see rooms::PendingDiscard) by naming the hand
     /// cards to shed. Empty `iids` = let the engine choose (highest mana
     /// value), which is also what the deadline does.
+    /// Activate a planeswalker loyalty ability by index (enforced rooms).
+    #[serde(rename = "loyalty.activate", rename_all = "camelCase")]
+    LoyaltyActivate { iid: String, index: usize },
     #[serde(rename = "discard.resolve", rename_all = "camelCase")]
     DiscardResolve { id: String, iids: Vec<String> },
     /// Cascade for `n` (enforced rooms): the server reveals from the top of
@@ -412,6 +415,35 @@ pub struct UndoEntry {
 /// with server-filled fields), log lines, whether viewers should get a fresh
 /// per-viewer room.state (hidden-information changed), and any per-viewer
 /// messages (library.cards, cmd.choice) that must NOT be broadcast.
+/// Move the turn to the next occupied seat: clocks, combat cleanup, pool
+/// emptying, auto-turn untap/draw, and upkeep triggers. Shared by the
+/// turn.pass action, the end-window StackPass completion, and the lapse
+/// sweeper. Returns the next seat; narration lands in `logs`.
+pub fn advance_turn_core(app: &crate::App, room: &mut crate::rooms::Room, now: i64, logs: &mut Vec<String>) -> usize {
+    let (next, wrapped) = next_occupied(room, room.active_seat);
+    if wrapped {
+        room.turn_number += 1;
+    }
+    turn_clock_credit(room, now);
+    room.active_seat = next;
+    turn_clock_begin(room, next, now);
+    clear_combat(room);
+    empty_pools_if_enforced(room);
+    room.end_window = None;
+    room.stack_passed.clear();
+    if room.auto_turn {
+        room.phase = "main1".to_string();
+        logs.extend(auto_turn_begin(room, next));
+        logs.extend(crate::rules::fire_phase_triggers(
+            app,
+            room,
+            crate::oracle::TriggerWhen::Upkeep,
+            next,
+        ));
+    }
+    next
+}
+
 pub struct Applied {
     pub for_actor: Value,
     pub for_others: Value,
@@ -1235,7 +1267,10 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                 let p = &room.players[pi];
                 if let Some(card) = p.battlefield.iter().find(|c| c.iid == *iid) {
                     if let Some(f) = crate::rules::facts(app, card) {
-                        if f.is_land() && !f.produced.is_empty() {
+                        let mana_source = f.is_land()
+                            || (f.taps_for_mana
+                                && !(f.is_creature() && crate::rules::card_is_sick(app, room, card)));
+                        if mana_source && !f.produced.is_empty() {
                             let want = mana.as_deref().and_then(|m| m.chars().next());
                             let color = want
                                 .filter(|c| f.produced.contains(c))
@@ -1857,6 +1892,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
         // --- turns + phases ---
 
         Action::TurnPass => {
+            let mut opened_window = false;
             // The passing player's end step happens now whether or not they
             // visited the end phase - fire its triggers once per turn.
             if room.end_fired != Some((room.turn_number, room.active_seat)) {
@@ -1868,34 +1904,61 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                     room.active_seat,
                 ));
             }
-            let (next, wrapped) = next_occupied(room, room.active_seat);
-            if wrapped {
-                room.turn_number += 1;
+            // Enforced rooms with other live seats get an END-STEP RESPONSE
+            // WINDOW: the first pass announces the end step and waits; the
+            // turn completes when everyone passes (StackPass closes it) or
+            // the window lapses (the sweeper closes it). Freeform, and a
+            // table with nobody left to respond, advance immediately.
+            let others_alive = room
+                .players
+                .iter()
+                .any(|p| !p.conceded && p.seat != room.active_seat);
+            if crate::rules::enforced(room) && others_alive {
+                match room.end_window {
+                    None => {
+                        room.phase = "end".to_string();
+                        room.stack_passed.clear();
+                        room.end_window = Some(now + crate::rules::END_WINDOW_MS);
+                        for v in [&mut for_actor, &mut for_others] {
+                            v["phase"] = json!(room.phase);
+                        }
+                        opened_window = true;
+                    }
+                    Some(deadline) => {
+                        if !room.stack.is_empty() {
+                            return Err((
+                                "stack_live",
+                                "the stack must resolve before the turn ends".to_string(),
+                            ));
+                        }
+                        let all_passed = room
+                            .players
+                            .iter()
+                            .filter(|p| !p.conceded && p.seat != room.active_seat)
+                            .all(|p| room.stack_passed.contains(&p.seat));
+                        if !(all_passed || now >= deadline) {
+                            return Err((
+                                "end_window",
+                                "waiting for responses to your end step".to_string(),
+                            ));
+                        }
+                    }
+                }
             }
-            turn_clock_credit(room, now);
-            room.active_seat = next;
-            turn_clock_begin(room, next, now);
-            clear_combat(room);
-            empty_pools_if_enforced(room);
-            if room.auto_turn {
-                room.phase = "main1".to_string();
-                extra_logs.extend(auto_turn_begin(room, next));
-                extra_logs.extend(crate::rules::fire_phase_triggers(
-                    app,
-                    room,
-                    crate::oracle::TriggerWhen::Upkeep,
-                    next,
-                ));
+            if opened_window {
+                log = format!("{username} moves to end the turn - responses?");
+            } else {
+                let next = advance_turn_core(app, room, now, &mut extra_logs);
+                let target = seat_username(room, next);
+                for v in [&mut for_actor, &mut for_others] {
+                    v["turnNumber"] = json!(room.turn_number);
+                    v["activeSeat"] = json!(room.active_seat);
+                    v["phase"] = json!(room.phase);
+                }
+                log = format!("{username} passes the turn to {target} (turn {})", room.turn_number);
+                coach_event = Some(CoachEvent::TurnPass);
             }
-            let target = seat_username(room, next);
-            for v in [&mut for_actor, &mut for_others] {
-                v["turnNumber"] = json!(room.turn_number);
-                v["activeSeat"] = json!(room.active_seat);
-                v["phase"] = json!(room.phase);
-            }
-            log = format!("{username} passes the turn to {target} (turn {})", room.turn_number);
             resync = true;
-            coach_event = Some(CoachEvent::TurnPass);
         }
 
         Action::TurnSet { seat } => {
@@ -1905,6 +1968,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
             if target_p.conceded {
                 return Err(("conceded", format!("seat {seat} has conceded")));
             }
+            room.end_window = None;
             // Handing the turn at-or-behind the current seat wraps past the
             // start of the order — that is a new turn round.
             let wrapped = seat <= room.active_seat;
@@ -1930,6 +1994,9 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
         }
 
         Action::PhaseSet { ref phase } => {
+            if phase != "end" {
+                room.end_window = None;
+            }
             if !PHASES.contains(&phase.as_str()) {
                 return Err(("invalid_phase", format!("unknown phase {phase}")));
             }
@@ -2046,6 +2113,64 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
         }
 
         Action::StackTarget { ref iid, ref target_iid } => {
+            // Ownership first: nothing below may mutate state for a caller
+            // who does not own the spell.
+            {
+                let Some(entry) = room.stack.iter().find(|e| e.card.iid == *iid) else {
+                    return Err(("not_on_stack", format!("No card {iid} on the stack")));
+                };
+                if entry.owner != actor_id {
+                    return Err(("forbidden", "only the caster chooses targets".to_string()));
+                }
+            }
+            // A pure-generic ward ("{2}") on an opponent's permanent is a
+            // REAL cost in enforced rooms: pay it here (auto-tapping like a
+            // cast) or the aim is refused - declining means aiming elsewhere.
+            // Colored and life-pay wards stay reminder-only.
+            let mut ward_paid: Option<i64> = None;
+            if crate::rules::enforced(room) {
+                if let Some(tid) = target_iid.as_deref() {
+                    let warded = room.players.iter().find_map(|p| {
+                        p.battlefield
+                            .iter()
+                            .find(|c| c.iid == tid)
+                            .map(|c| (p.user_id.clone(), c.name.clone(), crate::rules::facts(app, c)))
+                    });
+                    if let Some((owner, tname, Some(f))) = warded {
+                        let generic_ward = f.ward.as_deref().and_then(|w| {
+                            let inner = w.strip_prefix('{')?.strip_suffix('}')?;
+                            inner.parse::<i64>().ok()
+                        });
+                        if owner != actor_id {
+                            if let Some(n) = generic_ward {
+                                let (taps, pool_spend) = crate::rules::solve_payment(
+                                    app,
+                                    room,
+                                    &room.players[pi],
+                                    n,
+                                    &std::collections::BTreeMap::new(),
+                                    None,
+                                )
+                                .map_err(|_| {
+                                    ("ward_unpaid", format!("cannot pay {tname}'s ward {{{n}}}"))
+                                })?;
+                                let p = &mut room.players[pi];
+                                for land in &taps {
+                                    if let Some(c) = p.battlefield.iter_mut().find(|c| c.iid == *land) {
+                                        c.tapped = true;
+                                    }
+                                }
+                                for (color, k) in &pool_spend {
+                                    if let Some(v) = p.mana.get_mut(&color.to_string()) {
+                                        *v = (*v - k).max(0);
+                                    }
+                                }
+                                ward_paid = Some(n);
+                            }
+                        }
+                    }
+                }
+            }
             let Some(entry) = room.stack.iter_mut().find(|e| e.card.iid == *iid) else {
                 return Err(("not_on_stack", format!("No card {iid} on the stack")));
             };
@@ -2061,7 +2186,10 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                     .find(|c| c.iid == t)
                     .map(|c| c.name.clone())
             }) {
-                Some(name) => format!("{username} targets {name} with {spell}"),
+                Some(name) => match ward_paid {
+                    Some(n) => format!("{username} targets {name} with {spell}, paying ward {{{n}}}"),
+                    None => format!("{username} targets {name} with {spell}"),
+                },
                 None => format!("{username} clears {spell}'s target"),
             };
             resync = true;
@@ -2072,6 +2200,71 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                 room.stack_passed.push(actor_seat);
             }
             log = format!("{username} passes");
+            // The LAST pass of an open end-step window (stack empty, every
+            // other live seat passed) completes the turn right here - the
+            // active player already asked for it.
+            if crate::rules::enforced(room) && room.end_window.is_some() && room.stack.is_empty() {
+                let all_passed = room
+                    .players
+                    .iter()
+                    .filter(|p| !p.conceded && p.seat != room.active_seat)
+                    .all(|p| room.stack_passed.contains(&p.seat));
+                if all_passed {
+                    let passer = seat_username(room, room.active_seat);
+                    let next = advance_turn_core(app, room, now, &mut extra_logs);
+                    let target = seat_username(room, next);
+                    extra_logs.push(format!(
+                        "{passer} passes the turn to {target} (turn {})",
+                        room.turn_number
+                    ));
+                }
+            }
+            resync = true;
+        }
+
+        Action::LoyaltyActivate { ref iid, index } => {
+            if !crate::rules::enforced(room) {
+                return Err(("not_enforced", "loyalty activation needs an enforced table".to_string()));
+            }
+            // rules::check gated timing, ownership, once-per-turn, and the
+            // loyalty floor; here the numbers move and the text becomes a
+            // prompt (auto when the parser understands it, manual otherwise).
+            let (name, seat, delta, text) = {
+                let p = &room.players[pi];
+                let card = p
+                    .battlefield
+                    .iter()
+                    .find(|c| c.iid == *iid)
+                    .ok_or_else(|| not_found(iid))?;
+                let f = crate::rules::facts(app, card)
+                    .ok_or(("illegal", "that card has no rules data yet".to_string()))?;
+                let ab = f
+                    .loyalty_abilities
+                    .get(index)
+                    .ok_or(("illegal", "no such loyalty ability".to_string()))?;
+                (card.name.clone(), p.seat, ab.delta, ab.text.clone())
+            };
+            room.loyalty_used.retain(|(t, _)| *t == room.turn_number);
+            room.loyalty_used.push((room.turn_number, iid.clone()));
+            let after = {
+                let p = &mut room.players[pi];
+                let card = p.battlefield.iter_mut().find(|c| c.iid == *iid).unwrap();
+                let entry = card.counters.entry("loyalty".to_string()).or_insert(0);
+                *entry += delta;
+                let after = *entry;
+                if *entry <= 0 {
+                    card.counters.remove("loyalty");
+                }
+                after
+            };
+            let trig = crate::oracle::Trigger {
+                when: crate::oracle::TriggerWhen::Activated,
+                effects: crate::oracle::parse_ability_effects(&text, &name),
+                text: text.clone(),
+            };
+            extra_logs.push(crate::rules::queue_trigger(room, &actor_id, seat, iid, &name, &trig));
+            let sign = if delta > 0 { format!("+{delta}") } else { delta.to_string() };
+            log = format!("{username} activates {name}'s {sign} ability (loyalty {after})");
             resync = true;
         }
 
@@ -2298,7 +2491,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                 let f = crate::rules::facts(app, card)
                     .ok_or(("illegal", "that card has no rules data yet".to_string()))?;
                 let generic = crate::rules::reduced_generic(app, p, &f, f.generic);
-                crate::rules::solve_payment(app, p, generic, &f.pips, payment.as_deref())?
+                crate::rules::solve_payment(app, room, p, generic, &f.pips, payment.as_deref())?
             };
             let goes_to_stack = {
                 let p = &room.players[pi];
@@ -2451,7 +2644,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                             let tax = p.commander_tax.get(iid).copied().unwrap_or(0);
                             let generic =
                                 crate::rules::reduced_generic(app, p, &f, f.generic + tax);
-                            Some(crate::rules::solve_payment(app, p, generic, &f.pips, None)?)
+                            Some(crate::rules::solve_payment(app, room, p, generic, &f.pips, None)?)
                         }
                         None => None, // unknown commander stays permissive
                     }
@@ -3049,6 +3242,17 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
             }
         }
     }
+
+    // State-based actions: after ANY enforced action settles, the board is
+    // swept for deaths the numbers already decided (zero toughness, zero
+    // loyalty) and loss states worth announcing. Cheap, and always correct.
+    // A sweep that did anything forces a resync - counter edits and life
+    // taps do not resync on their own, and a death must never be invisible.
+    let swept = crate::rules::check_state_based(app, room);
+    if !swept.is_empty() {
+        resync = true;
+    }
+    extra_logs.extend(swept);
 
     Ok(Applied { for_actor, for_others, log, extra_logs, resync, private, record })
 }

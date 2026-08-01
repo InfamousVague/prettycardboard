@@ -233,13 +233,19 @@ async function main() {
   const turnMark = alice.mark();
   const carolTurnMark = carol.mark();
   alice.act({ kind: 'turn.pass' });
+  // The enforced end-step window: carol's pass is what closes alice's turn.
+  await carol.expectState((s) => s.endWindow != null, "alice's end window", 5000, { since: carolTurnMark });
+  carol.act({ kind: 'stack.pass' });
   await carol.expectState(
     (s) => s.activeSeat === carol.me(s).seat,
     "carol's turn",
     6000,
     { since: carolTurnMark },
   );
+  const aliceEwMark = alice.mark();
   carol.act({ kind: 'turn.pass' });
+  await alice.expectState((s) => s.endWindow != null, "carol's end window", 5000, { since: aliceEwMark });
+  alice.act({ kind: 'stack.pass' });
   await alice.expectState(
     (s) => s.turnNumber === 2 && s.activeSeat === alice.me(s).seat,
     'back to alice',
