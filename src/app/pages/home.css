@@ -250,14 +250,55 @@
 }
 .gmHalf {
   padding-block: var(--glacier-space-2);
+  /* quarter-width cells: the full-item inline padding starves the label */
+  padding-inline: var(--glacier-space-3);
 }
 .gmHalf .gmItemInner {
   justify-content: flex-start;
-  gap: var(--glacier-space-3);
+  gap: var(--glacier-space-2);
+  min-inline-size: 0;
 }
+/* Four labels share the row now (COLLECTION is the long one): smaller type,
+   tighter tracking, and ellipsis instead of a hard clip when a locale still
+   runs longer. */
 .gmHalf .gmItemTitle {
-  font-size: var(--glacier-font-size-sm);
-  letter-spacing: 0.1em;
+  font-size: var(--glacier-font-size-xs);
+  letter-spacing: 0.05em;
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- join by code, in the band --- */
+
+/* Wears the plate shape but is not a button: the code cells inside are the
+   control, and filling the sixth one is the join. No hover grow - the plate
+   itself does nothing - and no glow sweep; the cells carry their own focus. */
+.gmJoin {
+  cursor: default;
+  padding-block: var(--glacier-space-2);
+}
+.gmJoin .gmItemInner {
+  justify-content: flex-start;
+  gap: var(--glacier-space-4);
+  min-inline-size: 0;
+  flex-wrap: wrap;
+}
+.gmJoin .gmJoinLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+.gmJoin .gmItemTitle {
+  font-size: var(--glacier-font-size-xs);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+/* While a join is in flight the cells are disabled; dim the plate so the
+   pause reads as deliberate. */
+.gmJoin[data-busy] {
+  opacity: 0.7;
 }
 
 /* --- player badge (inline-end top corner) --- */
@@ -374,9 +415,8 @@
     inline-size: 100%;
     padding: 0;
   }
-  .gmHalfRow {
-    grid-template-columns: 1fr;
-  }
+  /* The 2x2 quarter grid survives on phones — four stacked rows would make
+     the band taller than the art can carry; the labels are short. */
   .gmItem,
   [dir='rtl'] .gmItem {
     transform: none;
@@ -432,18 +472,203 @@
   min-block-size: 2rem;
 }
 
-/* ---- deck shelves (recent + featured) ---- */
+/* ========================================================================
+   Career banner — Apex-style: six angled stat plates in one band. Big
+   numeral, uppercase micro-label, thin accent underline (the win-rate
+   plate's underline is its meter, filled inline to the percentage).
+   ======================================================================== */
 
-.homeStackItem {
+.hmCareerHead {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--glacier-space-1);
-  /* DeckStack width 150 plus its 14px tilt padding. */
-  inline-size: 164px;
+  align-items: center;
+  gap: var(--glacier-space-3);
 }
 
-.homeStackName {
+/* An h2 semantically, a kicker visually — the two-class selector outscores
+   the kit's heading class, same trick as .gmBadgeName. */
+.hmCareerHead .hmCareerKicker {
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--glacier-accent-text);
+}
+
+/* the hairline running from the kicker to the end of the band */
+.hmCareerHead::after {
+  content: '';
+  flex: 1;
+  block-size: 1px;
+  background: linear-gradient(to right, var(--glacier-border-subtle), transparent);
+}
+[dir='rtl'] .hmCareerHead::after {
+  background: linear-gradient(to left, var(--glacier-border-subtle), transparent);
+}
+
+.hmCareerBand {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--glacier-space-3);
+  /* the skewed corners poke past the column edges; keep them on the page */
+  padding-inline: var(--glacier-space-2);
+}
+
+.hmPlate {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--glacier-border) 75%, transparent);
+  border-radius: var(--glacier-radius-sm);
+  background: color-mix(in oklch, var(--glacier-surface) 92%, transparent);
+  padding: var(--glacier-space-3) var(--glacier-space-4) var(--glacier-space-4);
+  transform: skewX(-8deg);
+}
+
+/* Counter-skew: numerals stay upright inside the parallelogram. */
+.hmPlateInner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  block-size: 100%;
+  transform: skewX(8deg);
+}
+
+.hmPlateValue {
+  font-size: clamp(1.55rem, 2.1vw, 2.1rem);
+  font-weight: var(--glacier-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.hmPlateSub {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-accent-text);
+  white-space: nowrap;
+}
+
+.hmPlateLabel {
+  margin-block-start: auto;
+  padding-block-start: var(--glacier-space-1);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-inline-size: 0;
+  font-size: 0.62rem;
+  font-weight: var(--glacier-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--glacier-text-muted);
+  white-space: nowrap;
+}
+.hmPlateLabel svg {
+  flex: none;
+  color: var(--glacier-accent-text);
+  opacity: 0.85;
+}
+/* text-overflow needs a real text box, not a flex container: the label text
+   rides its own span so ES/FR long words ellipsise instead of hard-clipping */
+.hmPlateLabelText {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The thin accent underline; the win-rate plate narrows it via inline style. */
+.hmPlateEdge {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline-start: 0;
+  inline-size: 100%;
+  block-size: 3px;
+  background: var(--glacier-accent-solid);
+  opacity: 0.85;
+}
+
+[dir='rtl'] .hmPlate {
+  transform: skewX(8deg);
+}
+[dir='rtl'] .hmPlateInner {
+  transform: skewX(-8deg);
+}
+
+@media (max-width: 64rem) {
+  .hmCareerBand {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ========================================================================
+   Loadout rail — recent decks as Apex loadout cards: the stack art, then a
+   stat block (bracket chip on the art, card count, record, win rate).
+   ======================================================================== */
+
+.hmLoadout {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  /* DeckStack width 150 + its 14px tilt padding + the card's own padding,
+     with a little extra so the three stat labels keep their words. */
+  inline-size: 196px;
+  padding: var(--glacier-space-3) var(--glacier-space-3) var(--glacier-space-3);
+  border: 1px solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-lg);
+  background: color-mix(in oklch, var(--glacier-surface) 92%, transparent);
+  transition:
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    box-shadow var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.hmLoadout:hover {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-border));
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+}
+
+/* the stack itself centers; the stat block below runs edge to edge */
+.hmLoadout > :first-child {
+  margin-inline: auto;
+}
+
+/* Bracket chip riding the top card, same anatomy as the Decks page tile. */
+.hmLoadBracket {
+  position: absolute;
+  inset-block-start: 0.4rem;
+  inset-inline-end: 0.4rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.45rem;
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--glacier-surface) 82%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--glacier-shadow-1);
+  line-height: 1.25;
+}
+.hmLoadBracketNum {
+  font-family: var(--glacier-font-mono);
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--glacier-accent-text);
+}
+.hmLoadBracket[data-bracket='2'] .hmLoadBracketNum {
+  color: var(--glacier-success-text);
+}
+.hmLoadBracket[data-bracket='4'] .hmLoadBracketNum {
+  color: var(--glacier-warning-text);
+}
+.hmLoadBracketName {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+  max-inline-size: 5.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hmLoadName {
   margin-block-start: var(--glacier-space-2);
   font-weight: 600;
   max-inline-size: 100%;
@@ -452,11 +677,175 @@
   white-space: nowrap;
 }
 
-.homeStackSub {
+.hmLoadStats {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--glacier-space-1);
+  margin-block-start: var(--glacier-space-2);
+  padding-block-start: var(--glacier-space-2);
+  border-block-start: 1px solid var(--glacier-border-subtle);
+}
+
+.hmLoadStat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-inline-size: 0;
+}
+.hmLoadStat + .hmLoadStat {
+  padding-inline-start: 0.4rem;
+  border-inline-start: 1px solid var(--glacier-border-subtle);
+}
+
+.hmLoadValue {
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.hmLoadLabel {
+  font-size: 0.58rem;
+  font-weight: var(--glacier-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--glacier-text-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-inline-size: 100%;
+}
+
+/* ========================================================================
+   Store rail banners — Featured + both starter shelves share one wide,
+   art-forward tile: scrim, name, one-line hook, browse affordance, and an
+   Apex-style notched corner.
+   ======================================================================== */
+
+.hmBanner {
+  appearance: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  text-align: start;
+  inline-size: 264px;
+  min-block-size: 150px;
+  padding: 0;
+  color: var(--glacier-text);
+  border: 1px solid color-mix(in oklch, var(--glacier-border) 75%, transparent);
+  border-radius: var(--glacier-radius-lg);
+  background: var(--glacier-surface);
+  /* the notched top corner, Apex store style */
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+  transition:
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    box-shadow var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+[dir='rtl'] .hmBanner {
+  clip-path: polygon(18px 0, 100% 0, 100% 100%, 0 100%, 0 18px);
+}
+
+.hmBannerArt {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-size: cover;
+  background-position: center 30%;
+  transform: scale(1);
+  transition: transform var(--glacier-duration-normal) var(--glacier-ease-out);
+}
+/* Full card scans crop toward the art box under the name bar. */
+.hmBannerPortrait .hmBannerArt {
+  background-position: center 30%;
+}
+
+.hmBannerScrim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--glacier-bg) 10%, transparent) 0%,
+    color-mix(in oklch, var(--glacier-bg) 38%, transparent) 46%,
+    color-mix(in oklch, var(--glacier-bg) 88%, transparent) 100%
+  );
+}
+
+.hmBannerTag {
+  position: absolute;
+  inset-block-start: var(--glacier-space-2);
+  inset-inline-start: var(--glacier-space-2);
+  z-index: 1;
+}
+
+.hmBannerBody {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;
+  inline-size: 100%;
+  padding: var(--glacier-space-3) var(--glacier-space-4);
+}
+
+.hmBannerTitle {
+  font-size: var(--glacier-font-size-md);
+  font-weight: var(--glacier-font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.hmBannerHook {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
   max-inline-size: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.hmBannerCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-block-start: var(--glacier-space-1);
+  font-size: 0.66rem;
+  font-weight: var(--glacier-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--glacier-accent-text);
+  opacity: 0.85;
+  transition: opacity var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+[dir='rtl'] .hmBannerCta svg {
+  transform: scaleX(-1);
+}
+
+.hmBanner:hover,
+.hmBanner:focus-visible {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 60%, var(--glacier-border));
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.4);
+}
+.hmBanner:hover .hmBannerArt,
+.hmBanner:focus-visible .hmBannerArt {
+  transform: scale(1.05);
+}
+.hmBanner:hover .hmBannerCta,
+.hmBanner:focus-visible .hmBannerCta {
+  opacity: 1;
+}
+.hmBanner:focus-visible {
+  outline: 2px solid var(--glacier-accent-solid);
+  outline-offset: 2px;
 }
 
 /* ---- table setup: the detailed host/join machinery ---- */
@@ -466,6 +855,12 @@
   grid-template-columns: 1.55fr 1fr;
   gap: var(--glacier-space-4);
   align-items: stretch;
+}
+
+/* Join-by-code moved into the hero band, so the host tile stands alone - full
+   row, not the widowed left column of a two-track grid. */
+.qpGridSolo {
+  grid-template-columns: 1fr;
 }
 
 @media (max-width: 56rem) {
@@ -589,16 +984,49 @@
   padding-block: var(--glacier-space-2);
 }
 
-/* ---- page rhythm + KPI stat strip + carousels ---- */
+/* ---- page rhythm + carousels ---- */
 
 .homePage { gap: var(--glacier-space-5); }
 
-.homePage .homeStats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--glacier-space-3);
-}
-@media (max-width: 48rem) { .homePage .homeStats { grid-template-columns: repeat(2, 1fr); } }
+/* Rail tiles are flex: none on their own classes (.hmLoadout, .hmBanner);
+   the Carousel just snap-scrolls them. */
 
-/* carousel shelves: keep the fixed-width items, let Carousel scroll */
-.homeCarousel .homeStackItem { flex: none; }
+/* --- phone (PHONE_QUERY): nothing skewed, rails scroll naturally --- */
+
+@media (max-width: 700px), (max-height: 480px) {
+  .hmCareerBand {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-inline: 0;
+  }
+  .hmPlate,
+  [dir='rtl'] .hmPlate {
+    transform: none;
+  }
+  .hmPlateInner,
+  [dir='rtl'] .hmPlateInner {
+    transform: none;
+  }
+  .hmLoadout {
+    inline-size: 182px;
+    padding: var(--glacier-space-2);
+  }
+  .hmBanner {
+    inline-size: 228px;
+    min-block-size: 132px;
+  }
+}
+
+/* --- reduced motion: rails and plates hold their resting style --- */
+
+@media (prefers-reduced-motion: reduce) {
+  .hmLoadout,
+  .hmBanner,
+  .hmBannerArt,
+  .hmBannerCta {
+    transition: none;
+  }
+  .hmBanner:hover .hmBannerArt,
+  .hmBanner:focus-visible .hmBannerArt {
+    transform: none;
+  }
+}

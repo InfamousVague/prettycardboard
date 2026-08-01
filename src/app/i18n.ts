@@ -899,6 +899,19 @@ export const messages = {
     fr: 'Aucun deck pour l’instant. Importez-en un ou partez de zéro.',
     ar: 'لا مجموعات بعد. استورد واحدة أو ابدأ من الصفر.',
   },
+  // decks armory band
+  dkArmory: { en: 'The armory', es: 'La armería', fr: 'L’armurerie', ar: 'الترسانة' },
+  dkForgeSub: {
+    en: 'Forge your next contender',
+    es: 'Forja tu próximo contendiente',
+    fr: 'Forgez votre prochain concurrent',
+    ar: 'اصنع منافسك التالي',
+  },
+  dkBattles: { en: 'Battles', es: 'Batallas', fr: 'Batailles', ar: 'معارك' },
+  dkMostPlayed: { en: 'Most played', es: 'Más jugado', fr: 'Le plus joué', ar: 'الأكثر لعبًا' },
+  dkNoBattles: { en: 'No battles yet', es: 'Aún sin batallas', fr: 'Pas encore de bataille', ar: 'لا معارك بعد' },
+  dkGames: { en: 'games', es: 'partidas', fr: 'parties', ar: 'مباريات' },
+  dkLatest: { en: 'Latest build', es: 'Última creación', fr: 'Dernière création', ar: 'أحدث بناء' },
 
   // friends
   frTitle: { en: 'Friends', es: 'Amigos', fr: 'Amis', ar: 'الأصدقاء' },
@@ -1012,6 +1025,12 @@ export const messages = {
   },
   boAll: { en: 'All', es: 'Todas', fr: 'Toutes', ar: 'الكل' },
   boOpenPack: { en: 'Open a pack', es: 'Abrir un sobre', fr: 'Ouvrir un booster', ar: 'افتح عبوة' },
+  boOpenPackSub: {
+    en: 'Tear the foil — see what is inside',
+    es: 'Rasga el sobre y descubre qué hay dentro',
+    fr: 'Déchirez l’emballage — voyez ce qu’il contient',
+    ar: 'مزّق الغلاف واكتشف ما بداخله',
+  },
   boOpenAnother: { en: 'Open another', es: 'Abrir otro', fr: 'En ouvrir un autre', ar: 'افتح أخرى' },
   boBackToSets: { en: 'All sets', es: 'Todas las colecciones', fr: 'Toutes les éditions', ar: 'كل الإصدارات' },
   boLoadingPool: {
@@ -1049,6 +1068,11 @@ export const messages = {
   boCards: { en: 'cards', es: 'cartas', fr: 'cartes', ar: 'بطاقة' },
   boPacksOpened: { en: 'packs opened', es: 'sobres abiertos', fr: 'boosters ouverts', ar: 'عبوات مفتوحة' },
   boMythicRate: { en: 'Mythic rate', es: 'Tasa de mítica', fr: 'Taux de mythique', ar: 'نسبة الأسطورية' },
+  // booster pack-wall band
+  boWallKicker: { en: 'The pack wall', es: 'El muro de sobres', fr: 'Le mur des boosters', ar: 'جدار العبوات' },
+  boDropRates: { en: 'Drop rates', es: 'Probabilidades', fr: 'Taux d’obtention', ar: 'معدلات السحب' },
+  boNewest: { en: 'Newest', es: 'Novedad', fr: 'Nouveauté', ar: 'الأحدث' },
+  boEra: { en: 'Era', es: 'Época', fr: 'Époque', ar: 'الحقبة' },
   pdOpenPacks: { en: 'Open Packs', es: 'Abrir sobres', fr: 'Ouvrir des boosters', ar: 'افتح العبوات' },
   pdDismissDock: {
     en: 'Hide the pack opener',
@@ -2004,6 +2028,11 @@ export const messages = {
   hmWins: { en: 'Wins', es: 'Victorias', fr: 'Victoires', ar: 'انتصارات' },
   hmGames: { en: 'Games', es: 'Partidas', fr: 'Parties', ar: 'مباريات' },
   hmEndorse: { en: 'Endorsements', es: 'Reconocimientos', fr: 'Recommandations', ar: 'تزكيات' },
+  // career banner + loadout rail (COLLECTION/MATCHES reuse navCollection/navPlay)
+  hmCareer: { en: 'Career', es: 'Carrera', fr: 'Carrière', ar: 'المسيرة' },
+  hmAvgTurn: { en: 'Avg turn', es: 'Turno medio', fr: 'Tour moyen', ar: 'متوسط الدور' },
+  hmRecord: { en: 'Record', es: 'Historial', fr: 'Bilan', ar: 'السجل' },
+  hmViewInBrowse: { en: 'View in Browse', es: 'Ver en Explorar', fr: 'Voir dans Parcourir', ar: 'اعرض في التصفح' },
   hmNoFriendsOnline: {
     en: 'Nobody online right now.',
     es: 'Nadie en línea ahora mismo.',
@@ -2460,6 +2489,9 @@ export const messages = {
     fr: 'Toutes les cartes que vous avez obtenues, extension par extension. Ouvrez des boosters pour combler les trous.',
     ar: 'كل بطاقة سحبتها يومًا، مجموعة تلو الأخرى. افتح العبوات لسد الفجوات.',
   },
+  // collection vault band
+  collVaultKicker: { en: 'Trophy room', es: 'Sala de trofeos', fr: 'Salle des trophées', ar: 'غرفة الجوائز' },
+  collCrown: { en: 'Crown jewel', es: 'Joya de la corona', fr: 'Joyau de la couronne', ar: 'جوهرة التاج' },
   collUnique: { en: 'Unique cards', es: 'Cartas únicas', fr: 'Cartes uniques', ar: 'بطاقات فريدة' },
   collTotalPulls: { en: 'Cards pulled', es: 'Cartas obtenidas', fr: 'Cartes tirées', ar: 'بطاقات مسحوبة' },
   collSetsSeen: { en: 'Sets started', es: 'Sets empezados', fr: 'Extensions entamées', ar: 'مجموعات بدأتها' },
@@ -3122,6 +3154,32 @@ export const messages = {
     fr: 'Chance qu’un booster contienne cette carte. Les communes sont équilibrées par couleur : la leur est une moyenne.',
     ar: 'احتمال احتواء العبوة على تلك البطاقة. البطاقات الشائعة موزَّعة حسب اللون، لذا فقيمتها متوسط.',
   },
+
+  // social pages: the guild roster (Friends) and the career profile
+  frRecruit: { en: 'Recruit', es: 'Reclutar', fr: 'Recruter', ar: 'تجنيد' },
+  frRoster: { en: 'Roster', es: 'Plantilla', fr: 'Effectif', ar: 'القائمة' },
+  pfService: { en: 'Service record', es: 'Hoja de servicio', fr: 'États de service', ar: 'سجل الخدمة' },
+  pfLosses: { en: 'Losses', es: 'Derrotas', fr: 'Défaites', ar: 'هزائم' },
+
+  // Play & Matches pregame reskin: mode plates, career band, server browser,
+  // and the join card's big code moment.
+  plModePopular: { en: 'Popular', es: 'Popular', fr: 'Populaire', ar: 'شائع' },
+  plCustomTitle: {
+    en: 'Custom game',
+    es: 'Partida personalizada',
+    fr: 'Partie personnalisée',
+    ar: 'مباراة مخصصة',
+  },
+  plCustomLede: {
+    en: 'Set the table your way, or join one with a code.',
+    es: 'Prepara la mesa a tu manera o únete a una con un código.',
+    fr: 'Dressez la table à votre façon, ou rejoignez-en une avec un code.',
+    ar: 'جهّز الطاولة على طريقتك أو انضم إلى واحدة برمز.',
+  },
+  plEnterCode: { en: 'Enter code', es: 'Introduce el código', fr: 'Saisissez le code', ar: 'أدخل الرمز' },
+  plLosses: { en: 'Losses', es: 'Derrotas', fr: 'Défaites', ar: 'هزائم' },
+  plSrvOpen: { en: 'Open', es: 'Abierta', fr: 'Ouverte', ar: 'مفتوحة' },
+  plSrvFull: { en: 'Full', es: 'Llena', fr: 'Complète', ar: 'ممتلئة' },
 } satisfies Record<string, Entry>;
 
 export type MessageKey = keyof typeof messages;

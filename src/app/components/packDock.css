@@ -187,48 +187,6 @@ body:has(.tableDock:not(:empty)):not(:has(.tableSideScroll)) .pdDock {
   box-shadow: 0 18px 50px rgb(0 0 0 / 0.45);
 }
 
-/* --- docked: a column instead of a window -------------------------------- */
-
-/* THE HOST takes the column, not the panel. .pdPanel has nowhere in the page to
-   portal into: this dock is a root-level sibling of the shell, and moving it
-   into the shell's dock slot would drop it under `.appBody { z-index: 1 }` and
-   cost it ~100 ranks against every modal in the app (THE DOCK CONTRACT's first
-   invariant). So the fixed box it already lives in becomes the reserved space
-   and the panel goes `position: static` inside it, exactly like every other
-   docked panel - see .pcPanel[data-dock='dock'] in components/panels.css.
-
-   PackDock.tsx drops the dock's drag translate at the same moment (`anchored`):
-   that offset is PHYSICAL viewport pixels, so a docked column that kept it
-   would sit wherever the pill was last dropped - and mirrored the wrong way
-   under RTL, where the offset does not flip but the column does. */
-.pdDock[data-docked] {
-  /* Flush is the `full` chrome; the floating rule below insets it instead. The
-     corner and edge clearances go with it - the column runs the whole height,
-     so there is nothing left to hop over or step around. */
-  --pd-dock-inset: 0px;
-  inset-block: var(--pd-dock-inset) calc(var(--pd-dock-inset) + env(safe-area-inset-bottom, 0px));
-  inset-inline-end: calc(var(--pd-dock-inset) + env(safe-area-inset-right, 0px));
-  inline-size: min(30rem, 92vw);
-  align-items: stretch;
-}
-
-/* env() does not flip, so the mirrored corner reads the other inset - the same
-   pairing as the base .pdDock rule above. */
-:root[dir='rtl'] .pdDock[data-docked] {
-  inset-inline-end: calc(var(--pd-dock-inset) + env(safe-area-inset-left, 0px));
-}
-
-:root[data-layout='floating'] .pdDock[data-docked] {
-  --pd-dock-inset: var(--glacier-space-2);
-}
-
-.pdDock[data-docked] .pdPanel {
-  /* The panel fills the column: panels.css already set the sizes, but .pdPanel
-     caps its own height for the free-floating case and grows a resize grip. */
-  max-block-size: none;
-  resize: none;
-}
-
 .pdHead {
   display: flex;
   align-items: center;
@@ -1583,14 +1541,6 @@ body:has(.tableDock:not(:empty)):not(:has(.tableSideScroll)) .pdDock {
 
 .pdDock[data-phone] .pdCards {
   grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-/* Docking is suppressed in the resolver on a phone, so this toggle would flip a
-   preference with no visible effect - and the header of a 341px sheet has no
-   room to spend on it. Hidden rather than unmounted, so a rotation reflows the
-   header instead of rebuilding it. */
-.pdDock[data-phone] .pdDockToggle {
-  display: none;
 }
 
 /* --- the rail, on a screen that has no height to spare ---------------------

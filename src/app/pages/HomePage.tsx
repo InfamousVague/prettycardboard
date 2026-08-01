@@ -12,26 +12,25 @@ import {
   SegmentedControl,
   Select,
   Size,
-  StatTile,
   StatusDot,
   Text,
   TextTone,
   useToast,
 } from '@glacier/react';
-import { Compass, Heart, Play, Plus, Swords, Ticket, Trophy } from '@glacier/icons';
-import { PlayingCardDeck, PlayingCardPack } from '../icons/cards.ts';
+import { ChevronRight, Compass, Heart, Play, Plus, Swords, Target, Ticket, Timer, Trophy } from '@glacier/icons';
+import { PlayingCardDeck, PlayingCardPack, PlayingCardStack, PlayingCardSwap } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
 import { useUi } from '../state/uiStore.ts';
 import * as api from '../net/api.ts';
 import * as ws from '../net/ws.ts';
-import type { MyRoom, UserStats } from '../net/types.ts';
-import { cardImage } from '../data/cards.ts';
+import type { MyDeckStats, MyRoom, UserStats } from '../net/types.ts';
+import { artCrop } from '../data/cards.ts';
+import { bracketKey } from '../data/brackets.ts';
 import { rankFor, winRate } from '../data/ranks.ts';
 import { featuredDecks } from '../data/catalog.ts';
 import { useVisibleGames } from '../hooks/useVisibleGames.ts';
-import { useMobileLayout } from '../hooks/useIsPhone.ts';
 import { cyberpunkImage, cyberpunkStarters } from '../data/cyberpunk.ts';
 import { yugiohImage, yugiohStarters } from '../data/yugioh.ts';
 import { deckSummaryArt, deckSummaryCover } from '../data/deckCover.ts';
@@ -48,10 +47,21 @@ import './home.css';
  */
 
 /** A dashboard section that springs in, staggered by its position. */
-function Section({ order, className, children }: { order: number; className?: string; children: ReactNode }) {
+function Section({
+  order,
+  className,
+  ariaLabel,
+  children,
+}: {
+  order: number;
+  className?: string;
+  ariaLabel?: string;
+  children: ReactNode;
+}) {
   return (
     <motion.section
       className={className}
+      aria-label={ariaLabel}
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 240, damping: 26, delay: order * 0.07 }}
@@ -59,6 +69,13 @@ function Section({ order, className, children }: { order: number; className?: st
       {children}
     </motion.section>
   );
+}
+
+/** Compact per-turn pace, same convention as PostMatch: "1m 35s" / "45s". */
+function fmtTurn(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(s / 60);
+  return m > 0 ? `${m}m ${String(s % 60).padStart(2, '0')}s` : `${s}s`;
 }
 
 /** One baseline for every shelf header: title on the left, view-all on the right. */
@@ -84,6 +101,7 @@ export function HomePage() {
   const closedRoomId = useGame((state) => state.closedRoomId);
   const ackClosed = useGame((state) => state.ackClosed);
   const [stats, setStats] = useState<UserStats | null>(null);
+  const [deckStats, setDeckStats] = useState<Map<string, MyDeckStats> | null>(null);
   const [resume, setResume] = useState<MyRoom | null>(null);
 
   const refresh = useCallback(async () => {
@@ -91,6 +109,13 @@ export function HomePage() {
       setStats(await api.myStats());
     } catch {
       // Offline: keep whatever we had.
+    }
+    try {
+      // One fetch feeds every loadout tile's record; the rail maps by deckId.
+      const rows = await api.myDeckStats();
+      setDeckStats(new Map(rows.map((row) => [row.deckId, row])));
+    } catch {
+      // Offline.
     }
     try {
       // Newest activity first; the first started room is what "Continue" resumes.
@@ -129,7 +154,7 @@ export function HomePage() {
       <GameMenu identity={identity} stats={stats} resume={resume} />
       <StatStrip stats={stats} order={1} />
       <TableSetup order={2} />
-      <RecentDecks order={3} />
+      <RecentDecks deckStats={deckStats} order={3} />
       <Featured order={4} />
       <YugiohStarters order={5} />
       {showCyber && <CyberpunkStarters order={6} />}
@@ -153,10 +178,31 @@ function GameMenu({
   resume: MyRoom | null;
 }) {
   const t = useT();
+  const { toast } = useToast();
   const decks = useApp((state) => state.decks);
   const join = useGame((state) => state.join);
   const played = stats?.played ?? 0;
   const rank = rankFor(played);
+
+  // Join-by-code lives in the band now: six cells, and filling the last one IS
+  // the join - no separate button to find. The code resets on a bad code so
+  // the cells are immediately typeable again.
+  const [code, setCode] = useState('');
+  const [joining, setJoining] = useState(false);
+  const joinByCode = async (value: string) => {
+    const tableCode = value.trim().toUpperCase();
+    if (tableCode.length < 6 || joining) return;
+    setJoining(true);
+    try {
+      const room = await api.getRoomByCode(tableCode);
+      join(room.roomId);
+    } catch {
+      toast({ tone: 'danger', message: t('playCodeBad') });
+      setCode('');
+    } finally {
+      setJoining(false);
+    }
+  };
 
   // The most recently touched deck dresses the band; a fresh account gets the
   // default felt the tables use.
@@ -259,30 +305,117 @@ function GameMenu({
               <span className="gmItemTitle">{t('navBrowse')}</span>
             </span>
           </button>
+          <button type="button" className="gmItem gmHalf" onClick={() => (window.location.hash = '/collection')}>
+            <span className="gmItemInner">
+              <PlayingCardStack size={16} className="gmItemIcon" aria-hidden />
+              <span className="gmItemTitle">{t('navCollection')}</span>
+            </span>
+          </button>
+          <button type="button" className="gmItem gmHalf" onClick={() => (window.location.hash = '/play')}>
+            <span className="gmItemInner">
+              <PlayingCardSwap size={16} className="gmItemIcon" aria-hidden />
+              <span className="gmItemTitle">{t('navPlay')}</span>
+            </span>
+          </button>
+        </div>
+
+        {/* The code entry keeps the menu's plate shape but is not a button -
+            the cells inside are the control, and filling them is the action. */}
+        <div className="gmItem gmJoin" data-busy={joining || undefined}>
+          <span className="gmItemInner">
+            <span className="gmJoinLabel">
+              <Ticket size={16} className="gmItemIcon" aria-hidden />
+              <span className="gmItemTitle">{t('playJoin')}</span>
+            </span>
+            <OtpField
+              length={6}
+              type="alphanumeric"
+              size="sm"
+              value={code}
+              disabled={joining}
+              onValueChange={(value) => setCode(value.toUpperCase())}
+              onComplete={(value) => void joinByCode(value)}
+              aria-label={t('playCodePlaceholder')}
+            />
+          </span>
         </div>
       </nav>
     </section>
   );
 }
 
-/** The KPI strip: wins, games, endorsements, decks. */
+/**
+ * The career banner, Apex-style: one band of six angled stat plates — big
+ * numeral, uppercase micro-label, thin accent underline. The win-rate plate's
+ * underline doubles as its meter, filled to the percentage. StatTile can't
+ * wear this look (its internals are hashed kit classes), so the plates are
+ * app-owned markup on Glacier tokens.
+ */
 function StatStrip({ stats, order }: { stats: UserStats | null; order: number }) {
   const t = useT();
   const decks = useApp((state) => state.decks);
   const played = stats?.played ?? 0;
   const wr = stats ? winRate(stats) : null;
+
+  const plates: {
+    key: string;
+    icon: ReactNode;
+    value: ReactNode;
+    label: string;
+    sub?: string;
+    fill?: number | null;
+  }[] = [
+    {
+      key: 'wins',
+      icon: <Trophy size={13} aria-hidden />,
+      value: stats?.wins ?? 0,
+      label: t('hmWins'),
+      sub: wr != null ? `${wr}% ${t('hmWinRate')}` : undefined,
+    },
+    { key: 'games', icon: <Swords size={13} aria-hidden />, value: played, label: t('hmGames') },
+    {
+      key: 'winrate',
+      icon: <Target size={13} aria-hidden />,
+      value: wr != null ? `${wr}%` : '—',
+      label: t('hmWinRate'),
+      fill: wr,
+    },
+    {
+      key: 'avgturn',
+      icon: <Timer size={13} aria-hidden />,
+      value: stats && stats.avgTurnMs > 0 ? fmtTurn(stats.avgTurnMs) : '—',
+      label: t('hmAvgTurn'),
+    },
+    { key: 'endorse', icon: <Heart size={13} aria-hidden />, value: stats?.endorsements ?? 0, label: t('hmEndorse') },
+    { key: 'decks', icon: <PlayingCardDeck size={13} aria-hidden />, value: decks.length, label: t('decksTitle') },
+  ];
+
   return (
-    <Section order={order} className="homeStats">
-      <StatTile
-        glass
-        icon={<Trophy size={18} />}
-        value={stats?.wins ?? 0}
-        label={t('hmWins')}
-        hint={wr != null ? `${wr}% ${t('hmWinRate')}` : undefined}
-      />
-      <StatTile glass icon={<Swords size={18} />} value={played} label={t('hmGames')} />
-      <StatTile glass icon={<Heart size={18} />} value={stats?.endorsements ?? 0} label={t('hmEndorse')} />
-      <StatTile glass icon={<PlayingCardDeck size={18} />} value={decks.length} label={t('decksTitle')} />
+    <Section order={order} className="hmCareer" ariaLabel={t('hmCareer')}>
+      <div className="hmCareerHead">
+        <Heading level={2} noMargin className="hmCareerKicker">
+          {t('hmCareer')}
+        </Heading>
+      </div>
+      <div className="hmCareerBand">
+        {plates.map((plate) => (
+          <div key={plate.key} className="hmPlate">
+            <span className="hmPlateInner">
+              <span className="hmPlateValue">{plate.value}</span>
+              {plate.sub && <span className="hmPlateSub">{plate.sub}</span>}
+              <span className="hmPlateLabel">
+                {plate.icon}
+                <span className="hmPlateLabelText">{plate.label}</span>
+              </span>
+            </span>
+            <span
+              className="hmPlateEdge"
+              style={plate.fill != null ? { inlineSize: `${plate.fill}%` } : undefined}
+              aria-hidden
+            />
+          </div>
+        ))}
+      </div>
     </Section>
   );
 }
@@ -297,14 +430,12 @@ function TableSetup({ order }: { order: number }) {
   const { toast } = useToast();
   const decks = useApp((state) => state.decks);
   const join = useGame((state) => state.join);
-  const phone = useMobileLayout();
 
   const [tableName, setTableName] = useState('');
   const [seats, setSeats] = useState('4');
   const games = useVisibleGames();
   const [game, setGame] = useState('mtg');
   const [deckId, setDeckId] = useState('');
-  const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
 
   // Only the chosen game's decks are eligible; fall back to its first deck.
@@ -330,24 +461,10 @@ function TableSetup({ order }: { order: number }) {
     }
   };
 
-  const joinByCode = async (value?: string) => {
-    const tableCode = (value ?? code).trim().toUpperCase();
-    if (tableCode.length < 6) return;
-    setBusy(true);
-    try {
-      const room = await api.getRoomByCode(tableCode);
-      join(room.roomId, chosenDeck || undefined);
-    } catch {
-      toast({ tone: 'danger', message: t('playCodeBad') });
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <Section order={order}>
       <SectionHead title={t('hmSetupTable')} />
-      <div className="qpGrid">
+      <div className="qpGrid qpGridSolo">
         {/* HOST: game, deck, seats, name — the working half of the band above */}
         <div className="qpTile qpHost">
           <div className="qpTileBody">
@@ -416,40 +533,21 @@ function TableSetup({ order }: { order: number }) {
           </div>
         </div>
 
-        {/* JOIN: a ticket booth with arcade code cells */}
-        <div className="qpTile qpJoin">
-          <div className="qpTileBody">
-            <span className="qpTileTag">
-              <Ticket size={14} aria-hidden />
-              {t('playJoin')}
-            </span>
-            <div className="qpCode" data-no-drag>
-              <OtpField
-                length={6}
-                type="alphanumeric"
-                size={phone ? 'sm' : 'md'}
-                value={code}
-                onValueChange={(value) => setCode(value.toUpperCase())}
-                onComplete={(value) => void joinByCode(value)}
-                aria-label={t('playCodePlaceholder')}
-              />
-            </div>
-            <Text size={Size.XSmall} tone={TextTone.Subtle}>
-              {t('playCodePlaceholder')}
-            </Text>
-            <Button size="lg" variant="soft" onClick={() => void joinByCode()} loading={busy} disabled={code.length < 6} className="qpAction">
-              <Ticket size={17} />
-              {t('playJoinButton')}
-            </Button>
-          </div>
-        </div>
+        {/* Join-by-code moved up into the hero band's menu - one join entry on
+            the page, not two. */}
       </div>
     </Section>
   );
 }
 
-/** The four most recently touched decks as physical stacks. */
-function RecentDecks({ order }: { order: number }) {
+/**
+ * The loadout rail: the eight most recently touched decks as Apex loadout
+ * cards — the physical stack up top, then a stat block with the bracket chip,
+ * card count, and the deck's own record. Records come from HomePage's single
+ * myDeckStats fetch, mapped by deckId; a deck that has never hit a table shows
+ * an em dash, not a fake 0–0.
+ */
+function RecentDecks({ deckStats, order }: { deckStats: Map<string, MyDeckStats> | null; order: number }) {
   const t = useT();
   const decks = useApp((state) => state.decks);
   const refreshDecks = useApp((state) => state.refreshDecks);
@@ -467,7 +565,7 @@ function RecentDecks({ order }: { order: number }) {
 
   const recent = [...decks]
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .slice(0, 4);
+    .slice(0, 8);
 
   const openDeck = (id: string) => {
     selectDeck(id);
@@ -487,24 +585,45 @@ function RecentDecks({ order }: { order: number }) {
       <SectionHead title={t('hmRecentDecks')} onViewAll={goDecks} viewAllLabel={t('hmViewAll')} />
       {recent.length > 0 ? (
         <Carousel className="homeCarousel" gap="var(--glacier-space-4)" aria-label={t('hmRecentDecks')}>
-          {recent.map((deck) => (
-            <div key={deck.id} className="homeStackItem">
-              <DeckStack
-                name={deck.name}
-                imageUrl={deckSummaryCover(deck)}
-                width={150}
-                onClick={() => openDeck(deck.id)}
-              />
-              <Text size={Size.Small} className="homeStackName">
-                <GameTag game={deck.game} showName={false} /> {deck.name}
-              </Text>
-              {deck.commander && (
-                <Text size={Size.XSmall} tone={TextTone.Subtle} className="homeStackSub">
-                  {deck.commander}
+          {recent.map((deck) => {
+            const record = deckStats?.get(deck.id);
+            const playedIt = record != null && record.played > 0;
+            const pct = playedIt ? winRate(record) : null;
+            return (
+              <div key={deck.id} className="hmLoadout">
+                <DeckStack name={deck.name} imageUrl={deckSummaryCover(deck)} width={150} onClick={() => openDeck(deck.id)}>
+                  {deck.bracket && (
+                    <span
+                      className="hmLoadBracket"
+                      data-bracket={deck.bracket.bracket}
+                      role="img"
+                      aria-label={`${t('bkBracket')} ${deck.bracket.bracket}: ${t(bracketKey(deck.bracket.bracket))} (${t('bkEstimate')})`}
+                    >
+                      <span className="hmLoadBracketNum">{deck.bracket.bracket}</span>
+                      <span className="hmLoadBracketName">{t(bracketKey(deck.bracket.bracket))}</span>
+                    </span>
+                  )}
+                </DeckStack>
+                <Text size={Size.Small} className="hmLoadName">
+                  <GameTag game={deck.game} showName={false} /> {deck.name}
                 </Text>
-              )}
-            </div>
-          ))}
+                <div className="hmLoadStats">
+                  <span className="hmLoadStat">
+                    <span className="hmLoadValue">{deck.cardCount}</span>
+                    <span className="hmLoadLabel">{t('decksCards')}</span>
+                  </span>
+                  <span className="hmLoadStat">
+                    <span className="hmLoadValue">{playedIt ? `${record.wins}–${record.losses}` : '—'}</span>
+                    <span className="hmLoadLabel">{t('hmRecord')}</span>
+                  </span>
+                  <span className="hmLoadStat">
+                    <span className="hmLoadValue">{pct != null ? `${pct}%` : '—'}</span>
+                    <span className="hmLoadLabel">{t('hmWinRate')}</span>
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </Carousel>
       ) : settled ? (
         <EmptyFan
@@ -517,16 +636,59 @@ function RecentDecks({ order }: { order: number }) {
           }
         />
       ) : (
-        <CardRowSkeleton count={4} width={150} />
+        <CardRowSkeleton count={8} width={150} />
       )}
     </Section>
   );
 }
 
-/** A taste of the Browse catalog: the featured precon shelf. */
+/**
+ * One store-rail banner tile, shared by Featured and both starter shelves so
+ * the page reads as consistent rails: art-forward plate, a corner game tag,
+ * then name, one-line hook, and the browse affordance over the scrim. Portrait
+ * sources (full card scans) crop toward the art box; wide art crops center.
+ */
+function ShelfBanner({
+  art,
+  title,
+  hook,
+  tag,
+  portrait,
+  onClick,
+}: {
+  art: string;
+  title: string;
+  hook?: string;
+  tag?: ReactNode;
+  portrait?: boolean;
+  onClick: () => void;
+}) {
+  const t = useT();
+  return (
+    <button type="button" className={portrait ? 'hmBanner hmBannerPortrait' : 'hmBanner'} onClick={onClick}>
+      <span
+        className="hmBannerArt"
+        style={art ? { backgroundImage: `url(${art})` } : undefined}
+        aria-hidden
+      />
+      <span className="hmBannerScrim" aria-hidden />
+      {tag}
+      <span className="hmBannerBody">
+        <span className="hmBannerTitle">{title}</span>
+        {hook && <span className="hmBannerHook">{hook}</span>}
+        <span className="hmBannerCta">
+          {t('hmViewInBrowse')}
+          <ChevronRight size={14} aria-hidden />
+        </span>
+      </span>
+    </button>
+  );
+}
+
+/** A taste of the Browse catalog: the featured precon shelf as a store rail. */
 function Featured({ order }: { order: number }) {
   const t = useT();
-  const featured = featuredDecks().slice(0, 4);
+  const featured = featuredDecks().slice(0, 8);
   const goBrowse = () => {
     window.location.hash = '/browse';
   };
@@ -536,24 +698,16 @@ function Featured({ order }: { order: number }) {
       <SectionHead title={t('hmFeatured')} onViewAll={goBrowse} viewAllLabel={t('hmViewAll')} />
       <Carousel className="homeCarousel" gap="var(--glacier-space-4)" aria-label={t('hmFeatured')}>
         {featured.map((deck) => {
-          const commander = deck.commanders[0];
+          const hero = deck.commanders[0] ?? deck.face;
+          const year = deck.date.slice(0, 4);
           return (
-            <div key={deck.id} className="homeStackItem">
-              <DeckStack
-                name={deck.name}
-                imageUrl={commander ? cardImage(commander.sid) : undefined}
-                width={150}
-                onClick={goBrowse}
-              />
-              <Text size={Size.Small} className="homeStackName">
-                {deck.name}
-              </Text>
-              {commander && (
-                <Text size={Size.XSmall} tone={TextTone.Subtle} className="homeStackSub">
-                  {commander.name}
-                </Text>
-              )}
-            </div>
+            <ShelfBanner
+              key={deck.id}
+              art={hero ? artCrop(hero.sid) : ''}
+              title={deck.name}
+              hook={hero ? `${hero.name} · ${year}` : year}
+              onClick={goBrowse}
+            />
           );
         })}
       </Carousel>
@@ -578,15 +732,15 @@ function YugiohStarters({ order }: { order: number }) {
         {starters.map((starter) => {
           const coverName = starter.cards.find((card) => card.scryfallId === starter.cover)?.name ?? starter.name;
           return (
-            <div key={starter.id} className="homeStackItem">
-              <DeckStack name={coverName} imageUrl={yugiohImage(starter.cover)} width={150} onClick={goBrowse} />
-              <Text size={Size.Small} className="homeStackName">
-                <GameTag game="yugioh" showName={false} /> {starter.name}
-              </Text>
-              <Text size={Size.XSmall} tone={TextTone.Subtle} className="homeStackSub">
-                {coverName}
-              </Text>
-            </div>
+            <ShelfBanner
+              key={starter.id}
+              art={yugiohImage(starter.cover)}
+              title={starter.name}
+              hook={coverName}
+              tag={<GameTag game="yugioh" showName={false} className="hmBannerTag" />}
+              portrait
+              onClick={goBrowse}
+            />
           );
         })}
       </Carousel>
@@ -609,15 +763,15 @@ function CyberpunkStarters({ order }: { order: number }) {
       <SectionHead title={t('hmCyberStarters')} onViewAll={goBrowse} viewAllLabel={t('hmViewAll')} />
       <Carousel className="homeCarousel" gap="var(--glacier-space-4)" aria-label={t('hmCyberStarters')}>
         {starters.map((starter) => (
-          <div key={starter.id} className="homeStackItem">
-            <DeckStack name={starter.legend.displayName} imageUrl={cyberpunkImage(starter.legend.id)} width={150} onClick={goBrowse} />
-            <Text size={Size.Small} className="homeStackName">
-              <GameTag game="cyberpunk" showName={false} /> {starter.name}
-            </Text>
-            <Text size={Size.XSmall} tone={TextTone.Subtle} className="homeStackSub">
-              {starter.legend.displayName}
-            </Text>
-          </div>
+          <ShelfBanner
+            key={starter.id}
+            art={cyberpunkImage(starter.legend.id)}
+            title={starter.name}
+            hook={starter.legend.displayName}
+            tag={<GameTag game="cyberpunk" showName={false} className="hmBannerTag" />}
+            portrait
+            onClick={goBrowse}
+          />
         ))}
       </Carousel>
     </Section>
