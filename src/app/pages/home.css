@@ -1051,3 +1051,11 @@
     transform: none;
   }
 }
+
+/* The rank line carries its tier's emblem, so the badge reads the same here
+   as it does on the profile plate and in a lobby roster. */
+.gmBadgeRank {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}

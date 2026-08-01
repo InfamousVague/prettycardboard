@@ -40,7 +40,6 @@ import {
   ThumbsUp,
   Timer,
   Trash2,
-  Trophy,
   UserPlus,
   Users,
   WifiOff,
@@ -54,6 +53,7 @@ import { send } from '../../net/ws.ts';
 import { closeRoom, userStats } from '../../net/api.ts';
 import { deckSummaryArt } from '../../data/deckCover.ts';
 import { rankFor, winRate } from '../../data/ranks.ts';
+import { RankEmblem } from '../../components/RankEmblem.tsx';
 import { GameTag } from '../../components/GameTag.tsx';
 import { GameCard } from '../../components/GameCard.tsx';
 import { SaltPile } from '../../components/SaltPile.tsx';
@@ -913,7 +913,7 @@ function ScoutCard({
       ) : (
         <div className="pregameStats">
           <span className="pregameStat pregameRank" title={`${t('hmLevel')} ${rank.level}`}>
-            <Trophy size={11} /> {rank.title} · {rank.level}
+            <RankEmblem rank={rank} size={13} /> {rank.title} · {rank.level}
           </span>
           <span className="pregameStat pregameRecord">
             {stats && stats.played > 0

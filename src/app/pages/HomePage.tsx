@@ -29,6 +29,7 @@ import type { MyDeckStats, MyRoom, UserStats } from '../net/types.ts';
 import { artCrop } from '../data/cards.ts';
 import { bracketKey } from '../data/brackets.ts';
 import { rankFor, winRate } from '../data/ranks.ts';
+import { RankEmblem } from '../components/RankEmblem.tsx';
 import { featuredDecks } from '../data/catalog.ts';
 import { useVisibleGames } from '../hooks/useVisibleGames.ts';
 import { cyberpunkImage, cyberpunkStarters } from '../data/cyberpunk.ts';
@@ -234,7 +235,10 @@ function GameMenu({
           <StatusDot tone="success" pulse className="gmBadgePresence" />
         </span>
         <div className="gmBadgeId">
-          <span className="gmBadgeRank">{rank.title}</span>
+          <span className="gmBadgeRank">
+            <RankEmblem rank={rank} size={16} />
+            {rank.title}
+          </span>
           {/* The page's h1: the badge owns the player's name, like OW's portrait. */}
           <Heading level={1} noMargin className="gmBadgeName">
             {identity?.username}

@@ -26,6 +26,7 @@ import { fmtDuration, relativeWhen } from '../components/MatchHistory.tsx';
 import { SaltPile } from '../components/SaltPile.tsx';
 import { GameTag } from '../components/GameTag.tsx';
 import { RANKS, rankFor, winRate } from '../data/ranks.ts';
+import { RankEmblem, RankLadder } from '../components/RankEmblem.tsx';
 import { deckSummaryArt } from '../data/deckCover.ts';
 import { useShowcaseId, writeShowcaseId } from '../data/showcase.ts';
 import { useMobileLayout } from '../hooks/useIsPhone.ts';
@@ -60,33 +61,6 @@ const PIP: Record<string, string> = {
   G: 'oklch(0.55 0.13 150)',
 };
 
-/**
- * The rank insignia: one chevron slot per rank above the entry tier, filled to
- * the current tier - military-stripe style. Decorative; the rank title beside
- * it carries the meaning.
- */
-function RankInsignia({ tier }: { tier: number }) {
-  const slots = RANKS.length - 1;
-  return (
-    <svg className="pfInsignia" viewBox="0 0 20 22" width={18} height={20} aria-hidden>
-      {Array.from({ length: slots }, (_, i) => {
-        const y = 20 - i * 3.3;
-        return (
-          <path
-            key={i}
-            d={`M4 ${y} L10 ${y - 3.4} L16 ${y}`}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            opacity={i < tier ? 1 : 0.22}
-          />
-        );
-      })}
-    </svg>
-  );
-}
 
 /** One big-number stat plate: the value huge, the label small and tracked. */
 function Plate({
@@ -203,21 +177,38 @@ export function ProfilePage() {
   return (
     <div className="page profilePage">
       {/* ---- identity plate: art band, rank insignia, win-rate ring ---- */}
-      <header className="pfBand" data-has-art={art ? '' : undefined}>
+      <header
+        className="pfBand"
+        data-has-art={art ? '' : undefined}
+        /* The tier's colour drives the whole plate: the wash over the art, the
+           portrait ring, the rank line, and the watermark behind it all. */
+        style={rank ? ({ ['--pf-rank' as string]: rank.color }) : undefined}
+      >
         {art && <div className="pfBandArt" style={{ backgroundImage: `url(${art})` }} aria-hidden />}
         <div className="pfBandScrim" aria-hidden />
+        {rank && <div className="pfRankWash" aria-hidden />}
+        {rank && (
+          <div className="pfRankMark" aria-hidden>
+            <RankEmblem rank={rank} size={104} />
+          </div>
+        )}
         <Button variant="ghost" size="sm" onClick={signOut} className="pfSignOut">
           {t('pfSignOut')}
         </Button>
         <div className="pfBandMain">
           <div className="pfIdent">
-            <span className="pfPortrait">
+            <span className="pfPortrait" data-ranked={rank ? '' : undefined}>
               <Avatar name={identity?.username ?? '?'} size="xl" shape="rounded" />
+              {rank && (
+                <span className="pfPortraitBadge">
+                  <RankEmblem rank={rank} size={34} title={rank.title} />
+                </span>
+              )}
             </span>
             <div className="pfIdText">
               {rank && (
                 <span className="pfRankLine">
-                  <RankInsignia tier={tier} />
+                  <RankLadder tier={tier} size={17} />
                   <span className="pfRankTitle">{rank.title}</span>
                   <span className="pfLevel">
                     {t('hmLevel')} {rank.level}

@@ -146,8 +146,8 @@
    The octagon is horizontally symmetric, so RTL needs no mirror. */
 .pfPortrait {
   flex: none;
+  position: relative;
   display: inline-flex;
-  overflow: hidden;
   padding: 5px;
   background: linear-gradient(
     180deg,
@@ -155,6 +155,85 @@
     color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent)
   );
   border-radius: var(--glacier-radius-full);
+}
+
+/* Ranked: the frame wears the TIER's colour rather than the app accent, and
+   carries its emblem as a badge - the rank is legible from the portrait
+   alone, which is how it reads across a lobby. */
+.pfPortrait[data-ranked] {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--pf-rank, var(--glacier-accent-solid)) 95%, transparent),
+    color-mix(in oklch, var(--pf-rank, var(--glacier-accent-solid)) 35%, transparent)
+  );
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--pf-rank, var(--glacier-accent-solid)) 60%, transparent),
+    0 0 22px color-mix(in oklch, var(--pf-rank, var(--glacier-accent-solid)) 32%, transparent);
+}
+
+/* The frame stopped clipping when the badge had to hang outside it, so the
+   avatar takes its own circular crop - otherwise a rounded-square avatar
+   sits inside a round frame as a visible square. */
+.pfPortrait > :first-child {
+  overflow: hidden;
+  border-radius: var(--glacier-radius-full);
+}
+
+.pfPortraitBadge {
+  position: absolute;
+  inset-block-end: -6px;
+  inset-inline-end: -6px;
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--glacier-surface) 88%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+}
+
+/* The tier's colour wash over the showcase art: the hero READS as the rank
+   even before the title is read, and a plate with no deck art still has an
+   identity of its own. */
+.pfRankWash {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      125% 105% at 6% 46%,
+      color-mix(in oklch, var(--pf-rank, var(--glacier-accent-solid)) 62%, transparent),
+      transparent 66%
+    ),
+    linear-gradient(
+      100deg,
+      color-mix(in oklch, var(--pf-rank, var(--glacier-accent-solid)) 34%, transparent) 12%,
+      transparent 58%
+    );
+}
+
+/* The tier emblem, oversized and quiet, as the plate's watermark. */
+/* The tier's emblem as the plate's maker-mark: ABOVE the art and its scrim
+   (z-index 0 against their -2 / -1) so it is an emblem rather than a smudge
+   seen through a photo, and low enough in opacity to stay a watermark. It
+   sits in the bottom trailing corner, bleeding off the edge - the win-rate
+   ring owns the middle of that side. */
+.pfRankMark {
+  position: absolute;
+  z-index: 0;
+  /* Fully inside the plate and un-glowed: the plate clips (overflow:hidden),
+     so a bleeding emblem became a cropped box, and the drop-shadow turned the
+     rest into a square halo. Sitting whole in the corner, it reads as the
+     insignia it is. */
+  inset-block-end: var(--glacier-space-5);
+  inset-inline-end: var(--glacier-space-6);
+  opacity: 0.34;
+  pointer-events: none;
+}
+
+@media (max-width: 48rem) {
+  .pfRankMark {
+    display: none;
+  }
 }
 
 .pfIdText {
@@ -169,7 +248,7 @@
   display: flex;
   align-items: center;
   gap: var(--glacier-space-2);
-  color: var(--glacier-accent-text);
+  color: color-mix(in oklch, var(--pf-rank, var(--glacier-accent-text)) 82%, white);
 }
 
 .pfInsignia {
@@ -187,7 +266,7 @@
 /* Level chip: a hexagon (symmetric - RTL safe). */
 .pfLevel {
   padding: 2px 18px;
-  background: color-mix(in oklch, var(--glacier-accent-soft) 90%, transparent);
+  background: color-mix(in oklch, var(--pf-rank, var(--glacier-accent-solid)) 26%, transparent);
   font-size: var(--glacier-font-size-xs);
   font-weight: var(--glacier-font-weight-bold);
   letter-spacing: 0.06em;

@@ -1,0 +1,27 @@
+/* Rank insignia: drawn vector, never an uploaded asset, so it is crisp at
+   every size and can never go missing. Colour comes from the tier itself
+   (inline `color`), which every shape inherits through currentColor. */
+.rankEmblem {
+  flex: none;
+  display: block;
+}
+
+/* The whole ladder in a row: where you are, and what is left to climb. */
+.rankLadder {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.rankLadderNow {
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+.rankLadderDone {
+  opacity: 0.62;
+}
+
+.rankLadderTodo {
+  opacity: 0.22;
+  filter: grayscale(0.7);
+}
