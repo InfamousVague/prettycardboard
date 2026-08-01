@@ -37,6 +37,11 @@
   /* The floating nav pill's resting height. Anything that shares its corner
      (the chat aside) stacks on top of it rather than under it. */
   --pc-nav-h: 2.75rem;
+  /* How far the top strip reaches into the table: everything anchored under it
+     (side rail, dock column, turn cues) hangs from this one measure. When the
+     strip docks into the desktop title bar there is no strip to clear, so the
+     override below collapses the whole band to an ordinary gutter. */
+  --pc-strip-clear: 4.4rem;
   /* The staged playmat card: shared radius + resting/active glow. */
   --pc-mat-radius: 1.4rem;
   --pc-mat-shadow:
@@ -64,6 +69,13 @@
 .table[data-rail='hidden'] {
   --pc-rail-w: 0px;
   --pc-rail-band: 0px;
+}
+
+/* Tauri desktop: the strip's clusters live in the window title bar (see
+   titlebarDock.ts), so there is no strip row to clear - everything hung from
+   --pc-strip-clear rises to a plain gutter under the table's top edge. */
+.table[data-chrome-docked] {
+  --pc-strip-clear: var(--glacier-space-3);
 }
 
 /* The rail is up: the docked column parks INSIDE its gutter, so the two read as
@@ -570,30 +582,33 @@
        grows into a tall window but never shrinks under its portraits (they are
        overflow:hidden and would clip). */
     grid-template-rows: min-content minmax(min-content, 1fr) min-content min-content;
+    /* The launch controls are the room's FLOOR, not a card parked beside the
+       roster: one full-width line under everything, so leaving, closing,
+       spectating and starting read as one row of choices instead of a
+       floating square in the right column. */
     grid-template-areas:
       'hero   hero'
       'stage  setup'
-      'roster launch';
+      'roster roster'
+      'launch launch';
     padding-inline: var(--glacier-space-5);
   }
 
   /* Spectators are a footnote; with no seat of your own there is no deck
      column to sit beside, so the line keeps the full width under both. */
   .pregameLobby:has(.pregameSpectators) {
+    grid-template-rows: min-content minmax(min-content, 1fr) min-content min-content min-content;
     grid-template-areas:
       'hero   hero'
       'stage  setup'
-      'roster launch'
+      'roster roster'
+      'launch launch'
       'watch  watch';
   }
 
-  /* The deck picker heads its column, go anchors the foot of it. */
+  /* The deck picker heads its column; the launch line anchors the page. */
   .pregameLaunchSetup {
     align-self: start;
-  }
-
-  .pregameLaunch {
-    align-self: end;
   }
 }
 
@@ -621,19 +636,21 @@
     /* Bounded rows + no scroll of its own: row 3 is the elastic one and the
        stage inside it carries the overflow. */
     overflow: hidden;
-    grid-template-rows: min-content min-content minmax(0, 1fr);
-    grid-template-areas:
-      'hero   hero'
-      'roster setup'
-      'stage  launch';
-  }
-
-  .pregameLobby:has(.pregameSpectators) {
     grid-template-rows: min-content min-content minmax(0, 1fr) min-content;
     grid-template-areas:
       'hero   hero'
       'roster setup'
-      'stage  launch'
+      'stage  stage'
+      'launch launch';
+  }
+
+  .pregameLobby:has(.pregameSpectators) {
+    grid-template-rows: min-content min-content minmax(0, 1fr) min-content min-content;
+    grid-template-areas:
+      'hero   hero'
+      'roster setup'
+      'stage  stage'
+      'launch launch'
       'watch  watch';
   }
 
@@ -1362,12 +1379,18 @@
      clips: a rigid 457px cluster in a 293px column had nowhere to go. Wrapping
      is the floor - whatever the bar's width and whatever the translation, the
      cluster folds instead of leaving. */
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-inline-size: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--glacier-space-2);
+}
+
+/* The full-width line reads left to right: the ways OUT first (leave, close,
+   watch), then the primary go on the trailing edge where the eye lands last. */
+.pregameLaunchGo > :last-child {
+  margin-inline-start: auto;
 }
 
 /* A bar too narrow for the cluster side by side. One control per line, Start
@@ -1998,7 +2021,7 @@
 /* The one-shot "Your turn" pill, top-center under the ribbon. */
 .turnPill {
   position: absolute;
-  top: 4.4rem;
+  top: var(--pc-strip-clear);
   inset-inline-start: 50%;
   translate: -50%;
   z-index: 66;
@@ -2023,7 +2046,7 @@
    the turn pill — if it were your turn, your own board would be staged). */
 .spectateCue {
   position: absolute;
-  top: 4.4rem;
+  top: var(--pc-strip-clear);
   inset-inline-start: 50%;
   translate: -50%;
   z-index: 66;
@@ -4335,7 +4358,7 @@
    the two read as one band. */
 .tableDock {
   position: absolute;
-  inset-block: 4.4rem var(--glacier-space-3);
+  inset-block: var(--pc-strip-clear) var(--glacier-space-3);
   inset-inline-end: var(--pc-dock-edge);
   inline-size: var(--pc-dock-w);
   display: flex;
@@ -4392,7 +4415,7 @@
 /* The right rail owns a scrollable card stack and a pinned navigation row. */
 .tableSide {
   position: absolute;
-  top: 4.4rem;
+  top: var(--pc-strip-clear);
   bottom: var(--glacier-space-3);
   inset-inline-end: var(--glacier-space-3);
   width: var(--pc-rail-w);
@@ -4934,6 +4957,30 @@
 
 .tableTop .tableMeta {
   min-width: 0;
+}
+
+/* The same clusters docked in the desktop title bar (see titlebarDock.ts):
+   window-chrome idiom. Contextual button labels drop entirely - their
+   tooltips carry the names - the ribbon stays on one compact line, and the
+   room name truncates before it can crowd the arrows or the account chip. */
+.tbDock .ttActionLabel {
+  display: none;
+}
+
+.tbDock .ribbonRow {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.tbDock .phaseStop:not([data-current]) .phaseLabel {
+  display: none;
+}
+
+.tbDock .tableMeta > span:first-child {
+  max-width: 14rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Commander damage read-outs. Recording happens in the player's own vitals
