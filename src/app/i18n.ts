@@ -547,6 +547,62 @@ export const messages = {
   clCatSocial: { en: 'Social', es: 'Social', fr: 'Social', ar: 'اجتماعي' },
   clCatTable: { en: 'Table', es: 'Mesa', fr: 'Table', ar: 'الطاولة' },
 
+  // --- 0.8.0: every screen is a game screen ---
+  clHeadline080: {
+    en: 'The whole app plays like a game now.',
+    es: 'Toda la aplicación se siente como un juego.',
+    fr: 'Toute l’application se vit comme un jeu.',
+    ar: 'التطبيق كله يبدو الآن كلعبة.',
+  },
+  clGameScreens: {
+    en: 'Every screen is a game screen',
+    es: 'Cada pantalla es una pantalla de juego',
+    fr: 'Chaque écran est un écran de jeu',
+    ar: 'كل شاشة هي شاشة لعب',
+  },
+  clGameScreensDesc: {
+    en: 'Home opens like a main menu, Play deals its game modes as big plates, Decks is an armory, Collection is a trophy vault headed by your best pull, Boosters is a pack wall with drop rates, and your Profile is a career screen with a rank plate and a win-rate ring.',
+    es: 'Inicio abre como un menú principal, Jugar reparte sus modos como grandes placas, Mazos es una armería, Colección es una sala de trofeos encabezada por tu mejor carta, Sobres es una pared de paquetes con probabilidades, y tu Perfil es una pantalla de carrera con placa de rango y anillo de victorias.',
+    fr: 'L’accueil s’ouvre comme un menu principal, Jouer présente ses modes en grandes plaques, Decks devient une armurerie, Collection une salle des trophées menée par votre meilleure carte, Boosters un mur de paquets avec les taux, et votre Profil un écran de carrière avec plaque de rang et anneau de victoires.',
+    ar: 'الرئيسية تفتح كقائمة رئيسية، واللعب يعرض أطواره كلوحات كبيرة، والمجموعات ترسانة، والمقتنيات قاعة جوائز تتصدرها أفضل بطاقة لديك، والعبوات جدار عبوات مع نسب السحب، وملفك الشخصي شاشة مسيرة برتبة وحلقة انتصارات.',
+  },
+  clRailNav: {
+    en: 'One rail, everywhere',
+    es: 'Un solo riel, en todas partes',
+    fr: 'Un seul rail, partout',
+    ar: 'شريط واحد في كل مكان',
+  },
+  clRailNavDesc: {
+    en: 'The side rail is the navigation now - the old contextual sidebar retired, so every page gets its full width.',
+    es: 'El riel lateral es ahora la navegación: la antigua barra contextual se retiró, así que cada página usa todo su ancho.',
+    fr: 'Le rail latéral est désormais la navigation : l’ancienne barre contextuelle prend sa retraite, chaque page profite de toute sa largeur.',
+    ar: 'الشريط الجانبي هو التنقل الآن - تقاعد الشريط السياقي القديم، فصارت كل صفحة تستخدم عرضها الكامل.',
+  },
+  clCareerStats: {
+    en: 'Your record, writ large',
+    es: 'Tu historial, a lo grande',
+    fr: 'Votre palmarès, en grand',
+    ar: 'سجلّك بأحرف كبيرة',
+  },
+  clCareerStatsDesc: {
+    en: 'Wins, win rate and games played headline the Matches page, your tables read like a server browser with live seats, and every past match wears its result on its edge.',
+    es: 'Victorias, porcentaje y partidas encabezan la página de Partidas, tus mesas se leen como un navegador de servidores con asientos en vivo, y cada partida pasada lleva su resultado en el borde.',
+    fr: 'Victoires, taux et parties jouées coiffent la page Parties, vos tables se lisent comme un navigateur de serveurs avec sièges en direct, et chaque partie passée porte son résultat sur sa tranche.',
+    ar: 'الانتصارات ونسبة الفوز وعدد المباريات تتصدر صفحة المباريات، وطاولاتك تُقرأ كمتصفح خوادم بمقاعد حية، وكل مباراة سابقة تحمل نتيجتها على حافتها.',
+  },
+  clLobbyPicker: {
+    en: 'A deck picker you can read',
+    es: 'Un selector de mazos legible',
+    fr: 'Un sélecteur de decks lisible',
+    ar: 'مُنتقي مجموعات يمكن قراءته',
+  },
+  clLobbyPickerDesc: {
+    en: 'On a phone held upright the lobby deck picker takes the full width instead of squeezing beside Ready up, and nothing in the lobby sits off screen in either orientation.',
+    es: 'Con el teléfono en vertical, el selector de mazos ocupa todo el ancho en vez de apretarse junto a Listo, y nada de la sala queda fuera de pantalla en ninguna orientación.',
+    fr: 'Téléphone à la verticale, le sélecteur de decks prend toute la largeur au lieu de se serrer contre Prêt, et rien du salon ne sort de l’écran dans aucune orientation.',
+    ar: 'عند حمل الهاتف رأسيًا يأخذ منتقي المجموعات العرض الكامل بدل الانضغاط بجانب زر الاستعداد، ولا شيء في الردهة يخرج عن الشاشة في أي اتجاه.',
+  },
+
   // --- 0.7.0: the phone stops asking you to turn it back ---
   clHeadline070: {
     en: 'Your phone works whichever way you hold it.',

@@ -72,6 +72,46 @@ export interface ChangelogRelease {
  *  load-bearing, but keep the literal in order for whoever reads it. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: '0.8.0',
+    date: '2026-08-01',
+    headline: 'clHeadline080',
+    entries: [
+      {
+        id: 'game-screens',
+        icon: Swords,
+        title: 'clGameScreens',
+        desc: 'clGameScreensDesc',
+        kind: 'new',
+        category: 'clCatLayout',
+        featured: true,
+      },
+      {
+        id: 'rail-nav',
+        icon: PanelRightOpen,
+        title: 'clRailNav',
+        desc: 'clRailNavDesc',
+        kind: 'improved',
+        category: 'clCatLayout',
+      },
+      {
+        id: 'career-stats',
+        icon: BarChart2,
+        title: 'clCareerStats',
+        desc: 'clCareerStatsDesc',
+        kind: 'new',
+        category: 'clCatApp',
+      },
+      {
+        id: 'lobby-picker',
+        icon: LayoutGrid,
+        title: 'clLobbyPicker',
+        desc: 'clLobbyPickerDesc',
+        kind: 'fixed',
+        category: 'clCatTable',
+      },
+    ],
+  },
+  {
     version: '0.7.0',
     date: '2026-08-01',
     headline: 'clHeadline070',
