@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Button,
@@ -11,10 +11,11 @@ import {
   Spinner,
   Text,
   TextTone,
+  useLocale,
 } from '@glacier/react';
-import { ArrowLeft } from '@glacier/icons';
+import { ArrowLeft, ChevronRight, Sparkles } from '@glacier/icons';
 import { PlayingCardPack } from '../icons/cards.ts';
-import { useT } from '../i18n.ts';
+import { APP_LOCALES, useT, type AppLocale } from '../i18n.ts';
 import { cardImage } from '../data/cards.ts';
 import { cardBackUrl, effectiveCardBack } from '../data/cardBacks.ts';
 import { useCardPopup } from '../components/CardPopup.tsx';
@@ -28,24 +29,79 @@ import { PackOpening } from './boosters/PackOpening.tsx';
 import './boosters.css';
 
 /**
- * Boosters: browse every set that shipped in packs and open one.
+ * Boosters: browse every set that shipped in packs and open one - dressed as
+ * the shop's pack wall. The marquee band wears the newest set's art and offers
+ * it as the featured product; the grid below is the wall itself, box art
+ * forward on notched shelf plates. The opener page is the counter: the 3D
+ * display box, a drop-rates panel (games publish their odds; so do we), and
+ * one unmissable OPEN PACK.
  *
  * The point is fidelity - the pack you open here has the slots that set's real
  * boosters had, drawn from the cards those boosters could actually contain,
  * with the mythic rate computed from the set's own rare/mythic counts. Groundwork
  * for draft: once a pack is trustworthy, a draft is just eight of them passed
- * around a table.
+ * around a table. All of that machinery is untouched; this file's changes are
+ * presentation.
  */
+
+/**
+ * Strings this redesign introduces. i18n.ts is shared ground, so they live
+ * here (same Entry shape, same fallback rule) until they are folded in; the
+ * hook resolves the exact locale the app-wide useT() does.
+ */
+const LOCAL_MESSAGES = {
+  boWallKicker: {
+    en: 'The pack wall',
+    es: 'El muro de sobres',
+    fr: 'Le mur des boosters',
+    ar: 'جدار العبوات',
+  },
+  boDropRates: {
+    en: 'Drop rates',
+    es: 'Probabilidades',
+    fr: 'Taux d’obtention',
+    ar: 'معدلات السحب',
+  },
+  boNewest: {
+    en: 'Newest',
+    es: 'Novedad',
+    fr: 'Nouveauté',
+    ar: 'الأحدث',
+  },
+  boEra: {
+    en: 'Era',
+    es: 'Época',
+    fr: 'Époque',
+    ar: 'الحقبة',
+  },
+  boOpenPackSub: {
+    en: 'Tear the foil — see what is inside',
+    es: 'Rasga el sobre y descubre qué hay dentro',
+    fr: 'Déchirez l’emballage — voyez ce qu’il contient',
+    ar: 'مزّق الغلاف واكتشف ما بداخله',
+  },
+} satisfies Record<string, Record<AppLocale, string>>;
+
+function useLocalT(): (key: keyof typeof LOCAL_MESSAGES) => string {
+  const locale = useLocale();
+  const active: AppLocale = (APP_LOCALES as readonly string[]).includes(locale)
+    ? (locale as AppLocale)
+    : 'en';
+  return (key) => LOCAL_MESSAGES[key][active] ?? LOCAL_MESSAGES[key].en;
+}
+
 /**
  * The set's cached poster art, or null until it is known to load. The URL only
  * becomes a background/wrapper once the browser has it, so a set with no art
- * (or a server without the cache yet) degrades to the brandless pack.
+ * (or a server without the cache yet) degrades to the brandless pack. An empty
+ * code (nothing to feature yet) probes nothing.
  */
 function useBoosterArt(code: string): string | null {
   const [ok, setOk] = useState(false);
-  const url = boosterArtUrl(code);
+  const url = code ? boosterArtUrl(code) : '';
   useEffect(() => {
     setOk(false);
+    if (!url) return;
     const probe = new Image();
     probe.onload = () => setOk(true);
     probe.src = url;
@@ -53,7 +109,7 @@ function useBoosterArt(code: string): string | null {
       probe.onload = null;
     };
   }, [url]);
-  return ok ? url : null;
+  return ok && url ? url : null;
 }
 
 /** Tiles per page of the set grid. */
@@ -61,6 +117,7 @@ const PAGE = 24;
 
 export function BoostersPage() {
   const t = useT();
+  const lt = useLocalT();
   const [sets, setSets] = useState<BoosterSet[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
@@ -96,35 +153,73 @@ export function BoostersPage() {
     setPage(1);
   }, [query, decade]);
 
+  // The marquee: loadBoosterSets sorts newest first, so [0] is the latest
+  // wave on the wall. Its art paints the band; the featured plate opens it.
+  const newest = sets?.[0] ?? null;
+  const bandArt = useBoosterArt(newest?.code ?? '');
+
   if (openSet) {
     return <PackOpener set={openSet} onBack={() => setOpenSet(null)} />;
   }
 
   return (
     <div className="page boostersPage">
-      <div className="boHead">
-        <Heading level={1}>{t('boTitle')}</Heading>
-        <Text size={Size.Large} tone={TextTone.Muted} className="lede">
-          {t('boLede')}
-        </Text>
-      </div>
+      {/* ---- the marquee band: newest set's art, big title, featured plate ---- */}
+      <section className="bshBand" aria-label={t('boTitle')}>
+        <div
+          className="bshArt"
+          style={bandArt ? { backgroundImage: `url("${bandArt}")` } : undefined}
+          data-noart={bandArt ? undefined : ''}
+          aria-hidden
+        />
+        <div className="bshScrim" aria-hidden />
+        <div className="bshIntro">
+          <span className="bshKicker">{lt('boWallKicker')}</span>
+          <Heading level={1} noMargin className="bshTitle">
+            {t('boTitle')}
+          </Heading>
+          <Text size={Size.Large} tone={TextTone.Muted} className="lede">
+            {t('boLede')}
+          </Text>
+        </div>
+        {newest && (
+          <button type="button" className="bshFeature" onClick={() => setOpenSet(newest)}>
+            <span className="bshFeatureTag">
+              <Sparkles size={13} aria-hidden />
+              {lt('boNewest')}
+            </span>
+            <span className="bshFeatureName">{newest.name}</span>
+            <span className="bshFeatureMeta">
+              {newest.code.toUpperCase()} · {newest.released.slice(0, 4)} · {newest.cardCount} {t('boCards')}
+            </span>
+            <span className="bshFeatureCta">
+              <PlayingCardPack size={16} aria-hidden />
+              {t('boOpenPack')}
+              <ChevronRight size={14} className="bshFeatureChevron" aria-hidden />
+            </span>
+          </button>
+        )}
+      </section>
 
       <div className="boToolbar" role="group" aria-label={t('boSearch')}>
         <div className="boSearch">
           <SearchField value={query} onValueChange={setQuery} placeholder={t('boSearch')} aria-label={t('boSearch')} />
         </div>
-        <SegmentedControl
-          size="sm"
-          aria-label={t('boTitle')}
-          value={decade}
-          onValueChange={setDecade}
-          options={[
-            { value: 'all', label: t('boAll') },
-            { value: '2020', label: '2020s' },
-            { value: '2010', label: '2010s' },
-            { value: '2000', label: '2000s' },
-          ]}
-        />
+        <div className="bshEra">
+          <span className="bshEraLabel">{lt('boEra')}</span>
+          <SegmentedControl
+            size="sm"
+            aria-label={t('boTitle')}
+            value={decade}
+            onValueChange={setDecade}
+            options={[
+              { value: 'all', label: t('boAll') },
+              { value: '2020', label: '2020s' },
+              { value: '2010', label: '2010s' },
+              { value: '2000', label: '2000s' },
+            ]}
+          />
+        </div>
       </div>
 
       {failed ? (
@@ -163,18 +258,18 @@ export function BoostersPage() {
   );
 }
 
+/** One shelf slot on the wall: the product shot on a notched plate. Entrance
+ * is CSS (base state = settled), staggered by the --i index. */
 function SetTile({ set, index, onOpen }: { set: BoosterSet; index: number; onOpen: () => void }) {
   const t = useT();
   const spec = specFor(set.released, set.setType);
   const art = useBoosterArt(set.code);
   return (
-    <motion.button
+    <button
       type="button"
       className="boSetTile"
       onClick={onOpen}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: 'easeOut', delay: Math.min(index, 10) * 0.03 }}
+      style={{ '--i': Math.min(index, 10) } as CSSProperties}
     >
       {/* The product shot: the display box wearing the set's art, with the
           set's three rarest cards fanned out of its bottom-right corner. */}
@@ -217,13 +312,14 @@ function SetTile({ set, index, onOpen }: { set: BoosterSet; index: number; onOpe
           </Pill>
         )}
       </span>
-    </motion.button>
+    </button>
   );
 }
 
 /** The opened-pack view: load the set's pool once, then deal packs from it. */
 function PackOpener({ set, onBack }: { set: BoosterSet; onBack: () => void }) {
   const t = useT();
+  const lt = useLocalT();
   const phone = useMobileLayout();
   const art = useBoosterArt(set.code);
   const popup = useCardPopup();
@@ -309,45 +405,73 @@ function PackOpener({ set, onBack }: { set: BoosterSet; onBack: () => void }) {
       <div className="boProductRow">
         <BoosterBox3D set={set} art={art} />
         <div className="boProductInfo">
-      {pool && (
-        <div className="boStats">
-          <Stat label={t('boMythicRate')} value={mythicRate > 0 ? `1 in ${(1 / mythicRate).toFixed(1)}` : '—'} />
-          {/* `perRarityFoil` tracks whether foils had been printed at all, so
-              pre-1999 sets show nothing rather than contradicting their own
-              "foils did not exist yet" note three lines above. */}
-          <Stat label={t('boFoilRate')} value={foilRate} />
-          <Stat label={t('boCards')} value={String(poolSize)} />
-          <Stat label={t('boPacksOpened')} value={String(opened)} />
-        </div>
-      )}
+          {/* Games publish their odds; so does the counter. Same figures the
+              old stat row printed, now on a labelled drop-rates panel with
+              rate meters, plus the pool size and the session's pack count. */}
+          {pool && (
+            <div className="bshOdds">
+              <span className="bshOddsHead">
+                <Sparkles size={14} aria-hidden />
+                {lt('boDropRates')}
+              </span>
+              <div className="bshOddsRows">
+                <OddsRow
+                  label={t('boMythicRate')}
+                  value={mythicRate > 0 ? `1 in ${(1 / mythicRate).toFixed(1)}` : '—'}
+                  pct={mythicRate * 100}
+                  tone="mythic"
+                />
+                {/* `perRarityFoil` tracks whether foils had been printed at
+                    all, so pre-1999 sets show a dash rather than contradicting
+                    their own "foils did not exist yet" note above. */}
+                <OddsRow
+                  label={t('boFoilRate')}
+                  value={foilRate}
+                  pct={foilPerPack == null ? 0 : Math.min(100, foilPerPack * 100)}
+                  tone="foil"
+                />
+              </div>
+              <div className="bshOddsStats">
+                <span className="bshStat">
+                  <span className="bshStatValue">{poolSize}</span>
+                  <span className="bshStatLabel">{t('boCards')}</span>
+                </span>
+                <span className="bshStat">
+                  <span className="bshStatValue">{opened}</span>
+                  <span className="bshStatLabel">{t('boPacksOpened')}</span>
+                </span>
+              </div>
+            </div>
+          )}
 
-      {failed ? (
-        <div className="boNotice">
-          <Text tone={TextTone.Muted}>{t('boPoolFailed')}</Text>
-        </div>
-      ) : !pool ? (
-        <div className="boNotice">
-          <Spinner size="lg" />
-          <Text size={Size.Small} tone={TextTone.Subtle}>
-            {t('boLoadingPool')}
-          </Text>
-        </div>
-      ) : (
-        <>
-          <div className="boActions">
-            <Button size="lg" onClick={deal}>
-              <PlayingCardPack size={18} aria-hidden />
-              {t('boOpenPack')}
-            </Button>
-          </div>
-        </>
-      )}
+          {failed ? (
+            <div className="boNotice">
+              <Text tone={TextTone.Muted}>{t('boPoolFailed')}</Text>
+            </div>
+          ) : !pool ? (
+            <div className="boNotice">
+              <Spinner size="lg" />
+              <Text size={Size.Small} tone={TextTone.Subtle}>
+                {t('boLoadingPool')}
+              </Text>
+            </div>
+          ) : (
+            /* The one unmissable action on the page. */
+            <button type="button" className="bshOpen" onClick={deal}>
+              <span className="bshOpenInner">
+                <PlayingCardPack size={30} className="bshOpenIcon" aria-hidden />
+                <span className="bshOpenText">
+                  <span className="bshOpenTitle">{t('boOpenPack')}</span>
+                  <span className="bshOpenSub">{lt('boOpenPackSub')}</span>
+                </span>
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
       {failed || !pool ? null : (
         <>
-
           {/* The last pull stays on the page after the overlay closes, so a
               player can look back over what they got. */}
           {pack && (
@@ -385,6 +509,22 @@ function PackOpener({ set, onBack }: { set: BoosterSet; onBack: () => void }) {
   );
 }
 
+/** One published rate: label, a rarity-toned meter filled to the chance, and
+ * the human-readable figure. Presentation only - the numbers arrive computed. */
+function OddsRow({ label, value, pct, tone }: { label: string; value: string; pct: number; tone: 'mythic' | 'foil' }) {
+  // A tiny-but-real chance still deserves a visible sliver of fill.
+  const fill = pct > 0 ? Math.max(2, Math.min(100, pct)) : 0;
+  return (
+    <div className="bshOddsRow" data-tone={tone}>
+      <span className="bshOddsLabel">{label}</span>
+      <span className="bshOddsMeter" aria-hidden>
+        <span className="bshOddsFill" style={{ inlineSize: `${fill}%` }} />
+      </span>
+      <span className="bshOddsValue">{value}</span>
+    </div>
+  );
+}
+
 /**
  * The set's booster display box as a real cuboid: front, side and lid faces
  * positioned in 3D, wearing the poster art, idling with a slow sway. This is
@@ -410,17 +550,6 @@ function BoosterBox3D({ set, art }: { set: BoosterSet; art: string | null }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="boStat">
-      <span className="boStatValue">{value}</span>
-      <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
-        {label}
-      </Text>
-    </div>
-  );
-}
-
 const SLOT_LABEL = {
   common: 'boCommon',
   uncommon: 'boUncommon',
@@ -430,7 +559,9 @@ const SLOT_LABEL = {
   wildcard: 'boWildcard',
 } as const;
 
-/** One card in the fan: a face-down back that flips as the reveal reaches it. */
+/** One card in the fan: a face-down back that flips as the reveal reaches it.
+ * The entrance is CSS; the flip stays sprung - it only ever runs after a deal,
+ * which only ever happens in a visible, interacted-with page. */
 function PackSlot({
   card,
   faceUp,
@@ -449,13 +580,7 @@ function PackSlot({
   const t = useT();
   const rarityKey = card.rarity === 'mythic' ? 'boMythic' : SLOT_LABEL[card.slot];
   return (
-    <motion.div
-      className="boSlot"
-      data-rarity={card.rarity}
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
-    >
+    <div className="boSlot" data-rarity={card.rarity}>
       <motion.div
         className="boFlip"
         animate={{ rotateY: faceUp ? 0 : 180 }}
@@ -487,6 +612,6 @@ function PackSlot({
           {t(rarityKey)}
         </span>
       )}
-    </motion.div>
+    </div>
   );
 }

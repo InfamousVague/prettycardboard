@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { motion } from 'motion/react';
 import {
   Avatar,
   Button,
@@ -22,11 +21,31 @@ import { useUi } from '../state/uiStore.ts';
 import * as api from '../net/api.ts';
 import type { RoomInfo } from '../net/types.ts';
 import { clearPendingJoin } from '../data/pendingJoin.ts';
+import { getGame } from '../data/games.ts';
+import { GameTag } from '../components/GameTag.tsx';
+import { DEFAULT_PLAYMAT, playmatBackground } from '../data/playmats.ts';
 import './play.css';
 
 /**
+ * The felt behind the invite banner: a bundled mat evocative of the table's
+ * game. Purely presentational — the table's real mat is the host's preference
+ * and unknown until seated, so this is a mood, not a promise.
+ */
+const GAME_MATS: Record<string, string> = {
+  mtg: 'arcane-study',
+  cyberpunk: 'neon-megacity',
+  yugioh: 'deep-field',
+};
+
+function matFor(game: string | undefined): string {
+  return playmatBackground(GAME_MATS[game ?? 'mtg'] ?? DEFAULT_PLAYMAT);
+}
+
+/**
  * The landing screen for a shared table link (#/join/CODE), shown once the
- * visitor is authenticated.
+ * visitor is authenticated — dressed as the custom-game lobby splash: the
+ * table's felt as a banner, the code in big arcade cells, and one unmissable
+ * way to sit down.
  *
  * It is a MODAL over a dimmed screen rather than a page in the app frame. An
  * invite is an interruption with exactly three answers - sit down, watch, or
@@ -128,15 +147,16 @@ export function JoinTablePage({ code }: { code: string }) {
       aria-modal="true"
       aria-label={room?.name ?? t('joinFinding')}
     >
-      <motion.div
-        className="joinCardWrap"
-        initial={{ opacity: 0, y: 18, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ type: 'spring', stiffness: 220, damping: 26 }}
-      >
-        <div className="joinCard" data-draft={drafting || undefined}>
+      {/* CSS-only entrance (jtIn): the base state is the settled card, so a
+          frozen or reduced-motion environment lands on the finished screen. */}
+      <div className="jtWrap">
+        <div
+          className="jtCard"
+          data-draft={drafting || undefined}
+          style={room ? { ['--pg-tint' as string]: getGame(room.game).accent } : undefined}
+        >
           {status === 'loading' && (
-            <div className="joinState">
+            <div className="jtState">
               <Spinner size="sm" />
               <Heading level={2} align="center" noMargin>
                 {t('joinFinding')}
@@ -146,8 +166,8 @@ export function JoinTablePage({ code }: { code: string }) {
           )}
 
           {status === 'notfound' && (
-            <div className="joinState">
-              <div className="joinIcon" data-tone="warn" aria-hidden>
+            <div className="jtState">
+              <div className="jtIcon" data-tone="warn" aria-hidden>
                 <Hash size={22} />
               </div>
               <Heading level={2} align="center" noMargin>
@@ -162,96 +182,118 @@ export function JoinTablePage({ code }: { code: string }) {
 
           {status === 'ready' && room && (
             <>
-              <header className="joinHead">
-                <div className="joinIcon" aria-hidden>
-                  {drafting ? <PlayingCardPack size={22} /> : <Users size={22} />}
-                </div>
-                <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="joinEyebrow">
-                  {drafting ? t('joinInvitedDraft') : t('joinInvited')}
-                </Text>
-                <Heading level={1} align="center" noMargin className="joinName">
-                  {room.name}
-                </Heading>
-                <div className="joinMeta">
-                  <span className="joinTag">
-                    <Hash size={12} aria-hidden />
-                    <Kbd>{code}</Kbd>
+              {/* The banner: the game's felt fading into the card. */}
+              <div className="jtMat" style={{ backgroundImage: matFor(room.game) }} aria-hidden />
+              <div className="jtBody">
+                <header className="jtHead">
+                  <span className="jtIcon jtHeadIcon" aria-hidden>
+                    {drafting ? <PlayingCardPack size={22} /> : <Users size={22} />}
                   </span>
-                  <span className="joinTag" data-tone={full ? 'warn' : undefined}>
-                    <Users size={12} aria-hidden />
-                    {room.players.length} / {room.seats}
+                  <span className="jtEyebrow">
+                    {drafting ? t('joinInvitedDraft') : t('joinInvited')}
                   </span>
-                  {room.started && (
-                    <span className="joinTag" data-tone="live">
-                      <Play size={12} aria-hidden />
-                      {t('joinInProgress')}
+                  <Heading level={1} align="center" noMargin className="jtName">
+                    {room.name}
+                  </Heading>
+                  {/* The code, custom-game style: one big cell per character. */}
+                  <span className="jtCode" aria-label={`${t('playCodePlaceholder')}: ${code.toUpperCase()}`}>
+                    {code.toUpperCase().split('').map((char, cell) => (
+                      <span key={cell} className="jtCodeCell" aria-hidden>
+                        {char}
+                      </span>
+                    ))}
+                  </span>
+                  <div className="jtMeta">
+                    <GameTag game={room.game} />
+                    <span className="jtTag" data-tone={full ? 'warn' : undefined}>
+                      <Users size={12} aria-hidden />
+                      {room.players.length} / {room.seats}
                     </span>
+                    {room.started && (
+                      <span className="jtTag" data-tone="live">
+                        <Play size={12} aria-hidden />
+                        {t('joinInProgress')}
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    className="pgSeatMeter jtSeats"
+                    role="img"
+                    aria-label={`${t('playSeats')}: ${room.players.length}/${room.seats}`}
+                  >
+                    {Array.from({ length: room.seats }, (_, seatIndex) => (
+                      <span
+                        key={seatIndex}
+                        className="pgSeatDot"
+                        data-filled={seatIndex < room.players.length || undefined}
+                      />
+                    ))}
+                  </span>
+                </header>
+
+                <section className="jtWho" aria-label={t('playSeats')}>
+                  {room.players.length === 0 ? (
+                    <Text size={Size.Small} tone={TextTone.Subtle}>
+                      {t('joinNobody')}
+                    </Text>
+                  ) : (
+                    room.players.map((player) => (
+                      <span key={player.userId} className="jtPlayer">
+                        <Avatar name={player.username} size="sm" />
+                        <Text as="span" size={Size.Small}>
+                          {player.username}
+                        </Text>
+                      </span>
+                    ))
                   )}
-                </div>
-              </header>
+                </section>
 
-              <section className="joinWho" aria-label={t('playSeats')}>
-                {room.players.length === 0 ? (
-                  <Text size={Size.Small} tone={TextTone.Subtle}>
-                    {t('joinNobody')}
-                  </Text>
+                {/* A draft table takes the deck question off the table entirely,
+                    so it explains what will happen instead of asking. */}
+                {drafting ? (
+                  <p className="jtNote">
+                    <Sparkles size={14} aria-hidden />
+                    <Text as="span" size={Size.Small}>
+                      {t('joinDraftNote')}
+                    </Text>
+                  </p>
                 ) : (
-                  room.players.map((player) => (
-                    <span key={player.userId} className="joinPlayer">
-                      <Avatar name={player.username} size="sm" />
-                      <Text as="span" size={Size.Small}>
-                        {player.username}
-                      </Text>
-                    </span>
-                  ))
+                  <div className="jtDeck control">
+                    <Text as="span" size={Size.Small} tone={TextTone.Muted}>
+                      {t('playPickDeck')}
+                    </Text>
+                    <Select
+                      value={chosenDeck}
+                      onValueChange={setDeckId}
+                      options={decks.map((deck) => ({ value: deck.id, label: deck.name }))}
+                      placeholder={t('playPickDeck')}
+                    />
+                  </div>
                 )}
-              </section>
 
-              {/* A draft table takes the deck question off the table entirely,
-                  so it explains what will happen instead of asking. */}
-              {drafting ? (
-                <p className="joinNote">
-                  <Sparkles size={14} aria-hidden />
-                  <Text as="span" size={Size.Small}>
-                    {t('joinDraftNote')}
-                  </Text>
-                </p>
-              ) : (
-                <div className="joinDeck control">
-                  <Text as="span" size={Size.Small} tone={TextTone.Muted}>
-                    {t('playPickDeck')}
-                  </Text>
-                  <Select
-                    value={chosenDeck}
-                    onValueChange={setDeckId}
-                    options={decks.map((deck) => ({ value: deck.id, label: deck.name }))}
-                    placeholder={t('playPickDeck')}
-                  />
+                <div className="jtActions">
+                  <Button size="lg" className="jtPrimary" onClick={takeSeat} loading={busy} disabled={needsDeck || full}>
+                    {drafting ? <PlayingCardPack size={16} aria-hidden /> : <LogIn size={16} aria-hidden />}
+                    {seated ? t('joinResumeSeat') : drafting ? t('joinJoinDraft') : t('joinTakeSeat')}
+                  </Button>
+                  <Button variant="soft" onClick={watch}>
+                    <Eye size={16} aria-hidden /> {t('joinSpectate')}
+                  </Button>
+                  <Button variant="ghost" onClick={dismiss}>
+                    {t('joinNotNow')}
+                  </Button>
                 </div>
-              )}
 
-              <div className="joinActions">
-                <Button onClick={takeSeat} loading={busy} disabled={needsDeck || full}>
-                  {drafting ? <PlayingCardPack size={16} aria-hidden /> : <LogIn size={16} aria-hidden />}
-                  {seated ? t('joinResumeSeat') : drafting ? t('joinJoinDraft') : t('joinTakeSeat')}
-                </Button>
-                <Button variant="soft" onClick={watch}>
-                  <Eye size={16} aria-hidden /> {t('joinSpectate')}
-                </Button>
-                <Button variant="ghost" onClick={dismiss}>
-                  {t('joinNotNow')}
-                </Button>
+                {(full || needsDeck) && (
+                  <Text align="center" size={Size.XSmall} tone={TextTone.Warning}>
+                    {full ? t('joinFull') : t('joinNoDecks')}
+                  </Text>
+                )}
               </div>
-
-              {(full || needsDeck) && (
-                <Text align="center" size={Size.XSmall} tone={TextTone.Warning}>
-                  {full ? t('joinFull') : t('joinNoDecks')}
-                </Text>
-              )}
             </>
           )}
         </div>
-      </motion.div>
+      </div>
     </div>,
     document.body,
   );

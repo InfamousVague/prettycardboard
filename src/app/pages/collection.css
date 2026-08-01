@@ -1,6 +1,13 @@
-/* Collection - the binder view. Sets are shelves: a completion bar in the
-   header, the cards you own in the grid, and the ones you are missing as
-   ghosted empty sleeves beside them. First-time pulls glow until looked at. */
+/* Collection - the vault. A full-bleed trophy-room band (the crown jewel's own
+   art behind a directional scrim) carries the headline figures on chamfered
+   vault plates: unique count huge, completion as a real ring, the foil plate
+   wearing the holo rainbow. Below it the binder survives intact: set shelves
+   with completion meters, owned cards, ghost sleeves for the holes, NEW glow
+   on first-time pulls.
+
+   Shape language: CHAMFERED corner cuts (vault-door plating) - an echo of the
+   home page's skew idiom, deliberately not the same parallelogram. Chamfers
+   are clip-paths, so asymmetric ones are mirrored under [dir='rtl'] by hand. */
 
 .collHead {
   display: flex;
@@ -17,53 +24,516 @@
   padding-block: var(--glacier-space-8);
 }
 
-/* ---- headline figures ---- */
+/* ========================================================================
+   The vault band
+   ======================================================================== */
 
-.collStats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
-  gap: var(--glacier-space-3);
-  margin-block: var(--glacier-space-5);
+/* Scoped under .collectionPage to beat the `.page section` scaffolding rule:
+   the band is a row composition, not a stacked section. */
+.collectionPage .covVault {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-6);
+  min-block-size: clamp(17rem, 36vh, 22rem);
+  padding: var(--glacier-space-6) var(--glacier-space-8);
+  border: 1px solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-2xl);
+  background: var(--glacier-surface);
+  box-shadow: var(--glacier-shadow-3);
 }
 
-/* ---- filters ---- */
+/* The crown jewel's wide art crop fills the band. */
+.covArt {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-size: cover;
+  background-position: center 22%;
+  filter: saturate(1.08);
+  /* No crown (unreachable in practice - the band needs cards): quiet wash. */
+  background-color: color-mix(in oklch, var(--glacier-accent-soft) 40%, var(--glacier-surface));
+}
+
+/* Heavy over the text side, thinning over the art, plus a floor vignette. */
+.covScrim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--glacier-bg) 93%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-bg) 78%, transparent) 40%,
+      color-mix(in oklch, var(--glacier-bg) 34%, transparent) 72%,
+      color-mix(in oklch, var(--glacier-bg) 10%, transparent) 100%
+    ),
+    linear-gradient(180deg, transparent 55%, color-mix(in oklch, var(--glacier-bg) 52%, transparent) 100%);
+}
+
+[dir='rtl'] .covScrim {
+  background:
+    linear-gradient(
+      -90deg,
+      color-mix(in oklch, var(--glacier-bg) 93%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-bg) 78%, transparent) 40%,
+      color-mix(in oklch, var(--glacier-bg) 34%, transparent) 72%,
+      color-mix(in oklch, var(--glacier-bg) 10%, transparent) 100%
+    ),
+    linear-gradient(180deg, transparent 55%, color-mix(in oklch, var(--glacier-bg) 52%, transparent) 100%);
+}
+
+/* Entrance: CSS-only, staggered, base state = settled layout. `backwards`
+   holds the from-frame through each delay; with animations off (or a frozen
+   frame after settle) the band is simply finished. */
+@keyframes covRise {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+  }
+}
+
+.covIntro {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--glacier-space-3);
+  max-inline-size: 30rem;
+  min-inline-size: 0;
+}
+
+.covIntro > * {
+  animation: covRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+}
+.covIntro > :nth-child(1) { animation-delay: 0ms; }
+.covIntro > :nth-child(2) { animation-delay: 50ms; }
+.covIntro > :nth-child(3) { animation-delay: 100ms; }
+.covIntro > :nth-child(4) { animation-delay: 150ms; }
+.covIntro > :nth-child(5) { animation-delay: 200ms; }
+
+.covKicker {
+  text-transform: uppercase;
+  letter-spacing: 0.32em;
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-accent-text);
+}
+
+/* The page's h1, at marquee size: two-class selector outscores the kit class. */
+.covIntro .covTitle {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: clamp(2.1rem, 4.5vw, 3.1rem);
+  line-height: 1.02;
+}
+
+.covLede {
+  max-inline-size: 26rem;
+}
+
+.covActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-3);
+  margin-block-start: var(--glacier-space-2);
+}
+
+/* The one unmissable action: a chamfered accent plate. clip-path swallows
+   box-shadow, so elevation rides drop-shadow (which follows the cut shape). */
+.covOpenCta {
+  appearance: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-4) var(--glacier-space-6);
+  border: 1px solid color-mix(in oklch, var(--glacier-accent-solid) 55%, var(--glacier-border));
+  background: color-mix(in oklch, var(--glacier-accent-soft) 88%, transparent);
+  color: var(--glacier-text);
+  font: inherit;
+  font-size: var(--glacier-font-size-lg);
+  font-weight: var(--glacier-font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  clip-path: polygon(0 0.8rem, 0.8rem 0, 100% 0, 100% calc(100% - 0.8rem), calc(100% - 0.8rem) 100%, 0 100%);
+  filter: drop-shadow(0 8px 20px rgb(0 0 0 / 0.4));
+  transition:
+    scale var(--glacier-duration-fast) var(--glacier-ease-out),
+    filter var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+[dir='rtl'] .covOpenCta {
+  clip-path: polygon(0 0, calc(100% - 0.8rem) 0, 100% 0.8rem, 100% 100%, 0.8rem 100%, 0 calc(100% - 0.8rem));
+}
+
+.covOpenCta svg {
+  color: var(--glacier-accent-text);
+}
+
+/* Accent sweep sliding in from the leading edge on hover/focus. */
+.covOpenCta::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent),
+    color-mix(in oklch, var(--glacier-accent-solid) 10%, transparent) 55%,
+    transparent 85%
+  );
+  opacity: 0;
+  translate: -16% 0;
+  transition:
+    opacity var(--glacier-duration-fast) var(--glacier-ease-out),
+    translate var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+[dir='rtl'] .covOpenCta::after {
+  translate: 16% 0;
+}
+
+.covOpenCta:hover,
+.covOpenCta:focus-visible {
+  scale: 1.03;
+  filter: drop-shadow(0 8px 20px rgb(0 0 0 / 0.45))
+    drop-shadow(0 0 18px color-mix(in oklch, var(--glacier-accent-solid) 35%, transparent));
+}
+.covOpenCta:hover::after,
+.covOpenCta:focus-visible::after,
+[dir='rtl'] .covOpenCta:hover::after,
+[dir='rtl'] .covOpenCta:focus-visible::after {
+  opacity: 1;
+  translate: 0 0;
+}
+/* clip-path swallows an outset outline; draw it inside the plate. */
+.covOpenCta:focus-visible {
+  outline: 2px solid var(--glacier-accent-solid);
+  outline-offset: -4px;
+}
+
+/* Unseen-pull count riding the mark-all-seen button. */
+.covNewCount {
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: 1.3rem;
+  padding-inline: 0.3rem;
+  block-size: 1.3rem;
+  border-radius: var(--glacier-radius-full);
+  background: var(--glacier-accent-solid);
+  color: var(--glacier-accent-contrast);
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Nameplate for the art: which card is painting the band. */
+.covCrown {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  margin-block-start: var(--glacier-space-2);
+  padding: var(--glacier-space-1) var(--glacier-space-3);
+  border: 1px solid color-mix(in oklch, var(--glacier-border) 80%, transparent);
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--glacier-bg) 62%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  font-size: var(--glacier-font-size-xs);
+  max-inline-size: 100%;
+}
+
+.covCrown svg {
+  flex: none;
+  color: var(--glacier-warning-text, #d9a441);
+}
+
+.covCrownLabel {
+  flex: none;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--glacier-text-subtle);
+}
+
+.covCrownName {
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- the plates ---- */
+
+.covPlates {
+  position: relative;
+  flex: none;
+  display: grid;
+  grid-template-areas:
+    'hero hero ring'
+    'foil pulls sets';
+  grid-template-columns: repeat(3, minmax(6.5rem, 1fr));
+  gap: var(--glacier-space-3);
+  align-self: center;
+}
+
+.covPlates > * {
+  animation: covRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+}
+.covPlates > :nth-child(1) { animation-delay: 120ms; }
+.covPlates > :nth-child(2) { animation-delay: 180ms; }
+.covPlates > :nth-child(3) { animation-delay: 240ms; }
+.covPlates > :nth-child(4) { animation-delay: 300ms; }
+.covPlates > :nth-child(5) { animation-delay: 360ms; }
+
+/* A vault plate: chamfered cuts on opposite corners, accent leading edge,
+   frosted over the art. The chamfer is directional, so RTL mirrors it. */
+.covPlate {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: var(--glacier-space-3) var(--glacier-space-4);
+  border: 1px solid color-mix(in oklch, var(--glacier-border) 75%, transparent);
+  background: color-mix(in oklch, var(--glacier-surface) 78%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  clip-path: polygon(0 0.7rem, 0.7rem 0, 100% 0, 100% calc(100% - 0.7rem), calc(100% - 0.7rem) 100%, 0 100%);
+}
+
+[dir='rtl'] .covPlate {
+  clip-path: polygon(0 0, calc(100% - 0.7rem) 0, 100% 0.7rem, 100% 100%, 0.7rem 100%, 0 calc(100% - 0.7rem));
+}
+
+/* accent leading edge (logical start; the chamfer clips its top on purpose) */
+.covPlate::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 3px;
+  background: var(--glacier-accent-solid);
+  opacity: 0.85;
+}
+
+.covPlateValue {
+  font-size: clamp(1.4rem, 2.2vw, 1.8rem);
+  font-weight: var(--glacier-font-weight-bold);
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+.covPlateLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+
+.covPlateLabel svg {
+  flex: none;
+  color: var(--glacier-accent-text);
+  opacity: 0.9;
+}
+
+/* The hero figure: unique cards, the biggest number on the page. */
+.covHero {
+  grid-area: hero;
+  padding-block: var(--glacier-space-4);
+}
+
+.covHeroValue {
+  font-size: clamp(2.6rem, 5vw, 3.4rem);
+  font-weight: var(--glacier-font-weight-bold);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- the completion ring ---- */
+
+.covRingPlate {
+  grid-area: ring;
+  align-items: center;
+  text-align: center;
+}
+
+.covRing {
+  position: relative;
+  inline-size: 6.5rem;
+  block-size: 6.5rem;
+}
+
+.covRingSvg {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.covRingTrack {
+  fill: none;
+  stroke: color-mix(in oklch, var(--glacier-border) 60%, transparent);
+  stroke-width: 6;
+}
+
+/* The arc's final dashoffset is inline style; the keyframe only supplies the
+   empty start (dashoffset = circumference, r=34 - keep in step with RING_C in
+   CollectionPage.tsx), so the settled frame is always the true value. */
+.covRingFill {
+  fill: none;
+  stroke: var(--glacier-accent-solid);
+  stroke-width: 6;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  filter: drop-shadow(0 0 6px color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent));
+  animation: covRingIn 900ms var(--glacier-ease-out) 250ms backwards;
+}
+
+@keyframes covRingIn {
+  from {
+    stroke-dashoffset: 213.63px;
+  }
+}
+
+/* Clamped to the square inscribed in the ring's INNER circle (r 34 minus the
+   6-wide stroke = 31/80 of the box; a square inside that is ~55% of it), so
+   the readout can never spill over the arc however long the numbers get. */
+.covRingCenter {
+  position: absolute;
+  inset: 22%;
+  display: grid;
+  place-content: center;
+  gap: 1px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.covRingPct {
+  font-size: var(--glacier-font-size-xl);
+  font-weight: var(--glacier-font-weight-bold);
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+.covRingCount {
+  font-size: 0.62rem;
+  line-height: 1.2;
+  color: var(--glacier-text-subtle);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---- the foil plate: the app's holo rainbow, worn by a number ---- */
+
+/* Same recipe as the cards' own .gcFoil layer (counter-angled rainbow over a
+   crinkle), rebuilt under this page's namespace and swept slowly by CSS. The
+   sweep is ambient - a frozen frame is just a foil plate standing still. */
+.covFoilPlate {
+  overflow: hidden;
+}
+
+.covFoilPlate::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: color-dodge;
+  opacity: 0.4;
+  background-image:
+    linear-gradient(
+      115deg,
+      transparent 18%,
+      oklch(0.75 0.18 0 / 0.5) 32%,
+      oklch(0.8 0.16 90 / 0.5) 42%,
+      oklch(0.78 0.15 160 / 0.5) 52%,
+      oklch(0.75 0.17 250 / 0.5) 62%,
+      oklch(0.74 0.18 310 / 0.5) 72%,
+      transparent 86%
+    ),
+    repeating-linear-gradient(-30deg, rgb(255 255 255 / 0) 0 6px, rgb(255 255 255 / 0.06) 6px 7px);
+  background-size: 220% 100%, auto;
+  background-repeat: no-repeat, repeat;
+  animation: covSheen 7s linear infinite alternate;
+}
+
+@keyframes covSheen {
+  from {
+    background-position: 0% 0, 0 0;
+  }
+  to {
+    background-position: 100% 0, 0 0;
+  }
+}
+
+/* ========================================================================
+   Filters - the command bar
+   ======================================================================== */
 
 .collToolbar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--glacier-space-3) var(--glacier-space-4);
-  margin-block-end: var(--glacier-space-5);
+  padding: var(--glacier-space-3) var(--glacier-space-4);
+  border: 1px solid var(--glacier-border-subtle);
+  background: color-mix(in oklch, var(--glacier-surface) 85%, transparent);
+  clip-path: polygon(0 0.6rem, 0.6rem 0, 100% 0, 100% calc(100% - 0.6rem), calc(100% - 0.6rem) 100%, 0 100%);
+}
+
+[dir='rtl'] .collToolbar {
+  clip-path: polygon(0 0, calc(100% - 0.6rem) 0, 100% 0.6rem, 100% 100%, 0.6rem 100%, 0 calc(100% - 0.6rem));
 }
 
 .collSearch {
   flex: 1 1 14rem;
-  min-width: 12rem;
+  min-inline-size: 12rem;
 }
 
 .collSetSelect {
-  min-width: 12rem;
+  min-inline-size: 12rem;
 }
 
-/* ---- set shelves ---- */
+/* ========================================================================
+   Set shelves
+   ======================================================================== */
 
 .collSets {
   display: grid;
-  gap: var(--glacier-space-7);
+  gap: var(--glacier-space-8);
 }
+
+.collSets > * {
+  animation: covRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+}
+.collSets > :nth-child(1) { animation-delay: 80ms; }
+.collSets > :nth-child(2) { animation-delay: 140ms; }
+.collSets > :nth-child(3) { animation-delay: 200ms; }
 
 .collSet {
   display: grid;
   gap: var(--glacier-space-3);
 }
 
+/* The set banner: emblem + names on the start side, the score writ large on
+   the end side, over one shared baseline rule. */
 .collSetHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--glacier-space-2) var(--glacier-space-4);
-  padding-block-end: var(--glacier-space-2);
+  padding-block-end: var(--glacier-space-3);
   border-block-end: var(--glacier-hairline) solid var(--glacier-border-subtle);
 }
 
@@ -71,53 +541,141 @@
   display: flex;
   align-items: center;
   gap: var(--glacier-space-3);
-  min-width: 0;
+  min-inline-size: 0;
 }
 
-/* Set symbols are near-black SVGs; invert so they read on the dark surface. */
-.collSetIcon {
-  width: 1.5rem;
-  height: 1.5rem;
+/* The set emblem: a rotated plate (diamond - symmetric, so no RTL mirror)
+   holding the set symbol. */
+.covSetEmblem {
   flex: none;
+  display: grid;
+  place-items: center;
+  inline-size: 2.4rem;
+  block-size: 2.4rem;
+  rotate: 45deg;
+  border: 1px solid color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border));
+  border-radius: var(--glacier-radius-sm);
+  background: color-mix(in oklch, var(--glacier-surface) 88%, var(--glacier-accent-soft));
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.35);
+  /* The diamond's corners need breathing room against the name. */
+  margin-inline: 0.35rem;
+}
+
+/* Set symbols are near-black SVGs; invert so they read on the dark surface.
+   Counter-rotate so the symbol stands upright inside the diamond. */
+.covSetEmblem .collSetIcon {
+  inline-size: 1.35rem;
+  block-size: 1.35rem;
+  rotate: -45deg;
   filter: invert(1);
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .collSetNames {
   display: grid;
-  min-width: 0;
+  min-inline-size: 0;
 }
 
 .collSetName {
-  font-weight: var(--glacier-font-weight-semibold);
-  font-size: var(--glacier-font-size-md);
+  font-weight: var(--glacier-font-weight-bold);
+  font-size: var(--glacier-font-size-lg);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   color: var(--glacier-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* ---- the score: big percent + segmented charge meter ---- */
+
 .collSetScore {
   display: flex;
   align-items: center;
   gap: var(--glacier-space-3);
-  min-width: min(100%, 16rem);
+  min-inline-size: min(100%, 18rem);
+}
+
+.covSetPct {
+  font-size: clamp(1.4rem, 2.4vw, 1.9rem);
+  font-weight: var(--glacier-font-weight-bold);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A finished set turns gold - the binder's own prestige tier. */
+.covSetPct[data-full] {
+  color: var(--glacier-warning-text, #d9a441);
+  text-shadow: 0 0 12px color-mix(in oklch, var(--glacier-warning-solid, #d9a441) 40%, transparent);
+}
+
+.covMeterCol {
+  flex: 1 1 8rem;
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+/* The charge meter: accent fill under a 10-segment tick overlay. The fill
+   width is inline style (logical, so RTL flips it for free); only its
+   gradient needs the mirror. */
+.covMeter {
+  position: relative;
+  block-size: 0.6rem;
+  border-radius: 2px;
+  background: color-mix(in oklch, var(--glacier-border) 40%, transparent);
+  overflow: hidden;
+}
+
+.covMeterFill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklch, var(--glacier-accent-solid) 55%, transparent),
+    var(--glacier-accent-solid)
+  );
+  animation: covMeterIn 700ms var(--glacier-ease-out) 150ms backwards;
+}
+
+[dir='rtl'] .covMeterFill {
+  background: linear-gradient(
+    -90deg,
+    color-mix(in oklch, var(--glacier-accent-solid) 55%, transparent),
+    var(--glacier-accent-solid)
+  );
+}
+
+@keyframes covMeterIn {
+  from {
+    inline-size: 0%;
+  }
+}
+
+/* segment ticks: symmetric stripes, no mirror needed */
+.covMeter::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 calc(10% - 1px),
+    color-mix(in oklch, var(--glacier-bg) 85%, transparent) calc(10% - 1px) 10%
+  );
+  pointer-events: none;
 }
 
 .collSetCount {
   font-variant-numeric: tabular-nums;
-  font-weight: var(--glacier-font-weight-semibold);
-  color: var(--glacier-text);
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
   white-space: nowrap;
 }
 
 .collSetOf {
   color: var(--glacier-text-subtle);
-  font-weight: var(--glacier-font-weight-regular);
-}
-
-.collSetBar {
-  flex: 1 1 6rem;
 }
 
 .collPoolPrompt {
@@ -137,6 +695,17 @@
 
 .collTile {
   position: relative;
+  /* CSS entrance, staggered by the --i the tile carries (capped in JS). Base
+     state is the settled tile; ghosts carry no --i and land at delay 0. */
+  animation: covTileIn 240ms var(--glacier-ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * 20ms);
+}
+
+@keyframes covTileIn {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
 }
 
 .collMore {
@@ -185,12 +754,6 @@
   pointer-events: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .collNewFlag {
-    animation: none;
-  }
-}
-
 .collDupes,
 .collFoilFlag {
   position: absolute;
@@ -219,10 +782,10 @@
 /* ---- missing cards ---- */
 
 /* An unpulled card is an empty sleeve: the kit's proxy face, drained of colour
-   and dashed, so a hole in the set is legible at a glance across the grid. */
-/* The empty sleeve. The FACE is what fades - the border keeps full strength so
-   the rarity ring below stays readable, which is the whole point of showing a
-   hole in the set rather than hiding it. */
+   and dashed, so a hole in the set is legible at a glance across the grid.
+   The FACE is what fades - the border keeps full strength so the rarity ring
+   below stays readable, which is the whole point of showing a hole in the set
+   rather than hiding it. */
 /* Screen-reader only: without it, "missing" is conveyed by dashes and drained
    colour alone, which is nothing at all to a screen reader. */
 .collGhostSr {
@@ -266,12 +829,118 @@
   border-color: oklch(0.72 0.04 220);
 }
 
-@media (max-width: 700px) {
+/* ========================================================================
+   Phones (PHONE_QUERY): the band stacks, plates go two-up, nothing clipped
+   ======================================================================== */
+
+@media (max-width: 700px), (max-height: 480px) {
+  .collectionPage .covVault {
+    min-block-size: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--glacier-space-5);
+    padding: var(--glacier-space-4);
+    border-radius: var(--glacier-radius-xl);
+  }
+
+  .covIntro {
+    max-inline-size: none;
+  }
+
+  .covIntro .covTitle {
+    font-size: var(--glacier-font-size-2xl);
+  }
+
+  .covOpenCta {
+    flex: 1 1 auto;
+    justify-content: center;
+    padding: var(--glacier-space-3) var(--glacier-space-4);
+    font-size: var(--glacier-font-size-md);
+  }
+
+  .covPlates {
+    align-self: stretch;
+    grid-template-areas:
+      'hero ring'
+      'foil pulls'
+      'sets sets';
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* The odd plate out rides the whole last row (auto-placement puts it in one
+     cell; the named row exists exactly for it). */
+  .covPlates > :last-child {
+    grid-area: sets;
+  }
+
+  .covHeroValue {
+    font-size: var(--glacier-font-size-3xl, 2.2rem);
+  }
+
+  .covRing {
+    inline-size: 4.5rem;
+    block-size: 4.5rem;
+  }
+
+  /* text spans the full art now: one even scrim */
+  .covScrim,
+  [dir='rtl'] .covScrim {
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--glacier-bg) 88%, transparent),
+      color-mix(in oklch, var(--glacier-bg) 72%, transparent)
+    );
+  }
+
   .collSetScore {
-    min-width: 100%;
+    min-inline-size: 100%;
+  }
+
+  .covSetEmblem {
+    inline-size: 2rem;
+    block-size: 2rem;
+  }
+
+  .covSetEmblem .collSetIcon {
+    inline-size: 1.1rem;
+    block-size: 1.1rem;
+  }
+
+  .collSetName {
+    font-size: var(--glacier-font-size-md);
   }
 
   .collGrid {
     gap: var(--glacier-space-2);
+  }
+}
+
+/* ---- reduced motion: everything lands, nothing slides or shimmers ---- */
+
+@media (prefers-reduced-motion: reduce) {
+  .covIntro > *,
+  .covPlates > *,
+  .collSets > *,
+  .collTile,
+  .covRingFill,
+  .covMeterFill,
+  .covFoilPlate::after,
+  .collNewFlag {
+    animation: none;
+  }
+
+  .covOpenCta,
+  .covOpenCta::after {
+    transition: none;
+  }
+
+  .covOpenCta:hover,
+  .covOpenCta:focus-visible {
+    scale: none;
+  }
+
+  .covOpenCta::after,
+  [dir='rtl'] .covOpenCta::after {
+    translate: 0 0;
   }
 }

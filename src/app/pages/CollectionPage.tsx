@@ -1,24 +1,22 @@
-import { useEffect, useMemo, useState } from 'react';
-import { motion } from 'motion/react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
   Button,
   EmptyState,
   Heading,
   Pill,
-  ProgressBar,
   SearchField,
   SegmentedControl,
   Select,
   Size,
   Spinner,
-  StatTile,
   Text,
   TextTone,
+  useLocale,
 } from '@glacier/react';
 import { Gem, Sparkles, Star } from '@glacier/icons';
 import { PlayingCardPack, PlayingCardStack } from '../icons/cards.ts';
-import { useT } from '../i18n.ts';
-import { cardImage } from '../data/cards.ts';
+import { APP_LOCALES, useT, type AppLocale } from '../i18n.ts';
+import { artCrop, cardImage } from '../data/cards.ts';
 import { useCardPopup } from '../components/CardPopup.tsx';
 import { GameCard } from '../components/GameCard.tsx';
 import { useMobileLayout } from '../hooks/useIsPhone.ts';
@@ -28,17 +26,23 @@ import type { BoosterSet, PoolCard, SetPool } from '../data/boosterSets.ts';
 import './collection.css';
 
 /**
- * Collection - the "Magic Pokedex".
+ * Collection - the "Magic Pokedex", dressed as a trophy vault.
  *
  * Every card the account has ever pulled, grouped into the sets it came from
  * and scored against those sets' real card counts, so the page reads as a
  * binder with holes in it rather than a list of loot. Three things carry that:
  *
- *   - a per-set completion bar (owned / set size) and one overall figure;
+ *   - a per-set completion meter (owned / set size) and one overall figure;
  *   - a missing view: once a set's pool is loaded, the cards you have NOT
  *     pulled appear as ghost slots alongside the ones you have;
  *   - a NEW treatment on first-time pulls, which survives reloads and clears
  *     as each card is looked at (see collectionStore for why that is local).
+ *
+ * The headline figures ride a full-bleed vault band: the collection's own
+ * crown jewel (best rarity, foil preferred) paints the art, the unique count
+ * is the huge number, completion is a real ring, and the foil plate wears the
+ * same holo rainbow the cards do. All presentation - the fetching, scoring
+ * and store wiring are exactly what they were.
  *
  * Pools are the expensive part (Scryfall, rate-limited), so a set only fetches
  * one when the player asks that set what it is hiding.
@@ -51,10 +55,43 @@ const MISSING_PAGE = 24;
 
 const RARITY_RANK: Record<string, number> = { mythic: 0, rare: 1, uncommon: 2, common: 3 };
 
+/** Completion-ring geometry: r=34 in an 80-box; the CSS entrance keyframe
+ * hardcodes the same circumference, so the two must move together. */
+const RING_C = 2 * Math.PI * 34;
+
 type View = 'owned' | 'missing' | 'all';
+
+/**
+ * Strings this redesign introduces. i18n.ts is shared ground, so they live
+ * here (same Entry shape, same fallback rule) until they are folded in; the
+ * hook resolves the exact locale the app-wide useT() does.
+ */
+const LOCAL_MESSAGES = {
+  collVaultKicker: {
+    en: 'Trophy room',
+    es: 'Sala de trofeos',
+    fr: 'Salle des trophées',
+    ar: 'غرفة الجوائز',
+  },
+  collCrown: {
+    en: 'Crown jewel',
+    es: 'Joya de la corona',
+    fr: 'Joyau de la couronne',
+    ar: 'جوهرة التاج',
+  },
+} satisfies Record<string, Record<AppLocale, string>>;
+
+function useLocalT(): (key: keyof typeof LOCAL_MESSAGES) => string {
+  const locale = useLocale();
+  const active: AppLocale = (APP_LOCALES as readonly string[]).includes(locale)
+    ? (locale as AppLocale)
+    : 'en';
+  return (key) => LOCAL_MESSAGES[key][active] ?? LOCAL_MESSAGES[key].en;
+}
 
 export function CollectionPage({ onOpenBoosters }: { onOpenBoosters?: () => void }) {
   const t = useT();
+  const lt = useLocalT();
   const phone = useMobileLayout();
 
   const cards = useCollection((state) => state.cards);
@@ -150,6 +187,23 @@ export function CollectionPage({ onOpenBoosters }: { onOpenBoosters?: () => void
     return { owned, size, pct: size > 0 ? Math.round((owned / size) * 100) : 0 };
   }, [groups, setInfo, ownedIndex]);
 
+  /** The vault's showpiece: best rarity wins, foil breaks the tie, and its
+   * art crop paints the whole band. Pure presentation over cards the page
+   * already holds. */
+  const crown = useMemo(() => {
+    let best: CollectionCard | null = null;
+    for (const card of cards) {
+      if (!best) {
+        best = card;
+        continue;
+      }
+      const a = (RARITY_RANK[card.rarity] ?? 4) * 2 + (card.foil ? 0 : 1);
+      const b = (RARITY_RANK[best.rarity] ?? 4) * 2 + (best.foil ? 0 : 1);
+      if (a < b) best = card;
+    }
+    return best;
+  }, [cards]);
+
   const shownGroups = useMemo(
     () => (setFilter === 'all' ? groups : groups.filter((group) => group.code === setFilter)),
     [groups, setFilter],
@@ -165,6 +219,11 @@ export function CollectionPage({ onOpenBoosters }: { onOpenBoosters?: () => void
     ],
     [groups, setInfo, t],
   );
+
+  const goBoosters = () => {
+    if (onOpenBoosters) onOpenBoosters();
+    else window.location.hash = '/boosters';
+  };
 
   if (loading && !loaded) {
     return (
@@ -203,7 +262,7 @@ export function CollectionPage({ onOpenBoosters }: { onOpenBoosters?: () => void
           title={t('collEmptyTitle')}
           description={t('collEmptyBody')}
           action={
-            <Button onClick={() => (onOpenBoosters ? onOpenBoosters() : (window.location.hash = '/boosters'))}>
+            <Button onClick={goBoosters}>
               <PlayingCardPack size={16} aria-hidden />
               {t('collEmptyAction')}
             </Button>
@@ -215,36 +274,88 @@ export function CollectionPage({ onOpenBoosters }: { onOpenBoosters?: () => void
 
   return (
     <div className="page collectionPage">
-      <div className="collHead">
-        <div>
-          <Heading level={1}>{t('collTitle')}</Heading>
-          <Text size={Size.Large} tone={TextTone.Muted} className="lede">
+      {/* ---- the vault band: crown-jewel art, big figures, one big action ---- */}
+      <section className="covVault" aria-label={t('collTitle')}>
+        <div
+          className="covArt"
+          style={crown ? { backgroundImage: `url("${artCrop(crown.scryfallId)}")` } : undefined}
+          aria-hidden
+        />
+        <div className="covScrim" aria-hidden />
+
+        <div className="covIntro">
+          <span className="covKicker">{lt('collVaultKicker')}</span>
+          <Heading level={1} noMargin className="covTitle">
+            {t('collTitle')}
+          </Heading>
+          <Text size={Size.Large} tone={TextTone.Muted} className="covLede">
             {t('collLede')}
           </Text>
+          <div className="covActions">
+            {/* The one unmissable action: the vault only grows one way. */}
+            <button type="button" className="covOpenCta" onClick={goBoosters}>
+              <PlayingCardPack size={22} aria-hidden />
+              <span>{t('collEmptyAction')}</span>
+            </button>
+            {newCount > 0 && (
+              <Button variant="soft" onClick={markAllSeen}>
+                <Sparkles size={16} aria-hidden />
+                {t('collMarkAllSeen')}
+                <span className="covNewCount">{newCount}</span>
+              </Button>
+            )}
+          </div>
+          {crown && (
+            <div className="covCrown">
+              <Star size={12} aria-hidden />
+              <span className="covCrownLabel">{lt('collCrown')}</span>
+              <span className="covCrownName">{crown.name}</span>
+            </div>
+          )}
         </div>
-        {newCount > 0 && (
-          <Button variant="soft" onClick={markAllSeen}>
-            <Sparkles size={16} aria-hidden />
-            {t('collMarkAllSeen')}
-          </Button>
-        )}
-      </div>
 
-      <div className="collStats">
-        {/* Distinct printings, by the same rule the completion bars use - the
-            server's total counts a foil as its own row, which would put a
-            bigger number here than the bars below can ever add up to. */}
-        <StatTile icon={<PlayingCardStack size={18} />} value={ownedIndex.total} label={t('collUnique')} />
-        <StatTile icon={<PlayingCardPack size={18} />} value={totalPulls} label={t('collTotalPulls')} />
-        <StatTile icon={<Star size={18} />} value={groups.length} label={t('collSetsSeen')} />
-        <StatTile icon={<Gem size={18} />} value={foilCount} label={t('collFoils')} />
-        <StatTile
-          icon={<Sparkles size={18} />}
-          value={`${overall.pct}%`}
-          label={t('collCompletion')}
-          hint={overall.size > 0 ? `${overall.owned} / ${overall.size}` : undefined}
-        />
-      </div>
+        {/* The five figures the StatTiles used to carry, as vault plates. */}
+        <div className="covPlates">
+          {/* Distinct printings, by the same rule the completion meters use -
+              the server's total counts a foil as its own row, which would put
+              a bigger number here than the meters below can ever add up to. */}
+          <div className="covPlate covHero">
+            <span className="covHeroValue">{ownedIndex.total}</span>
+            <span className="covPlateLabel">
+              <PlayingCardStack size={13} aria-hidden />
+              {t('collUnique')}
+            </span>
+          </div>
+          <div className="covPlate covRingPlate">
+            <CompletionRing pct={overall.pct} owned={overall.owned} size={overall.size} label={t('collCompletion')} />
+            <span className="covPlateLabel">
+              <Sparkles size={13} aria-hidden />
+              {t('collCompletion')}
+            </span>
+          </div>
+          <div className="covPlate covFoilPlate">
+            <span className="covPlateValue">{foilCount}</span>
+            <span className="covPlateLabel">
+              <Gem size={13} aria-hidden />
+              {t('collFoils')}
+            </span>
+          </div>
+          <div className="covPlate">
+            <span className="covPlateValue">{totalPulls}</span>
+            <span className="covPlateLabel">
+              <PlayingCardPack size={13} aria-hidden />
+              {t('collTotalPulls')}
+            </span>
+          </div>
+          <div className="covPlate">
+            <span className="covPlateValue">{groups.length}</span>
+            <span className="covPlateLabel">
+              <Star size={13} aria-hidden />
+              {t('collSetsSeen')}
+            </span>
+          </div>
+        </div>
+      </section>
 
       <div className="collToolbar" role="group" aria-label={t('collSearch')}>
         <div className="collSearch">
@@ -317,7 +428,49 @@ export function CollectionPage({ onOpenBoosters }: { onOpenBoosters?: () => void
   );
 }
 
-/** One set's shelf: the completion readout, the cards you have, the holes. */
+/**
+ * The overall figure as a real ring. The fill is a stroke-dash arc whose final
+ * offset is inline style, so the CSS entrance (backwards from empty) can only
+ * ever land ON the finished value - a frozen or reduced-motion frame shows the
+ * true percentage, never a partial sweep.
+ */
+/**
+ * Shorten a count so a pair of them fits inside the ring. A full collection is
+ * five digits ("1946 / 10163" needs ~78px against the ring's ~48px of inner
+ * chord), so anything four digits or more collapses to thousands. Both halves
+ * switch together - "1946 / 10.2K" would read as two different units.
+ */
+function ringCount(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
+
+function CompletionRing({ pct, owned, size, label }: { pct: number; owned: number; size: number; label: string }) {
+  const compact = size >= 1000;
+  return (
+    <div className="covRing" role="img" aria-label={`${label}: ${pct}% (${owned} / ${size})`}>
+      <svg viewBox="0 0 80 80" className="covRingSvg" aria-hidden>
+        <circle className="covRingTrack" cx="40" cy="40" r="34" />
+        <circle
+          className="covRingFill"
+          cx="40"
+          cy="40"
+          r="34"
+          style={{ strokeDasharray: RING_C, strokeDashoffset: RING_C * (1 - Math.min(100, pct) / 100) }}
+        />
+      </svg>
+      <span className="covRingCenter">
+        <span className="covRingPct">{pct}%</span>
+        {size > 0 && (
+          <span className="covRingCount">
+            {compact ? `${ringCount(owned)}/${ringCount(size)}` : `${owned} / ${size}`}
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+/** One set's shelf: the completion banner, the cards you have, the holes. */
 function SetSection({
   code,
   cards,
@@ -388,7 +541,7 @@ function SetSection({
 
   // Scoring, in order of trust:
   //   pool loaded  -> count the pool entries you own. Owned + missing then sums
-  //                   to the set size exactly, so the bar can never overshoot
+  //                   to the set size exactly, so the meter can never overshoot
   //                   on a printing the booster pool does not list.
   //   pool unknown -> the same distinct printings over Scryfall's set size,
   //                   clamped. Both branches count printings, never finishes,
@@ -422,9 +575,12 @@ function SetSection({
 
   return (
     <section className="collSet" aria-label={info?.name ?? code.toUpperCase()}>
+      {/* The set banner: emblem, name, and the completion readout writ large. */}
       <header className="collSetHead">
         <div className="collSetIdent">
-          {info?.iconUrl && <img className="collSetIcon" src={info.iconUrl} alt="" aria-hidden />}
+          <span className="covSetEmblem" aria-hidden>
+            {info?.iconUrl && <img className="collSetIcon" src={info.iconUrl} alt="" />}
+          </span>
           <div className="collSetNames">
             <span className="collSetName">{info?.name ?? code.toUpperCase()}</span>
             <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} mono>
@@ -434,20 +590,25 @@ function SetSection({
           </div>
         </div>
         <div className="collSetScore">
-          <span className="collSetCount">
-            {scored}
-            <span className="collSetOf"> / {size > 0 ? size : '—'}</span>
+          <span className="covSetPct" data-full={pct >= 100 || undefined}>
+            {size > 0 ? `${pct}%` : '—'}
           </span>
-          <ProgressBar
-            value={scored}
-            max={size > 0 ? size : 1}
-            size="sm"
-            aria-label={t('collCompletion')}
-            className="collSetBar"
-          />
-          <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
-            {size > 0 ? `${pct}%` : t('collCompletion')}
-          </Text>
+          <div className="covMeterCol">
+            <div
+              className="covMeter"
+              role="progressbar"
+              aria-label={t('collCompletion')}
+              aria-valuemin={0}
+              aria-valuemax={size > 0 ? size : 1}
+              aria-valuenow={scored}
+            >
+              <span className="covMeterFill" style={{ inlineSize: `${size > 0 ? Math.min(100, pct) : 0}%` }} />
+            </div>
+            <span className="collSetCount">
+              {scored}
+              <span className="collSetOf"> / {size > 0 ? size : '—'}</span>
+            </span>
+          </div>
         </div>
       </header>
 
@@ -505,7 +666,8 @@ function SetSection({
   );
 }
 
-/** A card you own. First-time pulls glow and wear a NEW flag until looked at. */
+/** A card you own. First-time pulls glow and wear a NEW flag until looked at.
+ * Entrance is CSS (base state = settled), staggered by the --i index. */
 function OwnedTile({
   card,
   index,
@@ -521,13 +683,11 @@ function OwnedTile({
 }) {
   const t = useT();
   return (
-    <motion.div
+    <div
       className="collTile"
       data-rarity={card.rarity}
       data-new={isNew || undefined}
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2, ease: 'easeOut', delay: Math.min(index, 12) * 0.02 }}
+      style={{ '--i': Math.min(index, 12) } as CSSProperties}
     >
       <GameCard
         name={card.name}
@@ -550,7 +710,7 @@ function OwnedTile({
         )}
         {card.foil && !isNew && <span className="collFoilFlag">{t('collFoil')}</span>}
       </GameCard>
-    </motion.div>
+    </div>
   );
 }
 

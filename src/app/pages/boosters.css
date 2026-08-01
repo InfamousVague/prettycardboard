@@ -1,22 +1,290 @@
-/* Boosters: the set browser and the pack-opening table. Set tiles echo the
-   Browse catalog's tile rhythm; the opened pack is a fanned row of cards that
-   flip face-up one at a time, so the reveal reads like a real pack. */
+/* Boosters: the shop's pack wall and the counter you open packs at. The
+   marquee band wears the newest set's art; the grid is the wall itself, box
+   art forward on notched shelf plates; the opener page pairs the 3D display
+   box with a drop-rates panel and one huge OPEN PACK.
 
-.boHead {
-  display: grid;
-  gap: var(--glacier-space-2);
+   Shape language: NOTCHED corners (a single clipped cut, like a price-gun
+   ticket) - an echo of the home page's skew idiom, deliberately not the same
+   parallelogram. Notches are clip-paths, so they are mirrored under
+   [dir='rtl'] by hand, and clip-path swallows box-shadow and outset outlines:
+   elevation rides drop-shadow, focus rings draw inset. */
+
+/* ========================================================================
+   The marquee band
+   ======================================================================== */
+
+/* Scoped under .boostersPage to beat the `.page section` scaffolding rule:
+   the band is a row composition, not a stacked section. */
+.boostersPage .bshBand {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-6);
+  min-block-size: clamp(15rem, 32vh, 19rem);
+  padding: var(--glacier-space-6) var(--glacier-space-8);
+  border: 1px solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-2xl);
+  background: var(--glacier-surface);
+  box-shadow: var(--glacier-shadow-3);
 }
+
+/* The newest set's poster art fills the band. */
+.bshArt {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-size: cover;
+  background-position: center 25%;
+  filter: saturate(1.08);
+}
+
+/* Art not cached yet: the same accent wash the blank product boxes wear. */
+.bshArt[data-noart] {
+  background-image: linear-gradient(
+    155deg,
+    color-mix(in oklch, var(--glacier-accent-solid) 24%, var(--glacier-surface-raised, #1a1c20)),
+    color-mix(in oklch, var(--glacier-accent-solid) 5%, var(--glacier-surface-sunken, #101114)) 70%
+  );
+}
+
+/* Heavy over the title side, thinning over the art, plus a floor vignette. */
+.bshScrim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--glacier-bg) 93%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-bg) 76%, transparent) 40%,
+      color-mix(in oklch, var(--glacier-bg) 32%, transparent) 72%,
+      color-mix(in oklch, var(--glacier-bg) 10%, transparent) 100%
+    ),
+    linear-gradient(180deg, transparent 55%, color-mix(in oklch, var(--glacier-bg) 50%, transparent) 100%);
+}
+
+[dir='rtl'] .bshScrim {
+  background:
+    linear-gradient(
+      -90deg,
+      color-mix(in oklch, var(--glacier-bg) 93%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-bg) 76%, transparent) 40%,
+      color-mix(in oklch, var(--glacier-bg) 32%, transparent) 72%,
+      color-mix(in oklch, var(--glacier-bg) 10%, transparent) 100%
+    ),
+    linear-gradient(180deg, transparent 55%, color-mix(in oklch, var(--glacier-bg) 50%, transparent) 100%);
+}
+
+/* Entrance: CSS-only, staggered, base state = settled layout. */
+@keyframes bshRise {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+  }
+}
+
+.bshIntro {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--glacier-space-3);
+  max-inline-size: 30rem;
+  min-inline-size: 0;
+}
+
+.bshIntro > * {
+  animation: bshRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+}
+.bshIntro > :nth-child(1) { animation-delay: 0ms; }
+.bshIntro > :nth-child(2) { animation-delay: 50ms; }
+.bshIntro > :nth-child(3) { animation-delay: 100ms; }
+
+.bshKicker {
+  text-transform: uppercase;
+  letter-spacing: 0.32em;
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-accent-text);
+}
+
+/* The page's h1 at marquee size: two-class selector outscores the kit class. */
+.bshIntro .bshTitle {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: clamp(2.1rem, 4.5vw, 3.1rem);
+  line-height: 1.02;
+}
+
+/* ---- the featured plate: the newest wave, ready to open ---- */
+
+.bshFeature {
+  appearance: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--glacier-space-2);
+  inline-size: min(19rem, 40%);
+  padding: var(--glacier-space-5);
+  border: 1px solid color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border));
+  background: color-mix(in oklch, var(--glacier-surface) 72%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  color: var(--glacier-text);
+  font: inherit;
+  text-align: start;
+  clip-path: polygon(0 0, calc(100% - 1.1rem) 0, 100% 1.1rem, 100% 100%, 0 100%);
+  filter: drop-shadow(0 10px 24px rgb(0 0 0 / 0.4));
+  animation: bshRise var(--glacier-duration-normal) var(--glacier-ease-out) 150ms backwards;
+  transition:
+    scale var(--glacier-duration-fast) var(--glacier-ease-out),
+    filter var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+[dir='rtl'] .bshFeature {
+  clip-path: polygon(0 1.1rem, 1.1rem 0, 100% 0, 100% 100%, 0 100%);
+}
+
+/* The cut edge gets an accent seam - a hairline along the notch diagonal. */
+.bshFeature::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom left,
+    transparent calc(50% - 1.5px),
+    var(--glacier-accent-solid) calc(50% - 1.5px) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
+}
+
+[dir='rtl'] .bshFeature::before {
+  background: linear-gradient(
+    to bottom right,
+    transparent calc(50% - 1.5px),
+    var(--glacier-accent-solid) calc(50% - 1.5px) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
+}
+
+.bshFeature:hover,
+.bshFeature:focus-visible {
+  scale: 1.02;
+  filter: drop-shadow(0 10px 24px rgb(0 0 0 / 0.45))
+    drop-shadow(0 0 20px color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent));
+}
+
+.bshFeature:focus-visible {
+  outline: 2px solid var(--glacier-accent-solid);
+  outline-offset: -4px;
+}
+
+.bshFeatureTag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-accent-text);
+}
+
+.bshFeatureName {
+  font-size: var(--glacier-font-size-xl);
+  font-weight: var(--glacier-font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.12;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bshFeatureMeta {
+  font-family: var(--glacier-font-mono, monospace);
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle);
+}
+
+.bshFeatureCta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  margin-block-start: var(--glacier-space-2);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-bold);
+  color: var(--glacier-accent-text);
+}
+
+.bshFeatureChevron {
+  transition: translate var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.bshFeature:hover .bshFeatureChevron,
+.bshFeature:focus-visible .bshFeatureChevron {
+  translate: 3px 0;
+}
+
+[dir='rtl'] .bshFeatureChevron {
+  rotate: 180deg;
+}
+
+[dir='rtl'] .bshFeature:hover .bshFeatureChevron,
+[dir='rtl'] .bshFeature:focus-visible .bshFeatureChevron {
+  translate: -3px 0;
+}
+
+/* ========================================================================
+   The counter bar (search + era)
+   ======================================================================== */
 
 .boToolbar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--glacier-space-3) var(--glacier-space-4);
+  gap: var(--glacier-space-3) var(--glacier-space-5);
+  padding: var(--glacier-space-3) var(--glacier-space-4);
+  border: 1px solid var(--glacier-border-subtle);
+  background: color-mix(in oklch, var(--glacier-surface) 85%, transparent);
+  clip-path: polygon(0 0, calc(100% - 0.6rem) 0, 100% 0.6rem, 100% 100%, 0 100%);
+}
+
+[dir='rtl'] .boToolbar {
+  clip-path: polygon(0 0.6rem, 0.6rem 0, 100% 0, 100% 100%, 0 100%);
 }
 
 .boSearch {
   flex: 1 1 auto;
-  min-width: 14rem;
+  min-inline-size: 14rem;
+}
+
+.bshEra {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+}
+
+.bshEraLabel {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-text-muted);
 }
 
 .boNotice {
@@ -26,7 +294,9 @@
   padding-block: var(--glacier-space-8);
 }
 
-/* ---- set grid ---- */
+/* ========================================================================
+   The wall: set grid
+   ======================================================================== */
 
 .boGrid {
   display: grid;
@@ -35,29 +305,78 @@
   gap: var(--glacier-space-3);
 }
 
+/* A shelf slot: notched plate, shelf-light falling from the top, accent seam
+   along the cut. clip-path swallows box-shadow, so hover elevation rides
+   drop-shadow and the focus ring draws inset. */
 .boSetTile {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: var(--glacier-space-3);
   width: 100%;
   padding: var(--glacier-space-4) var(--glacier-space-4) var(--glacier-space-3);
-  border-radius: var(--glacier-radius-xl);
   border: var(--glacier-hairline) solid var(--glacier-border-subtle);
-  background: var(--glacier-surface);
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--glacier-surface-raised, var(--glacier-surface)) 92%, var(--glacier-accent-soft)),
+    var(--glacier-surface) 45%
+  );
   color: var(--glacier-text);
   font: inherit;
   text-align: start;
   cursor: pointer;
+  clip-path: polygon(0 0, calc(100% - 1.1rem) 0, 100% 1.1rem, 100% 100%, 0 100%);
+  animation: bshTileIn 280ms var(--glacier-ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * 30ms);
   transition:
+    translate var(--glacier-duration-fast) var(--glacier-ease-out),
     border-color var(--glacier-duration-fast) var(--glacier-ease-out),
-    box-shadow var(--glacier-duration-fast) var(--glacier-ease-out);
+    filter var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+[dir='rtl'] .boSetTile {
+  clip-path: polygon(0 1.1rem, 1.1rem 0, 100% 0, 100% 100%, 0 100%);
+}
+
+@keyframes bshTileIn {
+  from {
+    opacity: 0;
+    translate: 0 10px;
+  }
+}
+
+/* The accent seam along the notch. */
+.boSetTile::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom left,
+    transparent calc(50% - 1.5px),
+    color-mix(in oklch, var(--glacier-accent-solid) 75%, transparent) calc(50% - 1.5px) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
+}
+
+[dir='rtl'] .boSetTile::before {
+  background: linear-gradient(
+    to bottom right,
+    transparent calc(50% - 1.5px),
+    color-mix(in oklch, var(--glacier-accent-solid) 75%, transparent) calc(50% - 1.5px) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
 }
 
 @media (hover: hover) {
   .boSetTile:hover {
-    border-color: var(--glacier-border-strong);
-    box-shadow: var(--glacier-shadow-3);
+    translate: 0 -2px;
+    border-color: color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-border));
+    filter: drop-shadow(0 10px 22px rgb(0 0 0 / 0.4));
   }
 
   /* The showcase fan spreads a touch wider on hover, like being picked up. */
@@ -72,7 +391,12 @@
   }
 }
 
-/* ---- the product shot: display box behind, booster pack in front ---- */
+.boSetTile:focus-visible {
+  outline: 2px solid var(--glacier-accent-solid);
+  outline-offset: -3px;
+}
+
+/* ---- the product shot: display box behind, showcase fan in front ---- */
 
 .boShot {
   position: relative;
@@ -94,6 +418,14 @@
   translate: -62% 0;
   transform-style: preserve-3d;
   transform: rotateY(-24deg);
+}
+
+/* The shot's translates are physical, so RTL re-centres them by hand: the box
+   walks back toward the middle and yaws the other way, the fan crosses to the
+   other corner. (inset-inline-start flips on its own; the translates do not.) */
+[dir='rtl'] .boBox {
+  translate: 62% 0;
+  transform: rotateY(24deg);
 }
 
 .boBoxFront {
@@ -147,6 +479,10 @@
   height: 5.45rem;
 }
 
+[dir='rtl'] .boTileFan {
+  translate: -8% 0;
+}
+
 .boTileFanCard {
   position: absolute;
   inset: 0;
@@ -193,8 +529,12 @@
   );
 }
 
-/* The crimped foil seals. The zigzag edge is a clipped strip, the crinkle a
-   repeating gradient - reads as machine-pressed foil at this size. */
+/* Mirrored yaw exposes the LEFT panel instead. */
+[dir='rtl'] .boBoxSide {
+  transform: translateX(-4.3rem) rotateY(90deg);
+  border-radius: 3px 0 0 3px;
+}
+
 /* No cached art yet: the box stays, wearing the accent-gradient blank - the
    icon and name band still identify the set while the cache warms. */
 .boShot[data-noart] .boBoxFront {
@@ -210,11 +550,6 @@
   align-items: center;
   gap: var(--glacier-space-2);
   flex-wrap: wrap;
-}
-
-.boSetTile:focus-visible {
-  outline: 2px solid var(--glacier-accent-solid);
-  outline-offset: 2px;
 }
 
 /* Set symbols ship as SVG on a transparent background - they are dark on dark,
@@ -235,7 +570,10 @@
 }
 
 .boSetName {
-  font-weight: var(--glacier-font-weight-semibold);
+  font-weight: var(--glacier-font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: var(--glacier-font-size-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -245,7 +583,9 @@
   flex: none;
 }
 
-/* ---- opener ---- */
+/* ========================================================================
+   The counter: opener page
+   ======================================================================== */
 
 /* The expansion's art fills the opener page, dimmed to ambience (same recipe
    as the Browse tiles): the page must stay readable over any painting. */
@@ -275,10 +615,32 @@
   }
 }
 
-/* ---- the physical display box ---- */
+.boOpenerHead {
+  display: grid;
+  gap: var(--glacier-space-2);
+  justify-items: start;
+}
 
-/* The opener's product row: the 3D box on the shelf, stats and the deal
-   button beside it. Phones stack them. */
+.boBack {
+  margin-inline-start: calc(var(--glacier-space-2) * -1);
+}
+
+.boOpenerTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  flex-wrap: wrap;
+}
+
+/* The set's name at counter size, over the blurred painting. */
+.boOpenerTitle h1 {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: clamp(1.6rem, 3.2vw, 2.3rem);
+}
+
+/* ---- the product row: 3D box + odds + the big deal ---- */
+
 .boProductRow {
   display: flex;
   align-items: center;
@@ -293,17 +655,11 @@
   justify-items: start;
 }
 
-@media (max-width: 700px), (max-height: 480px) {
-  .boProductRow {
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .boProductInfo {
-    justify-items: center;
-    width: 100%;
-  }
+.boProductInfo > * {
+  animation: bshRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
 }
+.boProductInfo > :nth-child(1) { animation-delay: 60ms; }
+.boProductInfo > :nth-child(2) { animation-delay: 140ms; }
 
 /* A real cuboid: three visible faces around one preserve-3d pivot, swaying
    slowly on the shelf. Dimensions ride custom properties so every face and
@@ -439,10 +795,288 @@
   filter: blur(6px);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .boBox3d {
-    animation: none;
+/* ---- the drop-rates panel ---- */
+
+.bshOdds {
+  inline-size: 100%;
+  max-inline-size: 30rem;
+  display: grid;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-4) var(--glacier-space-5);
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  background: color-mix(in oklch, var(--glacier-surface) 74%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  clip-path: polygon(0 0, calc(100% - 0.9rem) 0, 100% 0.9rem, 100% 100%, 0 100%);
+}
+
+[dir='rtl'] .bshOdds {
+  clip-path: polygon(0 0.9rem, 0.9rem 0, 100% 0, 100% 100%, 0 100%);
+}
+
+.bshOddsHead {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-bold);
+  color: var(--glacier-accent-text);
+}
+
+.bshOddsRows {
+  display: grid;
+  gap: var(--glacier-space-2);
+}
+
+/* label | meter | figure, on one line each */
+.bshOddsRow {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, 8.5rem) minmax(3rem, 1fr) auto;
+  align-items: center;
+  gap: var(--glacier-space-3);
+}
+
+.bshOddsLabel {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bshOddsMeter {
+  position: relative;
+  block-size: 0.5rem;
+  border-radius: 2px;
+  background: color-mix(in oklch, var(--glacier-border) 40%, transparent);
+  overflow: hidden;
+}
+
+/* Fill width is inline style (logical, flips for free); the gradients are the
+   only directional part, mirrored below. */
+.bshOddsFill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-radius: inherit;
+  animation: bshFillIn 700ms var(--glacier-ease-out) 200ms backwards;
+}
+
+@keyframes bshFillIn {
+  from {
+    inline-size: 0%;
   }
+}
+
+/* Mythic burns the mythic orange... */
+.bshOddsRow[data-tone='mythic'] .bshOddsFill {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklch, var(--glacier-danger-solid, #d2622f) 55%, transparent),
+    var(--glacier-danger-solid, #d2622f)
+  );
+}
+
+[dir='rtl'] .bshOddsRow[data-tone='mythic'] .bshOddsFill {
+  background: linear-gradient(
+    -90deg,
+    color-mix(in oklch, var(--glacier-danger-solid, #d2622f) 55%, transparent),
+    var(--glacier-danger-solid, #d2622f)
+  );
+}
+
+/* ...and the foil meter wears the cards' own rainbow. */
+.bshOddsRow[data-tone='foil'] .bshOddsFill {
+  background: linear-gradient(
+    90deg,
+    oklch(0.72 0.16 0),
+    oklch(0.78 0.15 90),
+    oklch(0.76 0.14 160),
+    oklch(0.72 0.16 250)
+  );
+}
+
+[dir='rtl'] .bshOddsRow[data-tone='foil'] .bshOddsFill {
+  background: linear-gradient(
+    -90deg,
+    oklch(0.72 0.16 0),
+    oklch(0.78 0.15 90),
+    oklch(0.76 0.14 160),
+    oklch(0.72 0.16 250)
+  );
+}
+
+.bshOddsValue {
+  justify-self: end;
+  font-size: var(--glacier-font-size-md);
+  font-weight: var(--glacier-font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* pool size + session pack count, under the meters */
+.bshOddsStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--glacier-space-2) var(--glacier-space-6);
+  padding-block-start: var(--glacier-space-2);
+  border-block-start: var(--glacier-hairline) solid var(--glacier-border-subtle);
+}
+
+.bshStat {
+  display: grid;
+  gap: 1px;
+}
+
+.bshStatValue {
+  font-size: var(--glacier-font-size-xl);
+  font-weight: var(--glacier-font-weight-bold);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.bshStatLabel {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle);
+}
+
+/* ---- OPEN PACK: the unmissable one ---- */
+
+.bshOpen {
+  appearance: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  inline-size: 100%;
+  max-inline-size: 30rem;
+  padding: var(--glacier-space-5) var(--glacier-space-6);
+  border: 1px solid color-mix(in oklch, var(--glacier-accent-solid) 55%, var(--glacier-border));
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--glacier-accent-soft) 92%, transparent),
+    color-mix(in oklch, var(--glacier-accent-soft) 68%, transparent)
+  );
+  color: var(--glacier-text);
+  font: inherit;
+  text-align: start;
+  clip-path: polygon(0 0, calc(100% - 1.1rem) 0, 100% 1.1rem, 100% 100%, 0 100%);
+  filter: drop-shadow(0 10px 26px rgb(0 0 0 / 0.4));
+  transition:
+    scale var(--glacier-duration-fast) var(--glacier-ease-out),
+    filter var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+[dir='rtl'] .bshOpen {
+  clip-path: polygon(0 1.1rem, 1.1rem 0, 100% 0, 100% 100%, 0 100%);
+}
+
+/* Accent seam along the notch, same as the shelf tiles. */
+.bshOpen::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom left,
+    transparent calc(50% - 1.5px),
+    var(--glacier-accent-solid) calc(50% - 1.5px) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
+}
+
+[dir='rtl'] .bshOpen::before {
+  background: linear-gradient(
+    to bottom right,
+    transparent calc(50% - 1.5px),
+    var(--glacier-accent-solid) calc(50% - 1.5px) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
+}
+
+/* The shine sweep that slides across on hover/focus. */
+.bshOpen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    color-mix(in oklch, var(--glacier-accent-solid) 28%, transparent) 50%,
+    transparent 70%
+  );
+  opacity: 0;
+  translate: -40% 0;
+  transition:
+    opacity var(--glacier-duration-normal) var(--glacier-ease-out),
+    translate var(--glacier-duration-normal) var(--glacier-ease-out);
+}
+
+[dir='rtl'] .bshOpen::after {
+  translate: 40% 0;
+}
+
+.bshOpen:hover,
+.bshOpen:focus-visible {
+  scale: 1.02;
+  filter: drop-shadow(0 10px 26px rgb(0 0 0 / 0.45))
+    drop-shadow(0 0 24px color-mix(in oklch, var(--glacier-accent-solid) 40%, transparent));
+}
+
+.bshOpen:hover::after,
+.bshOpen:focus-visible::after,
+[dir='rtl'] .bshOpen:hover::after,
+[dir='rtl'] .bshOpen:focus-visible::after {
+  opacity: 1;
+  translate: 40% 0;
+}
+
+[dir='rtl'] .bshOpen:hover::after,
+[dir='rtl'] .bshOpen:focus-visible::after {
+  translate: -40% 0;
+}
+
+.bshOpen:focus-visible {
+  outline: 2px solid var(--glacier-accent-solid);
+  outline-offset: -4px;
+}
+
+.bshOpenInner {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-4);
+}
+
+.bshOpenIcon {
+  flex: none;
+  color: var(--glacier-accent-text);
+}
+
+.bshOpenText {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.bshOpenTitle {
+  font-size: clamp(1.5rem, 2.6vw, 2rem);
+  font-weight: var(--glacier-font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  line-height: 1.05;
+}
+
+.bshOpenSub {
+  font-size: var(--glacier-font-size-sm);
+  color: var(--glacier-text-muted);
 }
 
 .boMore {
@@ -451,56 +1085,9 @@
   padding-block: var(--glacier-space-2) var(--glacier-space-4);
 }
 
-.boOpenerHead {
-  display: grid;
-  gap: var(--glacier-space-2);
-  justify-items: start;
-}
-
-.boBack {
-  margin-inline-start: calc(var(--glacier-space-2) * -1);
-}
-
-.boOpenerTitle {
-  display: flex;
-  align-items: center;
-  gap: var(--glacier-space-3);
-  flex-wrap: wrap;
-}
-
-.boStats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--glacier-space-3) var(--glacier-space-6);
-  padding: var(--glacier-space-4);
-  border-radius: var(--glacier-radius-xl);
-  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
-  background: color-mix(in oklch, var(--glacier-surface) 70%, transparent);
-}
-
-.boStat {
-  display: grid;
-  gap: 2px;
-}
-
-.boStatValue {
-  font-size: var(--glacier-font-size-xl);
-  font-weight: var(--glacier-font-weight-semibold);
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
-}
-
-.boActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--glacier-space-3);
-}
-
-.boActions button svg {
-  margin-inline-end: var(--glacier-space-1);
-}
-
-/* ---- the opened pack ---- */
+/* ========================================================================
+   The opened pack
+   ======================================================================== */
 
 .boPack {
   display: flex;
@@ -517,6 +1104,16 @@
   /* Perspective belongs on the PARENT of the rotating element, or the flip
      reads as a flat mirror instead of a card turning over. */
   perspective: 900px;
+  /* CSS entrance (base = settled); the pack only exists after a deal, so this
+     never runs in a hidden page anyway. */
+  animation: bshSlotIn 240ms var(--glacier-ease-out) backwards;
+}
+
+@keyframes bshSlotIn {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
 }
 
 .boFlip {
@@ -565,25 +1162,98 @@
   filter: drop-shadow(0 0 10px color-mix(in oklch, var(--glacier-warning-solid, #d9a441) 40%, transparent));
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .boFlip {
-    transition: none;
-  }
-}
+/* ========================================================================
+   Phones (PHONE_QUERY): the band stacks, the counter goes full-width
+   ======================================================================== */
 
-/* Phones: tighter gaps, and the stat strip scrolls rather than wrapping tall. */
 @media (max-width: 700px), (max-height: 480px) {
+  .boostersPage .bshBand {
+    min-block-size: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--glacier-space-4);
+    padding: var(--glacier-space-4);
+    border-radius: var(--glacier-radius-xl);
+  }
+
+  .bshIntro {
+    max-inline-size: none;
+  }
+
+  .bshIntro .bshTitle {
+    font-size: var(--glacier-font-size-2xl);
+  }
+
+  .bshFeature {
+    inline-size: 100%;
+  }
+
+  /* text spans the full art now: one even scrim */
+  .bshScrim,
+  [dir='rtl'] .bshScrim {
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--glacier-bg) 88%, transparent),
+      color-mix(in oklch, var(--glacier-bg) 72%, transparent)
+    );
+  }
+
+  .boProductRow {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .boProductInfo {
+    justify-items: stretch;
+    width: 100%;
+  }
+
+  .bshOdds,
+  .bshOpen {
+    max-inline-size: none;
+  }
+
+  .bshOpenTitle {
+    font-size: var(--glacier-font-size-xl);
+  }
+
   .boPack {
     gap: var(--glacier-space-3) var(--glacier-space-2);
     justify-content: center;
   }
+}
 
-  .boStats {
-    gap: var(--glacier-space-3) var(--glacier-space-4);
-    padding: var(--glacier-space-3);
+/* ---- reduced motion: everything lands, nothing slides or sways ---- */
+
+@media (prefers-reduced-motion: reduce) {
+  .bshIntro > *,
+  .bshFeature,
+  .boSetTile,
+  .boProductInfo > *,
+  .bshOddsFill,
+  .boSlot,
+  .boBox3d {
+    animation: none;
   }
 
-  .boStatValue {
-    font-size: var(--glacier-font-size-lg);
+  .boSetTile,
+  .bshFeature,
+  .bshOpen,
+  .bshOpen::after,
+  .bshFeatureChevron {
+    transition: none;
+  }
+
+  .bshOpen:hover,
+  .bshOpen:focus-visible,
+  .bshFeature:hover,
+  .bshFeature:focus-visible {
+    scale: none;
+  }
+
+  .bshOpen::after,
+  [dir='rtl'] .bshOpen::after {
+    translate: 0 0;
+    opacity: 0;
   }
 }

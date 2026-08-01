@@ -1,155 +1,278 @@
-/* Shared styling for the two social pages: the Friends roster and the Profile
-   showcase. Imported by FriendsPage.tsx and ProfilePage.tsx. */
+/* The two social pages, dressed in the gamified idiom the Home page set:
+   full-bleed art bands under directional scrims, big tracked type, big-number
+   plates, and CSS-only staggered entrances whose BASE state is the finished
+   layout (animation ... backwards), so reduced-motion and frozen-animation
+   environments land on the final frame.
 
-/* ================= friends ================= */
+   Geometry: Home owns the skewed parallelogram. These pages answer with their
+   own shapes - the Profile wears CHAMFERED plates (two cut corners + an accent
+   corner tick) and an octagon portrait; Friends wears NOTCHED roster cards
+   (one cut corner) with a glowing presence edge, and hexagon count chips.
+   Clip-path polygons and angled gradients do not auto-flip, so every
+   asymmetric one is mirrored under [dir='rtl'] below. */
 
-/* Tightened rows: one consistent height for search hits, requests, and the
-   roster, everything on a single centered baseline. */
-.friendsPage .friendRow {
-  min-block-size: 3.75rem;
-  padding-block: var(--glacier-space-3);
-  padding-inline: var(--glacier-space-4);
+/* ==================== shared entrance ==================== */
+
+@keyframes soRise {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+.profilePage > *,
+.friendsPage > * {
+  animation: soRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+}
+.profilePage > :nth-child(1),
+.friendsPage > :nth-child(1) { animation-delay: 0ms; }
+.profilePage > :nth-child(2),
+.friendsPage > :nth-child(2) { animation-delay: 60ms; }
+.profilePage > :nth-child(3),
+.friendsPage > :nth-child(3) { animation-delay: 120ms; }
+.profilePage > :nth-child(4),
+.friendsPage > :nth-child(4) { animation-delay: 180ms; }
+.profilePage > :nth-child(5),
+.friendsPage > :nth-child(5) { animation-delay: 240ms; }
+
+/* Both pages use the same uppercase section kicker; two-class selectors so the
+   app style outscores the kit's own heading class. */
+.profilePage .pfKicker,
+.friendsPage .frKicker {
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--glacier-accent-text);
+}
+
+/* ========================================================================
+   PROFILE - the identity plate
+   ======================================================================== */
+
+.profilePage .pfBand {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--glacier-space-6);
+  min-block-size: clamp(17rem, 36vh, 21rem);
+  padding: var(--glacier-space-6) var(--glacier-space-8);
+  border: 1px solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-2xl);
+  background: var(--glacier-surface);
+  box-shadow: var(--glacier-shadow-3);
+}
+
+/* The showcase deck's wide art fills the plate. */
+.pfBandArt {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-size: cover;
+  background-position: center 22%;
+  filter: saturate(1.08);
+}
+
+/* Heavy on the identity side so type always reads, thin over the art, plus a
+   floor vignette. */
+.pfBandScrim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--glacier-bg) 92%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-bg) 76%, transparent) 42%,
+      color-mix(in oklch, var(--glacier-bg) 30%, transparent) 74%,
+      color-mix(in oklch, var(--glacier-bg) 10%, transparent) 100%
+    ),
+    linear-gradient(180deg, transparent 55%, color-mix(in oklch, var(--glacier-bg) 55%, transparent) 100%);
+}
+
+[dir='rtl'] .pfBandScrim {
+  background:
+    linear-gradient(
+      -90deg,
+      color-mix(in oklch, var(--glacier-bg) 92%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-bg) 76%, transparent) 42%,
+      color-mix(in oklch, var(--glacier-bg) 30%, transparent) 74%,
+      color-mix(in oklch, var(--glacier-bg) 10%, transparent) 100%
+    ),
+    linear-gradient(180deg, transparent 55%, color-mix(in oklch, var(--glacier-bg) 55%, transparent) 100%);
+}
+
+/* No showcase yet: a plain surface plate, no gradient haze. */
+.pfBand:not([data-has-art]) .pfBandScrim {
+  background: none;
+}
+
+/* In the band's flow, not floating over it. Absolutely positioned it sat on
+   top of the win-rate ring (they share the band's top-right corner), so the
+   ring's arc came out from behind the button. The band is already a column:
+   order -1 puts sign-out on its own top row and the layout reserves the
+   height. This is what the phone rule always did - now it is the only
+   behaviour rather than a second one. */
+.profilePage .pfSignOut {
+  position: static;
+  z-index: 1;
+  order: -1;
+  align-self: flex-end;
+}
+
+.pfBandMain {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-6);
 }
 
-/* Presence ring: a box-shadow halo on the avatar wrapper, with a surface-color
-   gap so it reads as a ring, not a border. */
-.frAvatar {
-  display: inline-flex;
+.pfIdent {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-5);
+}
+
+/* Octagon portrait frame: an accent-gradient rim, the avatar clipped inside.
+   The octagon is horizontally symmetric, so RTL needs no mirror. */
+.pfPortrait {
   flex: none;
-  border-radius: var(--glacier-radius-full);
-}
-
-.frAvatar[data-presence='online'] {
-  box-shadow:
-    0 0 0 2px var(--glacier-surface-raised),
-    0 0 0 4px var(--glacier-success-solid);
-}
-
-.frAvatar[data-presence='ingame'] {
-  box-shadow:
-    0 0 0 2px var(--glacier-surface-raised),
-    0 0 0 4px var(--glacier-accent-solid);
-}
-
-.frAvatar[data-presence='offline'] {
-  box-shadow:
-    0 0 0 2px var(--glacier-surface-raised),
-    0 0 0 4px var(--glacier-border);
-}
-
-/* Name + status share one baseline; the name stays readable when cramped. */
-.frWho {
   display: inline-flex;
-  align-items: baseline;
-  gap: var(--glacier-space-2);
-  min-width: 0;
+  padding: 5px;
+  clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--glacier-accent-solid) 90%, transparent),
+    color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent)
+  );
 }
 
-.frName {
-  font-weight: var(--glacier-font-weight-medium);
+.pfPortrait > * {
+  clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%);
+}
+
+.pfIdText {
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+}
+
+/* Rank insignia + title + level chip, all in the accent. */
+.pfRankLine {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  color: var(--glacier-accent-text);
+}
+
+.pfInsignia {
+  flex: none;
+}
+
+.pfRankTitle {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
   white-space: nowrap;
+}
+
+/* Level chip: a hexagon (symmetric - RTL safe). */
+.pfLevel {
+  clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 12px 100%, 0 50%);
+  padding: 2px 18px;
+  background: color-mix(in oklch, var(--glacier-accent-soft) 90%, transparent);
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-bold);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+/* The page's h1: big, uppercase, tracked. */
+.pfBand .pfName {
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  line-height: 1.05;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Right-aligned action cluster. */
-.frActions {
+/* Progress to the next rank; hidden at the top of the ladder. */
+.pfNext {
   display: flex;
   align-items: center;
   gap: var(--glacier-space-2);
-  margin-inline-start: auto;
+  max-inline-size: 18rem;
 }
 
-/* Section heading with the incoming-request count beside it. */
-.frHeadRow {
-  display: flex;
-  align-items: center;
-  gap: var(--glacier-space-2);
+.pfNext > :first-child {
+  flex: 1;
+  min-inline-size: 5rem;
 }
 
-/* ================= profile ================= */
-
-/* The showcase hero band: the chosen deck's cover art blurred under a
-   directional scrim, same recipe as the deck editor hero. */
-.pfHero {
-  position: relative;
-  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
-  border-radius: var(--glacier-radius-xl);
-  overflow: hidden;
-}
-
-.pfHeroArt {
-  position: absolute;
-  inset: 0;
-  background-size: cover;
-  background-position: center 25%;
-  filter: blur(16px) saturate(1.15) brightness(0.75);
-  transform: scale(1.2);
-}
-
-.pfHeroScrim {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    color-mix(in oklch, var(--glacier-bg) 90%, transparent) 0%,
-    color-mix(in oklch, var(--glacier-bg) 70%, transparent) 55%,
-    color-mix(in oklch, var(--glacier-bg) 40%, transparent) 100%
-  );
-}
-
-[dir='rtl'] .pfHeroScrim {
-  background: linear-gradient(
-    -90deg,
-    color-mix(in oklch, var(--glacier-bg) 90%, transparent) 0%,
-    color-mix(in oklch, var(--glacier-bg) 70%, transparent) 55%,
-    color-mix(in oklch, var(--glacier-bg) 40%, transparent) 100%
-  );
-}
-
-.pfHero:not([data-has-art]) .pfHeroScrim {
-  background: var(--glacier-surface);
-}
-
-.pfHeroContent {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--glacier-space-4);
-  padding: var(--glacier-space-5) var(--glacier-space-5) var(--glacier-space-3);
-}
-
-/* When a showcase deck is set the avatar earns an accent ring. */
-.pfAvatar {
-  display: inline-flex;
+.pfNextLabel {
   flex: none;
-  border-radius: var(--glacier-radius-full);
+  white-space: nowrap;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle);
 }
 
-.pfHero[data-has-art] .pfAvatar {
-  box-shadow:
-    0 0 0 2px var(--glacier-bg),
-    0 0 0 4px var(--glacier-accent-solid);
+/* The win-rate ring rides the art side of the band. */
+.pfRing {
+  flex: none;
 }
 
-.pfShowcaseRow {
-  position: relative;
+.pfRingLabel {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+
+.pfRingValue {
+  font-size: clamp(1.4rem, 2.6vw, 1.9rem);
+  font-weight: var(--glacier-font-weight-bold);
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  color: var(--glacier-text);
+}
+
+.pfRingCaption {
+  font-size: var(--glacier-font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--glacier-text-muted);
+}
+
+/* Foot of the plate: showcase picker + the chosen deck. */
+.pfBandFoot {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   flex-wrap: wrap;
-  gap: var(--glacier-space-3) var(--glacier-space-5);
-  padding: 0 var(--glacier-space-5) var(--glacier-space-5);
+  gap: var(--glacier-space-3) var(--glacier-space-6);
 }
 
 .pfShowcasePick {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   gap: var(--glacier-space-1);
+  /* The deck name is the only thing this control carries now, so give it room
+     to show one rather than truncating into the chevron. */
+  min-inline-size: min(22rem, 100%);
 }
 
-/* The chosen deck: name + commander, one clickable block. */
 .pfShowcaseDeck {
   display: grid;
   gap: 2px;
@@ -163,104 +286,724 @@
   cursor: pointer;
 }
 
-.pfShowcaseName {
-  font-size: var(--glacier-font-size-lg);
-  font-weight: var(--glacier-font-weight-semibold);
-}
-
-.pfShowcaseDeck:hover .pfShowcaseName {
+/* The commander line is the whole button now, so it carries the affordance. */
+.pfShowcaseDeck:hover,
+.pfShowcaseDeck:focus-visible {
   text-decoration: underline;
 }
 
-/* Stats on the page rhythm: value over label, no card chrome. */
-.pfStats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--glacier-space-4) var(--glacier-space-8);
+.pfShowcaseDeck:focus-visible {
+  outline: 2px solid var(--glacier-accent-solid);
+  outline-offset: 3px;
 }
 
-.pfStat {
+/* ---------------- lifetime stat plates ---------------- */
+
+.pfPlateRow {
   display: grid;
-  gap: var(--glacier-space-1);
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--glacier-space-3);
 }
 
-.pfStatValue {
-  font-size: var(--glacier-font-size-2xl);
-  font-weight: var(--glacier-font-weight-semibold);
-  line-height: 1.1;
+/* Chamfered plate: cut at top-inline-end and bottom-inline-start, an accent
+   tick filling the top cut. Mirrored for RTL below. */
+.pfPlate {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+  min-block-size: 5.5rem;
+  padding: var(--glacier-space-4) var(--glacier-space-4) var(--glacier-space-3);
+  border: 1px solid color-mix(in oklch, var(--glacier-border) 70%, transparent);
+  background: color-mix(in oklch, var(--glacier-surface) 82%, transparent);
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+  animation: soRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+}
+
+.pfPlateRow > :nth-child(1) { animation-delay: 40ms; }
+.pfPlateRow > :nth-child(2) { animation-delay: 80ms; }
+.pfPlateRow > :nth-child(3) { animation-delay: 120ms; }
+.pfPlateRow > :nth-child(4) { animation-delay: 160ms; }
+.pfPlateRow > :nth-child(5) { animation-delay: 200ms; }
+.pfPlateRow > :nth-child(6) { animation-delay: 240ms; }
+.pfPlateRow > :nth-child(7) { animation-delay: 280ms; }
+
+.pfPlate::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  inline-size: 16px;
+  block-size: 16px;
+  background: var(--glacier-accent-solid);
+  clip-path: polygon(100% 0, 100% 100%, 0 0);
+  opacity: 0.9;
+}
+
+[dir='rtl'] .pfPlate {
+  clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
+}
+
+[dir='rtl'] .pfPlate::before {
+  clip-path: polygon(0 0, 0 100%, 100% 0);
+}
+
+.pfPlateValue {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: clamp(1.5rem, 2.2vw, 2rem);
+  font-weight: var(--glacier-font-weight-bold);
+  line-height: 1.05;
   font-variant-numeric: tabular-nums;
 }
 
-/* The W/L slash sits between two numbers, so it reads better dimmed. */
-.pfStatSep {
-  color: var(--glacier-text-subtle);
-  margin-inline: 0.15em;
+/* Word-sized values (dates) wear smaller type and may wrap. */
+.pfPlate[data-fit='text'] .pfPlateValue {
+  font-size: clamp(1.05rem, 1.6vw, 1.3rem);
+  line-height: 1.2;
 }
 
-.pfStatEndorse,
-.pfStatSalt {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
+.pfPlateLabel {
+  margin-block-start: auto;
+  font-size: var(--glacier-font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--glacier-text-muted);
 }
 
-.pfStatEndorse {
+.pfPlate[data-tone='endorse'] .pfPlateValue {
   color: var(--glacier-success-text, var(--glacier-text));
 }
 
 /* The same warm orange the post-match salt rating and the deck inspector use,
    so saltiness reads as one thing everywhere it appears. */
-.pfStatSalt {
+.pfPlate[data-tone='salt'] .pfPlateValue {
   color: oklch(0.75 0.15 45);
 }
 
-/* Deck reputation: two short leaderboards of your own decks, side by side. */
-.pfDeckStats {
+/* ---------------- deck reputation boards ---------------- */
+
+.pfRepLede {
+  max-inline-size: 46rem;
+}
+
+.pfRepCols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--glacier-space-4);
+}
+
+.pfRepCol {
+  --pf-rep-tone: var(--glacier-accent-solid);
   display: flex;
   flex-direction: column;
   gap: var(--glacier-space-2);
+  min-inline-size: 0;
 }
 
-.pfDeckCols {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-  gap: var(--glacier-space-3);
-  margin-block-start: var(--glacier-space-2);
+.pfRepCol[data-tone='salt'] {
+  --pf-rep-tone: oklch(0.75 0.15 45);
 }
 
-.pfDeckCol {
-  display: flex;
-  flex-direction: column;
-  gap: var(--glacier-space-1);
+.pfRepCol[data-tone='endorse'] {
+  --pf-rep-tone: var(--glacier-success-solid);
 }
 
-.pfDeckColHead {
+.pfRepHead {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
+  color: var(--pf-rep-tone);
 }
 
-.pfDeckRow {
+/* A ranked row: big index numeral, name, figure, the tone as a leading edge
+   and a wash that fades toward the trailing side. */
+.pfRepRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--glacier-space-3);
-  padding: var(--glacier-space-2) var(--glacier-space-3);
-  border-radius: var(--glacier-radius-md);
-  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 45%, transparent);
-  background: color-mix(in oklch, var(--glacier-surface) 60%, transparent);
+  padding: var(--glacier-space-2) var(--glacier-space-4);
+  border: 1px solid color-mix(in oklch, var(--glacier-border) 45%, transparent);
+  border-inline-start: 3px solid var(--pf-rep-tone);
+  border-radius: var(--glacier-radius-sm);
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--pf-rep-tone) 13%, transparent), transparent 70%),
+    color-mix(in oklch, var(--glacier-surface) 60%, transparent);
 }
 
-.pfDeckName {
+[dir='rtl'] .pfRepRow {
+  background:
+    linear-gradient(-90deg, color-mix(in oklch, var(--pf-rep-tone) 13%, transparent), transparent 70%),
+    color-mix(in oklch, var(--glacier-surface) 60%, transparent);
+}
+
+.pfRepIndex {
+  flex: none;
+  inline-size: 1.6ch;
+  font-size: var(--glacier-font-size-lg);
+  font-weight: var(--glacier-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--glacier-text-subtle);
+}
+
+.pfRepName {
+  flex: 1;
+  min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.pfDeckFig {
+.pfRepFig {
+  flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-weight: var(--glacier-font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--pf-rep-tone);
+}
+
+.pfRepCount {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle);
+}
+
+/* ---------------- service record ---------------- */
+
+.pfLogList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+}
+
+.pfLogRow {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border: 1px solid color-mix(in oklch, var(--glacier-border) 45%, transparent);
+  border-radius: var(--glacier-radius-md);
+  background: color-mix(in oklch, var(--glacier-surface) 60%, transparent);
+}
+
+/* Result chip: a hexagon (symmetric - RTL safe). */
+.pfLogResult {
+  flex: none;
+  inline-size: 2.2rem;
+  block-size: 2.1rem;
+  display: grid;
+  place-items: center;
+  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+  background: color-mix(in oklch, var(--glacier-border) 40%, transparent);
+  color: var(--glacier-text-muted);
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-bold);
+}
+
+.pfLogResult[data-result='win'] {
+  background: color-mix(in oklch, var(--glacier-success-solid) 30%, transparent);
+  color: var(--glacier-success-text, var(--glacier-text));
+}
+
+.pfLogResult[data-result='loss'] {
+  background: color-mix(in oklch, var(--glacier-danger-solid) 26%, transparent);
+  color: var(--glacier-danger-text, var(--glacier-text));
+}
+
+.pfLogMain {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pfLogName {
+  font-weight: var(--glacier-font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pfLogWith {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pfLogStats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+
+.pfLogStat {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.2rem;
+  white-space: nowrap;
+}
+
+.pfLogWhen {
   flex: none;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle);
+  white-space: nowrap;
+}
+
+/* ---------------- precon shelf entrance ---------------- */
+
+/* The shelf keeps its app.css look; this only adds the staggered entrance
+   (delays are inline per card). */
+.pfPreconIn {
+  animation: soRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+}
+
+/* ========================================================================
+   FRIENDS - the guild roster
+   ======================================================================== */
+
+.friendsPage .frBand {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--glacier-space-6);
+  min-block-size: clamp(12rem, 26vh, 16rem);
+  padding: var(--glacier-space-6) var(--glacier-space-8);
+  border: 1px solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-2xl);
+  background: var(--glacier-surface);
+  box-shadow: var(--glacier-shadow-3);
+}
+
+/* The player's own table felt backs the guild hall (preferences.ts publishes
+   it as --pc-playmat on :root, always set at boot). */
+.frBandArt {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-image: var(--pc-playmat);
+  background-size: cover;
+  background-position: center;
+  filter: saturate(1.05);
+}
+
+.frBandScrim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--glacier-bg) 90%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-bg) 72%, transparent) 45%,
+      color-mix(in oklch, var(--glacier-bg) 34%, transparent) 100%
+    ),
+    linear-gradient(180deg, transparent 50%, color-mix(in oklch, var(--glacier-bg) 55%, transparent) 100%);
+}
+
+[dir='rtl'] .frBandScrim {
+  background:
+    linear-gradient(
+      -90deg,
+      color-mix(in oklch, var(--glacier-bg) 90%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-bg) 72%, transparent) 45%,
+      color-mix(in oklch, var(--glacier-bg) 34%, transparent) 100%
+    ),
+    linear-gradient(180deg, transparent 50%, color-mix(in oklch, var(--glacier-bg) 55%, transparent) 100%);
+}
+
+.frBandMain {
+  position: relative;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+}
+
+.friendsPage .frBandTitle {
+  font-size: clamp(2rem, 4.5vw, 3rem);
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.frBandLede {
+  max-inline-size: 28rem;
+}
+
+/* Squad tallies: notched glass plates with a presence-toned base bar. */
+.frTallies {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--glacier-space-3);
+}
+
+.frTally {
+  --fr-tone: var(--glacier-text-subtle);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 6.5rem;
+  padding: var(--glacier-space-3) var(--glacier-space-4);
+  border: 1px solid color-mix(in oklch, var(--glacier-border) 80%, transparent);
+  background: color-mix(in oklch, var(--glacier-bg) 62%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%);
+}
+
+[dir='rtl'] .frTally {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+}
+
+.frTally::before {
+  content: '';
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline-start: 0;
+  inline-size: 100%;
+  block-size: 2px;
+  background: var(--fr-tone);
+  opacity: 0.85;
+}
+
+.frTally[data-presence='online'] {
+  --fr-tone: var(--glacier-success-solid);
+}
+
+.frTally[data-presence='ingame'] {
+  --fr-tone: var(--glacier-accent-solid);
+}
+
+.frTallyValue {
+  font-size: clamp(1.5rem, 2.4vw, 2.1rem);
+  font-weight: var(--glacier-font-weight-bold);
+  line-height: 1.05;
   font-variant-numeric: tabular-nums;
-  font-weight: var(--glacier-font-weight-medium);
+}
+
+.frTallyLabel {
+  font-size: var(--glacier-font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--glacier-text-muted);
+}
+
+/* Incoming requests: the one tally that glows for attention. drop-shadow, not
+   box-shadow, so the halo follows the notched clip. */
+@keyframes frBadgePulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 2px color-mix(in oklch, var(--glacier-accent-solid) 25%, transparent));
+  }
+  50% {
+    filter: drop-shadow(0 0 12px color-mix(in oklch, var(--glacier-accent-solid) 60%, transparent));
+  }
+}
+
+.frTallyBadge {
+  --fr-tone: var(--glacier-accent-solid);
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 55%, var(--glacier-border));
+  background: color-mix(in oklch, var(--glacier-accent-soft) 75%, transparent);
+  animation: frBadgePulse 2.4s ease-in-out infinite;
+}
+
+.frTallyBadge .frTallyValue,
+.frTallyBadge .frTallyLabel {
+  color: var(--glacier-accent-text);
+}
+
+/* ---------------- RECRUIT station ---------------- */
+
+.frRecruitPlate {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-5);
+  padding: var(--glacier-space-5) var(--glacier-space-6);
+  border: 1px solid color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-border));
+  background:
+    linear-gradient(
+      100deg,
+      color-mix(in oklch, var(--glacier-accent-solid) 16%, transparent),
+      transparent 60%
+    ),
+    color-mix(in oklch, var(--glacier-surface) 88%, transparent);
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+}
+
+[dir='rtl'] .frRecruitPlate {
+  background:
+    linear-gradient(
+      -100deg,
+      color-mix(in oklch, var(--glacier-accent-solid) 16%, transparent),
+      transparent 60%
+    ),
+    color-mix(in oklch, var(--glacier-surface) 88%, transparent);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 18px 100%, 0 calc(100% - 18px));
+}
+
+/* Accent leading edge, inside the clip. */
+.frRecruitPlate::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 4px;
+  background: var(--glacier-accent-solid);
+  opacity: 0.9;
+}
+
+.frRecruitTitle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: clamp(1.1rem, 1.8vw, 1.5rem);
+  font-weight: var(--glacier-font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.frRecruitTitle svg {
+  color: var(--glacier-accent-text);
+}
+
+.frRecruitField {
+  flex: 1;
+  min-inline-size: 0;
+  max-inline-size: 30rem;
+}
+
+/* ---------------- roster cards ---------------- */
+
+.frHeadRow {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+/* Hexagon count chip beside the Requests heading. */
+.frReqCount {
+  min-inline-size: 2rem;
+  block-size: 1.8rem;
+  display: grid;
+  place-items: center;
+  padding-inline: 8px;
+  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+  background: var(--glacier-accent-soft);
+  color: var(--glacier-accent-text);
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.frGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: var(--glacier-space-3);
+}
+
+/* One roster card: a notched plate whose leading edge is the presence lamp. */
+.frCard {
+  --fr-presence: var(--glacier-border);
+  --fr-glow: transparent;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-3) var(--glacier-space-4);
+  padding-inline-start: calc(var(--glacier-space-4) + 4px);
+  border: 1px solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
+  background: color-mix(in oklch, var(--glacier-surface) 78%, transparent);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+  animation: soRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+  transition:
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    background-color var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+[dir='rtl'] .frCard {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 12px 100%, 0 12px);
+}
+
+/* The status edge: glows inward past the clip. */
+.frCard::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 4px;
+  background: var(--fr-presence);
+  box-shadow: 0 0 14px 1px var(--fr-glow);
+}
+
+.frCard[data-presence='online'] {
+  --fr-presence: var(--glacier-success-solid);
+  --fr-glow: color-mix(in oklch, var(--glacier-success-solid) 45%, transparent);
+}
+
+.frCard[data-presence='ingame'] {
+  --fr-presence: var(--glacier-accent-solid);
+  --fr-glow: color-mix(in oklch, var(--glacier-accent-solid) 50%, transparent);
+}
+
+.frCard[data-presence='offline'] {
+  opacity: 0.82;
+}
+
+.frCard:hover {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border));
+  background: color-mix(in oklch, var(--glacier-surface) 92%, transparent);
+}
+
+.frCardAvatar {
+  flex: none;
+  display: inline-flex;
+}
+
+.frCardWho {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.frCardName {
+  font-weight: var(--glacier-font-weight-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.frCardStatus {
+  font-size: var(--glacier-font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--glacier-text-subtle);
+}
+
+.frCard[data-presence='online'] .frCardStatus {
+  color: var(--glacier-success-text, var(--glacier-text-subtle));
+}
+
+.frCard[data-presence='ingame'] .frCardStatus {
+  color: var(--glacier-accent-text);
+}
+
+.frCardActions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+/* ========================================================================
+   phones (PHONE_QUERY): stacked bands, full-bleed cards, nothing overflows
+   ======================================================================== */
+
+@media (max-width: 700px), (max-height: 480px) {
+  /* profile */
+  .profilePage .pfBand {
+    min-block-size: 0;
+    gap: var(--glacier-space-4);
+    padding: var(--glacier-space-4);
+    border-radius: var(--glacier-radius-xl);
+  }
+  .pfBandMain {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--glacier-space-4);
+  }
+  .pfIdent {
+    gap: var(--glacier-space-3);
+  }
+  .pfBand .pfName {
+    font-size: clamp(1.4rem, 6vw, 1.9rem);
+  }
+  .pfRing {
+    align-self: center;
+  }
+  .pfPlateRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pfLogRow {
+    flex-wrap: wrap;
+  }
+  .pfLogStats {
+    justify-content: flex-start;
+    flex-basis: 100%;
+    order: 3;
+  }
+  .pfLogWhen {
+    margin-inline-start: auto;
+  }
+
+  /* friends */
+  .friendsPage .frBand {
+    min-block-size: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--glacier-space-4);
+    padding: var(--glacier-space-4);
+    border-radius: var(--glacier-radius-xl);
+  }
+  .frTallies {
+    justify-content: flex-start;
+  }
+  .frTally {
+    flex: 1;
+    min-inline-size: calc(50% - var(--glacier-space-3));
+  }
+  .frRecruitPlate {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--glacier-space-3);
+    padding: var(--glacier-space-4);
+  }
+  .frRecruitField {
+    max-inline-size: none;
+  }
+  .frGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ========================================================================
+   reduced motion: everything lands, nothing slides or pulses
+   ======================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .profilePage > *,
+  .friendsPage > *,
+  .pfPlate,
+  .pfPreconIn,
+  .frCard {
+    animation: none;
+  }
+  .frTallyBadge {
+    animation: none;
+    filter: drop-shadow(0 0 8px color-mix(in oklch, var(--glacier-accent-solid) 40%, transparent));
+  }
+  .frCard {
+    transition: none;
+  }
 }

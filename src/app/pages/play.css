@@ -1,284 +1,669 @@
-/* Play lobby page: the saved-tables section that sits above the create/join
-   grid. Shares .page rhythm and the glassy card look from app.css. */
+/* Play (pregame) + Matches (career/server-browser) + the join-link splash.
 
-/* ---- quick start: one card per format ---------------------------------- */
+   The pregame idiom, echoing the Home band without cloning it: the home page
+   owns the skewed parallelogram; these pages speak in CHAMFERED PLATES — a
+   clipped corner instead of a skew — over the same directional-scrim art
+   language. Namespaces: pg* (both PlayPage modes), jt* (JoinTablePage).
 
-.quickStarts {
-  display: flex;
-  flex-direction: column;
-  gap: var(--glacier-space-3);
+   Entrances are CSS-only with the finished layout as the BASE state
+   (`animation … backwards` + delays), so reduced-motion and frozen-rAF
+   environments land on the final frame. */
+
+/* ========================================================================
+   Shared entrance + section headers
+   ======================================================================== */
+
+@keyframes pgRise {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
 }
 
-.quickStartsHead {
+/* Top-level sections stagger in; the per-section delay rides inline from the
+   page so the two modes can share one class. */
+.playPage .pgEnter {
+  animation: pgRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+}
+
+/* One baseline for every section header: big tracked title, quiet lede. */
+.pgHead {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: var(--glacier-space-1) var(--glacier-space-3);
 }
 
-/* Three across, deliberately, rather than as many as will fit: the cards are
+.pgHead .pgHeadTitle,
+.pgHist .pgHeadTitle,
+.pgInvites .pgHeadTitle {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: var(--glacier-font-size-lg);
+}
+
+/* ========================================================================
+   Masthead band — art behind a directional scrim, the page title in big
+   type; the career variant carries the W/L plates on its floor.
+   ======================================================================== */
+
+.playPage .pgMast {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--glacier-space-5);
+  min-block-size: clamp(11rem, 24vh, 15rem);
+  padding: var(--glacier-space-6) var(--glacier-space-8);
+  border: 1px solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-2xl);
+  background: var(--glacier-surface);
+  box-shadow: var(--glacier-shadow-3);
+}
+
+.playPage .pgMastCareer {
+  min-block-size: clamp(14rem, 30vh, 18rem);
+}
+
+.pgMastArt {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-size: cover;
+  background-position: center 22%;
+  filter: saturate(1.06);
+}
+
+/* Heavy toward the text side (inline-start), thinning over the art, plus a
+   floor vignette under the type and the plates. */
+.pgMastScrim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--glacier-bg) 92%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-bg) 72%, transparent) 42%,
+      color-mix(in oklch, var(--glacier-bg) 26%, transparent) 74%,
+      color-mix(in oklch, var(--glacier-bg) 6%, transparent) 100%
+    ),
+    linear-gradient(180deg, transparent 40%, color-mix(in oklch, var(--glacier-bg) 62%, transparent) 100%);
+}
+
+[dir='rtl'] .pgMastScrim {
+  background:
+    linear-gradient(
+      -90deg,
+      color-mix(in oklch, var(--glacier-bg) 92%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-bg) 72%, transparent) 42%,
+      color-mix(in oklch, var(--glacier-bg) 26%, transparent) 74%,
+      color-mix(in oklch, var(--glacier-bg) 6%, transparent) 100%
+    ),
+    linear-gradient(180deg, transparent 40%, color-mix(in oklch, var(--glacier-bg) 62%, transparent) 100%);
+}
+
+.pgMastBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  max-inline-size: 44rem;
+  animation: pgRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+}
+
+.pgMastKicker {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-accent-text);
+}
+
+/* Two-class selector so the display size outscores the kit heading class. */
+.pgMastBody .pgMastTitle {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: clamp(2rem, 4.5vw, 3rem);
+  line-height: 1.02;
+}
+
+.pgMastLede {
+  max-inline-size: 38rem;
+}
+
+/* --- career plates: the number huge, the label small and tracked --- */
+
+.pgCareer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--glacier-space-3);
+  animation: pgRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+  animation-delay: 120ms;
+}
+
+.pgCareerPlate {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 8rem;
+  padding: var(--glacier-space-3) var(--glacier-space-4) var(--glacier-space-3);
+  background: color-mix(in oklch, var(--glacier-bg) 62%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  border: 1px solid color-mix(in oklch, var(--glacier-border) 70%, transparent);
+  /* The page's shape: a chamfered corner on the block-start inline-end. */
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+}
+
+[dir='rtl'] .pgCareerPlate {
+  clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%, 0 12px);
+}
+
+.pgCareerValue {
+  font-size: clamp(1.5rem, 3vw, 2.1rem);
+  font-weight: var(--glacier-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.pgCareerLabel {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+
+/* The thin accent underline; the win-rate plate fills it to the percentage. */
+.pgCareerEdge {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline-start: 0;
+  block-size: 3px;
+  inline-size: 100%;
+  background: var(--glacier-accent-solid);
+  opacity: 0.85;
+}
+
+/* WINS is the headline: the tallest numeral on the page, success-toned. */
+.pgCareerWins {
+  border-color: color-mix(in oklch, var(--glacier-success-solid, #4ade80) 45%, var(--glacier-border));
+  padding-inline-end: var(--glacier-space-6);
+}
+.pgCareerWins .pgCareerValue {
+  font-size: clamp(2.6rem, 6vw, 3.8rem);
+  color: var(--glacier-success-text, var(--glacier-success-solid, #4ade80));
+}
+.pgCareerWins .pgCareerEdge {
+  background: var(--glacier-success-solid, #4ade80);
+}
+
+.pgCareerLosses .pgCareerEdge {
+  background: var(--glacier-danger-solid, #d2622f);
+}
+
+/* ========================================================================
+   Game-mode plates — the big one-click tables. Chamfered corner, tint
+   leading edge, tint wash, hover sweep + drop-shadow glow (drop-shadow so
+   the glow follows the clipped shape).
+   ======================================================================== */
+
+.pgModes {
+  min-inline-size: 0;
+}
+
+/* Three across, deliberately, rather than as many as will fit: the plates are
    in a considered order - the everyday formats first, draft next because it is
    the only table you can join owning nothing - and an auto-fit track would
    reshuffle which of them share a row at whatever width the window happened to
    be. minmax(0, 1fr) rather than 1fr so a long blurb cannot push a column
    wider than its share. */
-.quickGrid {
+.pgModeGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--glacier-space-3);
 }
 
-/* Two and then one, halving rather than degrading gradually, so the reading
-   order stays predictable as the window narrows. */
+/* Two across when the window narrows; the featured plate keeps its double
+   width until the phone layout unspans it. */
 @media (max-width: 62rem) {
-  .quickGrid {
+  .pgModeGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 34rem) {
-  .quickGrid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.quickCard {
+.pgMode {
   position: relative;
   isolation: isolate;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  /* Tight by default so the name and its blurb read as one block; the parts
-     that want air ask for it themselves below. */
   gap: var(--glacier-space-1);
-  padding: var(--glacier-space-4);
-  border-radius: var(--glacier-radius-xl);
-  /* The card's own tint carries the whole identity - border, wash and glyph -
-     so six cards read as six choices rather than one repeated tile. */
-  border: var(--glacier-hairline) solid color-mix(in oklch, var(--qs-tint) 34%, transparent);
+  padding: var(--glacier-space-4) var(--glacier-space-5);
+  color: var(--glacier-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  border: 1px solid color-mix(in oklch, var(--pg-tint) 34%, transparent);
   background:
     radial-gradient(
       130% 110% at 0% 0%,
-      color-mix(in oklch, var(--qs-tint) 20%, transparent),
+      color-mix(in oklch, var(--pg-tint) 18%, transparent),
       transparent 62%
     ),
     color-mix(in oklch, var(--glacier-bg) 72%, transparent);
   backdrop-filter: blur(var(--glacier-blur-md));
   -webkit-backdrop-filter: blur(var(--glacier-blur-md));
-  box-shadow: 0 10px 28px rgb(0 0 0 / 0.3);
-  color: var(--glacier-text);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
+  /* The chamfer: box-shadow would be clipped with the shape, so depth and the
+     hover glow ride drop-shadows (they follow the clip). */
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+  filter: drop-shadow(0 8px 20px rgb(0 0 0 / 0.3));
   transition:
-    transform var(--glacier-duration-fast, 140ms) var(--glacier-ease-out, ease),
-    box-shadow var(--glacier-duration-fast, 140ms) var(--glacier-ease-out, ease),
-    border-color var(--glacier-duration-fast, 140ms) var(--glacier-ease-out, ease);
+    translate var(--glacier-duration-fast) var(--glacier-ease-out),
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    filter var(--glacier-duration-fast) var(--glacier-ease-out);
+  /* Entrance: base state is the settled grid. */
+  animation: pgRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
 }
 
-/* A light sweep across the wash on hover - the tile is a button, and it should
-   look like it can be pressed before it is. Painted behind the content by its
-   own z-index rather than by source order, since the content is text nodes. */
-.quickCard::after {
+[dir='rtl'] .pgMode {
+  clip-path: polygon(18px 0, 100% 0, 100% 100%, 0 100%, 0 18px);
+  background:
+    radial-gradient(
+      130% 110% at 100% 0%,
+      color-mix(in oklch, var(--pg-tint) 18%, transparent),
+      transparent 62%
+    ),
+    color-mix(in oklch, var(--glacier-bg) 72%, transparent);
+}
+
+/* stagger down the strip */
+.pgModeGrid > :nth-child(1) { animation-delay: 40ms; }
+.pgModeGrid > :nth-child(2) { animation-delay: 85ms; }
+.pgModeGrid > :nth-child(3) { animation-delay: 130ms; }
+.pgModeGrid > :nth-child(4) { animation-delay: 175ms; }
+.pgModeGrid > :nth-child(5) { animation-delay: 220ms; }
+.pgModeGrid > :nth-child(6) { animation-delay: 265ms; }
+.pgModeGrid > :nth-child(7) { animation-delay: 310ms; }
+.pgModeGrid > :nth-child(8) { animation-delay: 355ms; }
+.pgModeGrid > :nth-child(9) { animation-delay: 400ms; }
+.pgModeGrid > :nth-child(10) { animation-delay: 445ms; }
+
+/* tint leading edge */
+.pgMode::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 3px;
+  background: var(--pg-tint);
+  opacity: 0.9;
+  transition: inline-size var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+/* tint sweep that slides across on hover/focus */
+.pgMode::after {
   content: '';
   position: absolute;
   inset: 0;
   z-index: -1;
+  pointer-events: none;
   background: linear-gradient(
     115deg,
     transparent 30%,
-    color-mix(in oklch, var(--qs-tint) 26%, transparent) 50%,
+    color-mix(in oklch, var(--pg-tint) 24%, transparent) 50%,
     transparent 70%
   );
-  transform: translateX(-120%);
   opacity: 0;
+  translate: -120% 0;
   transition:
-    transform var(--glacier-duration-slow, 520ms) var(--glacier-ease-out, ease),
-    opacity var(--glacier-duration-fast, 140ms) var(--glacier-ease-out, ease);
+    translate var(--glacier-duration-slow, 520ms) var(--glacier-ease-out),
+    opacity var(--glacier-duration-fast) var(--glacier-ease-out);
 }
 
-.quickCard:hover:not(:disabled),
-.quickCard:focus-visible {
-  transform: translateY(-3px);
-  border-color: color-mix(in oklch, var(--qs-tint) 62%, transparent);
-  box-shadow: 0 16px 40px rgb(0 0 0 / 0.4);
+[dir='rtl'] .pgMode::after {
+  translate: 120% 0;
 }
 
-.quickCard:hover:not(:disabled)::after,
-.quickCard:focus-visible::after {
-  transform: translateX(120%);
+.pgMode:hover:not(:disabled),
+.pgMode:focus-visible {
+  translate: 0 -3px;
+  border-color: color-mix(in oklch, var(--pg-tint) 62%, transparent);
+  filter:
+    drop-shadow(0 14px 30px rgb(0 0 0 / 0.4))
+    drop-shadow(0 0 16px color-mix(in oklch, var(--pg-tint) 30%, transparent));
+}
+
+.pgMode:hover:not(:disabled)::before,
+.pgMode:focus-visible::before {
+  inline-size: 6px;
+}
+
+.pgMode:hover:not(:disabled)::after,
+.pgMode:focus-visible::after {
   opacity: 1;
+  translate: 120% 0;
 }
 
-.quickCard:active:not(:disabled) {
-  transform: translateY(-1px);
+[dir='rtl'] .pgMode:hover:not(:disabled)::after,
+[dir='rtl'] .pgMode:focus-visible::after {
+  translate: -120% 0;
 }
 
-.quickCard:disabled {
+.pgMode:active:not(:disabled) {
+  translate: 0 -1px;
+}
+
+.pgMode:focus-visible {
+  outline: 2px solid var(--pg-tint);
+  outline-offset: 2px;
+}
+
+.pgMode:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
 
-.quickCardIcon {
-  display: grid;
-  place-items: center;
-  width: 2.4rem;
-  height: 2.4rem;
-  margin-block-end: var(--glacier-space-1);
-  border-radius: var(--glacier-radius-lg);
-  background: color-mix(in oklch, var(--qs-tint) 22%, transparent);
-  border: var(--glacier-hairline) solid color-mix(in oklch, var(--qs-tint) 38%, transparent);
-  color: var(--qs-tint);
-}
-
-/* Top row of a card: the format glyph on the left, the game's identity tag on
-   the right - the strip mixes games now, so each card says whose table it
-   opens before its name does. */
-.quickCardTop {
+/* Top row: the mode glyph leads, the game's identity tag trails. */
+.pgModeTop {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
   gap: var(--glacier-space-2);
   align-self: stretch;
   margin-block-end: var(--glacier-space-1);
 }
 
-/* The row carries the spacing the glyph used to. */
-.quickCardTop .quickCardIcon {
-  margin-block-end: 0;
+.pgModeIcon {
+  display: grid;
+  place-items: center;
+  inline-size: 2.6rem;
+  block-size: 2.6rem;
+  border-radius: var(--glacier-radius-lg);
+  background: color-mix(in oklch, var(--pg-tint) 22%, transparent);
+  border: 1px solid color-mix(in oklch, var(--pg-tint) 38%, transparent);
+  color: var(--pg-tint);
 }
 
-/* The tag wears the game's full name, which for Magic is a long one: on a
-   narrow card it truncates rather than wrapping or shoving the glyph aside. */
-.quickCardGame {
+/* The tag rides the far end; the FEATURED chip (when present) sits beside it. */
+.pgModeGame {
+  margin-inline-start: auto;
   min-inline-size: 0;
-  max-inline-size: 70%;
+  max-inline-size: 65%;
 }
 
-.quickCardGame .gameTagName {
+.pgModeGame .gameTagName {
   min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.quickCardName {
-  font-size: var(--glacier-font-size-md);
-  font-weight: var(--glacier-font-weight-semibold, 600);
-  line-height: 1.2;
+.pgModeFeatTag {
+  margin-inline-start: auto;
+  padding: 2px 8px;
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--pg-tint) 24%, transparent);
+  border: 1px solid color-mix(in oklch, var(--pg-tint) 45%, transparent);
+  color: var(--pg-tint);
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
 }
 
-/* The everyday word for the format, next to its printed name. Quieter than the
-   name so it reads as a gloss rather than as part of the title. */
-.quickCardAlias {
+/* The FEATURED chip claims the auto margin; the tag then only needs a gap. */
+.pgModeFeatTag + .pgModeGame {
+  margin-inline-start: 0;
+}
+
+/* BIG TYPE: the mode's name is the plate. */
+.pgModeName {
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-size: clamp(1.05rem, 1.6vw, 1.3rem);
+  font-weight: var(--glacier-font-weight-bold);
+  line-height: 1.1;
+}
+
+.pgModeAlias {
+  text-transform: none;
+  letter-spacing: normal;
   font-size: var(--glacier-font-size-sm);
   font-weight: var(--glacier-font-weight-regular, 400);
   color: var(--glacier-text-muted);
 }
 
-/* What the evening is like, in a sentence or two. Wraps freely - the cards in
-   a row stretch to the tallest, and the meta below is pinned to the bottom, so
-   an extra line here does not knock the strip out of alignment. */
-.quickCardBlurb {
+.pgModeBlurb {
   font-size: var(--glacier-font-size-sm);
   line-height: 1.35;
   color: var(--glacier-text-muted);
   text-wrap: pretty;
 }
 
-.quickCardMeta {
+.pgModeMeta {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  /* Held to the bottom edge so the seat count and life total line up across
-     the strip however long each blurb turns out to be. */
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--glacier-space-2);
+  align-self: stretch;
+  min-inline-size: 0;
+  /* Pinned to the plate's floor so seat counts line up across the strip
+     however long each blurb turns out to be. */
   margin-block-start: auto;
   padding-block-start: var(--glacier-space-2);
 }
 
-/* The shape of the table - "1v1", "4 players" - is the thing being chosen, so
-   it outranks the life total below it. */
-.quickCardShape {
-  font-size: var(--glacier-font-size-sm);
-  color: color-mix(in oklch, var(--qs-tint) 72%, var(--glacier-text));
+/* The shape of the table - "1v1", "4 players" - is the thing being chosen. */
+.pgModeShape {
+  font-size: var(--glacier-font-size-md);
+  font-weight: var(--glacier-font-weight-semibold);
+  color: color-mix(in oklch, var(--pg-tint) 72%, var(--glacier-text));
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pgModeHint {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle, var(--glacier-text-muted));
+  text-align: end;
+}
+
+/* The featured plate: double width, the tallest name on the strip. */
+.pgModeFeat {
+  grid-column: span 2;
+  padding: var(--glacier-space-5) var(--glacier-space-6);
+}
+
+.pgModeFeat .pgModeName {
+  font-size: clamp(1.7rem, 2.6vw, 2.2rem);
+  letter-spacing: 0.09em;
+}
+
+.pgModeFeat .pgModeIcon {
+  inline-size: 3.2rem;
+  block-size: 3.2rem;
+}
+
+.pgModeFeat::before {
+  inline-size: 5px;
+  opacity: 1;
+}
+
+/* ========================================================================
+   Custom game: the create/join kit cards under a pgHead — plus the join
+   card's big ENTER CODE moment.
+   ======================================================================== */
+
+.pgJoinCard .pgCodeEntry {
+  align-self: stretch;
+  align-items: center;
+  text-align: center;
+  gap: var(--glacier-space-2);
+  padding-block: var(--glacier-space-2);
+}
+
+.pgCodeTitle {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: var(--glacier-font-size-md);
+  font-weight: var(--glacier-font-weight-bold);
+  color: var(--glacier-accent-text);
+}
+
+/* The code input reads like arcade cells: big, centered, tracked wide. Codes
+   are Latin, so the field stays LTR under every locale. */
+.pgCodeEntry input {
+  direction: ltr;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.45em;
+  font-size: 1.4rem;
+  font-weight: var(--glacier-font-weight-bold);
   font-variant-numeric: tabular-nums;
 }
 
-.quickCardHint {
-  font-size: var(--glacier-font-size-xs);
-  color: var(--glacier-text-subtle, var(--glacier-text-muted));
+/* Invites keep the kit card but wear the accent on their leading edge. */
+.pgInvites .inviteCard {
+  border-inline-start: 3px solid var(--glacier-accent-solid);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .quickCard,
-  .quickCard::after {
-    transition: none;
-  }
+/* ========================================================================
+   Server browser — every saved table as a row: game accent on the leading
+   edge, presence, seat occupancy, one big way back in.
+   ======================================================================== */
 
-  .quickCard:hover:not(:disabled),
-  .quickCard:focus-visible,
-  .quickCard:active:not(:disabled) {
-    transform: none;
-  }
-}
-
-.myTableList {
+.pgSrvList {
   display: flex;
   flex-direction: column;
   gap: var(--glacier-space-3);
 }
 
-.playPage .myTableRow {
+.pgSrvRow {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--glacier-space-4);
-  background: color-mix(in oklch, var(--glacier-bg) 72%, transparent);
+  padding: var(--glacier-space-4) var(--glacier-space-5);
+  border-radius: var(--glacier-radius-xl);
+  border: 1px solid color-mix(in oklch, var(--pg-tint) 28%, var(--glacier-border-subtle));
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--pg-tint) 10%, transparent),
+      transparent 45%
+    ),
+    color-mix(in oklch, var(--glacier-bg) 72%, transparent);
   backdrop-filter: blur(var(--glacier-blur-md));
   -webkit-backdrop-filter: blur(var(--glacier-blur-md));
-  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
+  transition:
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    box-shadow var(--glacier-duration-fast) var(--glacier-ease-out),
+    translate var(--glacier-duration-fast) var(--glacier-ease-out);
+  animation: pgRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+  animation-delay: 260ms;
 }
 
-/* Leading group: the game logo tile + the table's info column. */
-.myTableLead {
+[dir='rtl'] .pgSrvRow {
+  background:
+    linear-gradient(
+      -90deg,
+      color-mix(in oklch, var(--pg-tint) 10%, transparent),
+      transparent 45%
+    ),
+    color-mix(in oklch, var(--glacier-bg) 72%, transparent);
+}
+
+.pgSrvList > :nth-child(1) { animation-delay: 60ms; }
+.pgSrvList > :nth-child(2) { animation-delay: 110ms; }
+.pgSrvList > :nth-child(3) { animation-delay: 160ms; }
+.pgSrvList > :nth-child(4) { animation-delay: 210ms; }
+
+.pgSrvRow::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 3px;
+  background: var(--pg-tint);
+  opacity: 0.9;
+}
+
+.pgSrvRow:hover {
+  translate: 0 -2px;
+  border-color: color-mix(in oklch, var(--pg-tint) 55%, var(--glacier-border));
+  box-shadow:
+    0 10px 30px rgb(0 0 0 / 0.35),
+    0 0 18px color-mix(in oklch, var(--pg-tint) 22%, transparent);
+}
+
+.pgSrvLead {
   display: flex;
   align-items: center;
   gap: var(--glacier-space-3);
   min-inline-size: 0;
 }
 
-.myTableInfo {
+.pgSrvInfo {
   display: flex;
   flex-direction: column;
   gap: var(--glacier-space-2);
   min-inline-size: 0;
 }
 
-.myTableTitle {
+.pgSrvTitle {
   display: flex;
   align-items: center;
   gap: var(--glacier-space-3);
   flex-wrap: wrap;
 }
 
+.pgSrvName {
+  font-weight: var(--glacier-font-weight-bold);
+  font-size: var(--glacier-font-size-md);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* OPEN / FULL — the server-browser status word. */
+.pgSrvState {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-warning-text, #f0c273);
+}
+
+.pgSrvState[data-open] {
+  color: var(--glacier-success-text, var(--glacier-success-solid, #4ade80));
+}
+
 /* "Turns are happening" live indicator on a table the AI is playing on. */
-.myTableLive {
+.pgSrvLive {
   display: inline-flex;
   align-items: center;
   gap: var(--glacier-space-1);
 }
 
-.myTableLiveDot {
-  width: 0.5rem;
-  height: 0.5rem;
+.pgSrvLiveDot {
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
   border-radius: var(--glacier-radius-full);
   background: var(--glacier-success-solid, #4ade80);
-  animation: pcLivePulse 1.6s ease-in-out infinite;
+  animation: pgLivePulse 1.6s ease-in-out infinite;
 }
 
-@keyframes pcLivePulse {
+@keyframes pgLivePulse {
   0%,
   100% {
     opacity: 0.35;
@@ -290,50 +675,209 @@
   }
 }
 
-.myTableName {
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.myTableMeta {
+.pgSrvMeta {
   display: flex;
   align-items: center;
   gap: var(--glacier-space-4);
   flex-wrap: wrap;
 }
 
-.myTablePlayers {
+.pgSrvPlayers {
   display: flex;
   align-items: center;
   gap: var(--glacier-space-3);
   flex-wrap: wrap;
 }
 
-.myTablePlayer {
+.pgSrvPlayer {
   display: inline-flex;
   align-items: center;
   gap: var(--glacier-space-2);
 }
 
-.myTableActions {
+.pgSrvActions {
   display: flex;
   align-items: center;
   gap: var(--glacier-space-2);
   flex: none;
 }
 
-/* Phones: saved-table rows wrap so the action buttons drop under the info
-   instead of crushing the table name. */
-@media (max-width: 700px), (max-height: 480px) {
-  .playPage .myTableRow {
-    flex-wrap: wrap;
-  }
+/* The big JOIN affordance: the one action the row exists for. */
+.pgSrvActions .pgSrvJoin {
+  min-inline-size: 8.5rem;
+}
 
-  .playPage .myTableActions {
-    margin-inline-start: auto;
-  }
+.pgSrvJoin svg {
+  margin-inline-end: var(--glacier-space-1);
+}
+
+/* --- seat occupancy meter (shared with the join splash) --- */
+
+.pgSeatMeter {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.pgSeatDot {
+  inline-size: 1rem;
+  block-size: 0.35rem;
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--glacier-border) 70%, transparent);
+}
+
+.pgSeatDot[data-filled] {
+  background: var(--pg-tint, var(--glacier-accent-solid));
+  box-shadow: 0 0 6px color-mix(in oklch, var(--pg-tint, var(--glacier-accent-solid)) 45%, transparent);
+}
+
+.pgSeatCount {
+  margin-inline-start: var(--glacier-space-1);
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle, var(--glacier-text-muted));
+  font-variant-numeric: tabular-nums;
+}
+
+/* ========================================================================
+   Match history — career rows: the result wears the leading edge.
+   ======================================================================== */
+
+.pgHistList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+}
+
+.pgHistRow {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border-radius: var(--glacier-radius-md);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 45%, transparent);
+  background: color-mix(in oklch, var(--glacier-surface) 60%, transparent);
+  animation: pgRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+  animation-delay: 300ms;
+}
+
+.pgHistList > :nth-child(1) { animation-delay: 120ms; }
+.pgHistList > :nth-child(2) { animation-delay: 150ms; }
+.pgHistList > :nth-child(3) { animation-delay: 180ms; }
+.pgHistList > :nth-child(4) { animation-delay: 210ms; }
+.pgHistList > :nth-child(5) { animation-delay: 240ms; }
+.pgHistList > :nth-child(6) { animation-delay: 270ms; }
+
+/* the result edge */
+.pgHistRow::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 3px;
+  background: color-mix(in oklch, var(--glacier-border) 60%, transparent);
+}
+
+.pgHistRow[data-result='win'] {
+  border-color: color-mix(in oklch, var(--glacier-success-solid, #4ade80) 30%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--glacier-success-solid, #4ade80) 8%, transparent), transparent 40%),
+    color-mix(in oklch, var(--glacier-surface) 60%, transparent);
+}
+.pgHistRow[data-result='win']::before {
+  background: var(--glacier-success-solid, #4ade80);
+}
+
+.pgHistRow[data-result='loss'] {
+  border-color: color-mix(in oklch, var(--glacier-danger-solid, #d2622f) 26%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--glacier-danger-solid, #d2622f) 7%, transparent), transparent 40%),
+    color-mix(in oklch, var(--glacier-surface) 60%, transparent);
+}
+.pgHistRow[data-result='loss']::before {
+  background: var(--glacier-danger-solid, #d2622f);
+}
+
+[dir='rtl'] .pgHistRow[data-result='win'] {
+  background:
+    linear-gradient(-90deg, color-mix(in oklch, var(--glacier-success-solid, #4ade80) 8%, transparent), transparent 40%),
+    color-mix(in oklch, var(--glacier-surface) 60%, transparent);
+}
+[dir='rtl'] .pgHistRow[data-result='loss'] {
+  background:
+    linear-gradient(-90deg, color-mix(in oklch, var(--glacier-danger-solid, #d2622f) 7%, transparent), transparent 40%),
+    color-mix(in oklch, var(--glacier-surface) 60%, transparent);
+}
+
+/* The W/L medallion. */
+.pgHistBadge {
+  flex: none;
+  display: grid;
+  place-items: center;
+  inline-size: 1.7rem;
+  block-size: 1.7rem;
+  border-radius: var(--glacier-radius-sm);
+  border: 1px solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
+  background: color-mix(in oklch, var(--glacier-bg) 55%, transparent);
+  color: var(--glacier-text-muted);
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-bold);
+}
+
+.pgHistBadge[data-result='win'] {
+  border-color: color-mix(in oklch, var(--glacier-success-solid, #4ade80) 50%, transparent);
+  background: color-mix(in oklch, var(--glacier-success-solid, #4ade80) 18%, transparent);
+  color: var(--glacier-success-text, var(--glacier-success-solid, #4ade80));
+}
+
+.pgHistBadge[data-result='loss'] {
+  border-color: color-mix(in oklch, var(--glacier-danger-solid, #d2622f) 45%, transparent);
+  background: color-mix(in oklch, var(--glacier-danger-solid, #d2622f) 16%, transparent);
+  color: var(--glacier-danger-text, var(--glacier-danger-solid, #d2622f));
+}
+
+.pgHistMain {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  flex: 1;
+}
+
+.pgHistName {
+  font-weight: var(--glacier-font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pgHistWith {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pgHistStats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  margin-block-start: 0.15rem;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+
+.pgHistStat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.pgHistSide {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  flex: none;
 }
 
 /* The lobby switch and its hint read as one field in the create card. */
@@ -341,11 +885,19 @@
   max-inline-size: 30rem;
 }
 
-/* ================= shared table link — join screen ================= */
+/* Create-table card header: title + game tag on one row. */
+.playCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
 
-/* The invite dims the WHOLE app, not just the content column: it is portalled
-   to <body> and fixed, so nothing behind it stays inviting to click while an
-   invitation is on screen. */
+/* ========================================================================
+   Shared table link — the join splash. The scrim dims the WHOLE app (it is
+   portalled to <body> and fixed); the card is the custom-game lobby moment.
+   ======================================================================== */
+
 .joinScrim {
   position: fixed;
   inset: 0;
@@ -366,22 +918,18 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .joinScrim {
-    animation: none;
-  }
+/* CSS-only entrance: base state is the settled card. */
+.jtWrap {
+  inline-size: min(30rem, 100%);
+  animation: pgRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+  animation-delay: 60ms;
 }
 
-.joinCardWrap {
-  width: min(27rem, 100%);
-}
-
-.joinCard {
+.jtCard {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--glacier-space-4);
-  padding: var(--glacier-space-6) var(--glacier-space-5) var(--glacier-space-5);
   border-radius: var(--glacier-radius-xl);
   border: var(--glacier-hairline) solid var(--glacier-glass-border);
   background: var(--glacier-surface-raised, #16181d);
@@ -391,74 +939,142 @@
 
 /* A draft invite is a different offer, and the top edge says so before any of
    the copy does. */
-.joinCard[data-draft]::before {
+.jtCard[data-draft]::before {
   content: '';
   position: absolute;
+  z-index: 2;
   inset-inline: 0;
   inset-block-start: 0;
-  height: 3px;
-  border-radius: var(--glacier-radius-xl) var(--glacier-radius-xl) 0 0;
+  block-size: 3px;
   background: linear-gradient(90deg, transparent, var(--glacier-accent-solid), transparent);
 }
 
-.joinCard {
-  position: relative;
-  overflow: hidden;
+/* The banner: the game's felt fading down into the card surface. */
+.jtMat {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 0;
+  block-size: 10rem;
+  background-size: cover;
+  background-position: center;
+  filter: saturate(1.05);
 }
 
-.joinState {
+.jtMat::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--glacier-bg) 18%, transparent),
+    var(--glacier-surface-raised, #16181d) 96%
+  );
+}
+
+.jtBody {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--glacier-space-4);
+  inline-size: 100%;
+  padding: var(--glacier-space-6) var(--glacier-space-5) var(--glacier-space-5);
+}
+
+.jtState {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--glacier-space-3);
-  padding-block: var(--glacier-space-4);
+  padding: var(--glacier-space-6) var(--glacier-space-5);
 }
 
-.joinHead {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--glacier-space-2);
-  width: 100%;
-}
-
-.joinIcon {
+.jtIcon {
   display: grid;
   place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
   border-radius: var(--glacier-radius-full);
   background: color-mix(in oklch, var(--glacier-accent-solid) 16%, transparent);
   border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-accent-solid) 34%, transparent);
   color: var(--glacier-accent-text);
 }
 
-.joinIcon[data-tone='warn'] {
+.jtIcon[data-tone='warn'] {
   background: color-mix(in oklch, var(--glacier-warning-solid, #d9a441) 16%, transparent);
   border-color: color-mix(in oklch, var(--glacier-warning-solid, #d9a441) 34%, transparent);
   color: var(--glacier-warning-text, #f0c273);
 }
 
-.joinEyebrow {
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+.jtHead {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  inline-size: 100%;
 }
 
-.joinName {
+/* The head's glyph rides the game tint when the room is known. */
+.jtHeadIcon {
+  background: color-mix(in oklch, var(--pg-tint, var(--glacier-accent-solid)) 18%, transparent);
+  border-color: color-mix(in oklch, var(--pg-tint, var(--glacier-accent-solid)) 38%, transparent);
+  color: var(--pg-tint, var(--glacier-accent-text));
+  box-shadow: 0 0 18px color-mix(in oklch, var(--pg-tint, var(--glacier-accent-solid)) 25%, transparent);
+}
+
+.jtEyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-text-subtle, var(--glacier-text-muted));
+}
+
+/* The table's name is the headline. Two-class to outscore the kit heading. */
+.jtHead .jtName {
+  font-size: clamp(1.5rem, 5vw, 2rem);
+  line-height: 1.1;
   overflow-wrap: anywhere;
 }
 
-.joinMeta {
+/* --- the code, arcade cells: one big cell per character, always LTR --- */
+
+.jtCode {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  direction: ltr;
+  margin-block-start: var(--glacier-space-1);
+}
+
+.jtCodeCell {
+  display: grid;
+  place-items: center;
+  inline-size: clamp(1.9rem, 8vw, 2.5rem);
+  block-size: clamp(2.4rem, 10vw, 3.1rem);
+  border-radius: var(--glacier-radius-md);
+  border: 1px solid color-mix(in oklch, var(--pg-tint, var(--glacier-accent-solid)) 40%, var(--glacier-glass-border));
+  background: color-mix(in oklch, var(--glacier-bg) 62%, transparent);
+  font-size: clamp(1.15rem, 4vw, 1.5rem);
+  font-weight: var(--glacier-font-weight-bold);
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 -3px 0 color-mix(in oklch, var(--pg-tint, var(--glacier-accent-solid)) 30%, transparent);
+}
+
+.jtMeta {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
+  align-items: center;
   gap: var(--glacier-space-2);
   margin-block-start: var(--glacier-space-1);
 }
 
-/* One tag treatment for code, seats and status, so the row reads as a single
-   strip of facts rather than three unrelated kit pills. */
-.joinTag {
+/* One tag treatment for seats and status, so the row reads as a single strip
+   of facts rather than unrelated pills. */
+.jtTag {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
@@ -471,39 +1087,43 @@
   font-variant-numeric: tabular-nums;
 }
 
-.joinTag[data-tone='warn'] {
+.jtTag[data-tone='warn'] {
   border-color: color-mix(in oklch, var(--glacier-warning-solid, #d9a441) 40%, transparent);
   color: var(--glacier-warning-text, #f0c273);
 }
 
-.joinTag[data-tone='live'] {
+.jtTag[data-tone='live'] {
   border-color: color-mix(in oklch, var(--glacier-accent-solid) 40%, transparent);
   color: var(--glacier-accent-text);
 }
 
-.joinWho {
+.jtSeats {
+  margin-block-start: var(--glacier-space-1);
+}
+
+.jtWho {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: var(--glacier-space-3);
-  width: 100%;
+  inline-size: 100%;
   padding-block: var(--glacier-space-2);
   border-block: var(--glacier-hairline) solid var(--glacier-glass-border);
 }
 
-.joinPlayer {
+.jtPlayer {
   display: inline-flex;
   align-items: center;
   gap: var(--glacier-space-2);
 }
 
 /* What a draft invite says instead of asking for a deck. */
-.joinNote {
+.jtNote {
   display: flex;
   align-items: center;
   gap: var(--glacier-space-2);
   margin: 0;
-  width: 100%;
+  inline-size: 100%;
   padding: var(--glacier-space-2) var(--glacier-space-3);
   border-radius: var(--glacier-radius-lg);
   border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-accent-solid) 28%, transparent);
@@ -512,41 +1132,153 @@
   text-align: start;
 }
 
-.joinNote svg {
+.jtNote svg {
   flex: none;
   color: var(--glacier-accent-text);
 }
 
-.joinDeck {
-  width: 100%;
+.jtDeck {
+  inline-size: 100%;
   align-items: stretch;
   text-align: start;
 }
 
-.joinDeck > [role='combobox'],
-.joinDeck > button {
-  width: 100%;
+.jtDeck > [role='combobox'],
+.jtDeck > button {
+  inline-size: 100%;
 }
 
-.joinActions {
+.jtActions {
   display: flex;
   flex-direction: column;
   gap: var(--glacier-space-2);
-  width: 100%;
+  inline-size: 100%;
 }
 
-.joinActions > button {
-  width: 100%;
+.jtActions > button {
+  inline-size: 100%;
 }
 
-.joinActions > button svg {
+.jtActions > button svg {
   margin-inline-end: var(--glacier-space-1);
 }
 
-/* Create-table card header: title + game tag on one row. */
-.playCardHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+/* ========================================================================
+   Phones (PHONE_QUERY): unclip nothing off-screen, full-bleed rows, both
+   orientations. The plates keep their chamfer — it never overflows — but the
+   featured span collapses so a one-column grid cannot overflow.
+   ======================================================================== */
+
+@media (max-width: 700px), (max-height: 480px) {
+  .playPage .pgMast,
+  .playPage .pgMastCareer {
+    min-block-size: 0;
+    padding: var(--glacier-space-4);
+    border-radius: var(--glacier-radius-xl);
+  }
+
+  .pgMastBody .pgMastTitle {
+    font-size: clamp(1.5rem, 6vw, 2rem);
+  }
+
+  /* The plates become an even grid; WINS keeps the big numeral. */
+  .pgCareer {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--glacier-space-2);
+  }
+
+  .pgCareerPlate {
+    min-inline-size: 0;
+  }
+
+  .pgCareerWins .pgCareerValue {
+    font-size: clamp(2rem, 9vw, 2.8rem);
+  }
+
+  /* As many mode plates as honestly fit: one column upright, two or three in
+     a short landscape window. The featured plate un-spans so a single-column
+     grid never grows a phantom second track. */
+  .pgModeGrid {
+    grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));
+  }
+
+  .pgModeFeat {
+    grid-column: auto;
+    padding: var(--glacier-space-4) var(--glacier-space-5);
+  }
+
+  .pgModeFeat .pgModeName {
+    font-size: clamp(1.3rem, 5vw, 1.7rem);
+  }
+
+  /* Server rows wrap; the actions drop under the info instead of crushing
+     the table name, and JOIN stretches to a full-width thumb target. */
+  .pgSrvRow {
+    flex-wrap: wrap;
+  }
+
+  .pgSrvActions {
+    inline-size: 100%;
+  }
+
+  .pgSrvActions .pgSrvJoin {
+    flex: 1;
+  }
+
+  .pgHistRow {
+    flex-wrap: wrap;
+  }
+
+  .pgHistSide {
+    margin-inline-start: auto;
+  }
+
+  .jtMat {
+    block-size: 7rem;
+  }
+
+  .jtBody {
+    padding: var(--glacier-space-5) var(--glacier-space-4) var(--glacier-space-4);
+  }
+}
+
+/* ========================================================================
+   Reduced motion: everything still works, nothing slides or pulses.
+   ======================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .playPage .pgEnter,
+  .pgMastBody,
+  .pgCareer,
+  .pgMode,
+  .pgModeGrid > *,
+  .pgSrvRow,
+  .pgSrvList > *,
+  .pgHistRow,
+  .pgHistList > *,
+  .pgSrvLiveDot,
+  .jtWrap,
+  .joinScrim {
+    animation: none;
+  }
+
+  .pgMode,
+  .pgMode::before,
+  .pgMode::after,
+  .pgSrvRow {
+    transition: none;
+  }
+
+  .pgMode:hover:not(:disabled),
+  .pgMode:focus-visible,
+  .pgMode:active:not(:disabled),
+  .pgSrvRow:hover {
+    translate: 0 0;
+  }
+
+  .pgMode::after,
+  [dir='rtl'] .pgMode::after {
+    opacity: 0;
+  }
 }

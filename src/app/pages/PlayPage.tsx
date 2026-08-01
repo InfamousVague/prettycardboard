@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   Heading,
+  IconButton,
   Input,
   Kbd,
   Pill,
@@ -16,6 +17,7 @@ import {
   Switch,
   Text,
   TextTone,
+  Tooltip,
   useLocale,
   useToast,
 } from '@glacier/react';
@@ -25,6 +27,7 @@ import {
   Eye,
   Flag,
   Landmark,
+  Play,
   Shield,
   Swords,
   Ticket,
@@ -32,7 +35,7 @@ import {
   Zap,
 } from '@glacier/icons';
 import type { IconProps } from '@glacier/icons';
-import { PlayingCardPack } from '../icons/cards.ts';
+import { PlayingCard, PlayingCardPack } from '../icons/cards.ts';
 import { useT, type MessageKey } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
@@ -43,31 +46,33 @@ import { useVisibleGames } from '../hooks/useVisibleGames.ts';
 import { FORMATS, formatFor } from '../data/formats.ts';
 import { getGame, type GameId } from '../data/games.ts';
 import { GameTag, GameBadge } from '../components/GameTag.tsx';
-import { MatchHistory, relativeWhen } from '../components/MatchHistory.tsx';
+import { fmtDuration, relativeWhen } from '../components/MatchHistory.tsx';
+import { deckSummaryArt } from '../data/deckCover.ts';
+import { DEFAULT_PLAYMAT, playmatBackground } from '../data/playmats.ts';
 import './play.css';
 
-/** One of the tables on the quick-start strip. */
+/** One of the tables on the game-mode strip. */
 interface QuickStart {
   id: string;
   Icon: ComponentType<IconProps>;
-  /** Which game the table opens under; every card wears its game's tag. */
+  /** Which game the table opens under; every plate wears its game's tag. */
   game: GameId;
   /**
    * A `FORMATS` id - the name, life total and rules all come from there.
    * Magic only: other games have no format, and the server picks its own for
-   * them, so their cards must not send one.
+   * them, so their plates must not send one.
    */
   format?: string;
-  /** The card's name for a game with no `FORMATS` entry to name it. */
+  /** The plate's name for a game with no `FORMATS` entry to name it. */
   label?: MessageKey;
   seats: number;
   /**
-   * A line or two on what the evening is like. Two cards can share a format
+   * A line or two on what the evening is like. Two plates can share a format
    * and differ only by seat count, and "4" does not tell anyone that a pod is
-   * a long, political game - so the blurb is per card, not per format.
+   * a long, political game - so the blurb is per plate, not per format.
    */
   blurb: MessageKey;
-  /** The card's own accent, so the strip reads as six things rather than one. */
+  /** The plate's own accent, so the strip reads as ten things rather than one. */
   tint: string;
 }
 
@@ -79,13 +84,13 @@ interface QuickStart {
  * format dropdown below, which keeps the strip scannable. Ordered by how
  * likely someone is to want it: the current constructed formats, then draft,
  * which is the only table you can sit down at owning nothing at all, then the
- * singleton tables, the Yu-Gi-Oh duels, and the sandbox. Every card wears its
+ * singleton tables, the Yu-Gi-Oh duels, and the sandbox. Every plate wears its
  * game's tag, since the strip is no longer all Magic.
  *
  * Named for what the server will really build: seats are capped at 2-6 and
- * there is no team model anywhere in the room code, so a card promising "2v2"
+ * there is no team model anywhere in the room code, so a plate promising "2v2"
  * or "4v4" would be describing a rule nothing enforces. A duel is a duel and a
- * pod is a pod, and the seat count on each card is the truth about it.
+ * pod is a pod, and the seat count on each plate is the truth about it.
  */
 const QUICK_STARTS: QuickStart[] = [
   {
@@ -155,7 +160,7 @@ const QUICK_STARTS: QuickStart[] = [
   },
   {
     // The classic 1v1 at 8000 LP. No format field at all: the server forces
-    // its own on every non-Magic game, so the card sends none.
+    // its own on every non-Magic game, so the plate sends none.
     id: 'ygoDuel',
     Icon: Eye,
     game: 'yugioh',
@@ -187,7 +192,7 @@ const QUICK_STARTS: QuickStart[] = [
 
 /**
  * The headline vital a non-Magic game starts at - "8000 LP" - straight from
- * the game registry, so the card and the table it opens can never disagree.
+ * the game registry, so the plate and the table it opens can never disagree.
  */
 function vitalHint(gameId: GameId): string {
   const vital = getGame(gameId).resources.find((resource) => resource.primary);
@@ -196,16 +201,17 @@ function vitalHint(gameId: GameId): string {
 
 
 /**
- * The lobby: your saved tables (rooms survive server restarts now), create a
- * table, join by code, and answer invites. Joining always asks which deck to
- * bring - the fanned-out game itself lives in TablePage. Resuming a saved
- * table sends no deckId: the seat already holds the deck.
+ * The lobby, dressed as a pregame screen: your saved tables (rooms survive
+ * server restarts now) as a server browser, create a table, join by code, and
+ * answer invites. Joining always asks which deck to bring - the fanned-out
+ * game itself lives in TablePage. Resuming a saved table sends no deckId: the
+ * seat already holds the deck.
  *
  * Two routes, one component: `new` (the + in the rail) is every way INTO a
- * game - create, join by code, answer an invite - and `tables` is the games you
- * are already in plus what you have played. They share the deck picker, the
- * join call and the room list, which is why splitting them into two files would
- * mean keeping two copies of all of it in step.
+ * game - the big mode plates, create, join by code, answer an invite - and
+ * `tables` is the games you are already in plus your career record. They share
+ * the deck picker, the join call and the room list, which is why splitting
+ * them into two files would mean keeping two copies of all of it in step.
  */
 
 export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
@@ -235,7 +241,7 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
   const [history, setHistory] = useState<MatchRow[] | null>(null);
   const [confirmClose, setConfirmClose] = useState<MyRoom | null>(null);
   const [closing, setClosing] = useState(false);
-  /** Which quick-start card is opening a table, so only that one spins. */
+  /** Which mode plate is opening a table, so only that one spins. */
   const [quickBusy, setQuickBusy] = useState<string | null>(null);
 
   // Only decks for the chosen game are eligible; if the current pick belongs to
@@ -246,15 +252,15 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
   // point of the evening, not the price of admission.
   const drafting = game === 'mtg' && format === 'draft';
 
-  // A quick start ignores the form above entirely, so it picks from its OWN
-  // game's decks - a Yu-Gi-Oh card wants a Yu-Gi-Oh deck whatever the form says.
+  // A quick start ignores the form entirely, so it picks from its OWN game's
+  // decks - a Yu-Gi-Oh plate wants a Yu-Gi-Oh deck whatever the form says.
   const decksFor = (gameId: GameId) => decks.filter((deck) => (deck.game || 'mtg') === gameId);
 
   /** How a table of this size is described: a duel, or a count of players. */
   const seatLabel = (count: number) =>
     count === 2 ? '1v1' : `${count} ${t('tblPlayers').toLowerCase()}`;
 
-  /** A card's name: the format's printed name for Magic, its own label otherwise. */
+  /** A plate's name: the format's printed name for Magic, its own label otherwise. */
   const presetName = (preset: QuickStart) =>
     preset.label ? t(preset.label) : formatFor(preset.format).name;
 
@@ -297,11 +303,11 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
   /**
    * Open a table and sit down at it.
    *
-   * With a `preset` this is the quick-start path, and it deliberately reads
-   * nothing at all from the form below. Those cards sit ABOVE the form, so
+   * With a `preset` this is the mode-plate path, and it deliberately reads
+   * nothing at all from the form below. Those plates sit ABOVE the form, so
    * inheriting a half-typed table name, or a seat count someone set while
    * looking at a different game, would make one click do something other than
-   * what the card it was on says.
+   * what the plate it was on says.
    */
   const create = async (preset?: QuickStart) => {
     const useGame = preset ? preset.game : game;
@@ -309,7 +315,7 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
     const useSeats = preset ? preset.seats : Number(seats);
     const useDraft = useGame === 'mtg' && useFormat === 'draft';
     // A deck built for this exact format if there is one - otherwise any deck
-    // for the card's game, which is what the form's own picker would default to.
+    // for the plate's game, which is what the form's own picker would default to.
     const presetDecks = preset ? decksFor(preset.game) : [];
     const useDeck = preset
       ? ((presetDecks.find((deck) => deck.format === preset.format) ?? presetDecks[0])?.id ?? '')
@@ -373,73 +379,132 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
   };
 
   const starting = mode === 'new';
+
+  // The masthead's backdrop: the most recently touched deck's art — the chosen
+  // game's deck on the start screen (it follows the form's game switch), any
+  // game's on the career screen. A fresh account gets the default felt.
+  const artSource = starting ? gameDecks : decks;
+  const recentDeck = [...artSource].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  const mastWide = recentDeck ? deckSummaryArt(recentDeck) : '';
+  const mastArt = mastWide ? `url("${mastWide}")` : playmatBackground(DEFAULT_PLAYMAT);
+
+  // The career headline, derived from the SAME match list the history section
+  // renders — no extra fetch. Only finished ranked matches carry a result.
+  const finished = (history ?? []).filter((match) => match.matchId && match.won != null);
+  const careerWins = finished.filter((match) => match.won).length;
+  const careerLosses = finished.length - careerWins;
+  const careerRate = finished.length > 0 ? Math.round((careerWins / finished.length) * 100) : null;
+
   return (
     <div className="page playPage">
-      <Heading level={1}>{starting ? t('playTitle') : t('plYourTables')}</Heading>
-      <Text size={Size.Large} tone={TextTone.Muted} className="lede">
-        {starting ? t('playLede') : t('plTablesLede')}
-      </Text>
+      {/* The masthead band: art behind a directional scrim, the page's h1 in
+          big type — and on the career screen, the W/L plates. */}
+      <header className={starting ? 'pgMast' : 'pgMast pgMastCareer'}>
+        <div className="pgMastArt" style={{ backgroundImage: mastArt }} aria-hidden />
+        <div className="pgMastScrim" aria-hidden />
+        <div className="pgMastBody">
+          {!starting && <span className="pgMastKicker">{t('hmCareer')}</span>}
+          <Heading level={1} noMargin className="pgMastTitle">
+            {starting ? t('playTitle') : t('plYourTables')}
+          </Heading>
+          <Text size={Size.Large} tone={TextTone.Muted} className="pgMastLede">
+            {starting ? t('playLede') : t('plTablesLede')}
+          </Text>
+        </div>
+        {!starting && (
+          <div className="pgCareer" role="group" aria-label={t('hmCareer')}>
+            <div className="pgCareerPlate pgCareerWins">
+              <span className="pgCareerValue">{history !== null ? careerWins : '—'}</span>
+              <span className="pgCareerLabel">{t('hmWins')}</span>
+              <span className="pgCareerEdge" aria-hidden />
+            </div>
+            <div className="pgCareerPlate pgCareerLosses">
+              <span className="pgCareerValue">{history !== null ? careerLosses : '—'}</span>
+              <span className="pgCareerLabel">{t('plLosses')}</span>
+              <span className="pgCareerEdge" aria-hidden />
+            </div>
+            <div className="pgCareerPlate">
+              <span className="pgCareerValue">{careerRate != null ? `${careerRate}%` : '—'}</span>
+              <span className="pgCareerLabel">{t('hmWinRate')}</span>
+              <span
+                className="pgCareerEdge"
+                style={careerRate != null ? { inlineSize: `${careerRate}%` } : undefined}
+                aria-hidden
+              />
+            </div>
+            <div className="pgCareerPlate">
+              <span className="pgCareerValue">{history !== null ? history.length : '—'}</span>
+              <span className="pgCareerLabel">{t('hmGames')}</span>
+              <span className="pgCareerEdge" aria-hidden />
+            </div>
+          </div>
+        )}
+      </header>
 
       {starting && (
       <>
-      {/* The shortcut past the form: the popular tables across every game,
-          each one already knowing its game, its seats and its life total.
-          Above the builder rather than beside it, because the builder is what
-          you fall back to when none of these is the evening you wanted - the
-          quieter formats still live in its dropdown. */}
-      <section className="quickStarts">
-        <div className="quickStartsHead">
-          <Heading level={2} noMargin>
+      {/* The shortcut past the form: the popular tables across every game as
+          big mode plates, each one already knowing its game, its seats and its
+          life total. Above the builder rather than beside it, because the
+          builder is what you fall back to when none of these is the evening
+          you wanted - the quieter formats still live in its dropdown. */}
+      <section className="pgModes pgEnter" style={{ animationDelay: '60ms' }} aria-label={t('plQuickTitle')}>
+        <div className="pgHead">
+          <Heading level={2} noMargin className="pgHeadTitle">
             {t('plQuickTitle')}
           </Heading>
           <Text size={Size.Small} tone={TextTone.Muted}>
             {t('plQuickLede')}
           </Text>
         </div>
-        <div className="quickGrid">
-          {QUICK_STARTS.map((preset) => {
+        <div className="pgModeGrid">
+          {QUICK_STARTS.map((preset, index) => {
             const isDraft = preset.game === 'mtg' && preset.format === 'draft';
             // Draft is the one table you can sit down at with nothing; every
-            // other card needs a deck built for its own game.
+            // other plate needs a deck built for its own game.
             const blocked = !isDraft && decksFor(preset.game).length === 0;
             const opening = quickBusy === preset.id;
+            // The first plate is the strip's headline — the order already puts
+            // the likeliest evening first, so it gets the big treatment.
+            const featured = index === 0;
             return (
               <button
                 key={preset.id}
                 type="button"
-                className="quickCard"
-                style={{ ['--qs-tint' as string]: preset.tint }}
-                // Every card is one request; a second click anywhere on the
+                className={featured ? 'pgMode pgModeFeat' : 'pgMode'}
+                style={{ ['--pg-tint' as string]: preset.tint }}
+                // Every plate is one request; a second click anywhere on the
                 // strip while one is in flight would open a table nobody asked
                 // for and leave the player seated at the wrong one.
                 disabled={blocked || busy || quickBusy !== null}
                 title={blocked ? t('plQuickNeedDeck') : undefined}
                 onClick={() => void create(preset)}
               >
-                <span className="quickCardTop">
-                  <span className="quickCardIcon" aria-hidden>
-                    {opening ? <Spinner size="sm" /> : <preset.Icon size={20} />}
+                <span className="pgModeTop">
+                  <span className="pgModeIcon" aria-hidden>
+                    {opening ? <Spinner size="sm" /> : <preset.Icon size={featured ? 26 : 20} />}
                   </span>
+                  {featured && <span className="pgModeFeatTag">{t('plModePopular')}</span>}
                   {/* Which game this table opens under - the strip is no
-                      longer all Magic, so every card says. */}
-                  <GameTag game={preset.game} className="quickCardGame" />
+                      longer all Magic, so every plate says. */}
+                  <GameTag game={preset.game} className="pgModeGame" />
                 </span>
-                <span className="quickCardName">
+                <span className="pgModeName">
                   {presetName(preset)}
                   {/* The format is called Limited, but nobody says "let's play
-                      Limited" - they say draft. Both names are on the card so
+                      Limited" - they say draft. Both names are on the plate so
                       the strip is scannable by the word people actually use
                       without renaming the format everywhere else. */}
                   {isDraft && (
-                    <span className="quickCardAlias"> ({t('plQuickDraft')})</span>
+                    <span className="pgModeAlias"> ({t('plQuickDraft')})</span>
                   )}
                 </span>
                 {/* What the evening is actually like, which is the thing the
                     format name and the seat count between them never say. */}
-                <span className="quickCardBlurb">{t(preset.blurb)}</span>
-                <span className="quickCardMeta">
-                  <span className="quickCardShape">{seatLabel(preset.seats)}</span>
-                  <span className="quickCardHint">
+                <span className="pgModeBlurb">{t(preset.blurb)}</span>
+                <span className="pgModeMeta">
+                  <span className="pgModeShape">{seatLabel(preset.seats)}</span>
+                  <span className="pgModeHint">
                     {blocked
                       ? t('plQuickNeedDeck')
                       : isDraft
@@ -455,7 +520,16 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
         </div>
       </section>
 
-      <div className="playGrid">
+      <section className="pgCustom pgEnter" style={{ animationDelay: '140ms' }}>
+        <div className="pgHead">
+          <Heading level={2} noMargin className="pgHeadTitle">
+            {t('plCustomTitle')}
+          </Heading>
+          <Text size={Size.Small} tone={TextTone.Muted}>
+            {t('plCustomLede')}
+          </Text>
+        </div>
+        <div className="playGrid">
         <Card elevation={2} className="playCard">
           <div className="playCardIcon" aria-hidden>
             <Swords size={22} />
@@ -534,34 +608,40 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
           </Button>
         </Card>
 
-        <Card elevation={2} className="playCard">
+        {/* JOIN: the code is the star — a big ENTER CODE moment. */}
+        <Card elevation={2} className="playCard pgJoinCard">
           <div className="playCardIcon" aria-hidden>
             <Ticket size={22} />
           </div>
           <Heading level={3} noMargin>
             {t('playJoin')}
           </Heading>
-          <div className="control">
-            <Text as="span" size={Size.Small} tone={TextTone.Muted}>
-              {t('playCodePlaceholder')}
-            </Text>
+          <div className="control pgCodeEntry">
+            <span className="pgCodeTitle">{t('plEnterCode')}</span>
             <Input
               value={code}
               onChange={(event) => setCode(event.target.value.toUpperCase())}
               placeholder="ABC123"
               maxLength={6}
+              aria-label={t('playCodePlaceholder')}
             />
+            <Text size={Size.XSmall} tone={TextTone.Subtle}>
+              {t('playCodePlaceholder')}
+            </Text>
           </div>
           <DeckPicker value={chosenDeck} onChange={setDeckId} />
           <Button onClick={joinByCode} loading={busy} disabled={code.length < 6}>
             {t('playJoinButton')}
           </Button>
         </Card>
-      </div>
+        </div>
+      </section>
 
       {invites.length > 0 && (
-        <section>
-          <Heading level={2}>{t('playInvites')}</Heading>
+        <section className="pgInvites pgEnter" style={{ animationDelay: '220ms' }}>
+          <Heading level={2} noMargin className="pgHeadTitle">
+            {t('playInvites')}
+          </Heading>
           <div className="inviteList">
             {invites.map((invite) => (
               <Card key={invite.roomId} elevation={2} className="inviteCard">
@@ -593,81 +673,177 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
 
       {!starting && (
       <>
-      <section className="myTables">
+      {/* The server browser: every saved table as a row — game accent on the
+          leading edge, who is seated, seat occupancy, and a big way back in. */}
+      <section className="pgSrv pgEnter" style={{ animationDelay: '60ms' }} aria-label={t('plYourTables')}>
         {rooms !== null && rooms.length === 0 ? (
           <Text tone={TextTone.Muted}>{t('plNoTables')}</Text>
         ) : (
-          <div className="myTableList">
-            {(rooms ?? []).map((room) => (
-              <Card key={room.roomId} elevation={2} className="myTableRow">
-                <div className="myTableLead">
-                  <GameBadge game={room.game} />
-                  <div className="myTableInfo">
-                  <div className="myTableTitle">
-                    <Text as="span" className="myTableName">
-                      {room.name}
-                    </Text>
-                    <Kbd>{room.code}</Kbd>
-                    {room.persistent && (
-                      <Pill size="sm" tone="accent">
-                        {t('plLobby')}
-                      </Pill>
-                    )}
-                    {activity[room.roomId] != null && (
-                      <Pill size="sm" tone="success" className="myTableLive">
-                        <span className="myTableLiveDot" aria-hidden />
-                        {t('plTurn')} {activity[room.roomId]}
-                      </Pill>
-                    )}
-                  </div>
-                  <div className="myTableMeta">
-                    <div className="myTablePlayers">
-                      {room.players.map((player) => (
-                        <span key={player.userId} className="myTablePlayer">
-                          <Avatar name={player.username} size="sm" />
-                          <Text as="span" size={Size.Small}>
-                            {player.username}
-                          </Text>
-                          <StatusDot size="sm" tone={player.online ? 'success' : 'neutral'} />
+          <div className="pgSrvList">
+            {(rooms ?? []).map((room) => {
+              const open = room.players.length < room.seats;
+              return (
+                <div
+                  key={room.roomId}
+                  className="pgSrvRow"
+                  style={{ ['--pg-tint' as string]: getGame(room.game).accent }}
+                >
+                  <div className="pgSrvLead">
+                    <GameBadge game={room.game} />
+                    <div className="pgSrvInfo">
+                      <div className="pgSrvTitle">
+                        <span className="pgSrvName">{room.name}</span>
+                        <Kbd>{room.code}</Kbd>
+                        {room.persistent && (
+                          <Pill size="sm" tone="accent">
+                            {t('plLobby')}
+                          </Pill>
+                        )}
+                        {activity[room.roomId] != null && (
+                          <Pill size="sm" tone="success" className="pgSrvLive">
+                            <span className="pgSrvLiveDot" aria-hidden />
+                            {t('plTurn')} {activity[room.roomId]}
+                          </Pill>
+                        )}
+                        <span className="pgSrvState" data-open={open || undefined}>
+                          {open ? t('plSrvOpen') : t('plSrvFull')}
                         </span>
-                      ))}
+                      </div>
+                      <div className="pgSrvMeta">
+                        <span
+                          className="pgSeatMeter"
+                          role="img"
+                          aria-label={`${t('playSeats')}: ${room.players.length}/${room.seats}`}
+                        >
+                          {Array.from({ length: room.seats }, (_, seatIndex) => (
+                            <span
+                              key={seatIndex}
+                              className="pgSeatDot"
+                              data-filled={seatIndex < room.players.length || undefined}
+                            />
+                          ))}
+                          <span className="pgSeatCount">
+                            {room.players.length}/{room.seats}
+                          </span>
+                        </span>
+                        <div className="pgSrvPlayers">
+                          {room.players.map((player) => (
+                            <span key={player.userId} className="pgSrvPlayer">
+                              <Avatar name={player.username} size="sm" />
+                              <Text as="span" size={Size.Small}>
+                                {player.username}
+                              </Text>
+                              <StatusDot size="sm" tone={player.online ? 'success' : 'neutral'} />
+                            </span>
+                          ))}
+                        </div>
+                        <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+                          {relativeWhen(room.updatedAt, locale)}
+                        </Text>
+                      </div>
                     </div>
-                    <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
-                      {relativeWhen(room.updatedAt, locale)}
-                    </Text>
                   </div>
-                  </div>
-                </div>
-                <div className="myTableActions">
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      clearActivity(room.roomId);
-                      join(room.roomId);
-                    }}
-                  >
-                    {t('plResume')}
-                  </Button>
-                  {room.players[0]?.userId === identity?.userId && (
+                  <div className="pgSrvActions">
                     <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setConfirmClose(room)}
+                      size="lg"
+                      className="pgSrvJoin"
+                      onClick={() => {
+                        clearActivity(room.roomId);
+                        join(room.roomId);
+                      }}
                     >
-                      <Flag size={14} /> {t('plEndMatch')}
+                      <Play size={18} /> {t('plResume')}
                     </Button>
-                  )}
+                    {room.players[0]?.userId === identity?.userId && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setConfirmClose(room)}
+                      >
+                        <Flag size={14} /> {t('plEndMatch')}
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </Card>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
 
+      {/* The record behind the headline: every match as a row whose leading
+          edge wears its result — success for a win, danger for a loss. */}
       {history !== null && history.length > 0 && (
-        <section className="matchHistory">
-          <Heading level={2}>{t('plHistory')}</Heading>
-          <MatchHistory matches={history} myUsername={identity?.username} onReplay={(roomId) => join(roomId)} />
+        <section className="pgHist pgEnter" style={{ animationDelay: '140ms' }}>
+          <Heading level={2} noMargin className="pgHeadTitle">
+            {t('plHistory')}
+          </Heading>
+          <div className="pgHistList">
+            {history.map((match, index) => {
+              const others = match.players
+                .map((player) => player.username)
+                .filter((name) => name !== identity?.username);
+              const result = match.won == null ? undefined : match.won ? 'win' : 'loss';
+              return (
+                <div key={`${match.playedAt}-${index}`} className="pgHistRow" data-result={result}>
+                  <span className="pgHistBadge" data-result={result}>
+                    {match.won == null ? (
+                      <PlayingCard size={13} aria-hidden />
+                    ) : match.won ? (
+                      t('pmWinAbbr')
+                    ) : (
+                      t('pmLossAbbr')
+                    )}
+                  </span>
+                  <div className="pgHistMain">
+                    <span className="pgHistName">
+                      <GameTag game={match.game} showName={false} /> {match.name || t('playTitle')}
+                    </span>
+                    <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="pgHistWith">
+                      {others.length > 0 ? `${t('plWith')} ${others.join(', ')}` : t('plSolo')}
+                    </Text>
+                    {match.matchId && (
+                      <span className="pgHistStats">
+                        {match.winnerUsername && (
+                          <span className="pgHistStat">
+                            <Crown size={11} /> {match.winnerUsername}
+                          </span>
+                        )}
+                        {match.turns != null && (
+                          <span className="pgHistStat">
+                            {match.turns} {t('pmTurnsWord')}
+                          </span>
+                        )}
+                        {match.durationMs != null && <span className="pgHistStat">{fmtDuration(match.durationMs)}</span>}
+                        {match.cardsPlayed != null && (
+                          <span className="pgHistStat">
+                            <PlayingCard size={11} /> {match.cardsPlayed}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                  <div className="pgHistSide">
+                    <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+                      {relativeWhen(match.playedAt, locale)}
+                    </Text>
+                    {match.replayable && match.roomId && (
+                      <Tooltip content={t('gpWatchReplay')}>
+                        <IconButton
+                          size="sm"
+                          variant="soft"
+                          aria-label={t('gpWatchReplay')}
+                          onClick={() => join(match.roomId!)}
+                        >
+                          <Play size={15} />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </section>
       )}
       </>

@@ -1,6 +1,19 @@
-import { useEffect, useState } from 'react';
-import { Avatar, Button, Heading, Pill, Select, Size, Text, TextTone, useLocale } from '@glacier/react';
-import { motion } from 'motion/react';
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  Avatar,
+  Button,
+  Heading,
+  Pill,
+  ProgressBar,
+  ProgressRing,
+  Select,
+  Size,
+  Text,
+  TextTone,
+  useLocale,
+} from '@glacier/react';
+import { Crown, ThumbsUp } from '@glacier/icons';
+import { PlayingCard } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useUi } from '../state/uiStore.ts';
@@ -9,12 +22,22 @@ import { COLOR_ORDER, cardImage, commanderArt } from '../data/cards.ts';
 import { PRECONS, preconCommander } from '../data/precons.ts';
 import { DeckStack } from '../components/DeckStack.tsx';
 import { useCardPopup } from '../components/CardPopup.tsx';
-import { MatchHistory } from '../components/MatchHistory.tsx';
+import { fmtDuration, relativeWhen } from '../components/MatchHistory.tsx';
 import { SaltPile } from '../components/SaltPile.tsx';
-import { rankFor, winRate } from '../data/ranks.ts';
+import { GameTag } from '../components/GameTag.tsx';
+import { RANKS, rankFor, winRate } from '../data/ranks.ts';
+import { deckSummaryArt } from '../data/deckCover.ts';
+import { useMobileLayout } from '../hooks/useIsPhone.ts';
 import type { MatchRow, MyDeckStats, UserStats } from '../net/types.ts';
-import { ThumbsUp } from '@glacier/icons';
 import './social.css';
+
+/**
+ * The career profile: a full-bleed identity plate (showcase art, rank insignia,
+ * the win-rate ring), lifetime stats as chamfered plates, the deck reputation
+ * boards, the service record, and the Final Fantasy precon shelf. All data
+ * fetching is unchanged from the previous incarnation - this file re-clothes
+ * it in the gamified idiom the Home page established.
+ */
 
 const GAME_TAG: Record<string, string> = {
   'counter-blitz': 'FINAL FANTASY X',
@@ -36,10 +59,62 @@ const PIP: Record<string, string> = {
   G: 'oklch(0.55 0.13 150)',
 };
 
-/** Identity + showcase deck hero + the Final Fantasy precon shelf. */
+/**
+ * The rank insignia: one chevron slot per rank above the entry tier, filled to
+ * the current tier - military-stripe style. Decorative; the rank title beside
+ * it carries the meaning.
+ */
+function RankInsignia({ tier }: { tier: number }) {
+  const slots = RANKS.length - 1;
+  return (
+    <svg className="pfInsignia" viewBox="0 0 20 22" width={18} height={20} aria-hidden>
+      {Array.from({ length: slots }, (_, i) => {
+        const y = 20 - i * 3.3;
+        return (
+          <path
+            key={i}
+            d={`M4 ${y} L10 ${y - 3.4} L16 ${y}`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity={i < tier ? 1 : 0.22}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
+/** One big-number stat plate: the value huge, the label small and tracked. */
+function Plate({
+  value,
+  label,
+  tone,
+  fit,
+  hint,
+}: {
+  value: ReactNode;
+  label: ReactNode;
+  tone?: 'endorse' | 'salt';
+  /** 'text' shrinks the value type for word-sized values (dates). */
+  fit?: 'text';
+  hint?: string;
+}) {
+  return (
+    <div className="pfPlate" data-tone={tone} data-fit={fit} title={hint}>
+      <span className="pfPlateValue">{value}</span>
+      <span className="pfPlateLabel">{label}</span>
+    </div>
+  );
+}
+
+/** Identity plate + career plates + reputation + service record + precons. */
 export function ProfilePage() {
   const t = useT();
   const locale = useLocale();
+  const phone = useMobileLayout();
   const identity = useApp((state) => state.identity);
   const signOut = useApp((state) => state.signOut);
   const decks = useApp((state) => state.decks);
@@ -112,6 +187,7 @@ export function ProfilePage() {
     .slice(0, 3);
   const rank = stats ? rankFor(stats.played) : null;
   const rate = stats ? winRate(stats) : null;
+  const tier = rank ? Math.max(0, RANKS.findIndex((r) => r.at === rank.floor)) : 0;
 
   const memberSince = (() => {
     if (!createdAt) return null;
@@ -121,7 +197,9 @@ export function ProfilePage() {
   })();
 
   const showcaseDeck = showcaseId ? decks.find((deck) => deck.id === showcaseId) : undefined;
-  const cover = showcaseDeck?.coverImageUrl || '';
+  // The showcase deck's wide art dresses the identity plate for every game,
+  // not just MTG's scan URLs.
+  const art = showcaseDeck ? deckSummaryArt(showcaseDeck) : '';
 
   const openDeck = (id: string) => {
     selectDeck(id);
@@ -130,38 +208,75 @@ export function ProfilePage() {
 
   return (
     <div className="page profilePage">
-      <motion.header
-        className="pfHero"
-        data-has-art={cover ? '' : undefined}
-        initial={{ y: 18, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ type: 'spring', stiffness: 150, damping: 20 }}
-      >
-        {cover && <div className="pfHeroArt" style={{ backgroundImage: `url(${cover})` }} aria-hidden />}
-        <div className="pfHeroScrim" aria-hidden />
-        <div className="pfHeroContent">
-          <span className="pfAvatar">
-            <Avatar name={identity?.username ?? '?'} size="lg" />
-          </span>
-          <div className="profileWho">
-            <Heading level={1} noMargin>
-              {identity?.username}
-            </Heading>
-            <Text size={Size.Small} tone={TextTone.Muted}>
-              {t('pfTempId')}
-            </Text>
+      {/* ---- identity plate: art band, rank insignia, win-rate ring ---- */}
+      <header className="pfBand" data-has-art={art ? '' : undefined}>
+        {art && <div className="pfBandArt" style={{ backgroundImage: `url(${art})` }} aria-hidden />}
+        <div className="pfBandScrim" aria-hidden />
+        <Button variant="ghost" size="sm" onClick={signOut} className="pfSignOut">
+          {t('pfSignOut')}
+        </Button>
+        <div className="pfBandMain">
+          <div className="pfIdent">
+            <span className="pfPortrait">
+              <Avatar name={identity?.username ?? '?'} size="xl" shape="rounded" />
+            </span>
+            <div className="pfIdText">
+              {rank && (
+                <span className="pfRankLine">
+                  <RankInsignia tier={tier} />
+                  <span className="pfRankTitle">{rank.title}</span>
+                  <span className="pfLevel">
+                    {t('hmLevel')} {rank.level}
+                  </span>
+                </span>
+              )}
+              <Heading level={1} noMargin className="pfName">
+                {identity?.username}
+              </Heading>
+              <Text size={Size.Small} tone={TextTone.Muted}>
+                {t('pfTempId')}
+              </Text>
+              {rank && rank.next != null && stats && (
+                <div className="pfNext">
+                  <ProgressBar
+                    value={Math.round(rank.progress * 100)}
+                    max={100}
+                    size="sm"
+                    tone="accent"
+                    aria-label={t('hmNextRank')}
+                  />
+                  <span className="pfNextLabel">
+                    {rank.next - stats.played} {t('hmToNextRank')}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
-          <Button variant="ghost" onClick={signOut}>
-            {t('pfSignOut')}
-          </Button>
+          <div className="pfRing">
+            <ProgressRing
+              value={rate ?? 0}
+              max={100}
+              size={phone ? 108 : 148}
+              thickness={9}
+              tone="accent"
+              aria-label={t('hmWinRate')}
+              label={
+                <span className="pfRingLabel">
+                  <span className="pfRingValue">{rate != null ? `${rate}%` : '—'}</span>
+                  <span className="pfRingCaption">{t('hmWinRate')}</span>
+                </span>
+              }
+            />
+          </div>
         </div>
-        <div className="pfShowcaseRow">
+        <div className="pfBandFoot">
           <div className="pfShowcasePick">
             <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
               {t('pfFavDeck')}
             </Text>
             <Select
-              size="sm"
+              size="lg"
+              fullWidth
               options={decks.map((deck) => ({ value: deck.id, label: deck.name }))}
               value={showcaseId ?? undefined}
               onValueChange={pickShowcase}
@@ -169,114 +284,101 @@ export function ProfilePage() {
               aria-label={t('pfFavDeck')}
             />
           </div>
-          {showcaseDeck && (
+          {/* The picker already names the deck, so this is only the commander
+              and the way through to the deck itself - repeating the name beside
+              the control it came from said nothing twice. */}
+          {showcaseDeck?.commander && (
             <button type="button" className="pfShowcaseDeck" onClick={() => openDeck(showcaseDeck.id)}>
-              <span className="pfShowcaseName">{showcaseDeck.name}</span>
               <Text as="span" size={Size.Small} tone={TextTone.Muted}>
                 {showcaseDeck.commander}
               </Text>
             </button>
           )}
         </div>
-      </motion.header>
+      </header>
 
-      <motion.div
-        className="pfStats"
-        initial={{ y: 14, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ type: 'spring', stiffness: 150, damping: 20, delay: 0.06 }}
-      >
-        <div className="pfStat">
-          <span className="pfStatValue">{decks.length}</span>
-          <Text size={Size.Small} tone={TextTone.Muted}>
-            {t('pfDeckCount')}
-          </Text>
+      {/* ---- lifetime stats as big chamfered plates ---- */}
+      <section className="pfPlates" aria-label={t('hmCareer')}>
+        <Heading level={2} noMargin className="pfKicker">
+          {t('hmCareer')}
+        </Heading>
+        <div className="pfPlateRow">
+          <Plate value={decks.length} label={t('pfDeckCount')} />
+          {memberSince && <Plate value={memberSince} label={t('pfMemberSince')} fit="text" />}
+          {stats && stats.played > 0 && (
+            <>
+              <Plate value={stats.wins} label={t('hmWins')} />
+              <Plate value={stats.losses} label={t('pfLosses')} />
+              <Plate value={stats.played} label={t('hmGames')} />
+              <Plate
+                value={
+                  <>
+                    <ThumbsUp size={16} aria-hidden /> {stats.endorsements}
+                  </>
+                }
+                label={t('pmEndorseCount')}
+                tone="endorse"
+              />
+              <Plate
+                value={
+                  <>
+                    {/* Held back at a single rater: in a duel, one rating names
+                        its rater - the same threshold the lobby and the deck
+                        boards below use. */}
+                    <SaltPile size={16} aria-hidden /> {stats.saltCount > 1 ? stats.salt.toFixed(1) : '—'}
+                  </>
+                }
+                label={t('pfSalt')}
+                tone="salt"
+                hint={t('pfSaltHint')}
+              />
+            </>
+          )}
         </div>
-        {memberSince && (
-          <div className="pfStat">
-            <span className="pfStatValue">{memberSince}</span>
-            <Text size={Size.Small} tone={TextTone.Muted}>
-              {t('pfMemberSince')}
-            </Text>
-          </div>
-        )}
-        {stats && stats.played > 0 && (
-          <>
-            <div className="pfStat">
-              <span className="pfStatValue">
-                {stats.wins}<span className="pfStatSep">/</span>{stats.losses}
-              </span>
-              <Text size={Size.Small} tone={TextTone.Muted}>
-                {rate != null ? `${t('pfRecord')} · ${rate}%` : t('pfRecord')}
-              </Text>
-            </div>
-            {rank && (
-              <div className="pfStat">
-                <span className="pfStatValue">{rank.title}</span>
-                <Text size={Size.Small} tone={TextTone.Muted}>
-                  {t('pfRank')} {rank.level}
-                </Text>
-              </div>
-            )}
-            <div className="pfStat">
-              <span className="pfStatValue pfStatEndorse">
-                <ThumbsUp size={18} aria-hidden /> {stats.endorsements}
-              </span>
-              <Text size={Size.Small} tone={TextTone.Muted}>
-                {t('pmEndorseCount')}
-              </Text>
-            </div>
-            <div className="pfStat">
-              <span className="pfStatValue pfStatSalt">
-                {/* Held back at a single rater: in a duel, one rating names
-                    its rater - the same threshold the lobby and the deck list
-                    below use. */}
-                <SaltPile size={18} aria-hidden /> {stats.saltCount > 1 ? stats.salt.toFixed(1) : '—'}
-              </span>
-              <Text size={Size.Small} tone={TextTone.Muted} title={t('pfSaltHint')}>
-                {t('pfSalt')}
-              </Text>
-            </div>
-          </>
-        )}
-      </motion.div>
+      </section>
 
       {/* Your decks, judged by the people who had to play against them. Salt
           rates a DECK, never its owner, so every label here says so. */}
       {(saltiest.length > 0 || mostEndorsed.length > 0) && (
-        <section className="pfDeckStats">
-          <Heading level={2}>{t('pfDeckRep')}</Heading>
-          <Text tone={TextTone.Muted}>{t('pfDeckRepLede')}</Text>
-          <div className="pfDeckCols">
+        <section className="pfRep">
+          <Heading level={2} noMargin className="pfKicker">
+            {t('pfDeckRep')}
+          </Heading>
+          <Text tone={TextTone.Muted} className="pfRepLede">
+            {t('pfDeckRepLede')}
+          </Text>
+          <div className="pfRepCols">
             {saltiest.length > 0 && (
-              <div className="pfDeckCol">
-                <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="pfDeckColHead">
-                  {t('pfSaltiest')}
-                </Text>
-                {saltiest.map((deck) => (
-                  <div key={deck.deckId} className="pfDeckRow">
-                    <span className="pfDeckName">{deck.name ?? t('dbUntitled')}</span>
-                    <span className="pfDeckFig pfStatSalt">
-                      <SaltPile size={13} aria-hidden /> {deck.salt.toFixed(1)}
-                      <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
-                        ({deck.saltCount})
-                      </Text>
+              <div className="pfRepCol" data-tone="salt">
+                <span className="pfRepHead">
+                  <SaltPile size={14} aria-hidden /> {t('pfSaltiest')}
+                </span>
+                {saltiest.map((deck, index) => (
+                  <div key={deck.deckId} className="pfRepRow">
+                    <span className="pfRepIndex" aria-hidden>
+                      {index + 1}
+                    </span>
+                    <span className="pfRepName">{deck.name ?? t('dbUntitled')}</span>
+                    <span className="pfRepFig">
+                      {deck.salt.toFixed(1)}
+                      <span className="pfRepCount">({deck.saltCount})</span>
                     </span>
                   </div>
                 ))}
               </div>
             )}
             {mostEndorsed.length > 0 && (
-              <div className="pfDeckCol">
-                <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="pfDeckColHead">
-                  {t('pfMostEndorsed')}
-                </Text>
-                {mostEndorsed.map((deck) => (
-                  <div key={deck.deckId} className="pfDeckRow">
-                    <span className="pfDeckName">{deck.name ?? t('dbUntitled')}</span>
-                    <span className="pfDeckFig pfStatEndorse">
-                      <ThumbsUp size={13} aria-hidden /> {deck.endorsements}
+              <div className="pfRepCol" data-tone="endorse">
+                <span className="pfRepHead">
+                  <ThumbsUp size={14} aria-hidden /> {t('pfMostEndorsed')}
+                </span>
+                {mostEndorsed.map((deck, index) => (
+                  <div key={deck.deckId} className="pfRepRow">
+                    <span className="pfRepIndex" aria-hidden>
+                      {index + 1}
                     </span>
+                    <span className="pfRepName">{deck.name ?? t('dbUntitled')}</span>
+                    <span className="pfRepFig">{deck.endorsements}</span>
                   </div>
                 ))}
               </div>
@@ -285,10 +387,59 @@ export function ProfilePage() {
         </section>
       )}
 
+      {/* ---- service record: the same matches the Play page logs, dressed in
+              this page's own career idiom (no shared classes) ---- */}
       {history != null && history.length > 0 && (
-        <section className="matchHistory">
-          <Heading level={2}>{t('plHistory')}</Heading>
-          <MatchHistory matches={history} myUsername={identity?.username} />
+        <section className="pfLog">
+          <Heading level={2} noMargin className="pfKicker">
+            {t('pfService')}
+          </Heading>
+          <div className="pfLogList">
+            {history.map((match, index) => {
+              const others = match.players
+                .map((player) => player.username)
+                .filter((name) => name !== identity?.username);
+              return (
+                <article key={`${match.playedAt}-${index}`} className="pfLogRow">
+                  <span
+                    className="pfLogResult"
+                    data-result={match.won == null ? undefined : match.won ? 'win' : 'loss'}
+                  >
+                    {match.won == null ? '·' : match.won ? t('pmWinAbbr') : t('pmLossAbbr')}
+                  </span>
+                  <div className="pfLogMain">
+                    <span className="pfLogName">
+                      <GameTag game={match.game} showName={false} /> {match.name || t('playTitle')}
+                    </span>
+                    <span className="pfLogWith">
+                      {others.length > 0 ? `${t('plWith')} ${others.join(', ')}` : t('plSolo')}
+                    </span>
+                  </div>
+                  {match.matchId && (
+                    <div className="pfLogStats">
+                      {match.winnerUsername && (
+                        <span className="pfLogStat">
+                          <Crown size={12} aria-hidden /> {match.winnerUsername}
+                        </span>
+                      )}
+                      {match.turns != null && (
+                        <span className="pfLogStat">
+                          {match.turns} {t('pmTurnsWord')}
+                        </span>
+                      )}
+                      {match.durationMs != null && <span className="pfLogStat">{fmtDuration(match.durationMs)}</span>}
+                      {match.cardsPlayed != null && (
+                        <span className="pfLogStat">
+                          <PlayingCard size={12} aria-hidden /> {match.cardsPlayed}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <span className="pfLogWhen">{relativeWhen(match.playedAt, locale)}</span>
+                </article>
+              );
+            })}
+          </div>
         </section>
       )}
 
@@ -302,12 +453,10 @@ export function ProfilePage() {
             const identityColors = COLOR_ORDER.filter((color) => commander.colorIdentity.includes(color));
             const owned = decks.find((entry) => entry.name === deck.name);
             return (
-              <motion.article
+              <article
                 key={deck.id}
-                className="preconCard"
-                initial={{ y: 24, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ type: 'spring', stiffness: 140, damping: 18, delay: index * 0.07 }}
+                className="preconCard pfPreconIn"
+                style={{ animationDelay: `${index * 70}ms` }}
               >
                 <div
                   className="preconHero"
@@ -348,7 +497,7 @@ export function ProfilePage() {
                     )}
                   </div>
                 </div>
-              </motion.article>
+              </article>
             );
           })}
         </div>
