@@ -85,9 +85,9 @@
   margin-inline-end: auto;
 }
 
-/* The side column: the small destinations and the code entry, pushed to the
-   band's end edge and bottom-anchored so the badge keeps the top corner and
-   the art keeps the middle. */
+/* The side column: just the code entry, pushed to the band's end edge and
+   bottom-anchored so the badge keeps the top corner and the art keeps the
+   middle. */
 .gmSide {
   position: relative;
   display: flex;
@@ -121,9 +121,9 @@
 .gmMenu > :nth-child(1) { animation-delay: 0ms; }
 .gmMenu > :nth-child(2) { animation-delay: 60ms; }
 .gmMenu > :nth-child(3) { animation-delay: 120ms; }
-/* the side column arrives after the primaries, top to bottom */
-.gmSide > :nth-child(1) { animation-delay: 180ms; }
-.gmSide > :nth-child(2) { animation-delay: 240ms; }
+.gmMenu > :nth-child(4) { animation-delay: 180ms; }
+/* the side column's code entry arrives last */
+.gmSide > :nth-child(1) { animation-delay: 240ms; }
 
 /* --- one menu item: a parallelogram with an accent leading edge --- */
 

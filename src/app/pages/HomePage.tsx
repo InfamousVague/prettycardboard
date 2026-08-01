@@ -295,11 +295,7 @@ function GameMenu({
             <PlayingCardPack size={20} className="gmItemIcon" aria-hidden />
           </span>
         </button>
-        </div>
 
-        {/* The side column: destinations and the code entry, anchored to the
-            band's end edge under the player badge so the art keeps the middle. */}
-        <div className="gmSide">
         <div className="gmHalfRow">
           <button type="button" className="gmItem gmHalf" onClick={() => (window.location.hash = '/decks')}>
             <span className="gmItemInner">
@@ -326,7 +322,11 @@ function GameMenu({
             </span>
           </button>
         </div>
+        </div>
 
+        {/* The side column: just the code entry now, bottom-anchored under the
+            player badge so the art keeps the middle of the band. */}
+        <div className="gmSide">
         {/* The code entry keeps the menu's plate shape but is not a button -
             the cells inside are the control, and filling them is the action. */}
         <div className="gmItem gmJoin" data-busy={joining || undefined}>
