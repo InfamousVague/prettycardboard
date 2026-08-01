@@ -40,3 +40,7 @@ server/data
 .idea
 *.log
 playtest/logs/
+
+# Throwaway debug/probe pages. vite copies public/ verbatim into dist/ and
+# redeploy rsyncs dist/ to the web root, so anything left here ships publicly.
+public/__*.html

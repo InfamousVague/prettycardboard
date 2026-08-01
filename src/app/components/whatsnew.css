@@ -19,6 +19,21 @@
   max-inline-size: min(96vw, var(--pc-wn-max, 64rem));
 }
 
+/* ---- the dismiss stays reachable ----
+   The kit's `footer` slot is a static row inside the scrolling panel, not a
+   pinned one, so on a tall release "Got it" sits below the fold and dismissing
+   costs a scroll. Sticking the panel's last child to the block-end edge fixes
+   that without naming a hashed kit class - the same ARIA-contract escape hatch
+   the width rule above uses. `background: inherit` so the list scrolls UNDER
+   it rather than through it, and the panel's own block padding is re-applied
+   here because sticking the child does not move the padding with it. */
+[role='dialog']:has(.wnBody) > :last-child {
+  position: sticky;
+  inset-block-end: 0;
+  background: inherit;
+  padding-block: var(--glacier-space-3);
+}
+
 .wnBody {
   display: grid;
   gap: var(--glacier-space-5);
