@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="currentColor">
+  <!-- A netrunner's chip: the die at the centre of a circuit fan. Authored for
+       this app - Cyberpunk TCG is our own WIP game and has no bundled mark. -->
+  <path d="M35 35h30v30H35z"/>
+  <path d="M28 28h44v44H28v-6h38V34H28Z" opacity=".45"/>
+  <!-- pins, four per edge, reading as a chip at any size -->
+  <path d="M40 14h5v14h-5Zm10 0h5v14h-5Zm-20 0h5v14h-5Zm30 0h5v14h-5ZM40 72h5v14h-5Zm10 0h5v14h-5Zm-20 0h5v14h-5Zm30 0h5v14h-5ZM14 40h14v5H14Zm0 10h14v5H14Zm0-20h14v5H14Zm0 30h14v5H14ZM72 40h14v5H72Zm0 10h14v5H72Zm0-20h14v5H72Zm0 30h14v5H72Z"/>
+</svg>

@@ -1,10 +1,7 @@
-import { Pill } from '@glacier/react';
-import { Cpu, Pyramid, Sparkles } from '@glacier/icons';
+import { Pill, Tooltip } from '@glacier/react';
 import { getGame } from '../data/games.ts';
+import { GameMark } from './GameMark.tsx';
 import './GameTag.css';
-
-/** Per-game glyph. Kept here (not in the data registry) since icons are React. */
-const ICONS = { mtg: Sparkles, cyberpunk: Cpu, yugioh: Pyramid } as const;
 
 /**
  * A compact identity chip - game icon + name in the game's accent - shown
@@ -17,7 +14,9 @@ const ICONS = { mtg: Sparkles, cyberpunk: Cpu, yugioh: Pyramid } as const;
 export function GameTag({
   game,
   showName = true,
-  size = 12,
+  /** The mark's edge length. Icon-only chips get a bigger mark than a label
+   *  chip does - with no name beside it the glyph IS the whole message. */
+  size,
   className,
 }: {
   game: string | undefined | null;
@@ -26,22 +25,25 @@ export function GameTag({
   className?: string;
 }) {
   const def = getGame(game);
-  const Icon = ICONS[def.id] ?? Sparkles;
-  return (
+  const mark = size ?? (showName ? 15 : 22);
+  const pill = (
     <Pill
       size="sm"
       variant="soft"
       className={`gameTag${className ? ` ${className}` : ''}`}
       data-game={def.id}
       data-iconly={showName ? undefined : ''}
-      title={def.name}
       aria-label={showName ? undefined : def.name}
-      icon={<Icon size={size} />}
+      icon={<GameMark game={def.id} size={mark} />}
       style={{ ['--game-accent' as string]: def.accent }}
     >
       {showName && <span className="gameTagName">{def.name}</span>}
     </Pill>
   );
+  // With the name already on the chip there is nothing for a tooltip to add.
+  // Icon-only gets the kit Tooltip instead of a `title`, which the browser
+  // renders as a slow, unstyled OS bubble that never matches the app.
+  return showName ? pill : <Tooltip content={def.name}>{pill}</Tooltip>;
 }
 
 /**
@@ -51,7 +53,7 @@ export function GameTag({
  */
 export function GameBadge({
   game,
-  size = 20,
+  size = 26,
   className,
 }: {
   game: string | undefined | null;
@@ -59,16 +61,16 @@ export function GameBadge({
   className?: string;
 }) {
   const def = getGame(game);
-  const Icon = ICONS[def.id] ?? Sparkles;
   return (
-    <span
-      className={`gameBadge${className ? ` ${className}` : ''}`}
-      data-game={def.id}
-      title={def.name}
-      aria-label={def.name}
-      style={{ ['--game-accent' as string]: def.accent }}
-    >
-      <Icon size={size} />
-    </span>
+    <Tooltip content={def.name}>
+      <span
+        className={`gameBadge${className ? ` ${className}` : ''}`}
+        data-game={def.id}
+        aria-label={def.name}
+        style={{ ['--game-accent' as string]: def.accent }}
+      >
+        <GameMark game={def.id} size={size} />
+      </span>
+    </Tooltip>
   );
 }
