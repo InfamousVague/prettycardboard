@@ -1184,6 +1184,18 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                 // battlefield -> graveyard is a death, unless the card's own
                 // replacement routes it to exile. A face-down Set stays
                 // silent - its identity is hidden.
+                // Freeform tables still dial in a walker's printed loyalty -
+                // bookkeeping every table wants and nobody enjoys doing by
+                // hand. Everything else below stays enforced-only.
+                if !crate::rules::enforced(room)
+                    && !lands_hidden
+                    && to == Zone::Battlefield
+                    && from != Zone::Battlefield
+                {
+                    let banked = crate::rules::bank_printed_loyalty(app, room, iid);
+                    resync |= !banked.is_empty();
+                    extra_logs.extend(banked);
+                }
                 if crate::rules::enforced(room) && !lands_hidden {
                     if to == Zone::Battlefield && from != Zone::Battlefield {
                         let repl = crate::rules::apply_enters_replacements(app, room, iid);

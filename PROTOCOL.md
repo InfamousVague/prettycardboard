@@ -909,6 +909,24 @@ stance as the other intents.
   prompts. Freeform rooms and solo tables advance exactly as before. Bots
   pass open windows within a tick and never draw rejections.
 
+### Planeswalker loyalty on the card (2026-08-01)
+
+A walker arriving on the battlefield takes its printed loyalty in `loyalty`
+counters on EVERY table, not just enforced ones - the number the card cannot
+function without is bookkeeping, not a ruling. (The oracle prefetch is
+likewise no longer gated on enforcement: any MTG table warms the same card
+facts, which freeform reads for this, for the bots' threat table, and for the
+client's affordance mirrors.)
+
+The client renders that counter as a chip in the card's bottom trailing
+corner - where the card itself prints it - and the chip is a button. Its menu
+is built from the WALKER'S OWN parsed abilities (+1 / 0 / -N with their rules
+text), with costs the current loyalty cannot pay shown disabled rather than
+hidden, plus a plain +1 / -1 for damage and proliferate. On an enforced table
+the pick goes through `loyalty.activate` (once per turn, sorcery timing, zero
+floor, ability text queued as a prompt); on a freeform table it is an
+ordinary counter edit. An opponent's walker shows the number read-only.
+
 ### Lobby escape hatches (2026-08-01)
 
 A pregame lobby could become permanently unstartable - `room.start` refuses

@@ -809,9 +809,37 @@ fn find_card<'a>(room: &'a Room, iid: &str) -> Option<&'a Card> {
 
 /// Apply enters-the-battlefield replacements to a card that just arrived:
 /// "enters tapped" and "enters with N counters". Returns log lines.
+/// A planeswalker arriving on the battlefield takes its printed loyalty in
+/// `loyalty` counters. Runs on EVERY table (see the note in
+/// `apply_enters_replacements`); already-countered walkers are left alone, so
+/// a reanimated walker keeps whatever the table gave it.
+pub fn bank_printed_loyalty(app: &App, room: &mut Room, iid: &str) -> Vec<String> {
+    let mut logs = Vec::new();
+    for p in room.players.iter_mut() {
+        let Some(card) = p.battlefield.iter_mut().find(|c| c.iid == iid) else { continue };
+        let Some(f) = card.scryfall_id.as_deref().and_then(|sid| oracle::get(app, sid)) else {
+            return logs;
+        };
+        if f.type_line.contains("Planeswalker") {
+            if let Some(loyalty) = f.loyalty {
+                if loyalty > 0 && !card.counters.contains_key("loyalty") {
+                    card.counters.insert("loyalty".to_string(), loyalty);
+                    logs.push(format!("{} enters with {loyalty} loyalty", card.name));
+                }
+            }
+        }
+        break;
+    }
+    logs
+}
+
 pub fn apply_enters_replacements(app: &App, room: &mut Room, iid: &str) -> Vec<String> {
+    // A planeswalker's printed loyalty is BOOKKEEPING, not a ruling: it is
+    // the one number the card cannot function without and the one every
+    // table forgets to dial in by hand. So it lands on freeform tables too,
+    // where every other replacement below stays the players' business.
     if !enforced(room) {
-        return Vec::new();
+        return bank_printed_loyalty(app, room, iid);
     }
     let mut logs = Vec::new();
     for p in room.players.iter_mut() {

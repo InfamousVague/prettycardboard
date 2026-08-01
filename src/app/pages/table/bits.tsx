@@ -145,7 +145,10 @@ function CounterManager({ card, onSet }: { card: CardInst; onSet: (counter: stri
     .filter(([, count]) => count > 0)
     .sort(([left], [right]) => Number(parsePtCounter(right) != null) - Number(parsePtCounter(left) != null) || left.localeCompare(right));
   const ptEntries = entries.filter(([kind]) => parsePtCounter(kind) != null);
-  const others = entries.filter(([kind]) => parsePtCounter(kind) == null);
+  // `loyalty` has its own badge in the card's bottom corner (LoyaltyBadge),
+  // where the card itself prints it - listing it here too would say the same
+  // number twice.
+  const others = entries.filter(([kind]) => parsePtCounter(kind) == null && kind !== 'loyalty');
   const pt = ptCounterModifier(card.counters);
 
   const add = (kind: string) => {
@@ -284,7 +287,10 @@ export function CounterBadges({
   const t = useT();
   const entries = Object.entries(card.counters).filter(([, count]) => count > 0);
   const pt = ptCounterModifier(card.counters);
-  const others = entries.filter(([kind]) => parsePtCounter(kind) == null);
+  // `loyalty` has its own badge in the card's bottom corner (LoyaltyBadge),
+  // where the card itself prints it - listing it here too would say the same
+  // number twice.
+  const others = entries.filter(([kind]) => parsePtCounter(kind) == null && kind !== 'loyalty');
   const hasPt = pt.power !== 0 || pt.toughness !== 0;
   if (!onSet && !hasPt && others.length === 0) return null;
   const sign = (n: number) => (n > 0 ? `+${n}` : `${n}`);

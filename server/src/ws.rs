@@ -799,8 +799,11 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
         return;
     }
     room.started = true;
-    if crate::rules::enforced(&room) {
+    if room.game == "mtg" {
         // Belt and braces: any card the lobby phase missed gets fetched now.
+        // NOT gated on enforcement - a freeform table reads the same facts
+        // for planeswalker loyalty, the bots' threat table, and the client's
+        // affordance mirrors.
         crate::oracle::prefetch_room(app, &room);
     }
     let deal = crate::game::effective_hand_size(&room);
@@ -1013,7 +1016,7 @@ fn room_deck_set(app: &Arc<App>, user: &db::User, deck_id: &str, tx: &Tx) {
     player.graveyard.clear();
     player.exile.clear();
     player.ready = false;
-    if crate::rules::enforced(&room) {
+    if room.game == "mtg" {
         crate::oracle::prefetch_room(app, &room);
     }
     rooms::touch(app, &mut room);
@@ -1240,7 +1243,7 @@ fn bot_add(
     room.players.sort_by_key(|p| p.seat);
     room.seq += 1;
     let seq = room.seq;
-    if crate::rules::enforced(&room) {
+    if room.game == "mtg" {
         crate::oracle::prefetch_room(app, &room);
     }
     rooms::touch(app, &mut room);
@@ -1547,7 +1550,7 @@ fn game_action(app: &Arc<App>, user: &db::User, action: game::Action, tx: &Tx) {
     let outcome = dispatch_action(app, &mut room, &user.id, action, Some(tx));
     // Enforced rooms: any gap in the oracle cache (a failed fetch, a card the
     // prefetch missed) heals on the next human action - cached ids no-op.
-    if crate::rules::enforced(&room) {
+    if room.game == "mtg" {
         crate::oracle::prefetch_room(app, &room);
     }
     if let Err((code, message)) = outcome {

@@ -13,6 +13,7 @@ import type { CardInst, RoomState, TablePlayer } from '../../net/types.ts';
 import { selectCardScale, useTableUi } from './tableUi.ts';
 import { AnchoredMenu } from './menuAnchor.tsx';
 import { AttackBadge, BlockCluster, CardMark, CounterBadges, DEFAULT_MAT_LAYOUT, MARK_KINDS, ZonePiles, groupAttachments, markIcon, splitPile } from './bits.tsx';
+import { LoyaltyBadge } from './LoyaltyBadge.tsx';
 import { MARK_LABEL } from './marks.ts';
 import { YUGIOH_PILE_LAYOUT, YugiohZoneGrid } from './yugiohZones.tsx';
 import { ambientDelay, restTilt } from './juice.ts';
@@ -255,6 +256,9 @@ export function SeatFrame({
           tilt={0}
         >
           <CounterBadges card={card} />
+          {/* An opponent's walker shows its loyalty too - read-only; their
+              counters are theirs to move. */}
+          <LoyaltyBadge card={card} room={room} canAct={false} onCounter={() => {}} onActivate={() => {}} />
           {ptTotal && (
             <span className="ptTotal" title={t('gpPtTotal')}>
               {ptTotal}

@@ -54,6 +54,7 @@ import {
   typeLineOf,
 } from './boardModes.ts';
 import { canDeclareAttacker, discountedGeneric, enforcedRoom, handPlayability, matchesTargetKind, paymentPlan, stackTargetKinds } from './enforce.ts';
+import { LoyaltyBadge } from './LoyaltyBadge.tsx';
 import { oracleFacts } from '../../data/printedPt.ts';
 import { SETTLE_EASE, dragTilt, flightAnchor, juicePulse, prefersReducedMotion, restTilt, setFlightAnchor, ambientDelay } from './juice.ts';
 import { zoneLabel } from '../../data/games.ts';
@@ -1206,6 +1207,16 @@ export function MyBoard({
             tilt={0}
           >
             <CounterBadges card={card} onSet={(counter, value) => setCounterCount(card, counter, value)} />
+            <LoyaltyBadge
+              card={card}
+              room={room}
+              me={me}
+              canAct={started}
+              onCounter={(delta) =>
+                act({ kind: 'card.counter', iid: card.iid, counter: 'loyalty', delta })
+              }
+              onActivate={(index) => act({ kind: 'loyalty.activate', iid: card.iid, index })}
+            />
             {ptTotal && (
               <span className="ptTotal" title={t('gpPtTotal')}>
                 {ptTotal}

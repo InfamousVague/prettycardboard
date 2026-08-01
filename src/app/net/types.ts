@@ -761,6 +761,9 @@ export type GameActionV2 =
   /** Answer an owed discard: exactly `n` distinct in-hand iids, or `[]` to
    *  let the engine choose (highest mana value first). */
   | { kind: 'discard.resolve'; id: string; iids: string[] }
+  /** Activate a planeswalker's parsed loyalty ability by index (enforced
+   *  rooms): the server moves the counter and queues the ability's text. */
+  | { kind: 'loyalty.activate'; iid: string; index: number }
   | { kind: 'cascade'; n: number }
   | { kind: 'undo' }
   | { kind: 'redo' }
