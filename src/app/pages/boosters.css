@@ -3,11 +3,11 @@
    art forward on notched shelf plates; the opener page pairs the 3D display
    box with a drop-rates panel and one huge OPEN PACK.
 
-   Shape language: NOTCHED corners (a single clipped cut, like a price-gun
-   ticket) - an echo of the home page's skew idiom, deliberately not the same
-   parallelogram. Notches are clip-paths, so they are mirrored under
-   [dir='rtl'] by hand, and clip-path swallows box-shadow and outset outlines:
-   elevation rides drop-shadow, focus rings draw inset. */
+   Shape language: plain rounded plates. The shelf once notched one corner off
+   each plate (a price-gun ticket, echoing home's skew); the notches were pulled
+   at the owner's request - corners are not cropped anywhere in the app now.
+   Elevation still rides drop-shadow and focus rings still draw inset, which the
+   notch once forced and which render the same without it. */
 
 /* ========================================================================
    The marquee band
@@ -140,42 +140,12 @@
   color: var(--glacier-text);
   font: inherit;
   text-align: start;
-  clip-path: polygon(0 0, calc(100% - 1.1rem) 0, 100% 1.1rem, 100% 100%, 0 100%);
   filter: drop-shadow(0 10px 24px rgb(0 0 0 / 0.4));
   animation: bshRise var(--glacier-duration-normal) var(--glacier-ease-out) 150ms backwards;
   transition:
     scale var(--glacier-duration-fast) var(--glacier-ease-out),
     filter var(--glacier-duration-fast) var(--glacier-ease-out);
-}
-
-[dir='rtl'] .bshFeature {
-  clip-path: polygon(0 1.1rem, 1.1rem 0, 100% 0, 100% 100%, 0 100%);
-}
-
-/* The cut edge gets an accent seam - a hairline along the notch diagonal. */
-.bshFeature::before {
-  content: '';
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline-end: 0;
-  inline-size: 1.1rem;
-  block-size: 1.1rem;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom left,
-    transparent calc(50% - 1.5px),
-    var(--glacier-accent-solid) calc(50% - 1.5px) calc(50% + 0.5px),
-    transparent calc(50% + 0.5px)
-  );
-}
-
-[dir='rtl'] .bshFeature::before {
-  background: linear-gradient(
-    to bottom right,
-    transparent calc(50% - 1.5px),
-    var(--glacier-accent-solid) calc(50% - 1.5px) calc(50% + 0.5px),
-    transparent calc(50% + 0.5px)
-  );
+  border-radius: var(--glacier-radius-xl);
 }
 
 .bshFeature:hover,
@@ -261,11 +231,7 @@
   padding: var(--glacier-space-3) var(--glacier-space-4);
   border: 1px solid var(--glacier-border-subtle);
   background: color-mix(in oklch, var(--glacier-surface) 85%, transparent);
-  clip-path: polygon(0 0, calc(100% - 0.6rem) 0, 100% 0.6rem, 100% 100%, 0 100%);
-}
-
-[dir='rtl'] .boToolbar {
-  clip-path: polygon(0 0.6rem, 0.6rem 0, 100% 0, 100% 100%, 0 100%);
+  border-radius: var(--glacier-radius-lg);
 }
 
 .boSearch {
@@ -305,9 +271,8 @@
   gap: var(--glacier-space-3);
 }
 
-/* A shelf slot: notched plate, shelf-light falling from the top, accent seam
-   along the cut. clip-path swallows box-shadow, so hover elevation rides
-   drop-shadow and the focus ring draws inset. */
+/* A shelf slot: shelf-light falling from the top, accent leading
+   edge. Hover elevation rides drop-shadow and the focus ring draws inset. */
 .boSetTile {
   position: relative;
   display: flex;
@@ -326,17 +291,13 @@
   font: inherit;
   text-align: start;
   cursor: pointer;
-  clip-path: polygon(0 0, calc(100% - 1.1rem) 0, 100% 1.1rem, 100% 100%, 0 100%);
   animation: bshTileIn 280ms var(--glacier-ease-out) backwards;
   animation-delay: calc(var(--i, 0) * 30ms);
   transition:
     translate var(--glacier-duration-fast) var(--glacier-ease-out),
     border-color var(--glacier-duration-fast) var(--glacier-ease-out),
     filter var(--glacier-duration-fast) var(--glacier-ease-out);
-}
-
-[dir='rtl'] .boSetTile {
-  clip-path: polygon(0 1.1rem, 1.1rem 0, 100% 0, 100% 100%, 0 100%);
+  border-radius: var(--glacier-radius-lg);
 }
 
 @keyframes bshTileIn {
@@ -344,32 +305,6 @@
     opacity: 0;
     translate: 0 10px;
   }
-}
-
-/* The accent seam along the notch. */
-.boSetTile::before {
-  content: '';
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline-end: 0;
-  inline-size: 1.1rem;
-  block-size: 1.1rem;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom left,
-    transparent calc(50% - 1.5px),
-    color-mix(in oklch, var(--glacier-accent-solid) 75%, transparent) calc(50% - 1.5px) calc(50% + 0.5px),
-    transparent calc(50% + 0.5px)
-  );
-}
-
-[dir='rtl'] .boSetTile::before {
-  background: linear-gradient(
-    to bottom right,
-    transparent calc(50% - 1.5px),
-    color-mix(in oklch, var(--glacier-accent-solid) 75%, transparent) calc(50% - 1.5px) calc(50% + 0.5px),
-    transparent calc(50% + 0.5px)
-  );
 }
 
 @media (hover: hover) {
@@ -806,11 +741,7 @@
   border: var(--glacier-hairline) solid var(--glacier-border-subtle);
   background: color-mix(in oklch, var(--glacier-surface) 74%, transparent);
   backdrop-filter: blur(var(--glacier-blur-sm));
-  clip-path: polygon(0 0, calc(100% - 0.9rem) 0, 100% 0.9rem, 100% 100%, 0 100%);
-}
-
-[dir='rtl'] .bshOdds {
-  clip-path: polygon(0 0.9rem, 0.9rem 0, 100% 0, 100% 100%, 0 100%);
+  border-radius: var(--glacier-radius-md);
 }
 
 .bshOddsHead {
@@ -964,41 +895,11 @@
   color: var(--glacier-text);
   font: inherit;
   text-align: start;
-  clip-path: polygon(0 0, calc(100% - 1.1rem) 0, 100% 1.1rem, 100% 100%, 0 100%);
   filter: drop-shadow(0 10px 26px rgb(0 0 0 / 0.4));
   transition:
     scale var(--glacier-duration-fast) var(--glacier-ease-out),
     filter var(--glacier-duration-fast) var(--glacier-ease-out);
-}
-
-[dir='rtl'] .bshOpen {
-  clip-path: polygon(0 1.1rem, 1.1rem 0, 100% 0, 100% 100%, 0 100%);
-}
-
-/* Accent seam along the notch, same as the shelf tiles. */
-.bshOpen::before {
-  content: '';
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline-end: 0;
-  inline-size: 1.1rem;
-  block-size: 1.1rem;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom left,
-    transparent calc(50% - 1.5px),
-    var(--glacier-accent-solid) calc(50% - 1.5px) calc(50% + 0.5px),
-    transparent calc(50% + 0.5px)
-  );
-}
-
-[dir='rtl'] .bshOpen::before {
-  background: linear-gradient(
-    to bottom right,
-    transparent calc(50% - 1.5px),
-    var(--glacier-accent-solid) calc(50% - 1.5px) calc(50% + 0.5px),
-    transparent calc(50% + 0.5px)
-  );
+  border-radius: var(--glacier-radius-md);
 }
 
 /* The shine sweep that slides across on hover/focus. */

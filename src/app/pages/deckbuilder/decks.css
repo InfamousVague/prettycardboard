@@ -133,9 +133,9 @@
   flex-wrap: wrap;
 }
 
-/* NEW DECK: the page's one unmissable primary — a notched accent plate with
-   a leading edge and a sweep on hover. clip-path swallows box-shadow, so the
-   hover glow rides filter: drop-shadow (it follows the notched silhouette). */
+/* NEW DECK: the page's one unmissable primary — an accent plate with a
+   leading edge and a sweep on hover. The glow rides filter: drop-shadow, which
+   a notch clip once required. */
 .dkForge {
   appearance: none;
   cursor: pointer;
@@ -147,16 +147,15 @@
   background: color-mix(in oklch, var(--glacier-accent-soft) 85%, transparent);
   backdrop-filter: blur(var(--glacier-blur-sm));
   padding: var(--glacier-space-4) var(--glacier-space-6) var(--glacier-space-4) var(--glacier-space-5);
-  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
   transition:
     scale var(--glacier-duration-fast) var(--glacier-ease-out),
     filter var(--glacier-duration-fast) var(--glacier-ease-out),
     background-color var(--glacier-duration-fast) var(--glacier-ease-out);
+  border-radius: var(--glacier-radius-lg);
 }
 
 [dir='rtl'] .dkForge {
   padding: var(--glacier-space-4) var(--glacier-space-5) var(--glacier-space-4) var(--glacier-space-6);
-  clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
 }
 
 /* accent leading edge */
@@ -293,11 +292,7 @@
   border: 1px solid color-mix(in oklch, var(--glacier-border) 75%, transparent);
   background: color-mix(in oklch, var(--glacier-surface) 78%, transparent);
   backdrop-filter: blur(var(--glacier-blur-sm));
-  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
-}
-
-[dir='rtl'] .dkPlate {
-  clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%, 0 12px);
+  border-radius: var(--glacier-radius-md);
 }
 
 .dkPlate::before {
@@ -617,12 +612,8 @@
   color: var(--glacier-text-muted);
   border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 80%, transparent);
   background: color-mix(in oklch, var(--glacier-surface-sunken) 85%, transparent);
-  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 0 100%);
   white-space: nowrap;
-}
-
-[dir='rtl'] .deckTilePlate {
-  clip-path: polygon(7px 0, 100% 0, 100% 100%, 0 100%, 0 7px);
+  border-radius: var(--glacier-radius-sm);
 }
 
 .deckTileFormat {
@@ -864,7 +855,6 @@
   gap: var(--glacier-space-4);
   align-items: stretch;
 }
-
 
 .deckStatCurve {
   grid-column: span 2;
@@ -1238,8 +1228,6 @@
 }
 
 /* ---------- search pane ---------- */
-
-
 
 .cardSearch {
   display: flex;
@@ -1642,7 +1630,6 @@
   }
 }
 
-
 /* ---------- bracket panel ---------- */
 
 .deckStatBracket {
@@ -1681,7 +1668,6 @@
   font-size: var(--glacier-font-size-md);
   font-weight: var(--glacier-font-weight-semibold);
 }
-
 
 /* ---------- search bar (full width, above the decklist) ----------
 
@@ -1968,12 +1954,8 @@
   border: var(--glacier-hairline) solid var(--glacier-border-subtle);
   background: color-mix(in oklch, var(--glacier-surface) 82%, transparent);
   backdrop-filter: blur(6px);
-  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 0 100%);
   line-height: 1.25;
-}
-
-[dir='rtl'] .deckTileBracket {
-  clip-path: polygon(7px 0, 100% 0, 100% 100%, 0 100%, 0 7px);
+  border-radius: var(--glacier-radius-sm);
 }
 
 .deckTileBracketNum {

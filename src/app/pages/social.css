@@ -147,17 +147,14 @@
 .pfPortrait {
   flex: none;
   display: inline-flex;
+  overflow: hidden;
   padding: 5px;
-  clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%);
   background: linear-gradient(
     180deg,
     color-mix(in oklch, var(--glacier-accent-solid) 90%, transparent),
     color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent)
   );
-}
-
-.pfPortrait > * {
-  clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%);
+  border-radius: var(--glacier-radius-full);
 }
 
 .pfIdText {
@@ -189,13 +186,13 @@
 
 /* Level chip: a hexagon (symmetric - RTL safe). */
 .pfLevel {
-  clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 12px 100%, 0 50%);
   padding: 2px 18px;
   background: color-mix(in oklch, var(--glacier-accent-soft) 90%, transparent);
   font-size: var(--glacier-font-size-xs);
   font-weight: var(--glacier-font-weight-bold);
   letter-spacing: 0.06em;
   white-space: nowrap;
+  border-radius: var(--glacier-radius-full);
 }
 
 /* The page's h1: big, uppercase, tracked. */
@@ -305,8 +302,7 @@
   gap: var(--glacier-space-3);
 }
 
-/* Chamfered plate: cut at top-inline-end and bottom-inline-start, an accent
-   tick filling the top cut. Mirrored for RTL below. */
+/* A career plate: rounded, with an accent leading edge. */
 .pfPlate {
   position: relative;
   display: flex;
@@ -316,8 +312,8 @@
   padding: var(--glacier-space-4) var(--glacier-space-4) var(--glacier-space-3);
   border: 1px solid color-mix(in oklch, var(--glacier-border) 70%, transparent);
   background: color-mix(in oklch, var(--glacier-surface) 82%, transparent);
-  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
   animation: soRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+  border-radius: var(--glacier-radius-md);
 }
 
 .pfPlateRow > :nth-child(1) { animation-delay: 40ms; }
@@ -328,24 +324,19 @@
 .pfPlateRow > :nth-child(6) { animation-delay: 240ms; }
 .pfPlateRow > :nth-child(7) { animation-delay: 280ms; }
 
+/* The accent used to be a tick filling the chamfer's cut. With no cut to fill
+   it became a bare square in the corner, so it is a leading edge now - the same
+   accent language the mode plates and menu items already use. */
 .pfPlate::before {
   content: '';
   position: absolute;
-  inset-block-start: 0;
-  inset-inline-end: 0;
-  inline-size: 16px;
-  block-size: 16px;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 3px;
+  border-start-start-radius: inherit;
+  border-end-start-radius: inherit;
   background: var(--glacier-accent-solid);
-  clip-path: polygon(100% 0, 100% 100%, 0 0);
   opacity: 0.9;
-}
-
-[dir='rtl'] .pfPlate {
-  clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
-}
-
-[dir='rtl'] .pfPlate::before {
-  clip-path: polygon(0 0, 0 100%, 100% 0);
 }
 
 .pfPlateValue {
@@ -499,11 +490,11 @@
   block-size: 2.1rem;
   display: grid;
   place-items: center;
-  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
   background: color-mix(in oklch, var(--glacier-border) 40%, transparent);
   color: var(--glacier-text-muted);
   font-size: var(--glacier-font-size-sm);
   font-weight: var(--glacier-font-weight-bold);
+  border-radius: var(--glacier-radius-full);
 }
 
 .pfLogResult[data-result='win'] {
@@ -667,11 +658,7 @@
   border: 1px solid color-mix(in oklch, var(--glacier-border) 80%, transparent);
   background: color-mix(in oklch, var(--glacier-bg) 62%, transparent);
   backdrop-filter: blur(var(--glacier-blur-sm));
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%);
-}
-
-[dir='rtl'] .frTally {
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+  border-radius: var(--glacier-radius-md);
 }
 
 .frTally::before {
@@ -747,7 +734,7 @@
       transparent 60%
     ),
     color-mix(in oklch, var(--glacier-surface) 88%, transparent);
-  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+  border-radius: var(--glacier-radius-lg);
 }
 
 [dir='rtl'] .frRecruitPlate {
@@ -758,7 +745,6 @@
       transparent 60%
     ),
     color-mix(in oklch, var(--glacier-surface) 88%, transparent);
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 18px 100%, 0 calc(100% - 18px));
 }
 
 /* Accent leading edge, inside the clip. */
@@ -808,12 +794,12 @@
   display: grid;
   place-items: center;
   padding-inline: 8px;
-  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
   background: var(--glacier-accent-soft);
   color: var(--glacier-accent-text);
   font-size: var(--glacier-font-size-sm);
   font-weight: var(--glacier-font-weight-bold);
   font-variant-numeric: tabular-nums;
+  border-radius: var(--glacier-radius-full);
 }
 
 .frGrid {
@@ -834,15 +820,11 @@
   padding-inline-start: calc(var(--glacier-space-4) + 4px);
   border: 1px solid color-mix(in oklch, var(--glacier-border) 65%, transparent);
   background: color-mix(in oklch, var(--glacier-surface) 78%, transparent);
-  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
   animation: soRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
   transition:
     border-color var(--glacier-duration-fast) var(--glacier-ease-out),
     background-color var(--glacier-duration-fast) var(--glacier-ease-out);
-}
-
-[dir='rtl'] .frCard {
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 12px 100%, 0 12px);
+  border-radius: var(--glacier-radius-lg);
 }
 
 /* The status edge: glows inward past the clip. */

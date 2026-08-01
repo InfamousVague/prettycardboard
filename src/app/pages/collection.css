@@ -5,9 +5,12 @@
    with completion meters, owned cards, ghost sleeves for the holes, NEW glow
    on first-time pulls.
 
-   Shape language: CHAMFERED corner cuts (vault-door plating) - an echo of the
-   home page's skew idiom, deliberately not the same parallelogram. Chamfers
-   are clip-paths, so asymmetric ones are mirrored under [dir='rtl'] by hand. */
+   Shape language: plain rounded plates. This page once cut a chamfer off each
+   corner (vault-door plating, echoing home's skew); the cuts were pulled at the
+   owner's request - corners are not cropped anywhere in the app now. The depth
+   and focus treatments below still use drop-shadow and an inset ring, which a
+   clip-path once forced; they are kept because they render identically on a
+   rounded rect and swapping them is churn, not a fix. */
 
 .collHead {
   display: flex;
@@ -144,8 +147,8 @@
   margin-block-start: var(--glacier-space-2);
 }
 
-/* The one unmissable action: a chamfered accent plate. clip-path swallows
-   box-shadow, so elevation rides drop-shadow (which follows the cut shape). */
+/* The one unmissable action: an accent plate. Elevation rides drop-shadow,
+   which a clip-path once required and which still looks right. */
 .covOpenCta {
   appearance: none;
   cursor: pointer;
@@ -164,15 +167,11 @@
   text-transform: uppercase;
   letter-spacing: 0.1em;
   white-space: nowrap;
-  clip-path: polygon(0 0.8rem, 0.8rem 0, 100% 0, 100% calc(100% - 0.8rem), calc(100% - 0.8rem) 100%, 0 100%);
   filter: drop-shadow(0 8px 20px rgb(0 0 0 / 0.4));
   transition:
     scale var(--glacier-duration-fast) var(--glacier-ease-out),
     filter var(--glacier-duration-fast) var(--glacier-ease-out);
-}
-
-[dir='rtl'] .covOpenCta {
-  clip-path: polygon(0 0, calc(100% - 0.8rem) 0, 100% 0.8rem, 100% 100%, 0.8rem 100%, 0 calc(100% - 0.8rem));
+  border-radius: var(--glacier-radius-md);
 }
 
 .covOpenCta svg {
@@ -215,7 +214,7 @@
   opacity: 1;
   translate: 0 0;
 }
-/* clip-path swallows an outset outline; draw it inside the plate. */
+/* The ring draws inside the plate - an outset one used to be clipped away. */
 .covOpenCta:focus-visible {
   outline: 2px solid var(--glacier-accent-solid);
   outline-offset: -4px;
@@ -306,11 +305,7 @@
   border: 1px solid color-mix(in oklch, var(--glacier-border) 75%, transparent);
   background: color-mix(in oklch, var(--glacier-surface) 78%, transparent);
   backdrop-filter: blur(var(--glacier-blur-sm));
-  clip-path: polygon(0 0.7rem, 0.7rem 0, 100% 0, 100% calc(100% - 0.7rem), calc(100% - 0.7rem) 100%, 0 100%);
-}
-
-[dir='rtl'] .covPlate {
-  clip-path: polygon(0 0, calc(100% - 0.7rem) 0, 100% 0.7rem, 100% 100%, 0.7rem 100%, 0 calc(100% - 0.7rem));
+  border-radius: var(--glacier-radius-md);
 }
 
 /* accent leading edge (logical start; the chamfer clips its top on purpose) */
@@ -488,11 +483,7 @@
   padding: var(--glacier-space-3) var(--glacier-space-4);
   border: 1px solid var(--glacier-border-subtle);
   background: color-mix(in oklch, var(--glacier-surface) 85%, transparent);
-  clip-path: polygon(0 0.6rem, 0.6rem 0, 100% 0, 100% calc(100% - 0.6rem), calc(100% - 0.6rem) 100%, 0 100%);
-}
-
-[dir='rtl'] .collToolbar {
-  clip-path: polygon(0 0, calc(100% - 0.6rem) 0, 100% 0.6rem, 100% 100%, 0.6rem 100%, 0 calc(100% - 0.6rem));
+  border-radius: var(--glacier-radius-lg);
 }
 
 .collSearch {

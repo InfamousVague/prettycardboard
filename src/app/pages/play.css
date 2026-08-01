@@ -159,11 +159,7 @@
   backdrop-filter: blur(var(--glacier-blur-sm));
   border: 1px solid color-mix(in oklch, var(--glacier-border) 70%, transparent);
   /* The page's shape: a chamfered corner on the block-start inline-end. */
-  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
-}
-
-[dir='rtl'] .pgCareerPlate {
-  clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%, 0 12px);
+  border-radius: var(--glacier-radius-md);
 }
 
 .pgCareerValue {
@@ -263,7 +259,6 @@
   -webkit-backdrop-filter: blur(var(--glacier-blur-md));
   /* The chamfer: box-shadow would be clipped with the shape, so depth and the
      hover glow ride drop-shadows (they follow the clip). */
-  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
   filter: drop-shadow(0 8px 20px rgb(0 0 0 / 0.3));
   transition:
     translate var(--glacier-duration-fast) var(--glacier-ease-out),
@@ -271,10 +266,10 @@
     filter var(--glacier-duration-fast) var(--glacier-ease-out);
   /* Entrance: base state is the settled grid. */
   animation: pgRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+  border-radius: var(--glacier-radius-lg);
 }
 
 [dir='rtl'] .pgMode {
-  clip-path: polygon(18px 0, 100% 0, 100% 100%, 0 100%, 0 18px);
   background:
     radial-gradient(
       130% 110% at 100% 0%,
