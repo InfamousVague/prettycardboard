@@ -1,0 +1,207 @@
+/* The chat ball: a Messenger-style chat head in the bottom leading corner,
+   with its newest lines floating above it.
+
+   POSITION, and why it is safe here: the pack dock owns the MIDDLE of this same
+   edge (packDock.css pins it to top: 50%), and the table's own bottom-start
+   corner belongs to the zone piles only on a phone mid-match - which is exactly
+   the case TablePage does not render this in. So the corner is free wherever
+   the ball actually appears.
+
+   Z-INDEX: 94, one below the pack dock's 95. Both are ambient floating chrome;
+   when they overlap at all, the thing the player deliberately dragged there
+   should win. Still under the palette (110), card popup (120) and pickers
+   (130), which are all things the player opened on purpose. */
+
+.chatBallRoot {
+  position: fixed;
+  z-index: 94;
+  inset-block-end: calc(var(--glacier-space-4) + env(safe-area-inset-bottom, 0px));
+  inset-inline-start: calc(var(--glacier-space-4) + env(safe-area-inset-left, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--glacier-space-2);
+  /* INERT container: only the ball and the bubbles take pointers back, so the
+     empty column above the ball never eats a click meant for the board. */
+  pointer-events: none;
+}
+
+/* RTL: the inline inset flips on its own, but env() does not - the safe area
+   on the leading edge is the RIGHT one there. */
+:root[dir='rtl'] .chatBallRoot {
+  inset-inline-start: calc(var(--glacier-space-4) + env(safe-area-inset-right, 0px));
+}
+
+/* ---- the ball ---- */
+
+.chatBall {
+  pointer-events: auto;
+  appearance: none;
+  position: relative;
+  flex: none;
+  inline-size: 3.25rem;
+  block-size: 3.25rem;
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  background: var(--glacier-glass-regular);
+  backdrop-filter: blur(var(--glacier-blur-sm)) saturate(var(--glacier-glass-saturate));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.38);
+  color: var(--glacier-text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition:
+    scale var(--glacier-duration-fast) var(--glacier-ease-out),
+    background-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.chatBall:hover {
+  scale: 1.06;
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 55%, var(--glacier-glass-border));
+}
+
+.chatBall:focus-visible {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: 3px;
+}
+
+/* Open, the ball reads as pressed rather than as an invitation. */
+.chatBall[data-open] {
+  background: color-mix(in oklch, var(--glacier-accent-solid) 24%, var(--glacier-glass-regular));
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 60%, transparent);
+  color: var(--glacier-accent-text);
+}
+
+.chatBallCount {
+  position: absolute;
+  inset-block-start: -2px;
+  inset-inline-end: -2px;
+  min-inline-size: 1.15rem;
+  padding-inline: 0.28em;
+  border-radius: var(--glacier-radius-full);
+  background: var(--glacier-accent-solid);
+  color: var(--glacier-accent-contrast);
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-bold);
+  line-height: 1.15rem;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--glacier-bg);
+}
+
+/* ---- the floating lines ---- */
+
+.chatBallStack {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--glacier-space-2);
+  /* Wide enough for a sentence, capped so a long line wraps instead of
+     stretching across the board. */
+  inline-size: min(20rem, 60vw);
+}
+
+.chatBubble {
+  pointer-events: auto;
+  appearance: none;
+  cursor: pointer;
+  text-align: start;
+  position: relative;
+  display: grid;
+  gap: 1px;
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  padding-inline-end: var(--glacier-space-6);
+  border-radius: var(--glacier-radius-lg);
+  /* The corner nearest the ball is squared off, so the stack reads as coming
+     out of it rather than floating unattached. */
+  border-end-start-radius: var(--glacier-radius-xs);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  background: var(--glacier-glass-thick);
+  backdrop-filter: blur(var(--glacier-blur-md)) saturate(var(--glacier-glass-saturate));
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.34);
+  color: var(--glacier-text);
+}
+
+.chatBubble:hover {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-glass-border));
+}
+
+.chatBubble:focus-visible {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: 2px;
+}
+
+.chatBubbleFrom {
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-accent-text);
+}
+
+.chatBubbleText {
+  font-size: var(--glacier-font-size-sm);
+  line-height: var(--glacier-leading-sm);
+  /* Three lines then ellipsis: a pasted decklist must not become a wall. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.chatBubbleClose {
+  position: absolute;
+  inset-block-start: var(--glacier-space-1);
+  inset-inline-end: var(--glacier-space-1);
+  display: grid;
+  place-items: center;
+  inline-size: 1.35rem;
+  block-size: 1.35rem;
+  border-radius: var(--glacier-radius-full);
+  color: var(--glacier-text-subtle);
+  opacity: 0;
+  transition: opacity var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+/* Revealed on hover/focus of the bubble, and always on a touch screen - there
+   is no hover there, so a permanently invisible dismiss would be unreachable. */
+.chatBubble:hover .chatBubbleClose,
+.chatBubble:focus-within .chatBubbleClose,
+.chatBubbleClose:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .chatBubbleClose {
+    opacity: 1;
+  }
+}
+
+.chatBubbleClose:hover {
+  color: var(--glacier-text);
+  background: color-mix(in oklch, var(--glacier-surface) 70%, transparent);
+}
+
+/* Phones: the ball tucks in tighter and the stack narrows, since the board is
+   already fighting for every pixel. */
+@media (max-width: 700px), (max-height: 480px) {
+  .chatBallRoot {
+    inset-block-end: calc(var(--glacier-space-3) + env(safe-area-inset-bottom, 0px));
+    inset-inline-start: calc(var(--glacier-space-3) + env(safe-area-inset-left, 0px));
+  }
+
+  .chatBall {
+    inline-size: 2.85rem;
+    block-size: 2.85rem;
+  }
+
+  .chatBallStack {
+    inline-size: min(16rem, 66vw);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chatBall,
+  .chatBubbleClose {
+    transition: none;
+  }
+}

@@ -72,6 +72,37 @@ export interface ChangelogRelease {
  *  load-bearing, but keep the literal in order for whoever reads it. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: '0.8.1',
+    date: '2026-08-01',
+    entries: [
+      {
+        id: 'glass-panels',
+        icon: PanelRightOpen,
+        title: 'clGlassPanels',
+        desc: 'clGlassPanelsDesc',
+        kind: 'improved',
+        category: 'clCatLayout',
+        featured: true,
+      },
+      {
+        id: 'table-hud',
+        icon: Swords,
+        title: 'clTableHud',
+        desc: 'clTableHudDesc',
+        kind: 'improved',
+        category: 'clCatTable',
+      },
+      {
+        id: 'fixes-081',
+        icon: Wrench,
+        title: 'clFixes081',
+        desc: 'clFixes081Desc',
+        kind: 'fixed',
+        category: 'clCatApp',
+      },
+    ],
+  },
+  {
     version: '0.8.0',
     date: '2026-08-01',
     headline: 'clHeadline080',

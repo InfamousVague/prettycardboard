@@ -551,6 +551,60 @@ export const messages = {
   clCatSocial: { en: 'Social', es: 'Social', fr: 'Social', ar: 'اجتماعي' },
   clCatTable: { en: 'Table', es: 'Mesa', fr: 'Table', ar: 'الطاولة' },
 
+  // Evergreen, and deliberately version-free: bump-n-distribute stubs a
+  // changelog entry with these two keys when a release has no hand-written
+  // notes, so shipping a patch never needs an i18n edit first.
+  // --- 0.8.1 ---
+  clGlassPanels: {
+    en: 'Chat and library, wide and floating',
+    es: 'Chat y biblioteca, anchos y flotantes',
+    fr: 'Chat et bibliothèque, larges et flottants',
+    ar: 'الدردشة والمكتبة، عريضتان وعائمتان',
+  },
+  clGlassPanelsDesc: {
+    en: 'Both panels are a third of the window now, floating as real glass over the felt instead of a narrow column welded to the edge.',
+    es: 'Ambos paneles ocupan ahora un tercio de la ventana y flotan como cristal real sobre el tapete, en vez de ser una columna estrecha pegada al borde.',
+    fr: 'Les deux panneaux occupent désormais un tiers de la fenêtre et flottent comme du vrai verre au-dessus du tapis, au lieu d’une colonne étroite soudée au bord.',
+    ar: 'صارت اللوحتان تشغلان ثلث النافذة وتطفوان كزجاج حقيقي فوق البساط بدل عمود ضيّق ملتصق بالحافة.',
+  },
+  clTableHud: {
+    en: 'A real HUD at the table',
+    es: 'Un HUD de verdad en la mesa',
+    fr: 'Un vrai HUD à la table',
+    ar: 'واجهة معلومات حقيقية على الطاولة',
+  },
+  clTableHudDesc: {
+    en: 'Whose turn it is reads as a plate in that seat\'s own colour, and your life total carries its label and turns amber then red as it falls.',
+    es: 'De quién es el turno se lee como una placa con el color de ese asiento, y tu vida lleva su etiqueta y pasa a ámbar y luego a rojo según baja.',
+    fr: 'Le tour en cours s’affiche comme une plaque à la couleur du siège, et vos points de vie portent leur libellé et virent à l’ambre puis au rouge en baissant.',
+    ar: 'دور من الآن يظهر كلوحة بلون ذلك المقعد، ونقاط حياتك تحمل عنوانها وتتحوّل إلى الكهرماني ثم الأحمر كلما انخفضت.',
+  },
+  clFixes081: {
+    en: 'Buttons with their padding back',
+    es: 'Botones con su relleno de vuelta',
+    fr: 'Des boutons qui retrouvent leurs marges',
+    ar: 'أزرار تستعيد تباعدها',
+  },
+  clFixes081Desc: {
+    en: 'New deck and Import had no padding at all and were clipping their own labels. The right-hand rail no longer sits under its scrollbar, and muting a player is gone.',
+    es: 'Nuevo mazo e Importar no tenían ningún relleno y recortaban sus propias etiquetas. El panel derecho ya no queda bajo su barra de desplazamiento, y silenciar a un jugador ha desaparecido.',
+    fr: 'Nouveau deck et Importer n’avaient aucune marge et rognaient leurs propres libellés. Le rail de droite ne passe plus sous sa barre de défilement, et rendre un joueur muet a disparu.',
+    ar: 'لم يكن لزرّي «مجموعة جديدة» و«استيراد» أي تباعد فكانا يقصّان نصّهما. ولم يعد الشريط الأيمن يقع تحت شريط تمريره، وأُزيلت خاصية كتم اللاعبين.',
+  },
+
+  clRoutine: {
+    en: 'Fixes and polish',
+    es: 'Correcciones y mejoras',
+    fr: 'Corrections et finitions',
+    ar: 'إصلاحات وتحسينات',
+  },
+  clRoutineDesc: {
+    en: 'A round of fixes and refinements across the app.',
+    es: 'Una ronda de correcciones y mejoras por toda la aplicación.',
+    fr: 'Une série de corrections et d’améliorations dans toute l’application.',
+    ar: 'جولة من الإصلاحات والتحسينات في أنحاء التطبيق.',
+  },
+
   // --- 0.8.0: every screen is a game screen ---
   clHeadline080: {
     en: 'The whole app plays like a game now.',

@@ -113,6 +113,7 @@ import { LibrarySidebar } from './table/LibrarySidebar.tsx';
 import { PostMatch } from './table/PostMatch.tsx';
 import { PreMatch } from './table/PreMatch.tsx';
 import { LOBBY_NAV_DOCK_ID, PregameLobby } from './table/PregameLobby.tsx';
+import { ChatBall } from './table/ChatBall.tsx';
 import { LobbyChat } from './table/LobbyChat.tsx';
 import { DraftRoom } from './table/DraftRoom.tsx';
 import { TimelineCard } from './table/TimelineCard.tsx';
@@ -1946,25 +1947,8 @@ function SidePanel({
           </IconButton>
         </Tooltip>
       )}
-      {/* The lobby's chat lives here too, so there is one chat button in the
-          app instead of a nav toggle at the table and a floating chip in the
-          lobby stacked on the same corner. Mid-match on a phone the chat is a
-          sheet tab instead, so the button would be a second door to it. */}
-      {(!mobile || !room.started) && (
-        <Tooltip content={chatOpen ? t('tblChatClose') : t('tblChatOpen')}>
-          <span className="chatNavWrap">
-            <IconButton
-              size="sm"
-              variant="ghost"
-              aria-label={chatOpen ? t('tblChatClose') : t('tblChatOpen')}
-              onClick={() => setChatOpen((open) => !open)}
-            >
-              <MessageSquare size={16} />
-            </IconButton>
-            {!chatOpen && chatUnread > 0 && <span className="chatNavDot" aria-hidden />}
-          </span>
-        </Tooltip>
-      )}
+      {/* The chat's door is the floating ball in the bottom corner (ChatBall),
+          not a button in this row - so there is nothing to render here. */}
       {/* The chat's own dock toggle. It lives here rather than in LobbyChat's
           header because LobbyChat is shared with the phone sheet and the lobby,
           where there is nothing to dock into - the nav is the chat's chrome at
@@ -2049,6 +2033,20 @@ function SidePanel({
   // board - the same portal the lobby's nav has always used, one slot along.
   const chatEl = chatAsideEl && chatSlot ? createPortal(chatAsideEl, chatSlot) : chatAsideEl;
 
+  // The chat's door: a ball in the bottom corner, with incoming lines floating
+  // above it. Hidden mid-match on a phone, where the chat is a sheet tab and
+  // the bottom corner belongs to the zone piles - the same condition the nav
+  // button used, kept because the collision it avoids is still real.
+  const chatBallEl =
+    !mobile || !room.started ? (
+      <ChatBall
+        chat={chat}
+        open={chatVisible}
+        unread={chatUnread}
+        onToggle={() => setChatOpen((open) => !open)}
+      />
+    ) : null;
+
   if (mobile) {
     // Pregame mirrors the desktop rail: nav only. Vitals/players/log describe a
     // match in progress, and the lobby already lists the seats itself.
@@ -2070,6 +2068,7 @@ function SidePanel({
             </div>
           )}
           {chatEl}
+          {chatBallEl}
         </>
       );
     }
@@ -2141,6 +2140,7 @@ function SidePanel({
       <>
         {lobbyDock ? createPortal(navEl, lobbyDock) : null}
         {chatEl}
+        {chatBallEl}
       </>
     );
   }
@@ -2158,6 +2158,7 @@ function SidePanel({
         {navEl}
       </aside>
       {chatEl}
+      {chatBallEl}
     </>
   );
 }

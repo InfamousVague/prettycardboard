@@ -255,11 +255,46 @@ info(`version   ${current} → ${C.bold(version)}  (tag ${tag})`);
 // references, and this script must not need a compiler to read one string.
 const CHANGELOG_TS = join(ROOT, 'src', 'app', 'data', 'changelog.ts');
 const newestEntry = readFileSync(CHANGELOG_TS, 'utf8').match(/version:\s*'([^']+)'/)?.[1];
-if (newestEntry !== version && !ALLOW_NO_CHANGELOG) {
+// Not a refusal any more. Refusing was correct about the STAKES and wrong about
+// the remedy: it stopped a release dead over a file the script can perfectly
+// well write itself, so every patch release meant hand-editing the table first.
+// If this version is missing, a routine-maintenance entry is stubbed in at bump
+// time (below, next to the version files, so the tree stays clean for the
+// cleanliness check and the stub rides in the release commit). Write real notes
+// before releasing and this never fires - a human entry always wins.
+const stubChangelog = newestEntry !== version && !ALLOW_NO_CHANGELOG;
+if (stubChangelog && !readFileSync(CHANGELOG_TS, 'utf8').includes('export const CHANGELOG: ChangelogRelease[] = [')) {
   fail(
-    `CHANGELOG's newest entry is ${newestEntry ?? 'unreadable'}, not ${version}`,
-    'add the release to src/app/data/changelog.ts first — without it the what\'s-new modal never opens, so this release ships invisible. Pass --allow-no-changelog to ship anyway.',
+    'could not find the CHANGELOG array to add a release to',
+    `src/app/data/changelog.ts no longer starts its table with the expected declaration, so ${version} cannot be stubbed in. Add the entry by hand, or pass --allow-no-changelog.`,
   );
+}
+
+/** The stub: one "fixes and polish" row, using the two evergreen keys so no
+ *  i18n work is needed per release. `id` carries the version so two stubs can
+ *  never collide as list keys. */
+function writeChangelogStub(v) {
+  const raw = readFileSync(CHANGELOG_TS, 'utf8');
+  const anchor = 'export const CHANGELOG: ChangelogRelease[] = [\n';
+  const at = raw.indexOf(anchor) + anchor.length;
+  const block =
+    `  {\n` +
+    `    version: '${v}',\n` +
+    `    date: '${new Date().toISOString().slice(0, 10)}',\n` +
+    `    entries: [\n` +
+    `      {\n` +
+    `        id: 'routine-${v.replace(/\./g, '-')}',\n` +
+    `        icon: Wrench,\n` +
+    `        title: 'clRoutine',\n` +
+    `        desc: 'clRoutineDesc',\n` +
+    `        kind: 'fixed',\n` +
+    `        category: 'clCatApp',\n` +
+    `      },\n` +
+    `    ],\n` +
+    `  },\n`;
+  writeFileSync(CHANGELOG_TS, raw.slice(0, at) + block + raw.slice(at));
+  const check = readFileSync(CHANGELOG_TS, 'utf8').match(/version:\s*'([^']+)'/)?.[1];
+  if (check !== v) fail(`stubbing the changelog produced newest entry "${check}", expected "${v}"`);
 }
 
 // git: branch, cleanliness, remote identity, remote sync
@@ -339,6 +374,7 @@ if (!SKIP_CHECKS && !DRY) {
 step('Plan');
 [
   `bump package.json + src-tauri/tauri.conf.json to ${version}`,
+  ...(stubChangelog ? [`stub a "fixes and polish" changelog entry for ${version}`] : []),
   ALLOW_DIRTY ? `commit those + all local changes as "Release ${version}"` : `commit ONLY those two files as "Release ${version}"`,
   `tag ${tag} and push ${branch} + ${tag}  ${C.dim('(starts CI: Windows + Linux)')}`,
   doMac ? 'build + sign + notarize macOS locally, upload to the release' : C.dim('skip macOS'),
@@ -358,13 +394,21 @@ if (!(await confirm(`\nShip ${C.bold(tag)}?`))) {
 
 // --- bump -----------------------------------------------------------------
 step(`Bumping to ${version}`, 'bumped');
+// Captured BEFORE the write so a rollback restores the file byte-for-byte
+// rather than trying to un-parse the block back out of it.
+const changelogBefore = readFileSync(CHANGELOG_TS, 'utf8');
 writeVersion(PKG, current, version);
 writeVersion(TAURI_CONF, current, version);
+if (stubChangelog) {
+  writeChangelogStub(version);
+  info(`changelog: stubbed a routine entry for ${version} — edit it if this release deserves real notes`);
+}
 info('package.json, src-tauri/tauri.conf.json');
 
 const revertVersions = () => {
   writeVersion(PKG, version, current);
   writeVersion(TAURI_CONF, version, current);
+  if (stubChangelog) writeFileSync(CHANGELOG_TS, changelogBefore);
   warn(`reverted versions to ${current}`);
 };
 
@@ -383,7 +427,10 @@ try {
   } else {
     // --only: commit exactly these paths regardless of what else is staged,
     // so an unrelated `git add` can never ride along in a release commit.
-    run('git', ['commit', '--only', PKG, TAURI_CONF, '-m', `Release ${version}`]);
+    // CHANGELOG_TS joins them when it was stubbed: leaving it out would commit a
+    // version whose release notes are an uncommitted local edit.
+    const paths = stubChangelog ? [PKG, TAURI_CONF, CHANGELOG_TS] : [PKG, TAURI_CONF];
+    run('git', ['commit', '--only', ...paths, '-m', `Release ${version}`]);
   }
   committed = true;
   run('git', ['tag', '-a', tag, '-m', `PrettyCardboard ${version}`]);
