@@ -125,15 +125,17 @@ select,
   display: none;
 }
 
-/* Floating layout: the rail and the contextual sidebar both detach into
-   rounded cards, echoing the kit AppShell's floating mode. Content stays flush
-   and remains the scroll area. Logical margins keep the single gutter between
-   the panels correct under RTL. */
-.appWindow[data-layout='floating'] .appRail,
-
-/* rail: outer gutter on the start edge, a single gutter to the sidebar */
+/* Floating layout: the rail detaches into a rounded card, echoing the kit
+   AppShell's floating mode. Content stays flush and remains the scroll area.
+   Logical margins keep the gutters correct under RTL. */
 .appWindow[data-layout='floating'] .appRail {
+  margin-block: var(--glacier-space-4);
   margin-inline: var(--glacier-space-4);
+  height: calc(100% - var(--glacier-space-4) * 2);
+  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  border-radius: var(--glacier-radius-xl);
+  box-shadow: var(--glacier-shadow-3);
+  overflow: hidden;
 }
 
 /* Floating layout: the content column is the third card in the row, so its
@@ -1288,7 +1290,13 @@ select,
 
 /* Full-width, full-height surfaces on phones: the floating layout's
    detached-card margins waste width the screen doesn't have. */
-:root[data-phone='on'] .appWindow[data-layout='floating'] .appRail,
+:root[data-phone='on'] .appWindow[data-layout='floating'] .appRail {
+  margin: 0;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
 
 /* LANDSCAPE phone: the nav becomes a vertical rail on the leading edge.
    A bottom bar costs 85px of a 375px-tall screen - 22.7% of everything the
