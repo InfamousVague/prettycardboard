@@ -8,6 +8,7 @@ import {
   Input,
   OtpField,
   Pill,
+  ProgressBar,
   SegmentedControl,
   Select,
   Size,
@@ -154,7 +155,8 @@ function GameMenu({
   const t = useT();
   const decks = useApp((state) => state.decks);
   const join = useGame((state) => state.join);
-  const rank = rankFor(stats?.played ?? 0);
+  const played = stats?.played ?? 0;
+  const rank = rankFor(played);
 
   // The most recently touched deck dresses the band; a fresh account gets the
   // default felt the tables use.
@@ -181,10 +183,27 @@ function GameMenu({
           <Avatar name={identity?.username} size="lg" />
           <StatusDot tone="success" pulse className="gmBadgePresence" />
         </span>
-        <span className="gmBadgeId">
+        <div className="gmBadgeId">
           <span className="gmBadgeRank">{rank.title}</span>
-          <span className="gmBadgeName">{identity?.username}</span>
-        </span>
+          {/* The page's h1: the badge owns the player's name, like OW's portrait. */}
+          <Heading level={1} noMargin className="gmBadgeName">
+            {identity?.username}
+          </Heading>
+          {rank.next != null && (
+            <div className="gmBadgeProgress">
+              <ProgressBar
+                value={Math.round(rank.progress * 100)}
+                max={100}
+                size="sm"
+                tone="accent"
+                aria-label={t('hmNextRank')}
+              />
+              <span className="gmBadgeProgressLabel">
+                {rank.next - played} {t('hmToNextRank')}
+              </span>
+            </div>
+          )}
+        </div>
         <Pill size="sm" tone="accent" variant="soft">
           {t('hmLevel')} {rank.level}
         </Pill>

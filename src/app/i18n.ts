@@ -1989,7 +1989,6 @@ export const messages = {
   hmNextRank: { en: 'Next rank', es: 'Siguiente rango', fr: 'Rang suivant', ar: 'الرتبة التالية' },
   hmToNextRank: { en: 'to next rank', es: 'para el siguiente rango', fr: 'avant le prochain rang', ar: 'حتى الرتبة التالية' },
   hmContinue: { en: 'Continue', es: 'Continuar', fr: 'Continuer', ar: 'متابعة' },
-  hmStartTable: { en: 'Start a table', es: 'Crear mesa', fr: 'Lancer une table', ar: 'ابدأ طاولة' },
   hmStartTableSub: { en: 'Host or join a game', es: 'Crea o únete a una partida', fr: 'Héberger ou rejoindre', ar: 'استضف أو انضم' },
   // game-menu band (the Overwatch-style stack; PLAY reuses playTitle,
   // RESUME reuses hmContinue, DECKS/BROWSE reuse the nav labels)

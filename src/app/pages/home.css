@@ -1,31 +1,424 @@
-/* Home dashboard: hero band, quick-play card, and the three shelves.
-   Section rhythm (width, gutters, gaps) comes from .page in app.css. */
+/* Home dashboard: the game-menu band, KPI stat strip, table setup, and the
+   shelf carousels. Section rhythm (width, gutters, gaps) comes from .page in
+   app.css. */
 
-/* ---- hero ---- */
+/* ========================================================================
+   Game menu band — Overwatch main-menu idiom: full-bleed deck art behind a
+   stacked, skewed action menu, player badge in the far corner.
+   ======================================================================== */
 
-/* The greeting as a band: a soft accent glow bleeding in from the corners. */
-.homeHero {
+/* Scoped under .homePage to beat the `.page section { display: flex }`
+   scaffolding rule: the band is its own composition. */
+.homePage .gmBand {
   position: relative;
+  isolation: isolate;
   overflow: hidden;
-  padding: var(--glacier-space-6) var(--glacier-space-6);
+  display: flex;
+  /* .page section sets flex-direction: column; the band is a row. */
+  flex-direction: row;
+  align-items: center;
+  min-block-size: clamp(21rem, 44vh, 25rem);
   border: 1px solid var(--glacier-border-subtle);
-  border-radius: var(--glacier-radius-xl);
-  background:
-    radial-gradient(
-      110% 160% at 8% -30%,
-      color-mix(in oklch, var(--glacier-accent-solid) 16%, transparent),
-      transparent 58%
-    ),
-    radial-gradient(
-      90% 130% at 96% 130%,
-      color-mix(in oklch, var(--glacier-accent-solid) 9%, transparent),
-      transparent 62%
-    ),
-    var(--glacier-surface);
+  border-radius: var(--glacier-radius-2xl);
+  background: var(--glacier-surface);
+  box-shadow: var(--glacier-shadow-3);
 }
 
-.homeHero .lede {
-  margin-block-start: var(--glacier-space-2);
+/* The most recent deck's commander art (or the default felt) fills the band. */
+.gmArt {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-size: cover;
+  background-position: center 18%;
+  filter: saturate(1.06);
+}
+
+/* Heavy toward the menu side so type always reads, thinning over the art,
+   plus a soft floor vignette. */
+.gmScrim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--glacier-bg) 94%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-bg) 80%, transparent) 38%,
+      color-mix(in oklch, var(--glacier-bg) 32%, transparent) 72%,
+      color-mix(in oklch, var(--glacier-bg) 8%, transparent) 100%
+    ),
+    linear-gradient(180deg, transparent 55%, color-mix(in oklch, var(--glacier-bg) 52%, transparent) 100%);
+}
+
+[dir='rtl'] .gmScrim {
+  background:
+    linear-gradient(
+      -90deg,
+      color-mix(in oklch, var(--glacier-bg) 94%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-bg) 80%, transparent) 38%,
+      color-mix(in oklch, var(--glacier-bg) 32%, transparent) 72%,
+      color-mix(in oklch, var(--glacier-bg) 8%, transparent) 100%
+    ),
+    linear-gradient(180deg, transparent 55%, color-mix(in oklch, var(--glacier-bg) 52%, transparent) 100%);
+}
+
+/* --- the menu stack (inline-start column) --- */
+
+.gmMenu {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-3);
+  inline-size: min(26rem, 58%);
+  padding: var(--glacier-space-8) var(--glacier-space-8);
+}
+
+/* Staggered entrance. CSS-only with a safe end state: the base style is fully
+   visible, keyframes start offset and settle there, so a frozen frame after
+   settle (or no animation at all) still shows the finished menu. */
+@keyframes gmRise {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+.gmMenu > * {
+  animation: gmRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+}
+.gmMenu > :nth-child(1) { animation-delay: 0ms; }
+.gmMenu > :nth-child(2) { animation-delay: 60ms; }
+.gmMenu > :nth-child(3) { animation-delay: 120ms; }
+.gmMenu > :nth-child(4) { animation-delay: 180ms; }
+
+/* --- one menu item: a parallelogram with an accent leading edge --- */
+
+.gmItem {
+  appearance: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  text-align: start;
+  color: var(--glacier-text);
+  border: 1px solid color-mix(in oklch, var(--glacier-border) 75%, transparent);
+  border-radius: var(--glacier-radius-sm);
+  background: color-mix(in oklch, var(--glacier-surface) 72%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  padding: var(--glacier-space-3) var(--glacier-space-5);
+  /* The OW2 skew. The `scale` property (hover grow) and the `translate`
+     property (entrance) compose with this transform without touching it. */
+  transform: skewX(-8deg);
+  transition:
+    scale var(--glacier-duration-fast) var(--glacier-ease-out),
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    background-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    box-shadow var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+/* accent leading edge */
+.gmItem::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 3px;
+  background: var(--glacier-accent-solid);
+  opacity: 0.9;
+  transition: inline-size var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+/* accent sweep that slides in from the leading edge on hover/focus */
+.gmItem::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    color-mix(in oklch, var(--glacier-accent-solid) 26%, transparent),
+    color-mix(in oklch, var(--glacier-accent-solid) 8%, transparent) 55%,
+    transparent 85%
+  );
+  opacity: 0;
+  translate: -16% 0;
+  transition:
+    opacity var(--glacier-duration-fast) var(--glacier-ease-out),
+    translate var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.gmItem:hover,
+.gmItem:focus-visible {
+  scale: 1.03;
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 60%, var(--glacier-border));
+  box-shadow:
+    0 10px 30px rgb(0 0 0 / 0.45),
+    0 0 22px color-mix(in oklch, var(--glacier-accent-solid) 30%, transparent);
+}
+.gmItem:hover::before,
+.gmItem:focus-visible::before {
+  inline-size: 6px;
+}
+.gmItem:hover::after,
+.gmItem:focus-visible::after {
+  opacity: 1;
+  translate: 0 0;
+}
+.gmItem:focus-visible {
+  outline: 2px solid var(--glacier-accent-solid);
+  outline-offset: 3px;
+}
+
+/* Counter-skew: content stays upright inside the parallelogram. */
+.gmItemInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glacier-space-4);
+  transform: skewX(8deg);
+}
+
+.gmItemText {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.gmItemTitle {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: var(--glacier-font-weight-bold);
+  font-size: var(--glacier-font-size-lg);
+  line-height: 1.15;
+}
+
+.gmItemSub {
+  display: block;
+  margin-block-start: 2px;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-muted);
+}
+
+.gmItemIcon {
+  flex: none;
+  color: var(--glacier-accent-text);
+  opacity: 0.9;
+}
+
+/* PLAY: the unmissable one — accent-washed, tallest type in the stack. */
+.gmPrimary {
+  padding-block: var(--glacier-space-5);
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-border));
+  background: color-mix(in oklch, var(--glacier-accent-soft) 85%, transparent);
+}
+.gmPrimary::before {
+  inline-size: 5px;
+  opacity: 1;
+}
+.gmPrimary .gmItemTitle {
+  font-size: clamp(2rem, 2.6vw, 2.5rem);
+  letter-spacing: 0.1em;
+}
+.gmPrimary .gmItemSub {
+  font-size: var(--glacier-font-size-sm);
+  color: var(--glacier-text-subtle);
+}
+
+/* RESUME: live-table row with the pulse dot and the table's name. */
+.gmResumeSub {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  min-inline-size: 0;
+}
+.gmResumeName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* DECKS / BROWSE: the quiet half-height pair. */
+.gmHalfRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--glacier-space-3);
+}
+.gmHalf {
+  padding-block: var(--glacier-space-2);
+}
+.gmHalf .gmItemInner {
+  justify-content: flex-start;
+  gap: var(--glacier-space-3);
+}
+.gmHalf .gmItemTitle {
+  font-size: var(--glacier-font-size-sm);
+  letter-spacing: 0.1em;
+}
+
+/* --- player badge (inline-end top corner) --- */
+
+.gmBadge {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: var(--glacier-space-5);
+  inset-inline-end: var(--glacier-space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  padding-block: var(--glacier-space-2);
+  padding-inline: var(--glacier-space-2) var(--glacier-space-4);
+  border: 1px solid color-mix(in oklch, var(--glacier-border) 80%, transparent);
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--glacier-bg) 62%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
+  animation: gmRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
+  animation-delay: 240ms;
+}
+
+.gmBadgeAvatar {
+  position: relative;
+  flex: none;
+}
+.gmBadgePresence {
+  position: absolute;
+  inset-block-end: 1px;
+  inset-inline-end: 1px;
+}
+
+.gmBadgeId {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.gmBadgeRank {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-accent-text);
+}
+/* An h1 semantically (the page's document outline starts here), badge-sized
+   visually — the two-class selector outscores the kit's heading class. */
+.gmBadge .gmBadgeName {
+  font-weight: var(--glacier-font-weight-bold);
+  font-size: var(--glacier-font-size-md);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-inline-size: 12rem;
+}
+
+/* Next-rank ladder: the progress the old hero carried, shrunk to badge scale.
+   Hidden at the top rank (rank.next == null renders nothing). */
+.gmBadgeProgress {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  margin-block-start: var(--glacier-space-1);
+  max-inline-size: 12rem;
+}
+.gmBadgeProgress > :first-child {
+  flex: 1;
+  min-inline-size: 3rem;
+}
+.gmBadgeProgressLabel {
+  flex: none;
+  white-space: nowrap;
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle);
+}
+
+/* --- RTL: transforms do not auto-flip; mirror the skew and the sweep --- */
+
+[dir='rtl'] .gmItem {
+  transform: skewX(8deg);
+}
+[dir='rtl'] .gmItemInner {
+  transform: skewX(-8deg);
+}
+[dir='rtl'] .gmItem::after {
+  translate: 16% 0;
+}
+[dir='rtl'] .gmItem:hover::after,
+[dir='rtl'] .gmItem:focus-visible::after {
+  translate: 0 0;
+}
+
+/* --- phone (PHONE_QUERY): stacked band, full-bleed rows, nothing skewed --- */
+
+@media (max-width: 700px), (max-height: 480px) {
+  .homePage .gmBand {
+    min-block-size: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--glacier-space-4);
+    padding: var(--glacier-space-4);
+    border-radius: var(--glacier-radius-xl);
+  }
+  .gmBadge {
+    position: static;
+    border-radius: var(--glacier-radius-xl);
+  }
+  /* the level pill rides the far end of the badge row */
+  .gmBadge > :last-child {
+    margin-inline-start: auto;
+  }
+  .gmMenu {
+    inline-size: 100%;
+    padding: 0;
+  }
+  .gmHalfRow {
+    grid-template-columns: 1fr;
+  }
+  .gmItem,
+  [dir='rtl'] .gmItem {
+    transform: none;
+  }
+  .gmItemInner,
+  [dir='rtl'] .gmItemInner {
+    transform: none;
+  }
+  .gmPrimary .gmItemTitle {
+    font-size: var(--glacier-font-size-2xl);
+  }
+  /* text spans the full art now: one even scrim */
+  .gmScrim,
+  [dir='rtl'] .gmScrim {
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--glacier-bg) 88%, transparent),
+      color-mix(in oklch, var(--glacier-bg) 74%, transparent)
+    );
+  }
+}
+
+/* --- reduced motion: everything still works, nothing slides --- */
+
+@media (prefers-reduced-motion: reduce) {
+  .gmMenu > *,
+  .gmBadge {
+    animation: none;
+  }
+  .gmItem,
+  .gmItem::before,
+  .gmItem::after {
+    transition: none;
+  }
+  .gmItem:hover,
+  .gmItem:focus-visible {
+    scale: none;
+  }
+  .gmItem::after,
+  [dir='rtl'] .gmItem::after {
+    translate: 0 0;
+  }
 }
 
 /* ---- shared shelf scaffolding ---- */
@@ -39,58 +432,7 @@
   min-block-size: 2rem;
 }
 
-/* ---- quick play ---- */
-
-.homeQuick {
-  display: flex;
-  flex-direction: column;
-  gap: var(--glacier-space-4);
-}
-
-/* A compact inline form: labeled fields in a row, action button on the end. */
-.homeQuickRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--glacier-space-4);
-}
-
-.homeField {
-  display: flex;
-  flex-direction: column;
-  gap: var(--glacier-space-2);
-  min-inline-size: 0;
-}
-
-.homeField > * {
-  inline-size: 100%;
-  max-inline-size: 100%;
-  min-inline-size: 0;
-}
-
-.homeQuickRow > button {
-  flex: none;
-  margin-inline-start: auto;
-}
-
-.homeFieldGrow {
-  flex: 1 1 12rem;
-  max-inline-size: 26rem;
-}
-
-.homeQuickDivider {
-  block-size: 1px;
-  background: var(--glacier-border-subtle);
-}
-
 /* ---- deck shelves (recent + featured) ---- */
-
-.homeStackRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--glacier-space-5) var(--glacier-space-4);
-  align-items: flex-start;
-}
 
 .homeStackItem {
   display: flex;
@@ -117,25 +459,7 @@
   white-space: nowrap;
 }
 
-/* ---- friends strip ---- */
-
-.homeFriendsRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--glacier-space-3);
-}
-
-.homeFriend {
-  display: flex;
-  align-items: center;
-  gap: var(--glacier-space-2);
-  padding: var(--glacier-space-2) var(--glacier-space-3);
-  border: 1px solid var(--glacier-border-subtle);
-  border-radius: var(--glacier-radius-full);
-  background: var(--glacier-surface);
-}
-
-/* ---- quick play, gamified: two lobby tiles ---- */
+/* ---- table setup: the detailed host/join machinery ---- */
 
 .qpGrid {
   display: grid;
@@ -166,35 +490,6 @@
   border-color: color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-border));
   box-shadow: 0 10px 34px rgb(0 0 0 / 0.35);
   transform: translateY(-2px);
-}
-
-/* the commander presides over the host tile */
-.qpHostArt {
-  position: absolute;
-  inset: 0;
-  background-size: cover;
-  background-position: center 20%;
-  filter: saturate(1.05);
-}
-
-.qpTileScrim {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    100deg,
-    color-mix(in oklch, var(--glacier-bg) 96%, transparent) 0%,
-    color-mix(in oklch, var(--glacier-bg) 86%, transparent) 55%,
-    color-mix(in oklch, var(--glacier-bg) 45%, transparent) 100%
-  );
-}
-
-[dir='rtl'] .qpTileScrim {
-  background: linear-gradient(
-    -100deg,
-    color-mix(in oklch, var(--glacier-bg) 96%, transparent) 0%,
-    color-mix(in oklch, var(--glacier-bg) 86%, transparent) 55%,
-    color-mix(in oklch, var(--glacier-bg) 45%, transparent) 100%
-  );
 }
 
 .qpTileBody {
@@ -294,186 +589,10 @@
   padding-block: var(--glacier-space-2);
 }
 
-/* ---- jump back in: a resume banner above quick play ---- */
-
-.homeResume {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--glacier-space-4);
-  padding: var(--glacier-space-3) var(--glacier-space-4);
-  border: 1px solid color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border-subtle));
-  border-radius: var(--glacier-radius-xl);
-  background:
-    radial-gradient(
-      120% 180% at 0% -40%,
-      color-mix(in oklch, var(--glacier-accent-solid) 14%, transparent),
-      transparent 60%
-    ),
-    var(--glacier-surface);
-}
-
-.homeResumeInfo {
-  display: flex;
-  align-items: center;
-  gap: var(--glacier-space-3);
-  min-inline-size: 0;
-  color: var(--glacier-accent-text);
-}
-
-.homeResumeName {
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.homeResume > button {
-  flex: none;
-}
-
-/* ========================================================================
-   Gamified dashboard: player hero + KPI stat strip + shelf carousels
-   ======================================================================== */
+/* ---- page rhythm + KPI stat strip + carousels ---- */
 
 .homePage { gap: var(--glacier-space-5); }
 
-/* --- hero row: player card + side CTA (bento). Scoped under .homePage to beat
-   the `.page section { display: flex }` scaffolding rule. --- */
-.homePage .homeHeroRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr);
-  gap: var(--glacier-space-4);
-  align-items: stretch;
-}
-@media (max-width: 60rem) {
-  .homePage .homeHeroRow { grid-template-columns: 1fr; }
-}
-
-.heroCard {
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--glacier-space-5);
-  padding: var(--glacier-space-6);
-  border: 1px solid var(--glacier-border-subtle);
-  border-radius: var(--glacier-radius-2xl);
-  background:
-    radial-gradient(120% 150% at 0% -25%, color-mix(in oklch, var(--glacier-accent-solid) 24%, transparent), transparent 55%),
-    radial-gradient(120% 170% at 100% 135%, color-mix(in oklch, var(--glacier-accent-solid) 13%, transparent), transparent 60%),
-    var(--glacier-surface);
-  box-shadow: var(--glacier-shadow-3);
-}
-
-.heroPlayer {
-  display: flex;
-  align-items: center;
-  gap: var(--glacier-space-4);
-  min-inline-size: 0;
-}
-.heroAvatar { position: relative; flex: none; }
-.heroPresence { position: absolute; inset-block-end: 3px; inset-inline-end: 3px; }
-
-.heroIdentity { display: flex; flex-direction: column; gap: 2px; min-inline-size: 0; }
-.heroRank {
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  font-size: var(--glacier-font-size-xs);
-  font-weight: var(--glacier-font-weight-bold);
-  color: var(--glacier-accent-text);
-}
-.heroName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.heroMeta {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--glacier-space-2);
-  margin-block-start: var(--glacier-space-1);
-}
-
-.heroRing { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.heroRingLabel { text-transform: uppercase; letter-spacing: 0.08em; }
-
-/* Narrow phones: the win-rate ring wraps under the identity instead of
-   squeezing the name column. */
-@media (max-width: 30rem) {
-  .heroCard { flex-wrap: wrap; }
-  .heroRing { margin-inline: auto; }
-}
-
-/* Progress toward the next flavor rank, under the identity meta. */
-.heroRankProgress {
-  display: flex;
-  align-items: center;
-  gap: var(--glacier-space-2);
-  margin-block-start: var(--glacier-space-1);
-  max-inline-size: 18rem;
-}
-.heroRankProgress > :first-child {
-  flex: 1;
-  min-inline-size: 0;
-}
-.heroRankProgress > span {
-  flex: none;
-  white-space: nowrap;
-}
-
-/* side panel: Continue (accent) or Start-a-table CTA, both big buttons */
-.heroSide {
-  appearance: none;
-  text-align: start;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: var(--glacier-space-2);
-  padding: var(--glacier-space-6);
-  border-radius: var(--glacier-radius-2xl);
-  border: 1px solid var(--glacier-border-subtle);
-  background: var(--glacier-surface);
-  color: var(--glacier-text);
-  transition:
-    transform var(--glacier-duration-fast) var(--glacier-ease-out),
-    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
-    box-shadow var(--glacier-duration-fast) var(--glacier-ease-out);
-}
-.heroSide:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in oklch, var(--glacier-accent-solid) 55%, var(--glacier-border));
-  box-shadow: 0 10px 34px rgb(0 0 0 / 0.35);
-}
-.heroPlayCta { align-items: flex-start; }
-.heroPlayCta > svg { color: var(--glacier-accent-text); }
-.heroCtaTitle { font-size: var(--glacier-font-size-lg); font-weight: var(--glacier-font-weight-bold); }
-
-.heroResume2 {
-  background:
-    radial-gradient(140% 190% at 0% -35%, color-mix(in oklch, var(--glacier-accent-solid) 26%, transparent), transparent 60%),
-    var(--glacier-surface);
-  border-color: color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border-subtle));
-}
-.heroResumeTag {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--glacier-space-1);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: var(--glacier-font-size-xs);
-  font-weight: var(--glacier-font-weight-bold);
-  color: var(--glacier-accent-text);
-}
-.heroResumeName {
-  font-size: var(--glacier-font-size-lg);
-  font-weight: var(--glacier-font-weight-semibold);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.heroResumeGo { color: var(--glacier-accent-text); font-weight: var(--glacier-font-weight-semibold); }
-
-/* --- KPI stat strip --- */
 .homePage .homeStats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -481,5 +600,5 @@
 }
 @media (max-width: 48rem) { .homePage .homeStats { grid-template-columns: repeat(2, 1fr); } }
 
-/* --- carousel shelves: keep the fixed-width items, let Carousel scroll --- */
+/* carousel shelves: keep the fixed-width items, let Carousel scroll */
 .homeCarousel .homeStackItem { flex: none; }
