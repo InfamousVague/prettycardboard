@@ -38,18 +38,29 @@ mkdirSync(OUT_DIR, { recursive: true });
 
 if (universal) {
   // macOS: both slices, joined with lipo, named for tauri's universal target.
+  //
+  // ALL THREE NAMES ARE REQUIRED, not just the universal one. `tauri build
+  // --target universal-apple-darwin` is not one build: it compiles the app
+  // once PER ARCH and only lipos at the end, and each of those per-arch builds
+  // resolves `externalBin` as `prettycardboard-server-<that arch's triple>`.
+  // Staging only the fat binary fails the x86_64 half with
+  //   resource path `binaries/prettycardboard-server-x86_64-apple-darwin` doesn't exist
+  // and - worse when it does not fail - a stale per-arch file left over from an
+  // earlier release is picked up silently, shipping an old server inside a new
+  // app. So each slice is copied under its own triple as it is built.
+  const slices = [];
   for (const triple of ['aarch64-apple-darwin', 'x86_64-apple-darwin']) {
     console.log(`\n▸ building server for ${triple}`);
     run('cargo', ['build', '--release', '--target', triple], { cwd: join(ROOT, 'server') });
+    const src = join(ROOT, 'server', 'target', triple, 'release', 'prettycardboard-server');
+    const slice = join(OUT_DIR, `prettycardboard-server-${triple}`);
+    copyFileSync(src, slice);
+    chmodSync(slice, 0o755);
+    console.log(`✓ staged ${slice}`);
+    slices.push(src);
   }
   const out = join(OUT_DIR, 'prettycardboard-server-universal-apple-darwin');
-  run('lipo', [
-    '-create',
-    join(ROOT, 'server', 'target', 'aarch64-apple-darwin', 'release', 'prettycardboard-server'),
-    join(ROOT, 'server', 'target', 'x86_64-apple-darwin', 'release', 'prettycardboard-server'),
-    '-output',
-    out,
-  ]);
+  run('lipo', ['-create', ...slices, '-output', out]);
   chmodSync(out, 0o755);
   console.log(`\n✓ staged ${out}`);
 } else {
