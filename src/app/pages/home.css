@@ -1,3 +1,5 @@
+@import '../components/plates.css';
+
 /* Home dashboard: the game-menu band, KPI stat strip, table setup, and the
    shelf carousels. Section rhythm (width, gutters, gaps) comes from .page in
    app.css. */
@@ -141,7 +143,7 @@
   padding: var(--glacier-space-3) var(--glacier-space-5);
   /* The OW2 skew. The `scale` property (hover grow) and the `translate`
      property (entrance) compose with this transform without touching it. */
-  transform: skewX(-8deg);
+  transform: skewX(var(--pc-slant));
   transition:
     scale var(--glacier-duration-fast) var(--glacier-ease-out),
     border-color var(--glacier-duration-fast) var(--glacier-ease-out),
@@ -208,7 +210,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--glacier-space-4);
-  transform: skewX(8deg);
+  transform: skewX(var(--pc-slant-back));
 }
 
 .gmItemText {
@@ -407,12 +409,6 @@
 
 /* --- RTL: transforms do not auto-flip; mirror the skew and the sweep --- */
 
-[dir='rtl'] .gmItem {
-  transform: skewX(8deg);
-}
-[dir='rtl'] .gmItemInner {
-  transform: skewX(-8deg);
-}
 [dir='rtl'] .gmItem::after {
   translate: 16% 0;
 }
@@ -556,7 +552,7 @@
   border-radius: var(--glacier-radius-sm);
   background: color-mix(in oklch, var(--glacier-surface) 92%, transparent);
   padding: var(--glacier-space-3) var(--glacier-space-4) var(--glacier-space-4);
-  transform: skewX(-8deg);
+  transform: skewX(var(--pc-slant));
 }
 
 /* Counter-skew: numerals stay upright inside the parallelogram. */
@@ -565,7 +561,7 @@
   flex-direction: column;
   gap: 2px;
   block-size: 100%;
-  transform: skewX(8deg);
+  transform: skewX(var(--pc-slant-back));
 }
 
 .hmPlateValue {
@@ -618,13 +614,6 @@
   block-size: 3px;
   background: var(--glacier-accent-solid);
   opacity: 0.85;
-}
-
-[dir='rtl'] .hmPlate {
-  transform: skewX(8deg);
-}
-[dir='rtl'] .hmPlateInner {
-  transform: skewX(-8deg);
 }
 
 @media (max-width: 64rem) {

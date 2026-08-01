@@ -1,3 +1,5 @@
+@import '../../components/plates.css';
+
 /*
  * Deck builder - library grid, editor panes, decklist rows, search results,
  * mana/identity pips, and the mana-curve chart. Layout and chrome are Glacier
@@ -10,8 +12,8 @@
    Library — the ARMORY. A full-bleed headline band (the latest deck's art
    under a directional scrim) carries the big type, the NEW DECK primary and
    the arsenal read-out plates; the grid below shows hero-scale loadout
-   tiles. The band's plates are NOTCHED (chamfered corner + vertical accent
-   edge) — an echo of the home page's skewed parallelograms, not a copy.
+   tiles. The band's plates wear the SAME slanted rectangle as the home page:
+   one shape across the app, from components/plates.css.
    ======================================================================== */
 
 /* One entrance for the whole armory: base state IS the finished layout;
@@ -133,63 +135,30 @@
   flex-wrap: wrap;
 }
 
-/* NEW DECK: the page's one unmissable primary — an accent plate with a
-   leading edge and a sweep on hover. The glow rides filter: drop-shadow, which
-   a notch clip once required. */
+/* NEW DECK: the page's one unmissable primary. Silhouette, accent edge and
+   hover sweep all come from the shared plate vocabulary (.pcSlant/.pcEdge/
+   .pcSweep in components/plates.css) - the same parallelogram the home band
+   wears. This rule owns only what is specific to the armory: the accent paint,
+   the padding that clears the lean, and the drop-shadow glow.
+
+   The radius stays SMALL on purpose: a skewed box with a large radius reads as
+   a leaning lozenge rather than a parallelogram. */
 .dkForge {
   appearance: none;
   cursor: pointer;
-  position: relative;
-  overflow: hidden;
   text-align: start;
   color: var(--glacier-text);
   border: 1px solid color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-border));
   background: color-mix(in oklch, var(--glacier-accent-soft) 85%, transparent);
   backdrop-filter: blur(var(--glacier-blur-sm));
-  padding: var(--glacier-space-4) var(--glacier-space-6) var(--glacier-space-4) var(--glacier-space-5);
+  /* Symmetric and generous: the parallelogram overhangs its layout box on both
+     inline sides, so even padding keeps the label off the leaning edge. */
+  padding: var(--glacier-space-4) var(--glacier-space-7);
+  border-radius: var(--glacier-radius-sm);
   transition:
     scale var(--glacier-duration-fast) var(--glacier-ease-out),
     filter var(--glacier-duration-fast) var(--glacier-ease-out),
     background-color var(--glacier-duration-fast) var(--glacier-ease-out);
-  border-radius: var(--glacier-radius-lg);
-}
-
-[dir='rtl'] .dkForge {
-  padding: var(--glacier-space-4) var(--glacier-space-5) var(--glacier-space-4) var(--glacier-space-6);
-}
-
-/* accent leading edge */
-.dkForge::before {
-  content: '';
-  position: absolute;
-  inset-block: 0;
-  inset-inline-start: 0;
-  inline-size: 5px;
-  background: var(--glacier-accent-solid);
-  transition: inline-size var(--glacier-duration-fast) var(--glacier-ease-out);
-}
-
-/* the sweep that slides in from the leading edge on hover/focus */
-.dkForge::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    100deg,
-    color-mix(in oklch, var(--glacier-accent-solid) 28%, transparent),
-    color-mix(in oklch, var(--glacier-accent-solid) 9%, transparent) 55%,
-    transparent 85%
-  );
-  opacity: 0;
-  translate: -16% 0;
-  transition:
-    opacity var(--glacier-duration-fast) var(--glacier-ease-out),
-    translate var(--glacier-duration-fast) var(--glacier-ease-out);
-}
-
-[dir='rtl'] .dkForge::after {
-  translate: 16% 0;
 }
 
 .dkForge:hover,
@@ -200,32 +169,20 @@
 }
 
 /* Import: the same plate, one register quieter - hairline glass instead of
-   the accent wash, so New deck stays the primary of the pair. Geometry,
-   notch, edge and sweep all inherit from .dkForge. */
+   the accent wash, so New deck stays the primary of the pair. Geometry, edge
+   and sweep all inherit from .dkForge and the shared vocabulary. */
 .dkForgeQuiet {
   border-color: color-mix(in oklch, var(--glacier-border) 80%, transparent);
   background: color-mix(in oklch, var(--glacier-surface) 72%, transparent);
 }
-.dkForgeQuiet::before {
+/* Import's edge is the same stripe one register quieter. */
+.dkForgeQuiet.pcEdge::before {
   background: color-mix(in oklch, var(--glacier-accent-solid) 55%, var(--glacier-border));
 }
 .dkForgeQuiet:hover,
 .dkForgeQuiet:focus-visible {
   filter: drop-shadow(0 8px 22px rgb(0 0 0 / 0.4))
     drop-shadow(0 0 10px color-mix(in oklch, var(--glacier-accent-solid) 18%, transparent));
-}
-.dkForge:hover::before,
-.dkForge:focus-visible::before {
-  inline-size: 8px;
-}
-.dkForge:hover::after,
-.dkForge:focus-visible::after {
-  opacity: 1;
-  translate: 0 0;
-}
-[dir='rtl'] .dkForge:hover::after,
-[dir='rtl'] .dkForge:focus-visible::after {
-  translate: 0 0;
 }
 .dkForge:focus-visible {
   outline: 2px solid var(--glacier-accent-solid);
@@ -263,7 +220,7 @@
   color: var(--glacier-text-subtle);
 }
 
-/* --- the arsenal read-out (thin side): notched stat plates --- */
+/* --- the arsenal read-out (thin side): slanted stat plates --- */
 
 .dkPlates {
   flex: none;
@@ -280,9 +237,8 @@
 .dkPlates > :nth-child(2) { animation-delay: 260ms; }
 .dkPlates > :nth-child(3) { animation-delay: 320ms; }
 
-/* A notched plate: chamfered top corner on the trailing side, vertical accent
-   edge on the leading side — the armory's own shape, cousin to the home
-   page's skewed plates but never the same silhouette. */
+/* The armory's stat plates wear the SAME slanted rectangle as the home band's
+   career plates - one shape across the app, from .pcSlant. */
 .dkPlate {
   position: relative;
   display: flex;
@@ -292,7 +248,15 @@
   border: 1px solid color-mix(in oklch, var(--glacier-border) 75%, transparent);
   background: color-mix(in oklch, var(--glacier-surface) 78%, transparent);
   backdrop-filter: blur(var(--glacier-blur-sm));
-  border-radius: var(--glacier-radius-md);
+  border-radius: var(--glacier-radius-sm);
+}
+
+/* Counter-skewed content column; the numeral and its label stay upright. */
+.dkPlateInner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  block-size: 100%;
 }
 
 .dkPlate::before {
@@ -2082,10 +2046,7 @@
     scale: none;
   }
   .dkForge::after,
-  [dir='rtl'] .dkForge::after {
-    translate: 0 0;
-  }
-  .deckTile:hover {
+    .deckTile:hover {
     transform: none;
   }
 }

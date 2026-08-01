@@ -203,8 +203,8 @@ function ArmoryBand({
           {t('decksLede')}
         </Text>
         <div className="dkActions">
-          <button type="button" className="dkForge" onClick={onNewDeck}>
-            <span className="dkForgeInner">
+          <button type="button" className="dkForge pcSlant pcEdge pcSweep" onClick={onNewDeck}>
+            <span className="dkForgeInner pcSlantInner">
               <Plus size={26} className="dkForgeIcon" aria-hidden />
               <span className="dkForgeText">
                 <span className="dkForgeTitle">{t('decksNew')}</span>
@@ -214,8 +214,8 @@ function ArmoryBand({
           </button>
           {/* Import wears the same forge plate as New deck - quieter tone, same
               family - instead of a kit button that read as an afterthought. */}
-          <button type="button" className="dkForge dkForgeQuiet" onClick={onImport}>
-            <span className="dkForgeInner">
+          <button type="button" className="dkForge dkForgeQuiet pcSlant pcEdge pcSweep" onClick={onImport}>
+            <span className="dkForgeInner pcSlantInner">
               <Download size={26} className="dkForgeIcon" aria-hidden />
               <span className="dkForgeText">
                 <span className="dkForgeTitle">{t('decksImport')}</span>
@@ -227,22 +227,26 @@ function ArmoryBand({
       </div>
 
       <div className="dkPlates">
-        <div className="dkPlate">
-          <span className="dkPlateValue">{decks.length}</span>
-          <span className="dkPlateLabel">
-            <PlayingCardDeck size={13} aria-hidden />
-            {t('decksTitle')}
+        <div className="dkPlate pcSlant">
+          <span className="dkPlateInner pcSlantInner">
+            <span className="dkPlateValue">{decks.length}</span>
+            <span className="dkPlateLabel">
+              <PlayingCardDeck size={13} aria-hidden />
+              {t('decksTitle')}
+            </span>
           </span>
         </div>
-        <div className="dkPlate">
-          <span className="dkPlateValue">{deckStats ? battles : '—'}</span>
-          <span className="dkPlateLabel">
-            <Swords size={13} aria-hidden />
-            {t('dkBattles')}
+        <div className="dkPlate pcSlant">
+          <span className="dkPlateInner pcSlantInner">
+            <span className="dkPlateValue">{deckStats ? battles : '—'}</span>
+            <span className="dkPlateLabel">
+              <Swords size={13} aria-hidden />
+              {t('dkBattles')}
+            </span>
           </span>
         </div>
-        <div className="dkPlate dkPlateWide">
-          <span className="dkPlateMain">
+        <div className="dkPlate dkPlateWide pcSlant">
+          <span className="dkPlateMain pcSlantInner">
             <span className="dkPlateText">
               <span className="dkPlateValue dkPlateDeckName">{mostPlayedName ?? '—'}</span>
               <span className="dkPlateSub">

@@ -1,0 +1,95 @@
+/*
+ * The app's gamified plate vocabulary, in one place.
+ *
+ * The home band, the career banner and the armory all wear the same slanted
+ * rectangle. It used to be re-declared per page, which is how the armory ended
+ * up with a notched silhouette while home had a skewed one - the same idea
+ * drawn two different ways. One angle token, one counter-skew rule, one accent
+ * edge, one sweep: change the feel here and every surface follows.
+ *
+ * MIGRATION NOTE: @glacier/react now ships `shape="slant"` with the same
+ * geometry, built on a separate plate layer so content needs no counter-skew at
+ * all. When the vendored kit is refreshed, these classes become a thin shim
+ * over the kit prop and then disappear. Keeping the angle in ONE token here is
+ * what makes that swap a single-file change.
+ */
+
+:root {
+  /* The OW2 lean. Negative = top edge pushed toward the inline end. */
+  --pc-slant: -8deg;
+  --pc-slant-back: 8deg;
+}
+
+/* RTL: a transform does not flip itself, so the lean is mirrored centrally
+   here rather than in every consumer. */
+:root[dir='rtl'] {
+  --pc-slant: 8deg;
+  --pc-slant-back: -8deg;
+}
+
+/* ---- the plate ---- */
+
+.pcSlant {
+  position: relative;
+  overflow: hidden;
+  transform: skewX(var(--pc-slant));
+}
+
+/* Content rides upright inside the parallelogram. Always a single wrapper
+   rather than per-child counter-skew: skewing each child rotates it about its
+   own centre, so a two-line stack comes out with the lines offset from one
+   another by a few pixels. */
+.pcSlantInner {
+  transform: skewX(var(--pc-slant-back));
+}
+
+/* ---- accent leading edge ---- */
+
+.pcEdge::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 3px;
+  background: var(--glacier-accent-solid);
+  opacity: 0.9;
+  transition: inline-size var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.pcEdge:hover::before,
+.pcEdge:focus-visible::before {
+  inline-size: 6px;
+}
+
+/* ---- hover sweep ---- */
+
+.pcSweep::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    color-mix(in oklch, var(--glacier-accent-solid) 26%, transparent),
+    color-mix(in oklch, var(--glacier-accent-solid) 8%, transparent) 55%,
+    transparent 85%
+  );
+  opacity: 0;
+  translate: -16% 0;
+  transition:
+    opacity var(--glacier-duration-fast) var(--glacier-ease-out),
+    translate var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.pcSweep:hover::after,
+.pcSweep:focus-visible::after {
+  opacity: 1;
+  translate: 0 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pcEdge::before,
+  .pcSweep::after {
+    transition: none;
+  }
+}
