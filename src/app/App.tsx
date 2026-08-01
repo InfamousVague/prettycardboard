@@ -558,14 +558,21 @@ function Shell({
           trafficLightInset
           start={
             <>
+              {/* Seated at a table the routed page is hidden behind it, so
+                  traversal would drift the route with nothing on screen moving
+                  - the arrows lock while inRoom. aria-disabled (with a guarded
+                  handler) rather than disabled, so an arrow that locks under
+                  the keyboard user's focus does not dump focus to body. */}
               <div className="titleBarNav" data-no-drag>
                 <Tooltip content={t('tbBack')}>
                   <IconButton
                     size="sm"
                     variant="ghost"
                     aria-label={t('tbBack')}
-                    disabled={!nav.canBack}
-                    onClick={nav.back}
+                    aria-disabled={inRoom || !nav.canBack || undefined}
+                    onClick={() => {
+                      if (!inRoom && nav.canBack) nav.back();
+                    }}
                   >
                     <ArrowLeft size={15} />
                   </IconButton>
@@ -575,8 +582,10 @@ function Shell({
                     size="sm"
                     variant="ghost"
                     aria-label={t('tbForward')}
-                    disabled={!nav.canForward}
-                    onClick={nav.forward}
+                    aria-disabled={inRoom || !nav.canForward || undefined}
+                    onClick={() => {
+                      if (!inRoom && nav.canForward) nav.forward();
+                    }}
                   >
                     <ArrowRight size={15} />
                   </IconButton>

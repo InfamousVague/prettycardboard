@@ -4982,6 +4982,43 @@
 .tbDock .ribbonRow {
   min-width: 0;
   flex-wrap: nowrap;
+  /* The unscoped `.ribbonRow { position: relative; z-index: 1 }` rule near the
+     top of this file is about layering INSIDE the table; in the title bar it
+     would let a squeezed ribbon paint over the side slots' controls. Static
+     here, so the kit center cell's own overflow:hidden clips it instead. */
+  position: static;
+  z-index: auto;
+}
+
+/* Between the dock floor (70rem, below which the table falls back to its own
+   wrapping row - see useWideChrome) and a roomy window, the bar shrinks by
+   shedding its quietest chrome, the same ladder the strip's own container
+   queries walk: code text first (the copy button and tooltip still carry it),
+   then the marker chips and the turn clock, and tighter name caps - so the
+   End turn cluster always survives the squeeze. */
+@media (max-width: 80rem) {
+  .tbDock .tableCode kbd {
+    display: none;
+  }
+
+  .tbDock .markerChips {
+    display: none;
+  }
+
+  .tbDock .turnPlateClock {
+    display: none;
+  }
+
+  .tbDock .tableMeta > span:first-child {
+    max-width: 9rem;
+  }
+
+  .tbDock .turnPlateWho {
+    max-inline-size: 7rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 .tbDock .phaseStop:not([data-current]) .phaseLabel {

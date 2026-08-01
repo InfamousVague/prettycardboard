@@ -125,6 +125,7 @@ import {
   TITLEBAR_DOCK_END_ID,
   TITLEBAR_DOCK_START_ID,
   useDockElement,
+  useWideChrome,
 } from '../titlebarDock.ts';
 import { playSound, primeSounds } from '../sounds.ts';
 import { DEFAULT_PREFERENCES, loadPreferences } from '../preferences.ts';
@@ -210,8 +211,10 @@ export function TablePage() {
   const portrait = usePortrait();
   // Tauri desktop: the top strip's clusters ride the window title bar instead
   // of a row of their own. The slots exist whenever the title bar does; the
-  // portals below only fill them while this page is mounted.
-  const chromeDocked = DESKTOP && !mobile;
+  // portals below only fill them while this page is mounted. Only while the
+  // window is wide enough - the bar is one fixed row, and a narrow window
+  // needs the strip's own wrapping row back (see useWideChrome).
+  const chromeDocked = DESKTOP && !mobile && useWideChrome();
   const dockStart = useDockElement(TITLEBAR_DOCK_START_ID, chromeDocked);
   const dockCenter = useDockElement(TITLEBAR_DOCK_CENTER_ID, chromeDocked);
   const dockEnd = useDockElement(TITLEBAR_DOCK_END_ID, chromeDocked);

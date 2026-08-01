@@ -24,3 +24,23 @@ export function useDockElement(id: string, want: boolean): HTMLElement | null {
   }, [id, want]);
   return want ? el : null;
 }
+
+/* The bar is one fixed-height row with no wrap, so unlike the strip it
+   replaces it cannot grow a second line when a match's chrome outgrows the
+   window. Below this width the table keeps its own wrapping row instead -
+   docking must never make End turn unreachable. The dock-side shedding rules
+   in table.css hold until this floor is hit. */
+const WIDE_QUERY = '(min-width: 70rem)';
+
+/** True while the window is wide enough for the strip to ride the title bar. */
+export function useWideChrome(): boolean {
+  const [wide, setWide] = useState<boolean>(() => window.matchMedia(WIDE_QUERY).matches);
+  useEffect(() => {
+    const media = window.matchMedia(WIDE_QUERY);
+    const sync = () => setWide(media.matches);
+    sync();
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
+  return wide;
+}
