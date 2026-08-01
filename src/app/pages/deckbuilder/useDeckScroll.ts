@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 /* ===========================================================================
    Deck-builder scrolling (decision 11)
@@ -83,32 +83,65 @@ function onScrollFrame(
 
 /* ---------- hero collapse ---------- */
 
-/** Collapse once the page has actually started moving... */
-const HERO_COLLAPSE_AT = 32;
-/** ...and only give the hero back at the very top, so the two thresholds can
-    never chase each other across a single flick. */
-const HERO_EXPAND_AT = 4;
+/**
+ * Dead band between the two thresholds. Small, because the thresholds are
+ * already a whole hero apart; it only has to absorb sub-pixel rounding.
+ */
+const HERO_DEADBAND = 8;
 
 /**
- * True once the reader has scrolled far enough that the hero's art band, its
- * floating commander and its stats shelf are costing more than they earn.
+ * True once the reader has scrolled past the hero, so its art band, its
+ * floating commander and its stats shelf can hand back the height they are
+ * costing - measured at 352px against a 375px landscape viewport.
  *
- * The collapse fires early - 32px in, while the hero is still on screen - on
- * purpose. Collapsing something that has already scrolled off would yank every
- * row below it upwards by the hero's whole height, which reads as a glitch;
- * collapsing it in place reads as the deliberate gesture it is.
+ * Both thresholds are the hero's OWN height rather than some small constant,
+ * and that is the whole design:
  *
- * The `runway` guard is what keeps it stable. Losing the hero shortens the
- * document, and if that leaves less scrollable distance than we are currently
- * scrolled by, the browser clamps us back to the top, which would expand the
- * hero, which would lengthen the document again - a loop. Requiring more
- * runway than the hero's own height means the clamp can never reach
- * HERO_EXPAND_AT.
+ *   collapse when scrollTop > expanded height  (the hero is off screen)
+ *   expand   when scrollTop <= collapsed height (the band is fully back)
+ *
+ * Collapsing something still on screen would yank every row below it upwards
+ * by 268px mid-read. Collapsing it once it is out of view is invisible, and
+ * the payoff is on the way back: the return trip to the top costs a band
+ * instead of a billboard, and the whole page is 268px shorter.
+ *
+ * Two things then have to be true or it oscillates.
+ *
+ * 1. The scroll offset has to be corrected by the height that vanished, or the
+ *    rows below jump. Chrome and Firefox do this themselves (scroll anchoring);
+ *    Safari - which is every iPhone - does not. So the layout effect below
+ *    checks whether the browser already moved us and does it by hand when it
+ *    has not, instead of assuming either way and being wrong on half the fleet.
+ *
+ * 2. After that correction the offset must land inside the dead band. It does,
+ *    by construction: collapsing from T > E lands at T - (E - C) > C, and
+ *    expanding from T <= C lands at T + (E - C) <= E. Neither can trip the
+ *    other, so a single flick cannot start a loop.
+ *
+ * The `runway` guard covers the remaining case - a deck short enough that
+ * losing the hero leaves less scrollable distance than we are scrolled by,
+ * where the browser would clamp us back to the top and re-expand.
  */
 export function useHeroCollapse(hero: HTMLElement | null, enabled: boolean): boolean {
   const [collapsed, setCollapsed] = useState(false);
+  // Measured on the way through, so the thresholds are the real heights rather
+  // than guesses: `expanded` seeds from the first read, `collapsed` from the
+  // first collapse. Until then the expand threshold is 0, which just means
+  // "only at the very top" - correct, if conservative.
+  const heights = useRef({ expanded: 0, collapsed: 0 });
+  // Set by the read that flipped the state, consumed by the layout effect that
+  // has to repair the scroll offset. Null when the flip came from anywhere
+  // else (a rotation, a preference change) and there is nothing to repair.
+  const pending = useRef<{ scroller: HTMLElement | null; top: number; height: number } | null>(null);
+  // The scroll handler needs the live value and must not read it through a
+  // state updater: the decision writes both refs above, and an updater is not
+  // allowed to have side effects (React calls it twice under StrictMode).
+  const isCollapsed = useRef(false);
+
   useEffect(() => {
     if (!enabled || !hero) {
+      pending.current = null;
+      isCollapsed.current = false;
       setCollapsed(false);
       return;
     }
@@ -118,13 +151,40 @@ export function useHeroCollapse(hero: HTMLElement | null, enabled: boolean): boo
       const view = scroller ? scroller.clientHeight : window.innerHeight;
       const full = scroller ? scroller.scrollHeight : document.documentElement.scrollHeight;
       const runway = full - view;
-      setCollapsed((was) =>
-        was ? top > HERO_EXPAND_AT : top > HERO_COLLAPSE_AT && runway > hero.offsetHeight + 64,
-      );
+      const height = hero.offsetHeight;
+      const was = isCollapsed.current;
+      // Re-measure whichever height we are currently wearing, so a rotation
+      // that re-wraps the meta row moves the threshold with it.
+      heights.current[was ? 'collapsed' : 'expanded'] = height;
+      const next = was
+        ? top > heights.current.collapsed
+        : top > heights.current.expanded + HERO_DEADBAND && runway > height + 64;
+      if (next === was) return;
+      isCollapsed.current = next;
+      pending.current = { scroller, top, height };
+      setCollapsed(next);
     };
     read();
     return onScrollFrame(scroller, read);
   }, [hero, enabled]);
+
+  useLayoutEffect(() => {
+    const flip = pending.current;
+    pending.current = null;
+    if (!hero) return;
+    const height = hero.offsetHeight;
+    heights.current[collapsed ? 'collapsed' : 'expanded'] = height;
+    if (!flip) return;
+    const scroller = flip.scroller;
+    const now = scroller ? scroller.scrollTop : window.scrollY;
+    // The browser compensated already (scroll anchoring) if we are no longer
+    // where the read left us; only step in when nothing moved.
+    if (Math.abs(now - flip.top) > 1) return;
+    const want = Math.max(0, now - (flip.height - height));
+    if (scroller) scroller.scrollTop = want;
+    else window.scrollTo(0, want);
+  }, [collapsed, hero]);
+
   return enabled && collapsed;
 }
 
@@ -205,8 +265,16 @@ export function useCardWindow(grid: HTMLElement | null, total: number): CardWind
       const cols = style.gridTemplateColumns.split(' ').filter(Boolean).length;
       const gap = Number.parseFloat(style.rowGap) || 0;
       const track = Number.parseFloat(style.gridTemplateColumns) || 0;
+      // The resolved track times the print ratio is the cell height to the
+      // sub-pixel, because a cell holds nothing but a `fluid` GameCard
+      // (width: 100%, aspect-ratio: 488/680). offsetHeight would round, and a
+      // rounding error multiplied by twenty rows is a drifting scrollbar. The
+      // measurement is kept as a tripwire: if a cell ever grows something the
+      // ratio does not know about, it disagrees by more than a rounding and
+      // wins.
+      const derived = track * CARD_RATIO;
       const measured = grid.querySelector<HTMLElement>('.deckCardCell')?.offsetHeight ?? 0;
-      const cellH = measured > 0 ? measured : track * CARD_RATIO;
+      const cellH = derived > 0 && (measured === 0 || Math.abs(measured - derived) <= 1) ? derived : measured;
       if (cols < 1 || cellH <= 0) {
         setWin((prev) => (same(prev, wholeGrid(total)) ? prev : wholeGrid(total)));
         return;

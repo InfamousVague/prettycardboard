@@ -440,6 +440,15 @@
     'roster'
     'launch'
     'watch';
+  /* min-content, NOT the `auto` these rows would default to. Two of the six
+     items are scroll containers - the deck bar (overflow:hidden, for its art
+     wash) and the roster strip (overflow-x:auto) - and an `auto` track sizes
+     them to their PADDING: measured 19.8px and 2px against real heights of 41
+     and 51, which clipped the deck Select clean out of its own bar. A track
+     that asks for min-content gets the honest number. Rows created by
+     grid-template-areas take their size from grid-auto-rows when
+     grid-template-rows says nothing, which is why this is the knob. */
+  grid-auto-rows: min-content;
   align-content: start;
   gap: var(--glacier-space-3);
   overflow: hidden auto;
@@ -475,9 +484,10 @@
 @media (min-width: 44rem) {
   .pregameLobby {
     grid-template-columns: minmax(0, 1.4fr) minmax(15rem, 0.9fr);
-    /* min-content, not 0: the stage grows into a tall window but never shrinks
-       under its portraits (they are overflow:hidden and would clip). */
-    grid-template-rows: auto minmax(min-content, 1fr) auto auto;
+    /* min-content throughout, for the reason above; the stage row additionally
+       grows into a tall window but never shrinks under its portraits (they are
+       overflow:hidden and would clip). */
+    grid-template-rows: min-content minmax(min-content, 1fr) min-content min-content;
     grid-template-areas:
       'hero   hero'
       'stage  setup'
@@ -3497,9 +3507,12 @@
     /* start:auto end:0 - the trailing edge in both writing directions. */
     inset-inline: auto 0;
     block-size: var(--pc-vh, 100dvh);
+    /* inline-size AND max-inline-size, because the base rule sets the physical
+       aliases (`width` / `max-width`) and the two are the same property: a
+       later `width: auto` here would beat the inline-size above it and shrink
+       the panel to its content. */
     inline-size: min(26rem, 42vw);
-    width: auto;
-    max-width: none;
+    max-inline-size: none;
     padding-inline-end: calc(var(--glacier-space-3) + env(safe-area-inset-right, 0px));
     border-start-start-radius: var(--glacier-radius-2xl);
     border-end-start-radius: var(--glacier-radius-2xl);
@@ -3552,7 +3565,6 @@
   :root[data-phone='on'][data-phone='on'] [role='dialog']:has(.pcSideSheet) {
     inline-size: min(26rem, 42vw);
     max-inline-size: none;
-    width: auto;
     block-size: var(--pc-vh, 100dvh);
     max-block-size: none;
     padding-inline: calc(var(--glacier-space-3) + env(safe-area-inset-left, 0px))
@@ -6758,50 +6770,6 @@
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* ---- decision 5: landscape turns every panel surface into a trailing-edge
-   side sheet, full height, min(26rem, 42vw) wide.
-   Height is the scarce axis in landscape and width the abundant one, so a
-   bottom sheet spends the wrong one: 62% of 375px is 232px, minus a ~56px
-   head, for a card that is 340px tall. Full height of the same screen is 375. */
-@media (orientation: landscape) {
-  .mobileSheet {
-    inset-block: 0;
-    /* start:auto end:0 - the trailing edge in both writing directions. */
-    inset-inline: auto 0;
-    inline-size: min(26rem, 42vw);
-    block-size: auto;
-    border-bottom: var(--glacier-hairline) solid var(--glacier-glass-border);
-    border-inline-end: none;
-    border-start-start-radius: var(--glacier-radius-2xl);
-    border-end-start-radius: var(--glacier-radius-2xl);
-    border-start-end-radius: 0;
-    border-end-end-radius: 0;
-    /* Direction-agnostic: a shadow cannot be a logical property, so it spreads
-       evenly rather than pointing the wrong way under dir=rtl. */
-    box-shadow: 0 0 40px oklch(0.05 0.02 265 / 0.5);
-    padding-bottom: 0;
-    padding-inline-end: env(safe-area-inset-right, 0px);
-  }
-
-  /* 26rem of head cannot hold four tabs, five nav icons and a close button on
-     one line. The tabs take their own row and scroll; the nav keeps the first
-     row with the close button at its end. */
-  .mobileSheetHead {
-    flex-wrap: wrap;
-  }
-
-  .mobileSheetTabs {
-    order: 3;
-    flex: 1 0 100%;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .mobileSheetHead .tableSideNav {
-    margin-inline-end: auto;
-  }
-}
-
 .mobileSheetHead {
   display: flex;
   align-items: center;
@@ -6858,6 +6826,52 @@
 .mobileSheetBody > * {
   width: 100%;
 }
+
+/* ---- decision 5: landscape turns every panel surface into a trailing-edge
+   side sheet, full height, min(26rem, 42vw) wide.
+   Height is the scarce axis in landscape and width the abundant one, so a
+   bottom sheet spends the wrong one: 62% of 375px is 232px, minus a ~56px
+   head, for a card that is 340px tall. Full height of the same screen is 375. */
+@media (orientation: landscape) {
+  .mobileSheet {
+    inset-block: 0;
+    /* start:auto end:0 - the trailing edge in both writing directions. */
+    inset-inline: auto 0;
+    inline-size: min(26rem, 42vw);
+    block-size: auto;
+    border-bottom: var(--glacier-hairline) solid var(--glacier-glass-border);
+    border-inline-end: none;
+    border-start-start-radius: var(--glacier-radius-2xl);
+    border-end-start-radius: var(--glacier-radius-2xl);
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+    /* Direction-agnostic: a shadow cannot be a logical property, so it spreads
+       evenly rather than pointing the wrong way under dir=rtl. */
+    box-shadow: 0 0 40px oklch(0.05 0.02 265 / 0.5);
+    padding-bottom: 0;
+    padding-inline-end: env(safe-area-inset-right, 0px);
+  }
+
+  /* 26rem of head cannot hold four tabs, five nav icons and a close button on
+     one line. The tabs take their own row and scroll; the nav keeps the first
+     row with the close button at its end. (These three sit AFTER the base
+     rules on purpose - same specificity, so source order is what decides.) */
+  .mobileSheetHead {
+    flex-wrap: wrap;
+  }
+
+  .mobileSheetTabs {
+    order: 3;
+    flex: 1 0 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .mobileSheetHead .tableSideNav {
+    margin-inline-end: auto;
+  }
+}
+
 
 /* The staged opponent hand tucks harder on phones so it never covers chips. */
 .table[data-mobile] .oppHandStrip {

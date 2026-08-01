@@ -13,6 +13,7 @@ import {
   Minus,
   Plus,
   ScrollText,
+  Settings,
   Skull,
 } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
@@ -108,6 +109,19 @@ export function PortraitCompanion({
           </Text>
         </span>
         <span className="companionHeadActions">
+          {/* Settings was the third thing the old cover buried (the audit's
+              "no leave, no concede, no settings, no life"). The modal portals
+              at 100+, so it opens over this. */}
+          <Tooltip content={t('setTitle')}>
+            <IconButton
+              size="sm"
+              variant="ghost"
+              aria-label={t('setTitle')}
+              onClick={() => window.dispatchEvent(new CustomEvent('pc:open-settings'))}
+            >
+              <Settings size={16} />
+            </IconButton>
+          </Tooltip>
           {onConcede && (
             <Button size="sm" variant="ghost" onClick={onConcede}>
               <Flag size={15} /> {t('tblConcede')}

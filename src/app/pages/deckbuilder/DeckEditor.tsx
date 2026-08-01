@@ -58,7 +58,7 @@ import { PLAYMATS } from '../../data/playmats.ts';
 import { CARD_BACKS } from '../../data/cardBacks.ts';
 import { useLongPress } from '../../hooks/useLongPress.ts';
 import { useMobileLayout } from '../../hooks/useIsPhone.ts';
-import { useCardWindow, useHeroCollapse, WINDOW_MIN_CARDS } from './useDeckScroll.ts';
+import { useCardWindow, useHeroCollapse } from './useDeckScroll.ts';
 import { CardSearch } from './CardSearch.tsx';
 import { CyberpunkCardSearch } from './CyberpunkCardSearch.tsx';
 import { YugiohCardSearch } from './YugiohCardSearch.tsx';
