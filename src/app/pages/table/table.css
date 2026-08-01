@@ -1232,6 +1232,52 @@
   .pregameDeckLabel {
     display: none;
   }
+
+  /* And below that width, sharing a line stops being worth it at all: a picker
+     squeezed beside Ready measured 112px of a 295px column - a dropdown too
+     narrow to read the deck name it is showing, which is the one thing it
+     exists to do. Both take the full width and stack instead. `1 1 100%`
+     rather than `width: 100%` because the row is a wrap container: a 100%
+     basis forces the line break, so each lands on a line of its own without
+     the row needing to know how many items it has. */
+  .pregameDeckPicker,
+  .pregameReadyButton {
+    flex: 1 1 100%;
+    min-inline-size: 0;
+  }
+
+  /* The auto margin was what pushed Ready to the trailing edge of a SHARED
+     line. On its own full-width line it would just re-introduce the gap. */
+  .pregameReadyButton {
+    margin-inline-start: 0;
+  }
+}
+
+/* ...except on a phone held SIDEWAYS, where they share a line again.
+   AFTER the container query on purpose: both are one-class selectors, so this
+   only wins by coming later in the file.
+
+   The stack is right in portrait - 339px of container, height to spare, and a
+   dropdown wide enough to read the deck name it is showing. Landscape fires
+   the same container query on a 295px column, but the scarce axis there is the
+   other one: 330px of lobby, total. Stacking costs 54px it does not have, and
+   MEASURED the cost lands on the wrong thing - setup grew 65 -> 119, and the
+   launch bar (which is `align-self: end`, and taller than its row) grew UPWARD
+   into the row above and covered 24px of Ready up, whose centre then
+   hit-tested to the launch bar instead of itself.
+
+   So: a wide dropdown in portrait, everything reachable without scrolling in
+   landscape. The name ellipsizes at either width, and seeing Deal opening
+   hands is worth more than seeing more of the name. */
+@media (min-width: 44rem) and (max-height: 480px) {
+  .pregameDeckPicker {
+    flex: 1 1 6rem;
+  }
+
+  .pregameReadyButton {
+    flex: none;
+    margin-inline-start: auto;
+  }
 }
 
 /* Leading edge, not trailing: with the deck picker moved to the top the bar

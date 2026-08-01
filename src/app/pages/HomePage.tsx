@@ -6,11 +6,8 @@ import {
   Carousel,
   Heading,
   Input,
-  Kbd,
   OtpField,
   Pill,
-  ProgressBar,
-  ProgressRing,
   SegmentedControl,
   Select,
   Size,
@@ -20,8 +17,8 @@ import {
   TextTone,
   useToast,
 } from '@glacier/react';
-import { Compass, Heart, Play, Plus, Sparkles, Swords, Ticket, Trophy } from '@glacier/icons';
-import { PlayingCardDeck } from '../icons/cards.ts';
+import { Compass, Heart, Play, Plus, Swords, Ticket, Trophy } from '@glacier/icons';
+import { PlayingCardDeck, PlayingCardPack } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
@@ -37,15 +34,16 @@ import { useMobileLayout } from '../hooks/useIsPhone.ts';
 import { cyberpunkImage, cyberpunkStarters } from '../data/cyberpunk.ts';
 import { yugiohImage, yugiohStarters } from '../data/yugioh.ts';
 import { deckSummaryArt, deckSummaryCover } from '../data/deckCover.ts';
+import { DEFAULT_PLAYMAT, playmatBackground } from '../data/playmats.ts';
 import { DeckStack } from '../components/DeckStack.tsx';
 import { GameTag } from '../components/GameTag.tsx';
 import { CardRowSkeleton, EmptyFan } from '../components/Skeletons.tsx';
 import './home.css';
 
 /**
- * The Home dashboard: a greeting hero, a one-line quick-play form, and three
- * shelves (recent decks, friends online, featured precons). Every shelf links
- * out to its full page; sections stagger in on entrance.
+ * The Home dashboard: the game-menu band (full-bleed deck art + the big
+ * actions), the KPI strip, the table-setup machinery, and the shelves. Every
+ * shelf links out to its full page; sections stagger in on entrance.
  */
 
 /** A dashboard section that springs in, staggered by its position. */
@@ -127,9 +125,9 @@ export function HomePage() {
   const showCyber = useVisibleGames().some((g) => g.id === 'cyberpunk');
   return (
     <div className="page homePage">
-      <PlayerHero identity={identity} stats={stats} resume={resume} order={0} />
+      <GameMenu identity={identity} stats={stats} resume={resume} />
       <StatStrip stats={stats} order={1} />
-      <QuickPlay order={2} />
+      <TableSetup order={2} />
       <RecentDecks order={3} />
       <Featured order={4} />
       <YugiohStarters order={5} />
@@ -139,103 +137,112 @@ export function HomePage() {
 }
 
 /**
- * The gamified header: a player card (avatar, rank, level, at-a-glance line +
- * a win-rate ring) beside a big Continue / Start-a-table call to action.
+ * The game menu band, Overwatch main-menu idiom: the most recent deck's
+ * commander art full-bleed behind a stacked, skewed menu of the big actions,
+ * with the player badge in the far corner. Presentation only — `resume` and
+ * `stats` arrive from HomePage's existing fetching, untouched.
  */
-function PlayerHero({
+function GameMenu({
   identity,
   stats,
   resume,
-  order,
 }: {
   identity: { username: string } | null;
   stats: UserStats | null;
   resume: MyRoom | null;
-  order: number;
 }) {
   const t = useT();
   const decks = useApp((state) => state.decks);
-  const friends = useApp((state) => state.friends);
   const join = useGame((state) => state.join);
-  const played = stats?.played ?? 0;
-  const wr = stats ? winRate(stats) : null;
-  const rank = rankFor(played);
-  const online = friends.friends.filter((friend) => friend.online).length;
+  const rank = rankFor(stats?.played ?? 0);
+
+  // The most recently touched deck dresses the band; a fresh account gets the
+  // default felt the tables use.
+  const art = useMemo(() => {
+    const recent = [...decks].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+    const wide = recent ? deckSummaryArt(recent) : '';
+    return wide ? `url("${wide}")` : playmatBackground(DEFAULT_PLAYMAT);
+  }, [decks]);
+
+  const openPacks = () => {
+    // Latch BEFORE the event: the pack dock chunk may still be streaming and
+    // reads the latch when it mounts (see App.tsx requestPackDock).
+    (window as { __pcPackDock?: 'open' | 'show' }).__pcPackDock = 'open';
+    window.dispatchEvent(new CustomEvent('pc:open-packdock', { detail: { open: true } }));
+  };
 
   return (
-    <Section order={order} className="homeHeroRow">
-      <div className="heroCard">
-        <div className="heroPlayer">
-          <span className="heroAvatar">
-            <Avatar name={identity?.username} size="xl" />
-            <StatusDot tone="success" pulse className="heroPresence" />
-          </span>
-          <div className="heroIdentity">
-            <span className="heroRank">{rank.title}</span>
-            <Heading level={1} noMargin className="heroName">
-              {identity?.username}
-            </Heading>
-            <div className="heroMeta">
-              <Pill size="sm" tone="accent" variant="soft">
-                {t('hmLevel')} {rank.level}
-              </Pill>
-              <Text as="span" size={Size.Small} tone={TextTone.Muted}>
-                {played} {t('hmGames')} · {decks.length} {t('decksTitle')} · {online} {t('frOnline')}
-              </Text>
-              {rank.next != null && (
-                <div className="heroRankProgress">
-                  <ProgressBar
-                    value={Math.round(rank.progress * 100)}
-                    max={100}
-                    size="sm"
-                    tone="accent"
-                    aria-label={t('hmNextRank')}
-                  />
-                  <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
-                    {rank.next - played} {t('hmToNextRank')}
-                  </Text>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-        {wr != null && (
-          <div className="heroRing">
-            <ProgressRing
-              value={wr}
-              max={100}
-              size={104}
-              thickness={9}
-              tone={wr >= 50 ? 'success' : 'accent'}
-              showValue
-              aria-label={t('hmWinRate')}
-            />
-            <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="heroRingLabel">
-              {t('hmWinRate')}
-            </Text>
-          </div>
-        )}
+    <section className="gmBand">
+      <div className="gmArt" style={{ backgroundImage: art }} aria-hidden />
+      <div className="gmScrim" aria-hidden />
+
+      <div className="gmBadge">
+        <span className="gmBadgeAvatar">
+          <Avatar name={identity?.username} size="lg" />
+          <StatusDot tone="success" pulse className="gmBadgePresence" />
+        </span>
+        <span className="gmBadgeId">
+          <span className="gmBadgeRank">{rank.title}</span>
+          <span className="gmBadgeName">{identity?.username}</span>
+        </span>
+        <Pill size="sm" tone="accent" variant="soft">
+          {t('hmLevel')} {rank.level}
+        </Pill>
       </div>
 
-      {resume ? (
-        <button type="button" className="heroSide heroResume2" onClick={() => join(resume.roomId)}>
-          <span className="heroResumeTag">
-            <Play size={14} /> {t('hmContinue')}
-            <GameTag game={resume.game} showName={false} />
+      <nav className="gmMenu" aria-label={t('hmQuickPlay')}>
+        <button type="button" className="gmItem gmPrimary" onClick={() => (window.location.hash = '/new')}>
+          <span className="gmItemInner">
+            <span className="gmItemText">
+              <span className="gmItemTitle">{t('playTitle')}</span>
+              <span className="gmItemSub">{t('hmStartTableSub')}</span>
+            </span>
+            <Swords size={26} className="gmItemIcon" aria-hidden />
           </span>
-          <span className="heroResumeName">{resume.name}</span>
-          <span className="heroResumeGo">{t('plResume')} →</span>
         </button>
-      ) : (
-        <button type="button" className="heroSide heroPlayCta" onClick={() => (window.location.hash = '/new')}>
-          <Swords size={26} />
-          <span className="heroCtaTitle">{t('hmStartTable')}</span>
-          <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
-            {t('hmStartTableSub')}
-          </Text>
+
+        {resume && (
+          <button type="button" className="gmItem gmResume" onClick={() => join(resume.roomId)}>
+            <span className="gmItemInner">
+              <span className="gmItemText">
+                <span className="gmItemTitle">{t('hmContinue')}</span>
+                <span className="gmItemSub gmResumeSub">
+                  <StatusDot tone="success" pulse size="sm" label={t('hmInProgress')} />
+                  <span className="gmResumeName">{resume.name}</span>
+                  <GameTag game={resume.game} showName={false} />
+                </span>
+              </span>
+              <Play size={20} className="gmItemIcon" aria-hidden />
+            </span>
+          </button>
+        )}
+
+        <button type="button" className="gmItem" onClick={openPacks}>
+          <span className="gmItemInner">
+            <span className="gmItemText">
+              <span className="gmItemTitle">{t('hmOpenPacks')}</span>
+              <span className="gmItemSub">{t('hmOpenPacksSub')}</span>
+            </span>
+            <PlayingCardPack size={20} className="gmItemIcon" aria-hidden />
+          </span>
         </button>
-      )}
-    </Section>
+
+        <div className="gmHalfRow">
+          <button type="button" className="gmItem gmHalf" onClick={() => (window.location.hash = '/decks')}>
+            <span className="gmItemInner">
+              <PlayingCardDeck size={16} className="gmItemIcon" aria-hidden />
+              <span className="gmItemTitle">{t('navDecks')}</span>
+            </span>
+          </button>
+          <button type="button" className="gmItem gmHalf" onClick={() => (window.location.hash = '/browse')}>
+            <span className="gmItemInner">
+              <Compass size={16} className="gmItemIcon" aria-hidden />
+              <span className="gmItemTitle">{t('navBrowse')}</span>
+            </span>
+          </button>
+        </div>
+      </nav>
+    </section>
   );
 }
 
@@ -262,11 +269,11 @@ function StatStrip({ stats, order }: { stats: UserStats | null; order: number })
 }
 
 /**
- * Quick play as a pair of game-lobby tiles instead of a form: HOST wears the
- * chosen deck's commander art and deals you in; JOIN takes a table code on
- * arcade-style key cells. Same flows as PlayPage underneath.
+ * The detailed table machinery under the game menu: HOST with game/deck/seats/
+ * name, JOIN by code on arcade-style key cells. Same flows as PlayPage
+ * underneath; the hero art moved up into the GameMenu band.
  */
-function QuickPlay({ order }: { order: number }) {
+function TableSetup({ order }: { order: number }) {
   const t = useT();
   const { toast } = useToast();
   const decks = useApp((state) => state.decks);
@@ -320,14 +327,10 @@ function QuickPlay({ order }: { order: number }) {
 
   return (
     <Section order={order}>
-      <SectionHead title={t('hmQuickPlay')} />
+      <SectionHead title={t('hmSetupTable')} />
       <div className="qpGrid">
-        {/* HOST: the chosen commander presides over the tile */}
+        {/* HOST: game, deck, seats, name — the working half of the band above */}
         <div className="qpTile qpHost">
-          {chosenArt && (
-            <div className="qpHostArt" style={{ backgroundImage: `url(${chosenArt})` }} aria-hidden />
-          )}
-          <div className="qpTileScrim" aria-hidden />
           <div className="qpTileBody">
             <span className="qpTileTag">
               <Swords size={14} aria-hidden />

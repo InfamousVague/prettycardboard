@@ -1991,6 +1991,17 @@ export const messages = {
   hmContinue: { en: 'Continue', es: 'Continuar', fr: 'Continuer', ar: 'متابعة' },
   hmStartTable: { en: 'Start a table', es: 'Crear mesa', fr: 'Lancer une table', ar: 'ابدأ طاولة' },
   hmStartTableSub: { en: 'Host or join a game', es: 'Crea o únete a una partida', fr: 'Héberger ou rejoindre', ar: 'استضف أو انضم' },
+  // game-menu band (the Overwatch-style stack; PLAY reuses playTitle,
+  // RESUME reuses hmContinue, DECKS/BROWSE reuse the nav labels)
+  hmOpenPacks: { en: 'Open packs', es: 'Abrir sobres', fr: 'Ouvrir des boosters', ar: 'افتح العبوات' },
+  hmOpenPacksSub: {
+    en: 'Pull new cards for your collection',
+    es: 'Saca cartas nuevas para tu colección',
+    fr: 'Tirez de nouvelles cartes pour votre collection',
+    ar: 'اسحب بطاقات جديدة لمجموعتك',
+  },
+  hmInProgress: { en: 'In progress', es: 'En curso', fr: 'En cours', ar: 'جارية الآن' },
+  hmSetupTable: { en: 'Set up a table', es: 'Prepara una mesa', fr: 'Préparer une table', ar: 'جهّز طاولة' },
   hmWins: { en: 'Wins', es: 'Victorias', fr: 'Victoires', ar: 'انتصارات' },
   hmGames: { en: 'Games', es: 'Partidas', fr: 'Parties', ar: 'مباريات' },
   hmEndorse: { en: 'Endorsements', es: 'Reconocimientos', fr: 'Recommandations', ar: 'تزكيات' },
