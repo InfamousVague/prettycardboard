@@ -10,8 +10,8 @@
   --pc-strip-h: 11.5rem;
   /* The right rail: its width and the gutter the main column clears for it.
      Tokenized so the phone layout can zero both in one place. */
-  --pc-rail-w: 18.5rem;
-  --pc-rail-band: 19.5rem;
+  --pc-rail-w: 20rem;
+  --pc-rail-band: 21rem;
 
   /* A DOCKED side panel's column (see THE DOCK CONTRACT in
      components/panels.css). Folded into the clearance the layout ALREADY
@@ -2703,15 +2703,18 @@
   line-height: 1.15;
 }
 
+/* The pile captions and empty-zone ghosts sit on playmat ART, not a themed
+   surface - the theme's muted greys vanished into it. Plain white with alpha
+   instead, bright enough to read on the darkest mats. */
 .pileLabel {
   font-size: var(--glacier-font-size-xs);
   font-weight: var(--glacier-font-weight-medium);
-  color: var(--glacier-text-muted);
+  color: rgb(255 255 255 / 0.78);
 }
 
 .pileEmpty {
   aspect-ratio: 488 / 680;
-  border: var(--glacier-hairline) dashed color-mix(in oklch, var(--glacier-border) 60%, transparent);
+  border: var(--glacier-hairline) dashed rgb(255 255 255 / 0.6);
   border-radius: 8%;
 }
 
@@ -2719,7 +2722,7 @@
 .pileEmptyIcon {
   display: grid;
   place-items: center;
-  color: color-mix(in oklch, var(--glacier-text-subtle) 80%, transparent);
+  color: rgb(255 255 255 / 0.85);
 }
 
 /* hand fan */
@@ -4836,6 +4839,16 @@
   margin: var(--glacier-space-3) 0;
   border-radius: var(--pc-mat-radius);
   box-shadow: var(--pc-mat-shadow);
+}
+
+/* My own staged board wears the stage's side gutters too. Without them the
+   mat ran to .tableMain's edges (a space-1 field margin was all it had), so
+   its left edge nearly touched the window while a staged OPPONENT sat inside
+   the stage's frame - and the right gap to the rail read as a different
+   margin than the left page gutter. Scoped to the direct child: the grid's
+   live preview embeds a MyBoard of its own that must stay full-bleed. */
+.table:not([data-mobile]) .tableMain > .myBoard {
+  padding-inline: var(--glacier-space-4);
 }
 
 .myBoard[data-strip-only] {
