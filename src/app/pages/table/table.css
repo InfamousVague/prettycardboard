@@ -2913,6 +2913,32 @@
   backdrop-filter: blur(var(--glacier-blur-sm));
 }
 
+/* LifeCard is chrome-free markup: inside the rail's vitals grid it dissolves
+   entirely (its caption/steppers become the grid's own items, exactly the
+   flat layout the cluster always had), and the floating wrapper below is
+   what dresses it as a card. */
+.lifeCard {
+  display: contents;
+}
+
+/* The desktop's health steppers, floating top-left of the mat. Position mirrors
+   the timeline/turn chrome: below the top strip, inside the mat's gutter. */
+.lifeFloat {
+  position: absolute;
+  inset-block-start: calc(var(--pc-strip-clear) + var(--glacier-space-2));
+  inset-inline-start: calc(var(--glacier-space-4) + var(--glacier-space-3));
+  z-index: 30;
+  display: grid;
+  gap: var(--glacier-space-1);
+  justify-items: center;
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
+  border-radius: var(--glacier-radius-xl);
+  background: color-mix(in oklch, oklch(0.18 0.02 265) 82%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  box-shadow: 0 12px 32px oklch(0.05 0.02 265 / 0.45);
+}
+
 .lifeBlock {
   display: flex;
   align-items: center;
@@ -4461,7 +4487,6 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--glacier-space-2);
   overflow-y: auto;
   overscroll-behavior-y: contain;
   /* `stable` reserves a gutter only where the scrollbar is CLASSIC and takes
@@ -4475,11 +4500,38 @@
   scrollbar-width: thin;
   padding-inline-end: var(--glacier-space-2);
   pointer-events: auto;
+  /* ONE aside, not a stack of floating cards: the scroller itself is the
+     glass surface and the sections divide it with hairlines below. */
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
+  border-radius: var(--glacier-radius-xl);
+  background: color-mix(in oklch, oklch(0.18 0.02 265) 80%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  box-shadow: 0 12px 32px oklch(0.05 0.02 265 / 0.45);
 }
 
 .tableSideScroll > * {
   flex-shrink: 0;
   pointer-events: auto;
+}
+
+/* The sections shed their own card chrome inside the unified aside - they are
+   bands of one surface now, parted by hairlines. Their inner padding and
+   layout rules stay untouched. */
+.tableSideScroll > .myVitals,
+.tableSideScroll > .playersCard,
+.tableSideScroll > .sideLogCard,
+.tableSideScroll > .timelineCard,
+.tableSideScroll > .cpDicePanel {
+  border: none;
+  border-radius: 0;
+  background: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.tableSideScroll > * + * {
+  border-block-start: var(--glacier-hairline) solid
+    color-mix(in oklch, var(--glacier-border) 45%, transparent);
 }
 
 .tableSideNav {
@@ -4691,15 +4743,6 @@
   gap: 3px;
   font-size: var(--glacier-font-size-xs);
   color: var(--glacier-text-muted);
-}
-
-.playerTurnDot {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--glacier-success-solid);
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--glacier-success-solid) 25%, transparent);
 }
 
 .playerPing {

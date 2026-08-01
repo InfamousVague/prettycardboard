@@ -94,7 +94,7 @@ import {
   MOBILE_SCALE_STEP,
 } from './table/boardModes.ts';
 import { MyBoard } from './table/MyBoard.tsx';
-import { Vitals } from './table/Vitals.tsx';
+import { LifeCard, Vitals } from './table/Vitals.tsx';
 import { SeatFrame } from './table/SeatFrame.tsx';
 import { OpponentHand } from './table/OpponentHand.tsx';
 import { CyberpunkDicePanel } from './table/CyberpunkDicePanel.tsx';
@@ -850,6 +850,23 @@ export function TablePage() {
                   </Tooltip>
                 </div>
               )}
+              {/* The rail's collapse toggle rides up here (top-right, by
+                  Concede) rather than in the rail's own nav pill - so hiding
+                  and showing the sidebar is one fixed control, not one that
+                  moves with the thing it hides. */}
+              {room.started && !mobile && (
+                <Tooltip content={railHidden ? t('tblRailShow') : t('tblRailHide')}>
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    aria-pressed={railHidden}
+                    aria-label={railHidden ? t('tblRailShow') : t('tblRailHide')}
+                    onClick={() => useTableUi.getState().setRailHidden(!railHidden, identity?.userId)}
+                  >
+                    {railHidden ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
+                  </IconButton>
+                </Tooltip>
+              )}
               {room.started && me && !spectating && !me.conceded && !room.matchResult && (
                 <Tooltip content={t('tblConcede')}>
                   <Button size="sm" variant="ghost" onClick={() => setConfirmConcede(true)}>
@@ -1128,6 +1145,14 @@ export function TablePage() {
       {mobile && room.started && !spectating && (
         <div className="mobileHistory" inert={companion || undefined}>
           <TimelineCard floating />
+        </div>
+      )}
+      {/* Desktop: the health steppers float top-left of the mat, out of the
+          rail - always visible, even while another seat's board is staged
+          (it is MY life either way). Phones keep them in the bottom sheet. */}
+      {!mobile && room.started && me && !spectating && (
+        <div className="lifeFloat">
+          <LifeCard me={me} room={room} />
         </div>
       )}
       {mobile && room.started && (
@@ -1783,7 +1808,6 @@ function SidePanel({
   const log = useGame((state) => state.log);
   const chat = useGame((state) => state.chat);
   const railHidden = useTableUi((state) => state.railHidden);
-  const setRailHidden = useTableUi((state) => state.setRailHidden);
   const scrollRef = useRef<HTMLDivElement>(null);
   // The phone sheet: which tab is open (null = collapsed to the handle chip).
   const [sheet, setSheet] = useState<'vitals' | 'players' | 'log' | 'chat' | null>(null);
@@ -1833,11 +1857,13 @@ function SidePanel({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [log.length, sheet]);
 
-  // The rail's building blocks - shared verbatim between the desktop rail and
-  // the phone bottom sheet, so the two layouts can never drift.
+  // The rail's building blocks - shared between the desktop rail and the phone
+  // bottom sheet, so the two layouts can never drift. On desktop the health
+  // steppers leave the rail and float over the mat (see LifeCard in the board
+  // markup); the sheet keeps them, since the sheet IS the phone's life surface.
   const vitalsEl = seated && (
     <>
-      <Vitals me={me} room={room} />
+      <Vitals me={me} room={room} hideLife={!mobile} />
       {room.game === 'cyberpunk' && (
         <CyberpunkDicePanel me={me} others={room.players.filter((p) => p.userId !== me.userId)} />
       )}
@@ -1932,23 +1958,8 @@ function SidePanel({
   );
   const navEl = (
     <nav className="tableSideNav" aria-label={t('tblTableNav')}>
-      {/* Collapse the rail's card stack, handing its width to the mats. Only
-          while there IS a stack: the lobby's rail is already nav-only, and a
-          phone's rail is a bottom sheet. The pill itself never hides - it is
-          what this button lives in, so there is always a way back. */}
-      {!mobile && room.started && (
-        <Tooltip content={railHidden ? t('tblRailShow') : t('tblRailHide')}>
-          <IconButton
-            size="sm"
-            variant="ghost"
-            aria-pressed={railHidden}
-            aria-label={railHidden ? t('tblRailShow') : t('tblRailHide')}
-            onClick={() => setRailHidden(!railHidden, meId)}
-          >
-            {railHidden ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
-          </IconButton>
-        </Tooltip>
-      )}
+      {/* The rail's collapse toggle lives in the top strip now (by Concede),
+          where it stays put whether or not the rail is up. */}
       {/* The chat's door is the floating ball in the bottom corner (ChatBall),
           not a button in this row - so there is nothing to render here. */}
       {/* The chat's own dock toggle. It lives here rather than in LobbyChat's
@@ -2329,7 +2340,9 @@ function PlayersCard({
                 </IconButton>
               </Tooltip>
             )}
-            {active && <span className="playerTurnDot" aria-hidden />}
+            {/* No trailing turn dot: it shoved the ping button aside every
+                time the turn moved. The row's data-active treatment (the lit
+                seat bar and wash) already says whose turn it is. */}
           </div>
         );
       })}

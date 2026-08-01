@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from 'motion/react';
-import { Button, IconButton, Input, Menu, MenuItem, MenuSub, Pill, SegmentedControl, Size, Text, TextTone, Tooltip, useHaptics, useToast } from '@glacier/react';
+import { Button, IconButton, Input, Menu, MenuItem, MenuSub, Pill, Size, Text, TextTone, Tooltip, useHaptics, useToast } from '@glacier/react';
 import {
   AlignStartVertical,
   ChevronDown,
@@ -50,7 +50,6 @@ import {
   resolveDropTarget,
   snapDrop,
   tidyPositions,
-  type BoardMode,
   typeLineOf,
 } from './boardModes.ts';
 import { canDeclareAttacker, discountedGeneric, enforcedRoom, handPlayability, matchesTargetKind, paymentPlan, stackTargetKinds } from './enforce.ts';
@@ -1607,21 +1606,12 @@ export function MyBoard({
           );
         })}
 
-        {/* board mode toolbar, docked bottom-start of the field */}
-        <div className="boardTools boardToolsStart">
-          <SegmentedControl
-            size="sm"
-            aria-label={t('gpBoardMode')}
-            value={boardMode}
-            onValueChange={(value) => useTableUi.getState().setBoardMode(value as BoardMode, me.userId)}
-            options={[
-              { value: 'free', label: t('gpModeFree') },
-              { value: 'assist', label: t('gpModeAssist') },
-              { value: 'rows', label: t('gpModeRows') },
-              { value: 'grid', label: t('gpModeGrid') },
-            ]}
-          />
-          {boardMode === 'assist' && (
+        {/* The board-mode picker lives in Settings -> Table now, not on the
+            mat - a once-in-a-while preference was spending prime board
+            pixels. Only Smart mode's Tidy button stays: it is an ACTION on
+            the current battlefield, not a setting. */}
+        {boardMode === 'assist' && (
+          <div className="boardTools boardToolsStart">
             <Tooltip content={t('gpTidy')}>
               <IconButton
                 size="sm"
@@ -1638,8 +1628,8 @@ export function MyBoard({
                 <AlignStartVertical size={15} />
               </IconButton>
             </Tooltip>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* dice + markers toolbar, docked bottom-end of the field */}
         <div className="boardTools boardToolsEnd">

@@ -26,6 +26,9 @@ import { BotsTab } from './settings/BotsTab.tsx';
 import { AboutTab } from './settings/AboutTab.tsx';
 import { CustomizeTab } from './settings/CustomizeTab.tsx';
 import { KeybindsTab } from './settings/KeybindsTab.tsx';
+import { useApp } from './state/appStore.ts';
+import { useTableUi } from './pages/table/tableUi.ts';
+import type { BoardMode } from './pages/table/boardModes.ts';
 
 function resolveTheme(theme: Preferences['theme']): 'light' | 'dark' {
   if (theme !== 'system') return theme;
@@ -59,6 +62,13 @@ export function SettingsModal({
   const t = useT();
   const { toast } = useToast();
   const phone = useMobileLayout();
+  // The battlefield arrangement (free / smart / rows / grid). Table-scoped
+  // state rather than a Preferences field - it was born on the mat's own
+  // toolbar and keeps its per-user persistence (see boardModes.ts) - but it
+  // is a once-in-a-while choice, so the picker lives here with the other
+  // layout controls instead of spending board pixels.
+  const userId = useApp((state) => state.identity?.userId);
+  const boardMode = useTableUi((state) => state.boardMode);
   // The active tab is controlled so callers can deep-link (rail Customize, the
   // in-game menu) straight to a section; it resets to the requested tab on each
   // open.
@@ -301,6 +311,25 @@ export function SettingsModal({
           </Text>
         </div>
       )}
+
+      <div className="control">
+        <Label>{t('gpBoardMode')}</Label>
+        <SegmentedControl
+          aria-label={t('gpBoardMode')}
+          fullWidth
+          value={boardMode}
+          onValueChange={(value) => useTableUi.getState().setBoardMode(value as BoardMode, userId)}
+          options={[
+            { value: 'free', label: t('gpModeFree') },
+            { value: 'assist', label: t('gpModeAssist') },
+            { value: 'rows', label: t('gpModeRows') },
+            { value: 'grid', label: t('gpModeGrid') },
+          ]}
+        />
+        <Text size={Size.XSmall} tone={TextTone.Subtle}>
+          {t('setBoardModeHint')}
+        </Text>
+      </div>
 
       <div className="control">
         <Label>{t('setCardPlacement')}</Label>

@@ -1385,6 +1385,12 @@ export const messages = {
   // both the tooltip and the aria-label of an icon-only button.
   dockPanel: { en: 'Dock panel', es: 'Acoplar panel', fr: 'Ancrer le panneau', ar: 'إرساء اللوحة' },
   floatPanel: { en: 'Float panel', es: 'Flotar panel', fr: 'Détacher le panneau', ar: 'تعويم اللوحة' },
+  setBoardModeHint: {
+    en: 'How cards arrange themselves on your battlefield.',
+    es: 'Cómo se organizan las cartas en tu campo de batalla.',
+    fr: 'Comment les cartes s’organisent sur votre champ de bataille.',
+    ar: 'كيف تُرتَّب البطاقات في ساحة معركتك.',
+  },
   setCardPlacement: { en: 'Card placement', es: 'Colocación de cartas', fr: 'Placement des cartes', ar: 'وضع البطاقات' },
   setCardNatural: { en: 'Natural', es: 'Natural', fr: 'Naturel', ar: 'طبيعي' },
   setCardVertical: { en: 'Vertical', es: 'Vertical', fr: 'Vertical', ar: 'عمودي' },

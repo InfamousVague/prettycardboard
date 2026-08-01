@@ -24,35 +24,17 @@ import { useTableUi } from './tableUi.ts';
 import { formatFor } from '../../data/formats.ts';
 import type { ManaColor, ManaPool, RoomState, TablePlayer } from '../../net/types.ts';
 
-/**
- * The personal vitals + conveniences cluster in the right rail: life (or the
- * game's primary resource), the draw/untap/shuffle/token/settings row, the
- * token-create form, the floating-mana pad (MTG only), and the damage tracker
- * (commander damage per opponent, then poison). Rendered only for the seated
- * player, so all of its actions target `me`.
- */
-export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
-  const t = useT();
-  const act = useGame((state) => state.act);
-  const [tokenOpen, setTokenOpen] = useState(false);
-  const [tokenName, setTokenName] = useState('');
-  const [tokenPT, setTokenPT] = useState('1/1');
-  const lifeRef = useRef<HTMLSpanElement>(null);
-  // Commander damage I've taken from each opponent's commander (21 = lethal).
-  // Manual, like all damage now: steppers adjust cmdDamage[fromSeat].
-  const cmdFoes = formatFor(room.format).hasCommander
-    ? room.players.filter((p) => p.seat !== me.seat && !p.conceded)
-    : [];
-
+/* The life readout's shared derivations, used by BOTH the floating life card
+   and the rail's vitals - one source so the two can never grade the same
+   total differently. */
+function lifeMeta(me: TablePlayer, room: RoomState, fallbackLabel: string) {
   // Vitals are game-driven. MTG's `life`/`poison` slots are relabeled per the
   // registry: Cyberpunk shows Net (primary) + RAM (secondary), no poison-lethal;
   // Yu-Gi-Oh shows LP only (no secondary resource) and steps in LP-sized bites.
   const cyber = room.game === 'cyberpunk';
   const yugioh = room.game === 'yugioh';
   const gdef = getGame(room.game);
-  const primaryLabel = gdef.resources.find((r) => r.primary)?.label ?? t('tblLife');
-  const secondary = gdef.resources.find((r) => !r.primary);
-  const secondaryLabel = secondary?.label ?? t('tblPoison');
+  const primaryLabel = gdef.resources.find((r) => r.primary)?.label ?? fallbackLabel;
   // Yu-Gi-Oh life moves in hundreds; a ±1 stepper would be 30 clicks per attack.
   const lifeStep = yugioh ? 100 : 1;
 
@@ -68,12 +50,26 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
     (typeof primaryStart === 'function' ? primaryStart(room.format ?? '') : primaryStart);
   const lifeFrac = startLife > 0 ? me.life / startLife : 1;
   const lifeState = me.life <= 0 ? 'out' : lifeFrac <= 0.25 ? 'critical' : lifeFrac <= 0.5 ? 'bloodied' : 'ok';
+  return { cyber, yugioh, primaryLabel, lifeStep, lifeState };
+}
 
+/**
+ * The health controls on their own: the big total with its steppers (and
+ * Yu-Gi-Oh's LP-sized quick steps). On desktop this floats top-left of the
+ * playmat; on a phone it stays inside Vitals in the bottom sheet.
+ */
+export function LifeCard({ me, room }: { me: TablePlayer; room: RoomState }) {
+  const t = useT();
+  const act = useGame((state) => state.act);
+  const lifeRef = useRef<HTMLSpanElement>(null);
+  const { cyber, yugioh, primaryLabel, lifeStep, lifeState } = lifeMeta(me, room, t('tblLife'));
   return (
-    <div className="myVitals" data-game={room.game || 'mtg'}>
+    // Chrome-free on purpose: inside the rail's vitals grid it dissolves
+    // (display: contents), and the floating wrapper supplies the card look.
+    <div className="lifeCard" data-game={room.game || 'mtg'}>
       {(cyber || yugioh) && <div className="vitalCaption">{primaryLabel}</div>}
-      {/* The label rides with the number now: on a board full of counters, a
-          bare figure with two steppers does not say WHAT it counts. */}
+      {/* The label rides with the number: on a board full of counters, a bare
+          figure with two steppers does not say WHAT it counts. */}
       <div className="lifeBlock" data-state={lifeState}>
         <IconButton
           size="sm"
@@ -121,6 +117,38 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The personal vitals + conveniences cluster in the right rail: life (or the
+ * game's primary resource), the draw/untap/shuffle/token/settings row, the
+ * token-create form, the floating-mana pad (MTG only), and the damage tracker
+ * (commander damage per opponent, then poison). Rendered only for the seated
+ * player, so all of its actions target `me`. With `hideLife` the health
+ * cluster is left out - the desktop floats it over the mat as LifeCard.
+ */
+export function Vitals({ me, room, hideLife }: { me: TablePlayer; room: RoomState; hideLife?: boolean }) {
+  const t = useT();
+  const act = useGame((state) => state.act);
+  const [tokenOpen, setTokenOpen] = useState(false);
+  const [tokenName, setTokenName] = useState('');
+  const [tokenPT, setTokenPT] = useState('1/1');
+  // Commander damage I've taken from each opponent's commander (21 = lethal).
+  // Manual, like all damage now: steppers adjust cmdDamage[fromSeat].
+  const cmdFoes = formatFor(room.format).hasCommander
+    ? room.players.filter((p) => p.seat !== me.seat && !p.conceded)
+    : [];
+
+  const { cyber, yugioh } = lifeMeta(me, room, t('tblLife'));
+  const gdef = getGame(room.game);
+  const secondary = gdef.resources.find((r) => !r.primary);
+  const secondaryLabel = secondary?.label ?? t('tblPoison');
+
+  return (
+    <div className="myVitals" data-game={room.game || 'mtg'}>
+      {!hideLife && <LifeCard me={me} room={room} />}
       <div className="convenience">
         <Tooltip content={`${t('tblDraw')} 1`}>
           <IconButton size="sm" variant="soft" aria-label={t('tblDraw')} onClick={() => act({ kind: 'draw', count: 1 })}>
