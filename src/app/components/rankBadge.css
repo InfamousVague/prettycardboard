@@ -1,0 +1,106 @@
+/* Competitive rank badge: emblem + tier numeral, and the avatar ring variant.
+   Sized entirely off --rank-size so one component serves the 20px lobby chip
+   and the 96px career plate without a size enum. */
+
+.rankBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  min-inline-size: 0;
+}
+
+.rankBadgeArt {
+  position: relative;
+  flex: none;
+  inline-size: var(--rank-size);
+  block-size: var(--rank-size);
+  display: block;
+}
+
+.rankBadgeArt img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+  display: block;
+  /* The emblems are lit from above and carry no baked shadow, so they need one
+     to sit on glass rather than float on it. Scaled off the badge size so a
+     20px chip does not wear a 96px badge's shadow. */
+  filter: drop-shadow(0 calc(var(--rank-size) * 0.03) calc(var(--rank-size) * 0.06) rgb(0 0 0 / 0.55));
+}
+
+/* The numeral rides the emblem's foot, centred, on its own dark plate so it
+   reads against whatever metal is behind it. */
+.rankBadgeTier {
+  position: absolute;
+  inset-block-end: calc(var(--rank-size) * -0.04);
+  inset-inline: 0;
+  margin-inline: auto;
+  inline-size: fit-content;
+  padding-inline: calc(var(--rank-size) * 0.09);
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--glacier-bg) 82%, transparent);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--rank-accent) 55%, transparent);
+  color: var(--rank-accent);
+  font-family: var(--glacier-font-sans);
+  font-weight: var(--glacier-font-weight-bold);
+  font-size: calc(var(--rank-size) * 0.2);
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  /* RankBadge stops rendering this below 32px - measured, not guessed: at 20px
+     the plate is 4px of type and reads as a smudge. */
+}
+
+.rankBadgeLabel {
+  font-weight: var(--glacier-font-weight-semibold);
+  font-size: var(--glacier-font-size-sm);
+  color: var(--glacier-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Screen-reader-only: the badge is decorative art, so the division name has to
+   reach assistive tech some other way. */
+.srOnly {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- avatar ring ---- */
+
+.rankAvatar {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--rank-size);
+  block-size: var(--rank-size);
+  flex: none;
+}
+
+/* The ring's band eats roughly 13% of its width per side, so the portrait is
+   inset to sit inside it rather than under it. */
+.rankAvatarInner {
+  display: grid;
+  place-items: center;
+  inline-size: 74%;
+  block-size: 74%;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.rankAvatarRing {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 6px rgb(0 0 0 / 0.5));
+}
