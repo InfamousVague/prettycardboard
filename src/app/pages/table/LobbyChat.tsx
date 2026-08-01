@@ -5,6 +5,7 @@ import { useT } from '../../i18n.ts';
 import { useApp } from '../../state/appStore.ts';
 import { useGame, type ChatLine } from '../../state/gameStore.ts';
 import { artCrop } from '../../data/cards.ts';
+import { isMuted, onMutesChanged } from '../../data/mutes.ts';
 import { classifyEventLine, type EventTone } from './eventLines.ts';
 import './lobbyChat.css';
 
@@ -61,8 +62,11 @@ export function LobbyChat({
 
   // One transcript: spoken lines and the table's event narration (the same
   // lines that toast), interleaved by wall clock.
+  // Squelched players' lines drop out of the transcript on this client.
+  const [mutesTick, setMutesTick] = useState(0);
+  useEffect(() => onMutesChanged(() => setMutesTick((n) => n + 1)), []);
   const entries = useMemo(() => {
-    const merged: Entry[] = chat.map((line, index) => ({
+    const merged: Entry[] = chat.filter((line) => !isMuted(line.from.userId)).map((line, index) => ({
       kind: 'chat' as const,
       ts: line.ts,
       key: `c-${line.ts}-${index}`,
@@ -74,7 +78,8 @@ export function LobbyChat({
     }
     merged.sort((a, b) => a.ts - b.ts);
     return merged;
-  }, [chat, log]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chat, log, mutesTick]);
 
   // Follow the tail as messages arrive (and on first mount).
   useEffect(() => {

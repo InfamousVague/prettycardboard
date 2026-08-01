@@ -25,6 +25,7 @@ import type { CardInst, RoomState, TablePlayer, Zone } from '../../net/types.ts'
 import { formatFor } from '../../data/formats.ts';
 import { useTableUi } from './tableUi.ts';
 import { flyToAnchor } from './juice.ts';
+import { playSound } from '../../sounds.ts';
 
 /**
  * The table's modal moments: private library windows (peek with drag-reorder
@@ -812,6 +813,12 @@ export function TriggerPrompts({ room, me }: { room: RoomState; me: TablePlayer 
     () => (room.pendingTriggers ?? []).filter((p) => p.owner === me?.userId),
     [room.pendingTriggers, me?.userId],
   );
+  // A prompt arriving for YOU is the one moment the table needs your ears.
+  const chimeCount = useRef(0);
+  useEffect(() => {
+    if (mine.length > chimeCount.current) playSound('ping');
+    chimeCount.current = mine.length;
+  }, [mine.length]);
   if (!me || mine.length === 0) return null;
   return (
     <div className="triggerPrompts">
@@ -885,6 +892,9 @@ export function DiscardPrompts({ room, me }: { room: RoomState; me: TablePlayer 
   // A fresh prompt (or a hand change consuming picked cards) resets the pick.
   const promptId = mine[0]?.id;
   useEffect(() => setPicked([]), [promptId]);
+  useEffect(() => {
+    if (promptId) playSound('ping');
+  }, [promptId]);
   const p = mine[0];
   if (!me || !p) return null;
   const hand = me.hand ?? [];
@@ -960,7 +970,7 @@ export function DiscardPrompts({ room, me }: { room: RoomState; me: TablePlayer 
 // Dice results and combat damage both deserve the center-stage banner.
 // "deals N damage to" covers combat player damage and manual life-deals,
 // which previously surfaced on no overlay at all.
-const ROLLISH = /\broll(s|ed)?\b|\bHeads\b|\bTails\b|loses \d+ life|deals \d+ damage to|commander damage/i;
+const ROLLISH = /\broll(s|ed)?\b|\bHeads\b|\bTails\b|loses \d+ life|deals \d+ damage to|commander damage|casts .+ \(tax \d+\)/i;
 // A dice/coin result: hold the banner until the 3D dice have settled so the
 // number isn't spoiled mid-tumble. Non-dice banners (life, combat) show at once.
 const DICE_RESULT = /\broll(s|ed)?\b|\bHeads\b|\bTails\b/i;

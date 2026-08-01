@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Heading, Size, Spinner, Text, TextTone } from '@glacier/react';
 import { CircleDollarSign, Coins, Cpu, Layers, Link2, Palette, Shield, Star, Swords } from '@glacier/icons';
 import { useT } from '../i18n.ts';
+import { keywordsFromText, knownKeywords } from '../data/keywords.ts';
 import { cyberpunkCard, type CyberpunkCard } from '../data/cyberpunk.ts';
 import {
   isYugiohId,
@@ -305,6 +306,25 @@ function OracleText({ text }: { text: string }) {
  * (the hover preview) suppresses the loading spinner and network flash — it
  * shows what's already resolved and nothing while an MTG lookup is in flight.
  */
+/** Stacked keyword explainers under the rules text: each glossary-known
+ * keyword on the card gets a chip with its one-line plain-language meaning -
+ * the Runeterra treatment, so nobody has to ask what ward does mid-game. */
+function KeywordChips({ text }: { text: string }) {
+  const words = keywordsFromText(text);
+  const known = knownKeywords(words);
+  if (known.length === 0) return null;
+  return (
+    <div className="cpKeywords">
+      {known.map(({ word, text: gloss }) => (
+        <div key={word} className="cpKeyword">
+          <span className="cpKeywordWord">{word}</span>
+          <span className="cpKeywordGloss">{gloss}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function CardDetailsBody({
   scryfallId,
   name,
@@ -410,6 +430,9 @@ export function CardDetailsBody({
               </Text>
             </div>
           ) : null}
+          {details?.oracleText && !compact && (
+            <KeywordChips text={details.oracleText} />
+          )}
           {details?.flavorText && (
             <Text size={Size.Small} tone={TextTone.Subtle} className="cpFlavor">
               {details.flavorText}

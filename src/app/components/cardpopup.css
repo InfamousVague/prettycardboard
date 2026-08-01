@@ -295,3 +295,37 @@
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
+
+/* ---- keyword glossary chips ----
+   Each glossary-known keyword on the inspected card, with its plain-language
+   one-liner. Stacked, quiet, and skimmable - rules help without rules text. */
+.cpKeywords {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+  margin-block-start: var(--glacier-space-2);
+  padding-block-start: var(--glacier-space-2);
+  border-block-start: var(--glacier-hairline) solid var(--glacier-glass-border);
+}
+
+.cpKeyword {
+  display: flex;
+  align-items: baseline;
+  gap: var(--glacier-space-2);
+  font-size: var(--glacier-font-size-xs);
+  line-height: 1.45;
+}
+
+.cpKeywordWord {
+  flex: none;
+  font-weight: var(--glacier-font-weight-semibold);
+  color: var(--glacier-accent-text, var(--glacier-accent-solid));
+  padding: 0 var(--glacier-space-2);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-accent-solid) 35%, var(--glacier-border));
+  border-radius: var(--glacier-radius-full, 999px);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 10%, transparent);
+}
+
+.cpKeywordGloss {
+  color: var(--glacier-text-muted);
+}

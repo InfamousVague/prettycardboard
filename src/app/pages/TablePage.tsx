@@ -27,9 +27,11 @@ import {
   LayoutGrid,
   LogOut,
   MessageSquare,
+  PanelRight,
   PanelRightClose,
   PanelRightOpen,
   Paperclip,
+  PictureInPicture2,
   Play,
   Plus,
   Repeat,
@@ -49,6 +51,9 @@ import {
   Sparkles,
   Minus,
   Trash2,
+  Smile,
+  Volume2,
+  VolumeX,
 } from '@glacier/icons';
 import { PlayingCardBlank, PlayingCardHand, PlayingCardStack } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
@@ -60,7 +65,9 @@ import { useFaces } from '../data/faces.ts';
 import { cardBackUrl, effectiveCardBack } from '../data/cardBacks.ts';
 import { useEdgeColor } from '../data/edgeColor.ts';
 import { tableShareUrl } from '../data/pendingJoin.ts';
+import { isMuted, toggleMute } from '../data/mutes.ts';
 import { usePreference } from '../hooks/usePreference.ts';
+import { usePanelDock } from '../hooks/usePanelDock.ts';
 import { useMobileLayout, usePortrait } from '../hooks/useIsPhone.ts';
 import { RotateOverlay } from './table/RotateOverlay.tsx';
 import { resolveKeybinds, KEYBIND_DEF, type ActionId } from '../data/keybinds.ts';
@@ -74,7 +81,7 @@ import type { GameId } from '../data/games.ts';
 import { GameCard } from '../components/GameCard.tsx';
 import { ManaPoolReadout } from '../components/Mana.tsx';
 import type { CardInst, GameAction, GameActionV2, RoomState, TablePlayer, Zone } from '../net/types.ts';
-import { selectCardScale, useTableUi } from './table/tableUi.ts';
+import { TABLE_DOCK_ID, selectCardScale, useTableUi } from './table/tableUi.ts';
 import {
   CARD_SCALE_MAX,
   CARD_SCALE_MIN,
@@ -944,6 +951,13 @@ export function TablePage() {
         {room.started && <StackTray room={room} canAct={canAct} />}
       </div>
 
+      {/* ---- the dock slot: the column a side panel portals into when it is
+           docked instead of floating over the board (THE DOCK CONTRACT, see
+           components/panels.css). Always rendered and deliberately bare - the
+           stylesheet lays it out only once it has a child, so a table with
+           nothing docked is identical to one with no slot at all. ---- */}
+      <div id={TABLE_DOCK_ID} className="tableDock" />
+
       {/* ---- right dock: scrollable table cards over persistent navigation ---- */}
       <SidePanel
         room={room}
@@ -1666,6 +1680,11 @@ function SidePanel({
   // Desktop: the chat aside slides over the board edge when opened from the
   // nav row. Messages that arrive while it is closed light an unread dot.
   const [chatOpen, setChatOpen] = useState(false);
+  // ...or it docks into the board's own column instead, and the board narrows
+  // to make room. Phone-safe by construction: usePanelDock never reports docked
+  // under the phone composition, so this component must not re-check `mobile`.
+  const chatDock = usePanelDock('chat', TABLE_DOCK_ID);
+  const chatSlot = chatDock.docked ? chatDock.slot : null;
   // The log is collapsed by default and card names are starred out: a glance
   // at it must never spoil what a tutor fetched or what is about to resolve.
   const [logOpen, setLogOpen] = useState(() => {
@@ -1847,6 +1866,27 @@ function SidePanel({
           </span>
         </Tooltip>
       )}
+      {/* The chat's own dock toggle. It lives here rather than in LobbyChat's
+          header because LobbyChat is shared with the phone sheet and the lobby,
+          where there is nothing to dock into - the nav is the chat's chrome at
+          the table. Only while the chat is actually up, and gated on the hook's
+          own answer, never on `mobile`: usePanelDock is what knows that a short
+          desktop window counts as a phone.
+          i18n: dockPanel / floatPanel - literal English until the Phase 2 pass
+          adds the keys across en/es/fr/ar. */}
+      {chatOpen && !mobile && (
+        <Tooltip content={chatDock.docked ? 'Float panel' : 'Dock panel'}>
+          <IconButton
+            size="sm"
+            variant="ghost"
+            aria-pressed={chatDock.docked}
+            aria-label={chatDock.docked ? 'Float panel' : 'Dock panel'}
+            onClick={() => chatDock.setMode(chatDock.docked ? 'float' : 'dock')}
+          >
+            {chatDock.docked ? <PictureInPicture2 size={16} /> : <PanelRight size={16} />}
+          </IconButton>
+        </Tooltip>
+      )}
       {/* Pings live on the player rows (each name carries its own bell), and
           sharing lives in the pregame lobby - neither earns nav chrome. */}
       <Tooltip content={t('setTitle')}>
@@ -1893,13 +1933,24 @@ function SidePanel({
     </nav>
   );
 
-  // The slide-over the nav's chat button opens, at the table and in the lobby
-  // alike. Only its title and density differ between the two.
-  const chatAsideEl = chatOpen && (
-    <div className="chatAside" role="dialog" aria-label={room.started ? t('tblChat') : t('chatTitle')}>
+  // The panel the nav's chat button opens, at the table and in the lobby alike.
+  // Only its title and density differ between the two. ONE wrapper for both
+  // forms: floating it is a slide-over dialog, docked it is a column of the
+  // page - so the role changes with it, because a screen reader announcing a
+  // permanently-open column as a dialog is a lie about what it is.
+  const chatAsideEl = chatOpen ? (
+    <div
+      className="chatAside pcPanel"
+      data-dock={chatSlot ? 'dock' : 'float'}
+      role={chatSlot ? 'complementary' : 'dialog'}
+      aria-label={room.started ? t('tblChat') : t('chatTitle')}
+    >
       <LobbyChat variant={room.started ? 'table' : 'lobby'} onClose={() => setChatOpen(false)} />
     </div>
-  );
+  ) : null;
+  // Docked, it renders into the table's reserved column instead of over the
+  // board - the same portal the lobby's nav has always used, one slot along.
+  const chatEl = chatAsideEl && chatSlot ? createPortal(chatAsideEl, chatSlot) : chatAsideEl;
 
   if (mobile) {
     // Pregame mirrors the desktop rail: nav only. Vitals/players/log describe a
@@ -1910,7 +1961,7 @@ function SidePanel({
           <div className="mobileDock" data-nav-only>
             {navEl}
           </div>
-          {chatAsideEl}
+          {chatEl}
         </>
       );
     }
@@ -1981,7 +2032,7 @@ function SidePanel({
     return (
       <>
         {lobbyDock ? createPortal(navEl, lobbyDock) : null}
-        {chatAsideEl}
+        {chatEl}
       </>
     );
   }
@@ -1998,7 +2049,7 @@ function SidePanel({
         )}
         {navEl}
       </aside>
-      {chatAsideEl}
+      {chatEl}
     </>
   );
 }
@@ -2041,6 +2092,8 @@ function PlayersCard({
   const t = useT();
   const markers = room.markers ?? {};
   const players = [...room.players].sort((a, b) => a.seat - b.seat);
+  // Squelch state is module-level; a local tick re-renders the toggles.
+  const [, bumpMutes] = useState(0);
   return (
     <div className="playersCard">
       {players.map((player) => {
@@ -2124,6 +2177,49 @@ function PlayersCard({
                 </span>
               </span>
             </div>
+            {isMe && (
+              <Menu
+                aria-label={t('emWheel')}
+                placement="bottom-end"
+                trigger={
+                  <IconButton
+                    className="playerPing"
+                    size="sm"
+                    variant="ghost"
+                    aria-label={t('emWheel')}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <Smile size={13} />
+                  </IconButton>
+                }
+              >
+                {(['emGreetings', 'emWellPlayed', 'emWow', 'emThinking', 'emOops', 'emThreaten'] as const).map(
+                  (key) => (
+                    <MenuItem key={key} onSelect={() => useGame.getState().sendChat(t(key))}>
+                      {t(key)}
+                    </MenuItem>
+                  ),
+                )}
+              </Menu>
+            )}
+            {!isMe && (
+              <Tooltip content={isMuted(player.userId) ? t('emUnmute') : t('emMute')}>
+                <IconButton
+                  className="playerPing"
+                  size="sm"
+                  variant="ghost"
+                  aria-label={isMuted(player.userId) ? t('emUnmute') : t('emMute')}
+                  data-muted={isMuted(player.userId) || undefined}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleMute(player.userId);
+                    bumpMutes((n) => n + 1);
+                  }}
+                >
+                  {isMuted(player.userId) ? <VolumeX size={13} /> : <Volume2 size={13} />}
+                </IconButton>
+              </Tooltip>
+            )}
             {!isMe && player.online !== false && !player.conceded && onPingPlayer && (
               <Tooltip content={t('tblPingPlayer').replace('{name}', player.username)}>
                 <IconButton
