@@ -339,13 +339,85 @@
   gap: var(--glacier-space-2);
 }
 
-.turnLabel {
-  font-family: var(--glacier-font-mono);
+/* The turn plate. Everything about it answers "whose turn, which turn, how
+   long" without anyone having to read a sentence: the active seat's colour on
+   the leading edge (the same hue that seat wears on the mat, its cursor and its
+   markers), the count big enough to catch, the name in the tracked caps the
+   rest of the app uses for a headline, and the clock in mono so its digits do
+   not jitter as they tick. */
+.turnPlate {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-1) var(--glacier-space-3);
+  padding-inline-start: var(--glacier-space-3);
+  position: relative;
   white-space: nowrap;
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
+  border-radius: var(--glacier-radius-md);
+  background: color-mix(in oklch, var(--glacier-surface) 55%, transparent);
 }
 
-.turnLabel .turnWord {
-  text-transform: capitalize;
+/* The seat's colour, as a leading edge - the accent language the plates on
+   every other page already speak. */
+.turnPlate::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 3px;
+  border-start-start-radius: inherit;
+  border-end-start-radius: inherit;
+  background: var(--pc-seat-color, var(--glacier-accent-solid));
+}
+
+/* Your turn: the plate lights in the seat's own colour rather than shouting in
+   the app accent, so a four-player pod stays readable at a glance. */
+.turnPlate[data-mine] {
+  border-color: color-mix(in oklch, var(--pc-seat-color, var(--glacier-accent-solid)) 55%, var(--glacier-border));
+  background: color-mix(in oklch, var(--pc-seat-color, var(--glacier-accent-solid)) 12%, transparent);
+}
+
+.turnPlateCount {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--glacier-space-1);
+}
+
+.turnPlateWord {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: var(--glacier-font-size-2xs, 0.6875rem);
+  color: var(--glacier-text-muted);
+}
+
+.turnPlateNum {
+  font-size: var(--glacier-font-size-lg);
+  font-weight: var(--glacier-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.turnPlateWho {
+  max-inline-size: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-semibold);
+}
+
+.turnPlate[data-mine] .turnPlateWho {
+  color: var(--pc-seat-color, var(--glacier-accent-text));
+}
+
+/* Mono, so a ticking clock does not reflow the plate every second. */
+.turnPlateClock {
+  font-family: var(--glacier-font-mono);
+  font-size: var(--glacier-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--glacier-text-muted);
 }
 
 .endTurnWrap {
@@ -2867,14 +2939,50 @@
   color: var(--glacier-danger-text, var(--glacier-danger-solid));
 }
 
+/* The number and what it counts, as one unit - so the steppers stay on the
+   outside and the label cannot be mistaken for a third button. */
+.lifeStack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
 .lifeBig {
   font-family: var(--glacier-font-mono);
-  font-size: 2.1rem;
+  font-size: 2.6rem;
   font-weight: var(--glacier-font-weight-bold);
   line-height: 1;
   min-width: 2ch;
   text-align: center;
   display: inline-block;
+  font-variant-numeric: tabular-nums;
+  transition: color var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.lifeCaption {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: var(--glacier-font-size-2xs, 0.6875rem);
+  color: var(--glacier-text-muted);
+}
+
+/* Health states. A RATIO of the table's own starting total, not a threshold on
+   the figure: "10 left" is a scratch at Commander's 40 and half a life at
+   Standard's 20. Colour only - no bar - because the exact number is the thing
+   players actually track, and a meter beside it would just repeat it. */
+.lifeBlock[data-state='bloodied'] .lifeBig {
+  color: var(--glacier-warning-text, #f0b429);
+}
+
+.lifeBlock[data-state='critical'] .lifeBig {
+  color: var(--glacier-danger-text, #f87171);
+}
+
+.lifeBlock[data-state='out'] .lifeBig {
+  color: var(--glacier-danger-text, #f87171);
+  opacity: 0.55;
+  text-decoration: line-through;
 }
 
 .convenience {
@@ -4336,8 +4444,16 @@
   gap: var(--glacier-space-2);
   overflow-y: auto;
   overscroll-behavior-y: contain;
+  /* `stable` reserves a gutter only where the scrollbar is CLASSIC and takes
+     real width. On an overlay-scrollbar platform (macOS by default, and any
+     system set to "show on scrolling") it reserves nothing - measured
+     offsetWidth - clientWidth = 0 - so the bar floats over the cards, which run
+     to the column's own edge. The padding is what actually keeps content out
+     from under it; the gutter stays for the classic case, where the two simply
+     add up to a slightly wider inset rather than a collision. */
   scrollbar-gutter: stable;
   scrollbar-width: thin;
+  padding-inline-end: var(--glacier-space-2);
   pointer-events: auto;
 }
 
@@ -4916,15 +5032,6 @@
   padding-inline-start: var(--glacier-space-2);
 }
 
-/* Turn timer: quiet mono clock beside the turn indicator. */
-.turnTimer {
-  margin-inline-start: 0.6em;
-  padding: 0.05rem 0.45rem;
-  border-radius: var(--glacier-radius-full);
-  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
-  color: var(--glacier-text-subtle);
-  font-variant-numeric: tabular-nums;
-}
 
 /* ---- conceded players on the side panel ---- */
 
@@ -6893,7 +7000,7 @@
 
 .mobileTurnDock .markerChips,
 .mobileTurnDock .phaseRibbon,
-.mobileTurnDock .turnLabel {
+.mobileTurnDock .turnPlate {
   display: none;
 }
 

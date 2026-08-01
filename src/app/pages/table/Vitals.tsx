@@ -56,10 +56,25 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
   // Yu-Gi-Oh life moves in hundreds; a ±1 stepper would be 30 clicks per attack.
   const lifeStep = yugioh ? 100 : 1;
 
+  // How much of the pool is left, as a fraction - so the readout can go
+  // bloodied and then critical. A ratio rather than a threshold on the number
+  // itself, because the same "10 left" is a scratch at Commander's 40, half a
+  // life at Standard's 20, and a rounding error at Yu-Gi-Oh's 8000. The
+  // starting value is whatever the table was actually set to, falling back to
+  // the game registry's own default for the format.
+  const primaryStart = gdef.resources.find((r) => r.primary)?.start ?? 20;
+  const startLife =
+    room.settings?.startingLife ??
+    (typeof primaryStart === 'function' ? primaryStart(room.format ?? '') : primaryStart);
+  const lifeFrac = startLife > 0 ? me.life / startLife : 1;
+  const lifeState = me.life <= 0 ? 'out' : lifeFrac <= 0.25 ? 'critical' : lifeFrac <= 0.5 ? 'bloodied' : 'ok';
+
   return (
     <div className="myVitals" data-game={room.game || 'mtg'}>
       {(cyber || yugioh) && <div className="vitalCaption">{primaryLabel}</div>}
-      <div className="lifeBlock">
+      {/* The label rides with the number now: on a board full of counters, a
+          bare figure with two steppers does not say WHAT it counts. */}
+      <div className="lifeBlock" data-state={lifeState}>
         <IconButton
           size="sm"
           variant="ghost"
@@ -71,8 +86,11 @@ export function Vitals({ me, room }: { me: TablePlayer; room: RoomState }) {
         >
           <Minus size={14} />
         </IconButton>
-        <span className="lifeBig" ref={lifeRef}>
-          {me.life}
+        <span className="lifeStack">
+          <span className="lifeBig" ref={lifeRef}>
+            {me.life}
+          </span>
+          {!cyber && !yugioh && <span className="lifeCaption">{primaryLabel}</span>}
         </span>
         <IconButton
           size="sm"

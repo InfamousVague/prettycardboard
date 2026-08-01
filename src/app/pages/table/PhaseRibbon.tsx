@@ -17,6 +17,7 @@ import {
 } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import { isCreature } from './boardModes.ts';
+import { seatColor } from './seatColors.ts';
 import { enforcedRoom } from './enforce.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { getGame } from '../../data/games.ts';
@@ -299,11 +300,25 @@ export function PhaseRibbon({
 
       {/* turn counter + end turn cluster */}
       <div className="turnCluster">
-        <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="turnLabel">
-          <span className="turnWord">{t('gpTurnOf')}</span> {room.turnNumber ?? 1}
-          {activePlayer ? ` · ${activePlayer.username}` : ''}
-          <span className="turnTimer">{turnClock}</span>
-        </Text>
+        {/* The turn readout is the one thing everyone at the table looks at
+            constantly, so it reads as a HUD plate rather than a line of mono
+            text: the active seat's own colour on the leading edge, the turn
+            number at a glance, and whose turn it is in the same tracked caps
+            the rest of the app uses for a headline. */}
+        <div
+          className="turnPlate"
+          data-mine={myTurn || undefined}
+          style={{ ['--pc-seat-color' as string]: seatColor(room.activeSeat ?? 0) }}
+        >
+          <span className="turnPlateCount">
+            <span className="turnPlateWord">{t('gpTurnOf')}</span>
+            <b className="turnPlateNum">{room.turnNumber ?? 1}</b>
+          </span>
+          {activePlayer && (
+            <span className="turnPlateWho">{myTurn ? t('tblYourTurn') : activePlayer.username}</span>
+          )}
+          <span className="turnPlateClock">{turnClock}</span>
+        </div>
 
         {canAct && me && (
           <>
