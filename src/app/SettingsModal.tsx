@@ -255,21 +255,50 @@ export function SettingsModal({
         </Text>
       </div>
 
-      {/* The floating/full sidebar choice is desktop chrome; phones have no
-          sidebar to lay out. */}
+      {/* The CHROME axis: whether the shell's surfaces detach into rounded
+          cards or sit flush against the edges. No longer desktop-only - the
+          phone tab bar honours it too, so it is not "the sidebar" any more. */}
+      <div className="control">
+        <Label>{t('setLayout')}</Label>
+        <SegmentedControl
+          aria-label={t('setLayout')}
+          fullWidth
+          value={preferences.layout}
+          onValueChange={(value) => onChange({ layout: value as Preferences['layout'] })}
+          options={[
+            { value: 'floating', label: t('setFloating') },
+            { value: 'full', label: t('setFullHeight') },
+          ]}
+        />
+        <Text size={Size.XSmall} tone={TextTone.Subtle}>
+          {t('setLayoutHint')}
+        </Text>
+      </div>
+
+      {/* The OCCLUSION axis, which is a different question: does a panel cover
+          the board or take space beside it? 'Auto' follows the layout above,
+          so the single control usually reads as one switch; the explicit
+          values are the escape hatch. Hidden on phones, where nothing docks.
+
+          Its first two segments reuse setMobileAuto/setFloating rather than
+          carrying near-duplicate keys of their own. */}
       {!phone && (
         <div className="control">
-          <Label>{t('setSidebar')}</Label>
+          <Label>{t('setPanelDock')}</Label>
           <SegmentedControl
-            aria-label={t('setSidebar')}
+            aria-label={t('setPanelDock')}
             fullWidth
-            value={preferences.layout}
-            onValueChange={(value) => onChange({ layout: value as Preferences['layout'] })}
+            value={preferences.panelDock ?? DEFAULT_PREFERENCES.panelDock}
+            onValueChange={(value) => onChange({ panelDock: value as Preferences['panelDock'] })}
             options={[
-              { value: 'floating', label: t('setFloating') },
-              { value: 'full', label: t('setFullHeight') },
+              { value: 'auto', label: t('setMobileAuto') },
+              { value: 'float', label: t('setFloating') },
+              { value: 'dock', label: t('setDockDock') },
             ]}
           />
+          <Text size={Size.XSmall} tone={TextTone.Subtle}>
+            {t('setPanelDockHint')}
+          </Text>
         </div>
       )}
 
@@ -324,6 +353,26 @@ export function SettingsModal({
           checked={preferences.rulesCoach}
           onCheckedChange={(checked) => onChange({ rulesCoach: checked })}
         />
+      </Fieldset>
+
+      <Fieldset legend={t('setPriority')} description={t('setPriorityHint')}>
+        <div style={{ display: 'grid', gap: 'var(--glacier-space-3)' }}>
+          <Switch
+            label={t('setAutoPass')}
+            checked={preferences.autoPass ?? true}
+            onCheckedChange={(checked) => onChange({ autoPass: checked })}
+          />
+          <Switch
+            label={t('setStopStack')}
+            checked={preferences.alwaysStopStack ?? false}
+            onCheckedChange={(checked) => onChange({ alwaysStopStack: checked })}
+          />
+          <Switch
+            label={t('setStopEnd')}
+            checked={preferences.alwaysStopEndStep ?? false}
+            onCheckedChange={(checked) => onChange({ alwaysStopEndStep: checked })}
+          />
+        </div>
       </Fieldset>
 
       <Fieldset legend={t('setMirror')} description={t('setMirrorHint')}>

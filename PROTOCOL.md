@@ -909,6 +909,19 @@ stance as the other intents.
   prompts. Freeform rooms and solo tables advance exactly as before. Bots
   pass open windows within a tick and never draw rejections.
 
+### Priority prompt + auto-pass (client, 2026-07-31)
+
+The client runs Arena-style priority: a single floating button surfaces
+whatever the enforced table is waiting on the player for (pass on a spell,
+pass an end step, resolve their own top spell, complete the turn), and
+AUTO-PASS sends the pass itself after ~1.3s when the player holds nothing
+castable at instant speed. A castable instant (or flash spell) always
+stops; "always stop" preferences exist for opposing spells and end steps
+(Settings > Table > Priority & auto-pass). The affordance mirror counts
+rocks/dorks as payment sources (matching pass E) and exposes the full
+payment plan - hovering a castable hand card rings the sources the
+automatic payment would tap.
+
 ### Bot brain (refactor, 2026-07-31)
 
 `server/src/bot.rs` became `server/src/bot/`: `knowledge.rs` (embedded

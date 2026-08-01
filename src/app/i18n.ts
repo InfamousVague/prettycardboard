@@ -234,6 +234,74 @@ export const messages = {
   setMobileOn: { en: 'On', es: 'Sí', fr: 'Oui', ar: 'تشغيل' },
   setMobileOff: { en: 'Off', es: 'No', fr: 'Non', ar: 'إيقاف' },
 
+  // Changelog: 0.6.0
+  clHeadline060: {
+    en: 'Panels that dock, and an app that keeps itself up to date.',
+    es: 'Paneles que se acoplan y una app que se mantiene al día.',
+    fr: 'Des panneaux qui s’ancrent, et une app qui se met à jour toute seule.',
+    ar: 'لوحات تلتصق بالتخطيط، وتطبيق يبقي نفسه محدَّثًا.',
+  },
+  clDockPanels: {
+    en: 'Dock a panel instead of floating it',
+    es: 'Acopla un panel en vez de dejarlo flotando',
+    fr: 'Ancrez un panneau au lieu de le laisser flotter',
+    ar: 'ثبّت اللوحة بدل أن تطفو فوق الطاولة',
+  },
+  clDockPanelsDesc: {
+    en: 'Chat, the card library and the pack opener can snap into the layout and reserve their own column, so the board stays readable beside them. One switch in Settings turns it on everywhere, and each panel keeps its own toggle.',
+    es: 'El chat, la biblioteca de cartas y el abridor de sobres pueden encajar en la disposición y reservar su propia columna, así el tablero sigue legible al lado. Un interruptor en Ajustes lo activa en todas partes y cada panel conserva su propio botón.',
+    fr: 'Le chat, la bibliothèque de cartes et l’ouvreur de boosters peuvent s’ancrer dans la disposition et réserver leur propre colonne : le plateau reste lisible à côté. Un réglage dans les Paramètres l’active partout, et chaque panneau garde son propre bouton.',
+    ar: 'يمكن للدردشة ومكتبة البطاقات وفاتح العبوات أن تلتصق بالتخطيط وتحجز عمودها الخاص، فتبقى الطاولة واضحة بجانبها. مفتاح واحد في الإعدادات يفعّلها في كل مكان، ولكل لوحة زرّها الخاص.',
+  },
+  clAutoUpdates: {
+    en: 'The desktop app watches for updates',
+    es: 'La app de escritorio vigila las actualizaciones',
+    fr: 'L’app de bureau surveille les mises à jour',
+    ar: 'تطبيق سطح المكتب يترقّب التحديثات',
+  },
+  clAutoUpdatesDesc: {
+    en: 'New versions are found in the background and downloaded quietly, and you are told when one is ready. Never mid-match: while you are seated the notice stays a passive pill and nothing restarts without your say-so.',
+    es: 'Las versiones nuevas se detectan en segundo plano y se descargan sin ruido, y se te avisa cuando una está lista. Nunca en mitad de una partida: mientras estás sentado el aviso es solo una etiqueta y nada se reinicia sin tu permiso.',
+    fr: 'Les nouvelles versions sont détectées en arrière-plan et téléchargées discrètement, et vous êtes prévenu quand l’une est prête. Jamais en pleine partie : tant que vous êtes assis, l’avis reste une simple pastille et rien ne redémarre sans votre accord.',
+    ar: 'تُكتشف الإصدارات الجديدة في الخلفية وتُنزَّل بهدوء، ثم تُخبَر عندما يصبح أحدها جاهزًا. ولا يحدث ذلك أثناء المباراة: ما دمت جالسًا يبقى الإشعار مجرد شارة ولا يُعاد التشغيل دون موافقتك.',
+  },
+  clAlerts: {
+    en: 'Alerts that actually arrive',
+    es: 'Avisos que sí llegan',
+    fr: 'Des alertes qui arrivent vraiment',
+    ar: 'تنبيهات تصل فعلًا',
+  },
+  clAlertsDesc: {
+    en: 'Invites, friend requests and table activity reach you even when the app started while you were offline, and a table you are seated at but not watching can get your attention instead of going quiet.',
+    es: 'Las invitaciones, las solicitudes de amistad y la actividad de la mesa te llegan aunque la app se abriera sin conexión, y una mesa en la que estás sentado pero no estás mirando puede avisarte en lugar de quedarse en silencio.',
+    fr: 'Les invitations, les demandes d’amis et l’activité d’une table vous parviennent même si l’app a démarré hors ligne, et une table où vous êtes assis sans la regarder peut vous alerter au lieu de rester muette.',
+    ar: 'تصلك الدعوات وطلبات الصداقة ونشاط الطاولة حتى لو بدأ التطبيق وأنت دون اتصال، ويمكن للطاولة التي تجلس إليها دون أن تشاهدها أن تلفت انتباهك بدل أن تصمت.',
+  },
+  clReleaseNotes: {
+    en: 'Release notes worth reading',
+    es: 'Notas de versión que se leen',
+    fr: 'Des notes de version lisibles',
+    ar: 'ملاحظات إصدار تستحق القراءة',
+  },
+  clReleaseNotesDesc: {
+    en: 'This panel is wider, lays out in two columns, tags every change as new, improved or fixed, and folds older releases behind one row. Reopen it any time from Settings, under About.',
+    es: 'Este panel es más ancho, se reparte en dos columnas, etiqueta cada cambio como nuevo, mejorado o corregido y pliega las versiones antiguas en una sola fila. Puedes reabrirlo cuando quieras desde Ajustes, en Acerca de.',
+    fr: 'Ce panneau est plus large, s’organise en deux colonnes, étiquette chaque changement comme nouveau, amélioré ou corrigé et replie les versions plus anciennes derrière une seule ligne. Rouvrez-le quand vous voulez depuis les Paramètres, dans À propos.',
+    ar: 'صار هذا اللوح أعرض، ويُعرَض في عمودين، ويصنّف كل تغيير على أنه جديد أو محسَّن أو مُصلَح، ويطوي الإصدارات الأقدم خلف صف واحد. يمكنك فتحه متى شئت من الإعدادات، في «حول».',
+  },
+  clFixes060: {
+    en: 'Fixes from 0.5.1 through 0.5.3',
+    es: 'Correcciones de la 0.5.1 a la 0.5.3',
+    fr: 'Correctifs de la 0.5.1 à la 0.5.3',
+    ar: 'إصلاحات من 0.5.1 إلى 0.5.3',
+  },
+  clFixes060Desc: {
+    en: 'Those releases shipped without notes, so they are here: invites copied from the desktop app pointed at an address only that app could open, the Windows build could not be produced at all, and the desktop app now carries its real icon.',
+    es: 'Esas versiones salieron sin notas, así que aquí están: las invitaciones copiadas desde la app de escritorio apuntaban a una dirección que solo esa app podía abrir, la compilación de Windows no llegaba a generarse y la app de escritorio ya luce su icono real.',
+    fr: 'Ces versions sont sorties sans notes, les voici donc : les invitations copiées depuis l’app de bureau pointaient vers une adresse que seule cette app pouvait ouvrir, la version Windows ne pouvait pas être produite, et l’app de bureau porte enfin sa vraie icône.',
+    ar: 'صدرت تلك الإصدارات دون ملاحظات، فها هي: الدعوات المنسوخة من تطبيق سطح المكتب كانت تشير إلى عنوان لا يفتحه سوى ذلك التطبيق، ونسخة ويندوز لم تكن تُبنى أصلًا، وتطبيق سطح المكتب صار يحمل أيقونته الحقيقية.',
+  },
+
   // Changelog: 0.5.0
   clPiles: {
     en: 'Stack your lands',
@@ -453,6 +521,28 @@ export const messages = {
   // What's-new changelog (version announcement on refresh after an update)
   clTitle: { en: "What's new", es: 'Novedades', fr: 'Nouveautés', ar: 'ما الجديد' },
   clGotIt: { en: 'Got it', es: 'Entendido', fr: 'Compris', ar: 'حسنًا' },
+  clOlder: {
+    en: 'Earlier releases',
+    es: 'Versiones anteriores',
+    fr: 'Versions précédentes',
+    ar: 'الإصدارات السابقة',
+  },
+  // Prefixes a date, so it reads as "Released 31 July 2026" once Intl has
+  // formatted the day in the active locale.
+  clReleased: { en: 'Released', es: 'Publicado el', fr: 'Publié le', ar: 'صدر في' },
+  clSeeAll: {
+    en: 'See every release',
+    es: 'Ver todas las versiones',
+    fr: 'Voir toutes les versions',
+    ar: 'عرض كل الإصدارات',
+  },
+  // The chip a change wears: what happened to it, then where it happened.
+  clKindNew: { en: 'New', es: 'Nuevo', fr: 'Nouveau', ar: 'جديد' },
+  clKindImproved: { en: 'Improved', es: 'Mejorado', fr: 'Amélioré', ar: 'تحسين' },
+  clKindFixed: { en: 'Fixed', es: 'Corregido', fr: 'Corrigé', ar: 'إصلاح' },
+  clCatLayout: { en: 'Layout', es: 'Disposición', fr: 'Disposition', ar: 'التخطيط' },
+  clCatApp: { en: 'App', es: 'Aplicación', fr: 'Application', ar: 'التطبيق' },
+  clCatSocial: { en: 'Social', es: 'Social', fr: 'Social', ar: 'اجتماعي' },
   clMatEditor: {
     en: 'Design your mat',
     es: 'Diseña tu tapete',
@@ -1052,9 +1142,22 @@ export const messages = {
     fr: 'Comment la coque se cadre.',
     ar: 'كيف يؤطّر الهيكل نفسه.',
   },
-  setSidebar: { en: 'Sidebar', es: 'Barra lateral', fr: 'Barre latérale', ar: 'الشريط الجانبي' },
   setFloating: { en: 'Floating', es: 'Flotante', fr: 'Flottante', ar: 'عائم' },
   setFullHeight: { en: 'Full height', es: 'Altura completa', fr: 'Pleine hauteur', ar: 'ارتفاع كامل' },
+  // The occlusion axis, beside the chrome axis above. Its 'Auto' and 'Floating'
+  // segments reuse setMobileAuto/setFloating, so only the third needs a key.
+  setPanelDock: { en: 'Panels', es: 'Paneles', fr: 'Panneaux', ar: 'اللوحات' },
+  setPanelDockHint: {
+    en: 'Docked panels take space beside the board instead of covering it.',
+    es: 'Los paneles acoplados ocupan espacio junto al tablero en vez de taparlo.',
+    fr: 'Les panneaux ancrés prennent de la place à côté du plateau au lieu de le couvrir.',
+    ar: 'اللوحات المرسَاة تشغل مساحة بجانب الطاولة بدلاً من أن تغطيها.',
+  },
+  setDockDock: { en: 'Docked', es: 'Acoplado', fr: 'Ancré', ar: 'مُرسى' },
+  // Each panel's own toggle, in its header: one label per direction, used as
+  // both the tooltip and the aria-label of an icon-only button.
+  dockPanel: { en: 'Dock panel', es: 'Acoplar panel', fr: 'Ancrer le panneau', ar: 'إرساء اللوحة' },
+  floatPanel: { en: 'Float panel', es: 'Flotar panel', fr: 'Détacher le panneau', ar: 'تعويم اللوحة' },
   setCardPlacement: { en: 'Card placement', es: 'Colocación de cartas', fr: 'Placement des cartes', ar: 'وضع البطاقات' },
   setCardNatural: { en: 'Natural', es: 'Natural', fr: 'Naturel', ar: 'طبيعي' },
   setCardVertical: { en: 'Vertical', es: 'Vertical', fr: 'Vertical', ar: 'عمودي' },
@@ -1247,6 +1350,20 @@ export const messages = {
     fr: 'Regarder demande au moins deux bots — un bot seul n’a pas d’adversaire.',
     ar: 'المشاهدة تحتاج روبوتين على الأقل — روبوت واحد لا يجد من يلاعبه.',
   },
+  ppResolve: { en: 'Resolve', es: 'Resolver', fr: 'Résoudre', ar: 'حلّ' },
+  ppPass: { en: 'Pass', es: 'Pasar', fr: 'Passer', ar: 'تمرير' },
+  ppPassEnd: { en: 'Pass the end step', es: 'Pasar el paso final', fr: 'Passer la fin de tour', ar: 'تمرير خطوة النهاية' },
+  ppEndTurn: { en: 'End the turn', es: 'Terminar el turno', fr: 'Finir le tour', ar: 'إنهاء الدور' },
+  setPriority: { en: 'Priority & auto-pass', es: 'Prioridad y pase automático', fr: 'Priorité et passage auto', ar: 'الأولوية والتمرير التلقائي' },
+  setPriorityHint: {
+    en: 'Enforced tables: response windows pass themselves when you hold nothing castable. Holding a castable instant always stops.',
+    es: 'Mesas con reglas: las ventanas de respuesta se pasan solas si no tienes nada lanzable. Un instantáneo lanzable siempre detiene.',
+    fr: "Tables avec règles : les fenêtres de réponse passent seules si rien n'est jouable. Un éphémère jouable arrête toujours.",
+    ar: 'الطاولات المطبّقة: نوافذ الرد تُمرَّر تلقائيًا عندما لا تملك ما يمكن لعبه. البطاقة الفورية القابلة للعب توقفها دائمًا.',
+  },
+  setAutoPass: { en: 'Auto-pass quiet windows', es: 'Pase automático', fr: 'Passage automatique', ar: 'تمرير تلقائي' },
+  setStopStack: { en: 'Always stop on opposing spells', es: 'Parar siempre en hechizos rivales', fr: 'Toujours arrêter sur les sorts adverses', ar: 'توقف دائمًا عند تعويذات الخصم' },
+  setStopEnd: { en: "Always stop on opponents' end steps", es: 'Parar siempre en pasos finales rivales', fr: 'Toujours arrêter en fin de tour adverse', ar: 'توقف دائمًا عند نهاية أدوار الخصوم' },
   emWheel: { en: 'Quick emote', es: 'Emoticono rápido', fr: 'Émote rapide', ar: 'تعبير سريع' },
   emGreetings: { en: 'Greetings!', es: '¡Saludos!', fr: 'Salutations !', ar: 'تحياتي!' },
   emWellPlayed: { en: 'Well played.', es: 'Bien jugado.', fr: 'Bien joué.', ar: 'أحسنت اللعب.' },
@@ -1349,6 +1466,43 @@ export const messages = {
     es: 'La búsqueda de actualizaciones falló. Inténtalo más tarde.',
     fr: 'Échec de la recherche de mise à jour. Réessayez plus tard.',
     ar: 'فشل التحقق من التحديث. حاول لاحقًا.',
+  },
+  // The update notice: a global card, so its copy is shared with the About tab
+  // rather than duplicated. useT() has no interpolation, so the seated warning
+  // and the restart confirmation are separate keys stacked as separate lines.
+  updNoticeTitle: { en: 'Update ready', es: 'Actualización lista', fr: 'Mise à jour prête', ar: 'التحديث جاهز' },
+  updDownloading: {
+    en: 'Downloading update…',
+    es: 'Descargando actualización…',
+    fr: 'Téléchargement de la mise à jour…',
+    ar: 'جارٍ تنزيل التحديث…',
+  },
+  updNoticeSeated: {
+    en: 'It installs when you leave the table.',
+    es: 'Se instalará cuando salgas de la mesa.',
+    fr: 'Elle s’installera quand vous quitterez la table.',
+    ar: 'سيُثبَّت عند مغادرتك الطاولة.',
+  },
+  updRestartNow: { en: 'Restart now', es: 'Reiniciar ahora', fr: 'Redémarrer maintenant', ar: 'إعادة التشغيل الآن' },
+  updLater: { en: 'Later', es: 'Más tarde', fr: 'Plus tard', ar: 'لاحقًا' },
+  updSeeWhatsNew: { en: 'See what’s new', es: 'Ver novedades', fr: 'Voir les nouveautés', ar: 'عرض ما الجديد' },
+  updConfirmRestart: {
+    en: 'Restart to finish?',
+    es: '¿Reiniciar para terminar?',
+    fr: 'Redémarrer pour terminer ?',
+    ar: 'إعادة التشغيل للإنهاء؟',
+  },
+  updConfirmRestartBody: {
+    en: 'PrettyCardboard closes and reopens to install the update.',
+    es: 'PrettyCardboard se cerrará y volverá a abrirse para instalar la actualización.',
+    fr: 'PrettyCardboard se ferme et rouvre pour installer la mise à jour.',
+    ar: 'سيُغلق PrettyCardboard ويُفتح من جديد لتثبيت التحديث.',
+  },
+  updSeatedWarn: {
+    en: 'You are seated at a table. Restarting leaves the match.',
+    es: 'Estás sentado en una mesa. Reiniciar te sacará de la partida.',
+    fr: 'Vous êtes assis à une table. Redémarrer quitte la partie.',
+    ar: 'أنت جالس إلى طاولة. إعادة التشغيل تُخرجك من المباراة.',
   },
   setDesktopAutoUpdates: {
     en: 'The desktop app updates itself automatically.',
@@ -1935,6 +2089,32 @@ export const messages = {
     es: 'te invitó a',
     fr: 'vous invite à',
     ar: 'دعاك إلى',
+  },
+  // A table you are seated at but not looking at. {table}/{name} are filled by
+  // the caller with .replace(), the same convention tblPingedYou uses.
+  ntTableWaiting: {
+    en: 'Your turn at {table}',
+    es: 'Tu turno en {table}',
+    fr: 'À vous de jouer à {table}',
+    ar: 'دورك في {table}',
+  },
+  ntTableChat: {
+    en: '{name} wrote at another table',
+    es: '{name} escribió en otra mesa',
+    fr: '{name} a écrit à une autre table',
+    ar: 'كتب {name} في طاولة أخرى',
+  },
+  ntPoked: {
+    en: '{name} is waiting for you at another table',
+    es: '{name} te está esperando en otra mesa',
+    fr: '{name} vous attend à une autre table',
+    ar: '{name} ينتظرك في طاولة أخرى',
+  },
+  ntOfflineRetrying: {
+    en: 'Offline - reconnecting',
+    es: 'Sin conexión: reconectando',
+    fr: 'Hors ligne - reconnexion',
+    ar: 'غير متصل - جارٍ إعادة الاتصال',
   },
 
   // formats

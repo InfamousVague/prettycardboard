@@ -15,7 +15,25 @@ export function enforcedRoom(room: RoomState): boolean {
 /** Can this player pay `generic` + `pips` with floating mana + untapped lands?
  * Greedy mirror of the server's solver: pool first, then scarcest-color lands,
  * least-flexible producers first. */
-export function canAfford(me: TablePlayer, generic: number, pips: Record<string, number>): boolean {
+/** A clean "{T}: Add ..." ability on a nonland - the server's rocks-and-dorks
+ * rule, mirrored off the parsed ability list. */
+function tapsForMana(f: OracleFacts): boolean {
+  return f.abilities.some(
+    (a) => a.cost.trim() === '{T}' && a.effect.trim().toLowerCase().startsWith('add '),
+  );
+}
+
+/** The sources an automatic payment would tap, in the server's preference
+ * order (pool first - pooled spend is invisible here - then scarcest pip from
+ * the least flexible source, then generic). Null = unaffordable. Mirrors
+ * solve_payment: lands plus rocks/dorks with a clean tap-for-mana line, a
+ * summoning-sick creature excluded. */
+export function paymentPlan(
+  room: RoomState,
+  me: TablePlayer,
+  generic: number,
+  pips: Record<string, number>,
+): string[] | null {
   let needGeneric = generic;
   const need: Record<string, number> = { ...pips };
   const pool: Record<string, number> = { ...(me.mana ?? {}) };
@@ -30,27 +48,61 @@ export function canAfford(me: TablePlayer, generic: number, pips: Record<string,
     needGeneric -= take;
     pool[color] = (pool[color] ?? 0) - take;
   }
-  // Untapped mana-producing lands.
-  let lands = me.battlefield
+  // Untapped mana sources: lands, plus rocks and dorks (no sick creatures).
+  let sources = me.battlefield
     .filter((c) => !c.tapped)
-    .map((c) => oracleFacts(c.scryfallId))
-    .filter((f): f is OracleFacts => Boolean(f && f.typeLine.includes('Land') && f.produced.length > 0));
+    .map((c) => ({ iid: c.iid, entered: c.enteredTurn, facts: oracleFacts(c.scryfallId) }))
+    .filter((s): s is { iid: string; entered: number | undefined; facts: OracleFacts } => {
+      const f = s.facts;
+      if (!f || f.produced.length === 0) return false;
+      if (f.typeLine.includes('Land')) return true;
+      if (!tapsForMana(f)) return false;
+      const sick =
+        f.typeLine.includes('Creature') &&
+        s.entered != null &&
+        s.entered === room.turnNumber &&
+        !f.keywords.includes('haste');
+      return !sick;
+    });
+  const picked: string[] = [];
   const colors = Object.keys(need)
     .filter((c) => (need[c] ?? 0) > 0)
-    .sort((a, b) => lands.filter((l) => l.produced.includes(a)).length - lands.filter((l) => l.produced.includes(b)).length);
+    .sort(
+      (a, b) =>
+        sources.filter((s) => s.facts.produced.includes(a)).length -
+        sources.filter((s) => s.facts.produced.includes(b)).length,
+    );
   for (const color of colors) {
     let remaining = need[color] ?? 0;
     while (remaining > 0) {
-      const candidates = lands
-        .filter((l) => l.produced.includes(color))
-        .sort((a, b) => a.produced.length - b.produced.length);
+      const candidates = sources
+        .filter((s) => s.facts.produced.includes(color))
+        .sort((a, b) => a.facts.produced.length - b.facts.produced.length);
       const pick = candidates[0];
-      if (!pick) return false;
-      lands = lands.filter((l) => l !== pick);
+      if (!pick) return null;
+      picked.push(pick.iid);
+      sources = sources.filter((s) => s !== pick);
       remaining -= 1;
     }
   }
-  return lands.length >= needGeneric;
+  if (sources.length < needGeneric) return null;
+  // Generic prefers the least flexible leftovers, saving duals for later.
+  const leftovers = [...sources].sort((a, b) => a.facts.produced.length - b.facts.produced.length);
+  for (let i = 0; i < needGeneric; i += 1) {
+    const src = leftovers[i];
+    if (!src) return null;
+    picked.push(src.iid);
+  }
+  return picked;
+}
+
+export function canAfford(
+  room: RoomState,
+  me: TablePlayer,
+  generic: number,
+  pips: Record<string, number>,
+): boolean {
+  return paymentPlan(room, me, generic, pips) != null;
 }
 
 /** The generic cost of `facts` for `me` after battlefield cost cuts
@@ -83,7 +135,7 @@ export function handPlayability(
   // in response to the stack - whenever the cost is payable.
   const instantSpeed = facts.typeLine.includes('Instant') || facts.keywords.includes('flash');
   if (instantSpeed) {
-    return canAfford(me, discountedGeneric(me, facts), facts.pips) ? 'cast' : null;
+    return canAfford(room, me, discountedGeneric(me, facts), facts.pips) ? 'cast' : null;
   }
   // Everything else is sorcery speed: your turn, a main phase, empty stack.
   if (room.activeSeat !== me.seat) return null;
@@ -93,7 +145,7 @@ export function handPlayability(
   if (facts.typeLine.includes('Land')) {
     return (me.landsThisTurn ?? 0) === 0 ? 'land' : null;
   }
-  return canAfford(me, discountedGeneric(me, facts), facts.pips) ? 'cast' : null;
+  return canAfford(room, me, discountedGeneric(me, facts), facts.pips) ? 'cast' : null;
 }
 
 /** May this creature be declared as an attacker right now? */

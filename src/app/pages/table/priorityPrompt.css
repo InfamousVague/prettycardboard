@@ -1,0 +1,27 @@
+/* The one-button priority prompt: floats above the hand, center stage, and
+   pulses gently while an auto-pass countdown runs so the pass never feels
+   like the app acting behind your back. */
+.priorityPrompt {
+  position: fixed;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  bottom: 27%;
+  z-index: 62;
+  display: flex;
+  justify-content: center;
+}
+
+.priorityPrompt[data-counting] button {
+  animation: ppPulse 1.3s ease-in-out infinite;
+}
+
+@keyframes ppPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .priorityPrompt[data-counting] button {
+    animation: none;
+  }
+}

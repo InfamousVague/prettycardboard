@@ -11,7 +11,28 @@
   /* The right rail: its width and the gutter the main column clears for it.
      Tokenized so the phone layout can zero both in one place. */
   --pc-rail-w: 18.5rem;
-  --pc-rail-clear: 19.5rem;
+  --pc-rail-band: 19.5rem;
+
+  /* A DOCKED side panel's column (see THE DOCK CONTRACT in
+     components/panels.css). Folded into the clearance the layout ALREADY
+     reserves rather than opening a second gutter, so the three consumers of
+     --pc-rail-clear - the ribbon, the main column and the opponent hand strip -
+     need no edits at all.
+       --pc-dock-w    the column's own width; 0px = nothing is docked
+       --pc-dock-edge where it parks, measured from the inline-end edge
+       --pc-dock-band its whole footprint from that edge, gutter included
+     Both bands are measured from the SAME edge, so the board clears whichever
+     reaches further inboard - `max`, not a sum. When the rail is up the dock
+     parks inside its gutter and the dock band already contains the rail band;
+     in the lobby (no rail rendered) the dock takes the edge itself and the
+     rail's reserved-but-empty stripe must not be added on top of it. With
+     nothing docked it collapses to `max(19.5rem, 0px)` - the old literal,
+     unchanged - and with the rail hidden too, to a clean `max(0px, 0px)`, which
+     the [data-rail='hidden'] rule below relies on. */
+  --pc-dock-w: 0px;
+  --pc-dock-edge: var(--glacier-space-3);
+  --pc-dock-band: 0px;
+  --pc-rail-clear: max(var(--pc-rail-band), var(--pc-dock-band));
 
   /* The floating nav pill's resting height. Anything that shares its corner
      (the chat aside) stacks on top of it rather than under it. */
@@ -42,7 +63,36 @@
    the mats reclaim 19.5rem without a single layout rule knowing about it. */
 .table[data-rail='hidden'] {
   --pc-rail-w: 0px;
-  --pc-rail-clear: 0px;
+  --pc-rail-band: 0px;
+}
+
+/* The rail is up: the docked column parks INSIDE its gutter, so the two read as
+   one band of table chrome down the inline-end edge. Without a rail on screen
+   (the lobby, and the collapsed rail, whose --pc-rail-band is 0 above) the dock
+   takes the edge itself instead of floating 19.5rem off it. */
+.table:has(.tableSide) {
+  --pc-dock-edge: calc(var(--pc-rail-band) + var(--glacier-space-3));
+}
+
+/* Something is docked: publish the column's width and its footprint. The only
+   rule that ever sets these - a panel never sizes its own gutter.
+
+   "Docked" is read off the slot HAVING A CHILD rather than off a flag some
+   component remembers to set. A panel arrives in the slot by portalling into
+   it, so the child and the gutter land in the same paint; a flag written from
+   an effect would land one frame later and show the panel at zero width first.
+
+   BOTH phone guards live here rather than in a counter-rule further down, so a
+   gutter is never reserved for a beat and then taken back, and so the ordering
+   between them can never be got wrong. `[data-phone='on']` is the viewport
+   (PHONE_QUERY is `(max-width: 700px), (max-height: 480px)`, so a wide but
+   SHORT desktop window counts - the exact window where a width-only guard would
+   reserve 22rem with no panel in it); `[data-mobile]` is the same composition
+   forced by preference at any size. resolvePanelDock already refuses to dock
+   anything in either case; this is the CSS half of the same rule. */
+:root:not([data-phone='on']) .table:not([data-mobile]):has(.tableDock:not(:empty)) {
+  --pc-dock-w: 22rem;
+  --pc-dock-band: calc(var(--pc-dock-edge) + var(--pc-dock-w) + var(--glacier-space-3));
 }
 
 .tableFelt {
@@ -111,9 +161,11 @@
 }
 
 /* No z-index of its own: with the aside at `auto` it creates no stacking
-   context, so the nav pill below can claim a root-level z-index above the
-   floating pack dock (95) while the rail's cards stay under the hand fan
-   (.tableMain, z 2) exactly as before. */
+   context, so the nav pill inside it keeps its own rank instead of being capped
+   by this box, while the rail's cards stay under the hand fan (.tableMain, z 2)
+   exactly as before. (The pill cannot outrank the pack dock by z-index at all -
+   .appBody's z-1 caps the whole shell below it - so packDock.css clears the
+   corner with `body:has()` instead. Read that file, not this sentence.) */
 .tableSide {
   position: relative;
 }
@@ -356,25 +408,104 @@
 
 /* ---- pregame lobby ---- */
 
-/* A matchup, not a form. Top to bottom: who is playing (hero), the versus
-   stage, the roster strip, and the floor bar that holds the only two decisions
-   made here. The stage is the flexible band, so a tall window makes the
-   portraits bigger rather than opening a hole in the middle. Chat is not in
-   this layout at all - the table's floating nav owns it. */
+/* A matchup, not a form - and LANDSCAPE-FIRST in two columns (decision 12 in
+   docs/mobile-orientation.md): the roster side (versus stage, then the seat
+   chips) beside the deck side (which deck, then go). Picking a deck and
+   starting the game are the only two decisions made here and they now share a
+   screen with the people you are about to play, so nothing in this room asks
+   for a rotation.
+
+   ONE breakpoint governs the whole lobby. The old pair - a 900px rule that cut
+   the stage in half and a separate stack of floor-bar rules - disagreed about
+   who scrolls: it set `.tableMain[data-lobby]` scrolling AND turned the
+   lobby's own overflow off, so below 900px the sticky floor bar stopped being
+   sticky. The lobby is the scroller at every size now, which is what keeps
+   Start reachable on a short screen.
+
+   Areas rather than DOM order, because the two orders genuinely differ: narrow
+   wants the deck picker directly under the hero (it is the first decision),
+   wide wants it heading its own column. */
 .pregameLobby {
   flex: 1;
   width: min(78rem, 100%);
   min-height: 0;
   margin-inline: auto;
-  padding: var(--glacier-space-3) var(--glacier-space-5) var(--glacier-space-2);
-  display: flex;
-  flex-direction: column;
+  padding: var(--glacier-space-3) var(--glacier-space-4) var(--glacier-space-2);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'hero'
+    'setup'
+    'stage'
+    'roster'
+    'launch'
+    'watch';
+  align-content: start;
   gap: var(--glacier-space-3);
   overflow: hidden auto;
 }
 
 .pregameHero {
-  flex: none;
+  grid-area: hero;
+}
+
+.pregameLaunchSetup {
+  grid-area: setup;
+}
+
+.pregameStage {
+  grid-area: stage;
+}
+
+.pregameStrip {
+  grid-area: roster;
+}
+
+.pregameLaunch {
+  grid-area: launch;
+}
+
+.pregameSpectators {
+  grid-area: watch;
+}
+
+/* Two columns from 44rem - a phone on its side is ~50.75rem, so the landscape
+   phone is INSIDE this, not an afterthought below it. The roster column takes
+   the slack; the deck column has a floor so the Select never crushes. */
+@media (min-width: 44rem) {
+  .pregameLobby {
+    grid-template-columns: minmax(0, 1.4fr) minmax(15rem, 0.9fr);
+    /* min-content, not 0: the stage grows into a tall window but never shrinks
+       under its portraits (they are overflow:hidden and would clip). */
+    grid-template-rows: auto minmax(min-content, 1fr) auto auto;
+    grid-template-areas:
+      'hero   hero'
+      'stage  setup'
+      'roster launch';
+    padding-inline: var(--glacier-space-5);
+  }
+
+  /* Spectators are a footnote; with no seat of your own there is no deck
+     column to sit beside, so the line keeps the full width under both. */
+  .pregameLobby:has(.pregameSpectators) {
+    grid-template-areas:
+      'hero   hero'
+      'stage  setup'
+      'roster launch'
+      'watch  watch';
+  }
+
+  /* The deck picker heads its column, go anchors the foot of it. */
+  .pregameLaunchSetup {
+    align-self: start;
+  }
+
+  .pregameLaunch {
+    align-self: end;
+  }
+}
+
+.pregameHero {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -418,29 +549,45 @@
 
 /* ---- the versus stage ---- */
 
-/* Grows into a tall window but never shrinks: the grid centres its rows, so a
-   band squeezed under its content would spill the portraits over the strip and
-   the floor bar instead of clipping. Short windows scroll the lobby (the floor
-   bar is sticky, so Start stays put) rather than squashing the stage. */
+/* Stacked by default: the roster column is only ~60% of the page in the
+   two-column layout, and three tracks in it would leave each portrait too
+   narrow to read. The face-off arrangement arrives at 64rem, below, where that
+   column is finally wide enough for it. */
 .pregameStage {
-  flex: 1 0 auto;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
   align-items: center;
-  gap: var(--glacier-space-4);
+  gap: var(--glacier-space-3);
   padding-block: var(--glacier-space-2);
 }
 
-/* The two sides lean into the middle, so the VS mark always sits between two
-   portraits rather than floating in whatever gap the columns left over. */
-.pregameStageSide {
+.pregameStageSide,
+.pregameStageSide[data-them] {
   min-width: 0;
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
+  inline-size: 100%;
 }
 
-.pregameStageSide[data-them] {
-  justify-content: flex-start;
+/* Wide enough for the face-off: the two sides lean into the middle, so the VS
+   mark always sits between two portraits rather than floating in whatever gap
+   the columns left over. */
+@media (min-width: 64rem) {
+  .pregameStage {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: var(--glacier-space-4);
+  }
+
+  .pregameStageSide {
+    justify-content: flex-end;
+    inline-size: auto;
+  }
+
+  .pregameStageSide[data-them] {
+    justify-content: flex-start;
+    inline-size: auto;
+  }
 }
 
 .pregameStageTile,
@@ -482,11 +629,17 @@
   opacity: 0.62;
 }
 
-/* The stage is the one place the cover card gets room to be a card, and it
-   takes the height a tall window has going spare rather than leaving it as air
-   above and below the portraits. */
+/* The stage is the one place the cover card gets room to be a card. Stacked,
+   the two sides are spending height rather than width, so the band stays
+   modest until the face-off layout gives it a column to grow into. */
 .pregameStageTile .pregameArt {
-  min-height: clamp(8rem, 22vh, 14rem);
+  min-height: clamp(7rem, 16vh, 11rem);
+}
+
+@media (min-width: 64rem) {
+  .pregameStageTile .pregameArt {
+    min-height: clamp(8rem, 22vh, 14rem);
+  }
 }
 
 /* No deck chosen: nothing to show, so the mat band collapses to a sliver
@@ -546,18 +699,29 @@
   font-weight: var(--glacier-font-weight-semibold);
 }
 
-/* The middle: the mark, the verdict, and the way into the rules. */
+/* The middle: the mark, the verdict, and the way into the rules. Stacked, the
+   mark IS the divider between the two sides, so it lays out as a row; in the
+   face-off layout it becomes the tall column between two portraits. */
 .pregameVs {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--glacier-space-2);
+  justify-content: center;
+  gap: var(--glacier-space-3);
   text-align: center;
+}
+
+@media (min-width: 64rem) {
+  .pregameVs {
+    flex-direction: column;
+    gap: var(--glacier-space-2);
+  }
 }
 
 .pregameVsMark {
   font-family: var(--glacier-font-display, var(--glacier-font-sans));
-  font-size: 2rem;
+  font-size: 1.5rem;
   line-height: 1;
   font-weight: 800;
   text-transform: uppercase;
@@ -572,10 +736,19 @@
    the words it belongs to. */
 .pregameVsStatus {
   display: block;
-  max-inline-size: 13rem;
   color: var(--glacier-text-muted);
   font-size: var(--glacier-font-size-sm);
   text-wrap: balance;
+}
+
+@media (min-width: 64rem) {
+  .pregameVsMark {
+    font-size: 2rem;
+  }
+
+  .pregameVsStatus {
+    max-inline-size: 13rem;
+  }
 }
 
 .pregameVsStatus svg {
@@ -592,8 +765,9 @@
    count, a stack of faces and how much of the pod is still getting ready. */
 .pregameStagePod {
   /* Enough body that the far side reads as the other half of a matchup rather
-     than a caption beside a portrait. */
-  min-block-size: 14rem;
+     than a caption beside a portrait. Stacked it is spending height, so the
+     generous version waits for the face-off layout (see below). */
+  min-block-size: 10rem;
   justify-content: center;
   padding: var(--glacier-space-4) var(--glacier-space-3);
   display: flex;
@@ -638,7 +812,7 @@
 
 .pregameStageEmpty,
 .pregameStageWatch {
-  min-block-size: 14rem;
+  min-block-size: 10rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -658,6 +832,14 @@
   cursor: pointer;
 }
 
+@media (min-width: 64rem) {
+  .pregameStagePod,
+  .pregameStageEmpty,
+  .pregameStageWatch {
+    min-block-size: 14rem;
+  }
+}
+
 .pregameStageEmpty:hover {
   color: var(--glacier-text);
   border-color: var(--glacier-accent-border);
@@ -670,7 +852,6 @@
    rows that push the floor bar off screen. The chip carries only what a glance
    needs; the popover behind it carries the scouting report. */
 .pregameStrip {
-  flex: none;
   margin: 0;
   padding: 0 0 2px;
   list-style: none;
@@ -786,14 +967,17 @@
 /* Sticks to the bottom of the lobby's scroll box: on a short window the stage
    scrolls under it rather than pushing Start out of reach. */
 .pregameLaunch {
-  flex: none;
   position: sticky;
   bottom: 0;
   z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--glacier-space-4);
+  /* Always wrappable: in the two-column layout this bar lives in a ~15rem
+     column, so "watch instead + Start + the nav dock" is two rows more often
+     than it is one. */
+  flex-wrap: wrap;
+  gap: var(--glacier-space-2) var(--glacier-space-4);
   padding: var(--glacier-space-2) var(--glacier-space-3);
   border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 72%, transparent);
   border-radius: 10px;
@@ -812,7 +996,6 @@
 .pregameLaunchSetup {
   position: relative;
   isolation: isolate;
-  flex: none;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -880,8 +1063,9 @@
   display: flex;
   align-items: center;
   /* A separator, so the nav reads as table-level chrome rather than another
-     lobby control sitting beside Start. */
-  margin-inline-start: var(--glacier-space-2);
+     lobby control sitting beside Start. `auto` keeps it in the trailing corner
+     on the second row too, once the bar wraps. */
+  margin-inline-start: auto;
   padding-inline-start: var(--glacier-space-2);
   border-inline-start: var(--glacier-hairline) solid
     color-mix(in oklch, var(--glacier-border) 55%, transparent);
@@ -900,18 +1084,6 @@
   flex-wrap: nowrap;
 }
 
-/* Narrow lobbies: the bar stacks, and the nav keeps the trailing corner with
-   its separator turned into a top rule. */
-@media (max-width: 60rem) {
-  .pregameLaunch {
-    flex-wrap: wrap;
-  }
-
-  .pregameNavDock {
-    margin-inline-start: auto;
-  }
-}
-
 .pregameLaunchGo > span {
   display: inline-flex;
   align-items: center;
@@ -919,7 +1091,6 @@
 }
 
 .pregameSpectators {
-  flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1123,63 +1294,14 @@
   gap: var(--glacier-space-2);
 }
 
-@media (max-width: 900px) {
-  /* Narrow windows: the stage stops being a side-by-side and the lobby goes
-     back to an ordinary page-scrolling flow. */
-  .tableMain[data-lobby] {
-    overflow: auto;
-  }
-
-  .pregameLobby {
-    overflow: visible;
-    padding-inline: var(--glacier-space-4);
-  }
-
-  .pregameStage {
-    grid-template-columns: minmax(0, 1fr);
-    justify-items: center;
-    gap: var(--glacier-space-3);
-  }
-
-  .pregameStageSide,
-  .pregameStageSide[data-them] {
-    justify-content: center;
-    inline-size: 100%;
-  }
-
-  /* Stacked, the two sides are spending height rather than width, so both
-     shrink to keep the roster strip near the fold. */
-  .pregameStageTile .pregameArt {
-    min-height: clamp(7rem, 16vh, 11rem);
-  }
-
-  .pregameStagePod,
-  .pregameStageEmpty,
-  .pregameStageWatch {
-    min-block-size: 10rem;
-  }
-
-  /* The mark itself is the divider between the two sides here, so it lays out
-     as a row rather than a tall column. */
-  .pregameVs {
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--glacier-space-3);
-  }
-
-  .pregameVsMark {
-    font-size: 1.5rem;
-  }
-
-  .pregameVsStatus {
-    max-inline-size: none;
-  }
-
-  /* The bar used to stack here because deck picker + Ready + Watch + Start was
-     one row too many. The picker has moved to the top of the page, so what is
-     left fits on a line again. */
-}
+/* The 900px breakpoint is retired. It cut the lobby in half - side-by-side
+   stage above it, stacked below - and while doing so handed scrolling to
+   .tableMain and switched the lobby's own overflow off, which quietly unstuck
+   the sticky floor bar on exactly the screens that needed it most. Everything
+   it did now lives with the rule it modifies: the stacked stage is the DEFAULT
+   (see .pregameStage) and the face-off arrives at 64rem, where the roster
+   column is finally wide enough for three tracks. The lobby is the scroller at
+   every width, so Start stays reachable. */
 
 @media (max-width: 620px) {
   .pregameHero,
@@ -3211,11 +3333,15 @@
 
 /* ---- the chat aside (opened from the nav row's chat toggle) ---- */
 
-/* Same fixed slide-over recipe as .libSidebar, one slot narrower so both can
-   coexist without a full eclipse. LobbyChat fills it (data-variant=table).
-   Its floor clears the nav pill it is opened from: the two share this corner,
-   and a chat that ran to the bottom edge would sit behind the pill (which
-   outranks it at z 96) with its composer half-covered. */
+/* The FLOATING form. Same fixed slide-over recipe as .libSidebar, one slot
+   narrower so both can coexist without a full eclipse - which is also the whole
+   reason the docked form exists: making one panel thinner is not "view both",
+   it is "eclipse slightly less". Docked, the panel leaves this layer entirely
+   for the .tableDock column above, and every declaration here is overridden by
+   .pcPanel[data-dock='dock'] in components/panels.css.
+   LobbyChat fills it (data-variant=table). Its floor clears the nav pill it is
+   opened from: the two share this corner, and a chat that ran to the bottom
+   edge would sit behind the pill (z 140) with its composer half-covered. */
 .chatAside {
   position: fixed;
   inset-block: 4.4rem
@@ -3260,6 +3386,9 @@
 
 /* ---- library as a scrollable side panel (search + drag to play) ---- */
 
+/* The FLOATING form, as above: docked, .pcPanel[data-dock='dock'] drops the
+   fixed positioning, the insets, the rank and the slide-in, and the chrome axis
+   supplies the frame - only the glass surface below survives. */
 .libSidebar {
   position: fixed;
   inset-block: 4.4rem var(--glacier-space-3);
@@ -3309,6 +3438,10 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--glacier-text-subtle);
+  /* The head carries TWO controls now (dock, then close): the title takes the
+     slack so they stay a pair at the end, instead of space-between spreading
+     them across the row. */
+  margin-inline-end: auto;
 }
 
 .libSidebarHint {
@@ -3342,6 +3475,47 @@
   cursor: grabbing;
 }
 
+/* ---- decision 5: the floating panels as landscape side sheets --------------
+   Height is the scarce axis on a phone held sideways. Both panels are pinned
+   4.4rem off the top and clear of the nav pill at the bottom, which on a 375px
+   screen leaves them about 250px of a 375px screen; full height plus
+   min(26rem, 42vw) of the abundant axis is the same panel with room to read.
+
+   `--pc-vh` rather than 100dvh (viewportHeight.ts): a fixed panel measured in
+   dvh keeps its composer under the on-screen keyboard, because dvh does not
+   shrink when the keyboard opens and the visual viewport does. Same reading
+   the shell and the dock sheet use, so the three cannot disagree.
+
+   `:root[data-phone='on']` is the phone COMPOSITION (preference-aware), not a
+   width - a forced phone layout in a landscape desktop window gets this too,
+   which is the same panel shape it should have. Docked panels are excluded by
+   construction: usePanelDock never reports docked under this composition. */
+@media (orientation: landscape) {
+  :root[data-phone='on'] .libSidebar,
+  :root[data-phone='on'] .chatAside[data-dock='float'] {
+    inset-block: 0 auto;
+    /* start:auto end:0 - the trailing edge in both writing directions. */
+    inset-inline: auto 0;
+    block-size: var(--pc-vh, 100dvh);
+    inline-size: min(26rem, 42vw);
+    width: auto;
+    max-width: none;
+    padding-inline-end: calc(var(--glacier-space-3) + env(safe-area-inset-right, 0px));
+    border-start-start-radius: var(--glacier-radius-2xl);
+    border-end-start-radius: var(--glacier-radius-2xl);
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+    /* A shadow cannot be logical, so it spreads rather than pointing the wrong
+       way under dir=rtl. */
+    box-shadow: 0 0 40px oklch(0.05 0.02 265 / 0.5);
+  }
+
+  :root[data-phone='on'] .chatAside[data-dock='float'] .lobbyChat {
+    border-radius: inherit;
+    box-shadow: none;
+  }
+}
+
 /* The pointer-following ghost while dragging a library card onto the table. */
 .libDragGhost {
   position: fixed;
@@ -3349,6 +3523,51 @@
   transform: translate(-50%, -50%) rotate(-3deg);
   pointer-events: none;
   filter: drop-shadow(0 12px 24px rgb(0 0 0 / 0.5));
+}
+
+/* ---- decision 5: the library and pile VIEWERS as landscape side sheets -----
+   These two are kit Modals, so they arrive as a centred panel and, on a phone,
+   as app.css's .pcMobileFull fullscreen takeover. In landscape that is the
+   wrong shape for a panel-style surface: the board disappears behind a
+   viewer you opened to compare against it. Both roots keep .pcMobileFull (the
+   portrait form is still fullscreen) and add .pcSideSheet, which this reshapes.
+
+   Reached through the kit's stable ARIA contract - role="dialog" inside a
+   fixed overlay div on body - because kit class names are hashed at build time.
+   The kit overlay is `display:grid; place-items:center`, so stretching the
+   block axis and ending the inline one is the whole move.
+
+   SPECIFICITY, deliberately: app.css's
+   `:root[data-phone='on'] [role='dialog']:has(.pcMobileFull)` scores 0,4,0 and
+   applies to these same elements. Repeating the root attribute takes these to
+   0,5,0, so the landscape form wins whichever stylesheet the bundler emits
+   first. Flatten either selector and the winner changes. */
+@media (orientation: landscape) {
+  :root[data-phone='on'][data-phone='on'] body > div:has(> [role='dialog'] .pcSideSheet) {
+    padding: 0;
+    align-items: stretch;
+    justify-items: end;
+  }
+
+  :root[data-phone='on'][data-phone='on'] [role='dialog']:has(.pcSideSheet) {
+    inline-size: min(26rem, 42vw);
+    max-inline-size: none;
+    width: auto;
+    block-size: var(--pc-vh, 100dvh);
+    max-block-size: none;
+    padding-inline: calc(var(--glacier-space-3) + env(safe-area-inset-left, 0px))
+      calc(var(--glacier-space-3) + env(safe-area-inset-right, 0px));
+    border-start-start-radius: var(--glacier-radius-2xl);
+    border-end-start-radius: var(--glacier-radius-2xl);
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+  }
+
+  /* One column of cards at 26rem; the fan/grid inside scrolls rather than
+     squeezing the cards past reading size. */
+  :root[data-phone='on'] .pcSideSheet .libPeekRow {
+    overflow-x: auto;
+  }
 }
 
 /* ---- pile browser ---- */
@@ -3434,6 +3653,58 @@
 .mullActions {
   display: flex;
   gap: var(--glacier-space-3);
+}
+
+/* ---- the toast band ------------------------------------------------------
+   The kit's toast is a fixed, bottom-CENTRE pill, and these two overlays put
+   their decision in the same place: measured at 812x375, the toast box spans
+   182-630 / 283-355 and both "Mulligan" (291-422 / 293-337) and "Keep hand"
+   (437-557 / 293-337) sit entirely inside it - elementFromPoint on either
+   returns the toast, so the announcement eats the decision it announces. Same
+   for "Deal me in".
+
+   The toast cannot be moved from here (the kit's viewport class is hashed and
+   carries no ARIA of its own), so the overlays give the band up instead: they
+   reserve it as padding and centre what is left above it. Grid centring does
+   the rest, so nothing needs to know a pixel offset. */
+:root[data-phone='on'] .mullOverlay,
+:root[data-phone='on'] .preOverlay {
+  padding-block-end: 5.5rem;
+}
+
+/* The splash caps at min(88vh, 44rem), which is taller than what is left once
+   the band is reserved - without this it simply overflows back down into it. */
+:root[data-phone='on'] .prePanel {
+  max-block-size: 100%;
+}
+
+/* Landscape as well as short: the decision moves off the bottom edge entirely
+   and becomes a column beside the cards, which is also the right shape for a
+   surface that is 812 wide and 375 tall. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .mullPanel {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'head side'
+      'fan  side';
+    align-items: center;
+    gap: var(--glacier-space-2) var(--glacier-space-4);
+    padding: var(--glacier-space-3);
+  }
+
+  .mullHead {
+    grid-area: head;
+  }
+
+  .mullFan {
+    grid-area: fan;
+  }
+
+  .mullActions {
+    grid-area: side;
+    flex-direction: column;
+    align-self: center;
+  }
 }
 
 /* ---- commander return prompt ---- */
@@ -3570,6 +3841,75 @@
 
 /* ---- side dock ---- */
 
+/* THE DOCK SLOT (#pc-dock-table). A panel that is docked rather than floating
+   portals its whole wrapper in here, and this column is the space the board
+   reserved for it - see the --pc-dock-* tokens at the top of this file and THE
+   DOCK CONTRACT in components/panels.css.
+
+   Deliberately bare, exactly like .tableSide and .mobileDock: NO z-index, so it
+   never becomes a stacking context and a panel inside it keeps whatever rank it
+   would have had; no background and no backdrop-filter, so it never becomes a
+   containing block for a fixed descendant (a docked library's drag ghost is
+   position: fixed and is rendered outside the panel for that reason). Absolute
+   rather than a flex child because .table is a COLUMN: a flow child here would
+   land under the board, full width. It shares the rail's ceiling and floor so
+   the two read as one band. */
+.tableDock {
+  position: absolute;
+  inset-block: 4.4rem var(--glacier-space-3);
+  inset-inline-end: var(--pc-dock-edge);
+  inline-size: var(--pc-dock-w);
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+}
+
+/* Nothing docked: the slot is not laid out at all, which is what makes a table
+   with the dock closed identical to one with no slot in the markup. */
+.tableDock:empty {
+  display: none;
+}
+
+/* The lobby's bottom edge is the whole launch bar, not a bare nav pill, and the
+   bar's height changes as it wraps - PregameLobby measures it into
+   --pc-launch-h and the pack dock already clears exactly that. Same debt, same
+   token. */
+.table:has(.pregameLaunch) .tableDock {
+  inset-block-end: calc(var(--pc-launch-h, 6.5rem) + var(--glacier-space-3));
+}
+
+/* Rail collapsed: the nav pill drops to the very edge this column now owns, and
+   it outranks everything in the table (z 140), so a column running to the floor
+   would have the pill sitting on its bottom corner. Exactly the floor - and
+   exactly the reason - the floating chat aside already keeps. */
+.table[data-rail='hidden'] .tableDock {
+  inset-block-end: calc(
+    var(--pc-nav-h, 2.75rem) + var(--glacier-space-3) + var(--glacier-space-2) + var(--pc-safe-b, 0px)
+  );
+}
+
+/* Two panels docked at once share the column top to bottom rather than each
+   claiming the full height panels.css hands them. */
+.tableDock > .pcPanel[data-dock='dock'] {
+  flex: 1 1 0;
+  block-size: auto;
+  min-block-size: 0;
+}
+
+/* The chat aside is a BARE wrapper - LobbyChat inside it carries the glass, the
+   hairline and the corners. Docked, panels.css has framed the wrapper, so the
+   chat drops its own frame instead of drawing a second one inside the first,
+   and the wrapper clips it to whichever corners the chrome axis chose. */
+.table .tableDock > .chatAside[data-dock='dock'] {
+  overflow: hidden;
+}
+
+.table .tableDock > .chatAside[data-dock='dock'] .lobbyChat {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 /* The right rail owns a scrollable card stack and a pinned navigation row. */
 .tableSide {
   position: absolute;
@@ -3596,6 +3936,25 @@
 .table[data-rail='hidden'] .tableSide {
   width: auto;
   align-items: flex-end;
+}
+
+/* THE CHROME AXIS, and only that. The rail already reserves its own gutter
+   through --pc-rail-clear, so in the "let me see the panel AND the board" sense
+   it has always been docked; what it never had is the shell's floating/full
+   look. `floating` is what it has always been - detached cards inset from the
+   edge - so it declares nothing. `full` runs the column edge to edge behind
+   them, the way .appSidebar goes flush.
+
+   Not while it is collapsed to its pill: --pc-rail-w is 0 there and the rail
+   shrinks to the pill's own width, so a full-height surface behind it would be
+   a translucent stripe with one button in it. */
+:root[data-layout='full'] .table:not([data-rail='hidden']) .tableSide {
+  inset-inline-end: 0;
+  inset-block-end: 0;
+  padding: var(--glacier-space-2) var(--glacier-space-2) var(--glacier-space-3);
+  border-inline-start: var(--glacier-hairline) solid var(--glacier-glass-border);
+  background: color-mix(in oklch, oklch(0.14 0.02 265) 78%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
 }
 
 .tableSideScroll {
@@ -4778,6 +5137,36 @@
   justify-content: center;
 }
 
+/* Same move as the mulligan overlay: "Deal me in" leaves the bottom band and
+   becomes a column beside the matchup. DOM order is untouched - head, grid,
+   then the action - so what a screen reader hears still matches what the eye
+   reads down the panel. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .prePanel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'head side'
+      'grid side';
+    align-items: center;
+    gap: var(--glacier-space-3) var(--glacier-space-5);
+    padding: var(--glacier-space-4);
+  }
+
+  .preHead {
+    grid-area: head;
+  }
+
+  .preGrid {
+    grid-area: grid;
+  }
+
+  .preFooter {
+    grid-area: side;
+    align-self: center;
+  }
+}
+
 /* ================= opponent hand ================= */
 
 /* The staged opponent's hand (OpponentHand) reuses my own hand's exact markup -
@@ -5465,6 +5854,7 @@
 .table[data-mobile] {
   --pc-rail-clear: 0px;
   --pc-rail-w: 0px;
+  --pc-rail-band: 0px;
   --pc-strip-h: 9rem;
   /* One height for everything along the top edge - the players and life pills,
      the history cluster and the board tools - so the row reads as one bar
@@ -5482,6 +5872,17 @@
 /* The rail column never renders as a column on phones (SidePanel switches to
    the dock markup), but belt-and-braces for any straggler rules. */
 .table[data-mobile] .tableSide {
+  display: none;
+}
+
+/* A phone NEVER reserves an inline gutter for a docked panel: its docked form
+   of a side panel is the full-width .mobileSheet below, not a column. The width
+   and the band are already pinned to 0 by the two guards on the rule that
+   publishes them (see --pc-dock-band at the top of this file); this hides the
+   slot itself, so a panel that somehow portalled in cannot paint a strip over
+   the board either. */
+.table[data-mobile] .tableDock,
+:root[data-phone='on'] .table .tableDock {
   display: none;
 }
 
@@ -6319,6 +6720,20 @@
   rotate: 90deg;
 }
 
+/* THE PHONE'S SIDE PANEL. One element, two presentations, and which one you
+   get is a media query - never a component swap (decision 6: a sheet open when
+   the phone turns must stay open and reflow, so nothing here may unmount).
+   Portrait it is a bottom sheet; landscape it is the trailing-edge side sheet
+   of decision 5, below.
+
+   SIZING: `block-size` is a PREFERENCE and `max-block-size` the law. The old
+   `height: min(62dvh, 34rem)` was neither - a fixed height that, at 375px tall,
+   left ~128px of body for a ~340px Vitals card, and that measured itself in
+   `dvh` while its parent measures in `--pc-vh` (viewportHeight.ts, the visual
+   viewport). With the keyboard up dvh stays tall while --pc-vh shrinks, so the
+   sheet grew TALLER than the table and `.table { overflow: hidden }` clipped
+   its tab row and close button off the TOP. A percentage resolves against
+   .mobileDock (inset:0 on .table), so both now read the same number. */
 .mobileSheet {
   pointer-events: auto;
   position: absolute;
@@ -6326,17 +6741,65 @@
      stacking context, so this z applies against the table's own children). */
   z-index: 70;
   inset-inline: 0;
-  bottom: 0;
-  height: min(62dvh, 34rem);
+  inset-block-end: 0;
+  block-size: min(62%, 34rem);
+  max-block-size: 100%;
   display: flex;
   flex-direction: column;
-  border-radius: var(--glacier-radius-2xl) var(--glacier-radius-2xl) 0 0;
+  /* Logical corners: the two edges that leave the screen stay square under
+     dir=rtl as well as ltr. */
+  border-start-start-radius: var(--glacier-radius-2xl);
+  border-start-end-radius: var(--glacier-radius-2xl);
   border: var(--glacier-hairline) solid var(--glacier-glass-border);
   border-bottom: none;
   background: color-mix(in oklch, var(--glacier-surface) 92%, transparent);
   backdrop-filter: blur(14px);
   box-shadow: 0 -12px 40px oklch(0.05 0.02 265 / 0.5);
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ---- decision 5: landscape turns every panel surface into a trailing-edge
+   side sheet, full height, min(26rem, 42vw) wide.
+   Height is the scarce axis in landscape and width the abundant one, so a
+   bottom sheet spends the wrong one: 62% of 375px is 232px, minus a ~56px
+   head, for a card that is 340px tall. Full height of the same screen is 375. */
+@media (orientation: landscape) {
+  .mobileSheet {
+    inset-block: 0;
+    /* start:auto end:0 - the trailing edge in both writing directions. */
+    inset-inline: auto 0;
+    inline-size: min(26rem, 42vw);
+    block-size: auto;
+    border-bottom: var(--glacier-hairline) solid var(--glacier-glass-border);
+    border-inline-end: none;
+    border-start-start-radius: var(--glacier-radius-2xl);
+    border-end-start-radius: var(--glacier-radius-2xl);
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+    /* Direction-agnostic: a shadow cannot be a logical property, so it spreads
+       evenly rather than pointing the wrong way under dir=rtl. */
+    box-shadow: 0 0 40px oklch(0.05 0.02 265 / 0.5);
+    padding-bottom: 0;
+    padding-inline-end: env(safe-area-inset-right, 0px);
+  }
+
+  /* 26rem of head cannot hold four tabs, five nav icons and a close button on
+     one line. The tabs take their own row and scroll; the nav keeps the first
+     row with the close button at its end. */
+  .mobileSheetHead {
+    flex-wrap: wrap;
+  }
+
+  .mobileSheetTabs {
+    order: 3;
+    flex: 1 0 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .mobileSheetHead .tableSideNav {
+    margin-inline-end: auto;
+  }
 }
 
 .mobileSheetHead {
@@ -6414,8 +6877,300 @@
   grid-template-columns: auto 1fr 4.5rem;
 }
 
-/* ---- rotate-to-landscape overlay ---- */
+/* ---- portrait companion (phone, portrait, match running) ------------------
+   Decision 2 in docs/mobile-orientation.md. The mat is landscape-only; this is
+   the second screen that makes the OTHER orientation a place you can still
+   play from - life for every seat, the turn, the roster, the log, chat, and
+   the two doors out - with the rotate ask as the headline rather than the
+   whole content.
 
+   RANK 50, and the number is the whole point. The cover this replaces sat at
+   65 with every control it hid at 8-44, so a portrait phone had no leave, no
+   concede, no life. 50 clears the board's floating chrome (boardTools 8,
+   turn dock 42, the pills and history 44) - landscape furniture, deliberately
+   inert while this is up - and stays UNDER every panel surface: chat aside 58,
+   library 60, timeline 63, the dock sheet, mulligan and the kit's modals at
+   70+. So a sheet open at the moment of rotation stays open, on top, and
+   usable (decision 6), and nothing this covers is a control still needed. */
+.portraitCompanion {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-3);
+  /* Reserved, never painted: the safe areas are gutters, not a frame. */
+  padding: calc(var(--glacier-space-3) + env(safe-area-inset-top, 0px))
+    calc(var(--glacier-space-3) + env(safe-area-inset-right, 0px))
+    calc(var(--glacier-space-3) + env(safe-area-inset-bottom, 0px))
+    calc(var(--glacier-space-3) + env(safe-area-inset-left, 0px));
+  background: color-mix(in oklch, var(--glacier-bg) 96%, transparent);
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+}
+
+.companionHead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+}
+
+.companionHeadText {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.companionHeadActions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+}
+
+/* The rotate ask, reduced to a glyph: a handset that turns on its own. It is a
+   hint now, not a wall, so it costs a 2.5rem square instead of the screen. */
+.companionGlyph {
+  flex: none;
+  display: grid;
+  place-items: center;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+}
+
+.companionPhone {
+  inline-size: 1.05rem;
+  block-size: 1.8rem;
+  border: 2px solid var(--glacier-accent-solid);
+  border-radius: 0.3rem;
+  animation: pcCompanionPhone 2.8s ease-in-out infinite;
+}
+
+@keyframes pcCompanionPhone {
+  0%,
+  18% {
+    rotate: 0deg;
+  }
+  45%,
+  78% {
+    rotate: -90deg;
+  }
+  100% {
+    rotate: 0deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .companionPhone {
+    animation: none;
+    rotate: -90deg;
+  }
+}
+
+.companionTurn {
+  flex: none;
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border-radius: var(--glacier-radius-lg);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 12%, var(--glacier-surface));
+  font-size: var(--glacier-font-size-sm);
+}
+
+.companionTurnWord {
+  color: var(--glacier-text-muted);
+  font-family: var(--glacier-font-mono);
+  font-size: var(--glacier-font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Every seat, each with its own stepper. My own row adjusts my total; the
+   others are DEALT to (life.deal), which is the only third-party life action
+   the protocol has - and the one the log narrates as "X deals N to Y". */
+.companionSeats {
+  flex: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+  max-block-size: 45%;
+  overflow-y: auto;
+}
+
+.companionSeat {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-2);
+  border-radius: var(--glacier-radius-lg);
+  background: var(--glacier-surface);
+}
+
+.companionSeat[data-turn] {
+  background: color-mix(in oklch, var(--glacier-accent-solid) 14%, var(--glacier-surface));
+}
+
+.companionSeat[data-dead] {
+  opacity: 0.55;
+}
+
+/* The seat's own hue - the same one its cursor, arrows and markers wear. */
+.companionSeatDot {
+  flex: none;
+  inline-size: 0.4rem;
+  block-size: 1.6rem;
+  border-radius: var(--glacier-radius-full);
+  background: var(--pc-seat-color, var(--glacier-border));
+}
+
+.companionSeatWho {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.companionSeatName {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-semibold);
+}
+
+.companionSeatName > :first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.companionBadge {
+  display: inline-flex;
+  color: var(--glacier-text-subtle);
+}
+
+.companionSeatMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  min-width: 0;
+  color: var(--glacier-text-muted);
+  font-size: var(--glacier-font-size-xs);
+}
+
+.companionSeatMeta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.companionSeatDeck {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.companionLife {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.companionLifeVal {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-inline-size: 3ch;
+  justify-content: center;
+  font-family: var(--glacier-font-mono);
+  font-size: var(--glacier-font-size-md, 1rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.companionTabs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+}
+
+.companionTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.5rem;
+  padding: 0.3rem 0.9rem;
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid transparent;
+  background: none;
+  color: var(--glacier-text-muted);
+  font: inherit;
+  font-weight: var(--glacier-font-weight-medium);
+  cursor: pointer;
+}
+
+.companionTab[data-active] {
+  color: var(--glacier-text);
+  border-color: var(--glacier-glass-border);
+  background: var(--glacier-glass-regular);
+}
+
+.companionTabsEnd {
+  margin-inline-start: auto;
+}
+
+/* The pane takes the rest of the screen and scrolls inside itself, so the
+   seats and the rotate ask never scroll away from under the player's thumb. */
+.companionPane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--glacier-radius-lg);
+  background: var(--glacier-surface);
+  overflow: hidden;
+}
+
+.companionLog {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--glacier-space-2);
+}
+
+/* Inside the pane the chat is already on a surface: drop the floating panel's
+   own frost and frame so it does not read as a card within a card. */
+.companionPane .lobbyChat {
+  flex: 1;
+  min-height: 0;
+  border: none;
+  border-radius: inherit;
+  background: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.companionFoot {
+  flex: none;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--glacier-space-2);
+  color: var(--glacier-text-subtle);
+  font-size: var(--glacier-font-size-xs);
+}
 
 /* ---- Yu-Gi-Oh LP quick steps (Vitals) ---- */
 
@@ -6908,4 +7663,14 @@
 /* The bubble holds a panel, not a sentence - let it size to the content. */
 .deckStatsTip {
   max-inline-size: none;
+}
+
+/* ---- auto-tap payment preview ----
+   Hovering a castable hand card rings the sources the automatic payment
+   would tap - see the cost before you commit, Arena style. */
+.fieldCard[data-pays] {
+  border-radius: var(--glacier-radius-md);
+  box-shadow:
+    0 0 0 2px color-mix(in oklch, var(--glacier-info-solid) 80%, transparent),
+    0 0 16px color-mix(in oklch, var(--glacier-info-solid) 45%, transparent);
 }

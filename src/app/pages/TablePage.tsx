@@ -69,7 +69,8 @@ import { isMuted, toggleMute } from '../data/mutes.ts';
 import { usePreference } from '../hooks/usePreference.ts';
 import { usePanelDock } from '../hooks/usePanelDock.ts';
 import { useMobileLayout, usePortrait } from '../hooks/useIsPhone.ts';
-import { RotateOverlay } from './table/RotateOverlay.tsx';
+import { PortraitCompanion } from './table/PortraitCompanion.tsx';
+import { maskLogNames } from './table/logMask.ts';
 import { resolveKeybinds, KEYBIND_DEF, type ActionId } from '../data/keybinds.ts';
 import { zoneLabel } from '../data/games.ts';
 import { getDeck } from '../net/api.ts';
@@ -103,6 +104,7 @@ import { CombatPreviewCard, PhaseRibbon } from './table/PhaseRibbon.tsx';
 import { StackTray } from './table/StackTray.tsx';
 import { CmdChoiceDialog, DiscardPrompts, LibraryViewer, MulliganOverlay, PileViewer, RevealTray, RollBanner, TargetPicker, TriggerPrompts } from './table/overlays.tsx';
 import { EventToasts } from './table/EventToasts.tsx';
+import { PriorityPrompt } from './table/PriorityPrompt.tsx';
 import { TablePresence } from './table/TablePresence.tsx';
 import { AimLayer } from './table/AimLayer.tsx';
 import { MARK_KINDS, markIcon } from './table/bits.tsx';
@@ -689,10 +691,24 @@ export function TablePage() {
     >
       <div className="tableFelt" aria-hidden />
 
-      {/* The live board is landscape-shaped: a phone held portrait gets the
-          animated rotate ask instead of a cramped board. The lobby and the
-          post-match screen stay portrait-friendly. */}
-      {mobile && portrait && room.started && !room.matchResult && <RotateOverlay />}
+      {/* The live board is landscape-shaped, so a phone held portrait gets the
+          companion instead of a cramped mat: life for every seat, the turn, the
+          roster, the log, chat and the way out, with the rotate ask as the
+          headline (docs/mobile-orientation.md, decision 2). It is a SECOND
+          SCREEN, not a portrait board - the old bare cover left every control
+          on the mat sitting underneath it. The lobby and the post-match screen
+          were always portrait-friendly and are untouched. */}
+      {mobile && portrait && room.started && !room.matchResult && (
+        <PortraitCompanion
+          room={room}
+          me={me}
+          spectating={spectating}
+          onLeave={leave}
+          onConcede={
+            me && !spectating && !me.conceded && !room.matchResult ? () => setConfirmConcede(true) : undefined
+          }
+        />
+      )}
 
       {/* ---- your-turn cue: edge glow + dismissable pill ---- */}
       {me && !spectating && <TurnCue room={room} meSeat={me.seat} />}
@@ -1087,6 +1103,7 @@ export function TablePage() {
       {me && !spectating && !replay.active && <CmdChoiceDialog me={me} />}
       {me && !spectating && !replay.active && <TriggerPrompts room={room} me={me} />}
       {me && !spectating && !replay.active && <DiscardPrompts room={room} me={me} />}
+      {me && !spectating && !replay.active && <PriorityPrompt room={room} me={me} />}
       {me && !spectating && !replay.active && <TargetPicker room={room} me={me} />}
       {preMatch && <PreMatch room={room} onClose={() => setPreMatch(false)} />}
       {/* Combat v3: target picker, defender response, resolved breakdown. */}
@@ -1738,27 +1755,12 @@ function SidePanel({
       pingCooling={pingCooling}
     />
   );
-  // Star out capitalized name runs (card names) while protecting player
-  // names and structural words. Heuristic on purpose: over-masking a verb is
-  // harmless, under-masking a tutored card is the thing we are preventing.
-  const maskSpoilers = (text: string): string => {
-    if (logSpoilers) return text;
-    let masked = text;
-    const names = room.players.map((p) => p.username).sort((a, b) => b.length - a.length);
-    const tokens: string[] = [];
-    names.forEach((name, i) => {
-      masked = masked.split(name).join(`\u0000${i}\u0000`);
-      tokens.push(name);
-    });
-    masked = masked.replace(
-      /\b[A-Z][\w'!-]*(?:(?:,?\s+(?:of|the|and|a|an|to|in|for)\s+|,?\s+)[A-Z][\w'!-]*)*\b/g,
-      (run) => (['Game', 'Turn', 'GG', 'AI', 'Foil'].includes(run) ? run : '★★★'),
-    );
-    tokens.forEach((name, i) => {
-      masked = masked.split(`\u0000${i}\u0000`).join(name);
-    });
-    return masked;
-  };
+  // Star out capitalized name runs (card names) while protecting player names
+  // and structural words. The rule itself lives in logMask.ts, shared verbatim
+  // with the portrait companion's log - two copies of a spoiler heuristic is
+  // one copy too many.
+  const maskSpoilers = (text: string): string =>
+    logSpoilers ? text : maskLogNames(text, room.players.map((player) => player.username));
 
   const logTime = (ts: number) =>
     new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -1871,16 +1873,14 @@ function SidePanel({
           where there is nothing to dock into - the nav is the chat's chrome at
           the table. Only while the chat is actually up, and gated on the hook's
           own answer, never on `mobile`: usePanelDock is what knows that a short
-          desktop window counts as a phone.
-          i18n: dockPanel / floatPanel - literal English until the Phase 2 pass
-          adds the keys across en/es/fr/ar. */}
+          desktop window counts as a phone. */}
       {chatOpen && !mobile && (
-        <Tooltip content={chatDock.docked ? 'Float panel' : 'Dock panel'}>
+        <Tooltip content={chatDock.docked ? t('floatPanel') : t('dockPanel')}>
           <IconButton
             size="sm"
             variant="ghost"
             aria-pressed={chatDock.docked}
-            aria-label={chatDock.docked ? 'Float panel' : 'Dock panel'}
+            aria-label={chatDock.docked ? t('floatPanel') : t('dockPanel')}
             onClick={() => chatDock.setMode(chatDock.docked ? 'float' : 'dock')}
           >
             {chatDock.docked ? <PictureInPicture2 size={16} /> : <PanelRight size={16} />}

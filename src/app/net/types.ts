@@ -499,6 +499,9 @@ export interface RoomState {
   pendingTriggers?: PendingTrigger[];
   /** Enforced rooms: owed discards awaiting a choice of cards (rules pass D). */
   pendingDiscards?: PendingDiscard[];
+  /** Enforced rooms: the open end-step response window's deadline (unix ms).
+   * Present while the active player waits for the table to pass. */
+  endWindow?: number | null;
   /** Table markers parked on cards, by card iid. Fully public. */
   marks?: Record<string, CardMarkState>;
   combat?: CombatState | null;

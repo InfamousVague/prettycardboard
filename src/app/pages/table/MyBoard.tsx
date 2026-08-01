@@ -52,7 +52,7 @@ import {
   type BoardMode,
   typeLineOf,
 } from './boardModes.ts';
-import { canDeclareAttacker, enforcedRoom, handPlayability, matchesTargetKind, stackTargetKinds } from './enforce.ts';
+import { canDeclareAttacker, discountedGeneric, enforcedRoom, handPlayability, matchesTargetKind, paymentPlan, stackTargetKinds } from './enforce.ts';
 import { oracleFacts } from '../../data/printedPt.ts';
 import { SETTLE_EASE, dragTilt, flightAnchor, juicePulse, prefersReducedMotion, restTilt, setFlightAnchor, ambientDelay } from './juice.ts';
 import { zoneLabel } from '../../data/games.ts';
@@ -256,6 +256,9 @@ export function MyBoard({
   // The fan rests half off-screen and peeks up on hover (or while dragging).
   const [handPeek, setHandPeek] = useState(false);
   // Manually tucked ~95% off-screen via the Hide-hand tab, to clear the board.
+  // Auto-tap preview: hovering a castable hand card glows the sources the
+  // automatic payment would tap (the client mirror of solve_payment).
+  const [payPreview, setPayPreview] = useState<Set<string> | null>(null);
   const [handHidden, setHandHidden] = useState(false);
   // "Is Magic", not "is not cyberpunk": the token picker, felt menu, markers
   // and mat editor are MTG concepts, and Yu-Gi-Oh (which lays its zones out on
@@ -1141,6 +1144,7 @@ export function MyBoard({
         data-preview-src={fieldPreview}
         data-preview-name={fieldPreview ? displayName : undefined}
         data-dragging={dragging || undefined}
+        data-pays={payPreview?.has(card.iid) || undefined}
         data-attacker={attacker ? '' : undefined}
         data-attachment={host ? (card.piled ? 'pile' : 'aura') : undefined}
         data-pile={pileCount > 0 ? pileCount : undefined}
@@ -1820,8 +1824,21 @@ export function MyBoard({
                   shareHandHover(null);
                   beginDrag(event, card, 'hand');
                 }}
-                onPointerEnter={() => onHover(card)}
-                onPointerLeave={() => onHover(null)}
+                onPointerEnter={() => {
+                  onHover(card);
+                  if (enforcedRoom(room)) {
+                    const facts = oracleFacts(card.scryfallId);
+                    const plan =
+                      facts && handPlayability(room, me, card) === 'cast'
+                        ? paymentPlan(room, me, discountedGeneric(me, facts), facts.pips)
+                        : null;
+                    setPayPreview(plan ? new Set(plan) : null);
+                  }
+                }}
+                onPointerLeave={() => {
+                  onHover(null);
+                  setPayPreview(null);
+                }}
                 onClick={() => clickHandCard(card)}
                 onContextMenu={(event) => onMenu(event, card.iid, 'hand')}
               />

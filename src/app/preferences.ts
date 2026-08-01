@@ -17,6 +17,14 @@ export interface Preferences {
   theme: 'system' | 'light' | 'dark';
   density: Density;
   layout: 'floating' | 'full';
+  /** How persistent panels present themselves. This is the OCCLUSION axis, and
+   * it is not the same thing as `layout` above (which is chrome: detached card
+   * vs flush edge). 'float' lets a panel overlay the content it belongs to;
+   * 'dock' makes it reserve real layout space so the panel and the content are
+   * readable at once. 'auto' follows `layout`, which is what lets the one
+   * Settings control move both axes together. Resolved before it ever reaches
+   * the DOM or a panel - see resolvePanelDock. */
+  panelDock: 'auto' | 'float' | 'dock';
   accent: string;
   /** The sans typeface, stamped as data-font. */
   font: SansFont;
@@ -83,6 +91,13 @@ export interface Preferences {
    * Magic rule. Purely a teaching aid - it never blocks or undoes anything, so
    * house rules and unusual cards are unaffected. Off by default. */
   rulesCoach: boolean;
+  /** Enforced rooms: automatically pass priority windows (a spell on the
+   * stack, an opponent's end step) when you hold nothing castable. */
+  autoPass: boolean;
+  /** Always stop on opposing spells even with nothing castable. */
+  alwaysStopStack: boolean;
+  /** Always stop on opponents' end steps even with nothing castable. */
+  alwaysStopEndStep: boolean;
   /** Developer / work-in-progress features (off by default). Gates everything
    * that isn't production-ready — currently the whole Cyberpunk TCG game. */
   enableWip: boolean;
@@ -109,6 +124,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   theme: 'dark',
   density: 'comfortable',
   layout: 'floating',
+  panelDock: 'auto',
   accent: accentOptions[0]!.name,
   font: 'inter',
   mono: 'jetbrains',
@@ -141,6 +157,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
   autoUntap: false,
   autoDraw: false,
   rulesCoach: false,
+  autoPass: true,
+  alwaysStopStack: false,
+  alwaysStopEndStep: false,
   enableWip: false,
   keybinds: {},
 };
@@ -171,6 +190,46 @@ export function savePreferences(preferences: Preferences): void {
   }
 }
 
+/** The two ways a persistent panel can present itself. 'auto' is a preference
+ *  value only - it is resolved away before anything reads it. */
+export type DockMode = 'float' | 'dock';
+
+/**
+ * Resolve the dock axis for the whole app.
+ *
+ * Phones never dock: an inline gutter is width they do not have, and their
+ * docked form of a side panel is already a full-width bottom sheet. This is the
+ * ONLY place that suppression may live - the phone breakpoint (PHONE_QUERY in
+ * hooks/useIsPhone.ts) has a `(max-height: 480px)` clause, so an ordinary short
+ * desktop window counts as a phone, and a CSS-only guard would let such a
+ * window reserve a gutter with no panel in it.
+ */
+export function resolvePanelDock(
+  preferences: Pick<Preferences, 'panelDock' | 'layout'>,
+  phone: boolean,
+): DockMode {
+  if (phone) return 'float';
+  const mode = preferences.panelDock ?? DEFAULT_PREFERENCES.panelDock;
+  if (mode !== 'auto') return mode;
+  return preferences.layout === 'full' ? 'dock' : 'float';
+}
+
+/**
+ * Stamp the RESOLVED dock mode on the document element. Always present and
+ * never 'auto', so a stylesheet can key on `:root[data-panel-dock='dock']`
+ * without knowing about the preference or the breakpoint.
+ *
+ * Two callers, because the value depends on two things that move separately:
+ * applyPreferences below (the preference side) and App's phone effect (the
+ * breakpoint side, which is the only place that knows it).
+ */
+export function applyPanelDock(
+  preferences: Pick<Preferences, 'panelDock' | 'layout'>,
+  phone: boolean,
+): void {
+  document.documentElement.setAttribute('data-panel-dock', resolvePanelDock(preferences, phone));
+}
+
 /**
  * Reflect the preferences onto the document element. Each value that equals
  * its default clears the attribute so the token `:root` defaults win, exactly
@@ -189,6 +248,12 @@ export function applyPreferences(preferences: Preferences): void {
   // The portalled kit surfaces (Drawer, Modal) read the layout mode from the
   // root, so it is always stamped.
   root.setAttribute('data-layout', layout);
+
+  // The dock axis resolves from the layout above PLUS the phone breakpoint,
+  // which only the shell knows - so read the flag back off the root that App
+  // stamps rather than re-deriving it here. App restamps on its own when the
+  // breakpoint moves without a preference change.
+  applyPanelDock(preferences, root.dataset.phone === 'on');
 
   if (accent === DEFAULT_PREFERENCES.accent) root.removeAttribute('data-accent');
   else root.setAttribute('data-accent', accent);
