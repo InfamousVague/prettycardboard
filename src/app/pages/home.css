@@ -289,7 +289,9 @@
   padding: var(--glacier-space-5) var(--glacier-space-5);
 }
 
-/* Sized to its glyph, not to a share of the plate: a tight full-height slice. */
+/* Sized to its glyph, not to a share of the plate: a tight full-height slice.
+   The glyph wears .gmItemIcon, so it holds the same accent blue as the plate's
+   swords - this rule only draws the slice itself. */
 .gmSplitBot {
   flex: none;
   inline-size: 4rem;
@@ -297,16 +299,17 @@
   place-items: center;
   border-inline-start: var(--glacier-hairline) solid
     color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border));
-  color: var(--glacier-text-muted);
-  transition:
-    color var(--glacier-duration-fast) var(--glacier-ease-out),
-    background-color var(--glacier-duration-fast) var(--glacier-ease-out);
+  transition: background-color var(--glacier-duration-fast) var(--glacier-ease-out);
 }
 
 .gmSplitBot:hover,
 .gmSplitBot:focus-visible {
-  color: var(--glacier-text);
   background: color-mix(in oklch, var(--glacier-accent-solid) 16%, transparent);
+}
+
+.gmSplitBot:hover .gmItemIcon,
+.gmSplitBot:focus-visible .gmItemIcon {
+  opacity: 1;
 }
 
 /* The plate clips its corners (overflow: hidden), so the segments' focus

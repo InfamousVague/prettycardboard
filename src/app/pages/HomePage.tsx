@@ -344,7 +344,7 @@ function GameMenu({
             trigger={
               <button type="button" className="gmSplitBot" aria-label={t('gmPlayBots')}>
                 <span className="gmItemInner">
-                  <Bot size={20} aria-hidden />
+                  <Bot size={20} className="gmItemIcon" aria-hidden />
                 </span>
               </button>
             }
