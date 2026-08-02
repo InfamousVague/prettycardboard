@@ -119,7 +119,7 @@ import { TimelineCard } from './table/TimelineCard.tsx';
 import { TurnCue } from './table/TurnCue.tsx';
 import { flightAnchor, flyCard } from './table/juice.ts';
 import { onMessage, onStatus, send } from '../net/ws.ts';
-import { isTauri } from '../tauri.ts';
+import { isDesktopApp } from '../tauri.ts';
 import {
   TITLEBAR_DOCK_CENTER_ID,
   TITLEBAR_DOCK_END_ID,
@@ -149,7 +149,7 @@ type AnyAction = GameAction | GameActionV2;
 
 // The Tauri shell owns a title bar; the top strip's clusters dock into it
 // there instead of spending a second row of chrome (see titlebarDock.ts).
-const DESKTOP = isTauri();
+const DESKTOP = isDesktopApp();
 
 interface Menu {
   iid: string;

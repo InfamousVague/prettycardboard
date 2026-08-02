@@ -246,6 +246,12 @@ pub enum Action {
         iid: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         defender_seat: Option<usize>,
+        /// The defending card this attack is aimed at. Magic declares attacks
+        /// at a PLAYER and the defender answers with blocks; a Yu-Gi-Oh attack
+        /// declaration names the monster it is battling, and the defender
+        /// never gets to reassign it. One optional field covers both.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        target_iid: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         power: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2380,7 +2386,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
             resync = true;
         }
 
-        Action::CombatAttack { ref iid, defender_seat, ref power, ref toughness } => {
+        Action::CombatAttack { ref iid, defender_seat, ref target_iid, ref power, ref toughness } => {
             let (card_name, was_tapped) = {
                 let p = &room.players[pi];
                 let c = p
@@ -2417,22 +2423,38 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                         .and_then(|c| crate::rules::facts(app, c))
                         .map(|f| f.has("vigilance"))
                         .unwrap_or(false);
-                if !was_tapped && !vigilant {
+                // A rotated Yu-Gi-Oh card is in Defense Position, not tapped:
+                // rotating an attacker would put it in the one position that
+                // cannot attack. Nothing "taps" to attack in a duel.
+                let rotates = room.game != "yugioh";
+                if !was_tapped && !vigilant && rotates {
                     if let Some(c) = room.players[pi].battlefield.iter_mut().find(|c| c.iid == *iid) {
                         c.tapped = true;
                     }
                     tapped_note = ", tapped";
                 }
                 let defender = defender_seat.map(|s| seat_username(room, s));
+                // A named target reads off the board: a face-down one is still
+                // face-down to everyone, so it is announced as a set card
+                // rather than by name.
+                let target_name = target_iid.as_deref().and_then(|t| {
+                    room.players
+                        .iter()
+                        .flat_map(|p| p.battlefield.iter())
+                        .find(|c| c.iid == t)
+                        .map(|c| if c.face_down { "a set card".to_string() } else { c.name.clone() })
+                });
                 room.combat.as_mut().unwrap().attackers.push(Attacker {
                     iid: iid.clone(),
                     defender_seat,
+                    target_iid: target_iid.clone(),
                     power: power.clone(),
                     toughness: toughness.clone(),
                 });
-                log = match defender {
-                    Some(d) => format!("{card_name} attacks {d}{tapped_note}"),
-                    None => format!("{card_name} attacks{tapped_note}"),
+                log = match (target_name, defender) {
+                    (Some(t), _) => format!("{card_name} attacks {t}{tapped_note}"),
+                    (None, Some(d)) => format!("{card_name} attacks {d}{tapped_note}"),
+                    (None, None) => format!("{card_name} attacks{tapped_note}"),
                 };
                 coach_event = Some(CoachEvent::Attack { name: card_name.clone(), was_tapped });
             }

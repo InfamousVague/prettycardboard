@@ -14,6 +14,31 @@ export function isTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
 
+/**
+ * True on a phone or tablet OS, in a browser or a Tauri webview alike.
+ *
+ * The Macintosh clause is not paranoia: iPadOS reports a desktop Safari user
+ * agent, so an iPad is indistinguishable from a Mac by UA string alone. Touch
+ * points break the tie - a real Mac reports 0.
+ */
+export function isMobileOS(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  if (/Android/i.test(ua)) return true;
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  return /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
+}
+
+/**
+ * True only in the DESKTOP app. `isTauri()` is NOT this: the iOS build is also
+ * Tauri, so anything keyed on it alone leaks desktop-shell assumptions onto the
+ * phone - a native title bar, window drag regions, self-update. Use this for
+ * anything that presumes a resizable OS window.
+ */
+export function isDesktopApp(): boolean {
+  return isTauri() && !isMobileOS();
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function importApi(subpath: string): Promise<any> {
   if (!isTauri()) return null;
@@ -88,7 +113,9 @@ export async function localServerPort(): Promise<number | null> {
 /** Whether this install is in local-play mode (persisted across launches). */
 export function isLocalPlay(): boolean {
   try {
-    return isTauri() && localStorage.getItem('pc.local') === '1';
+    // isDesktopApp, not isTauri: local play spawns the server sidecar, which
+    // iOS has no way to run.
+    return isDesktopApp() && localStorage.getItem('pc.local') === '1';
   } catch {
     return false;
   }

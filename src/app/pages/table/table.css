@@ -666,6 +666,30 @@
   .pregameLaunch {
     position: static;
   }
+
+  /* Seats share the row with the deck picker here, so the roster gets ~411px
+     while a chip is a fixed 13.5rem (216px). Two of them plus the gap want 440:
+     a 1v1 lobby - the ordinary case - overflowed by 31px and sliced the second
+     seat straight down the middle, with iOS's overlay scrollbar giving no hint
+     that anything had been cut. Letting the chips share the row instead makes
+     the common lobbies whole. Past three seats the floor wins and the strip
+     scrolls again, which is the honest behaviour for a roster that genuinely
+     does not fit.
+
+     SPECIFICITY: both selectors are qualified with .pregameLobby on purpose. A
+     media query adds none, and the base `.pregameStrip > li` / `.pregameChip`
+     rules live ~400 lines FURTHER DOWN this file - so at equal weight they win
+     on source order and this block silently does nothing. Measured: chips
+     stayed 216px wide until the ancestor was added. */
+  .pregameLobby .pregameStrip > li {
+    flex: 1 1 0;
+    min-inline-size: 0;
+  }
+
+  .pregameLobby .pregameChip {
+    inline-size: 100%;
+    min-inline-size: 8.5rem;
+  }
 }
 
 .pregameHero {
@@ -6806,9 +6830,11 @@
   position: relative;
 }
 
-/* Only the count survives on a phone: the pile's own art already says which
-   zone it is, and a word under each card both crowded the cascade and pushed
-   the captioned piles out of line with the deck (which has no caption). */
+/* The caption rides ON the pile (see above), so naming the zone costs no
+   height and knocks nothing out of line - the deck carries a caption of its
+   own now, so all four piles caption identically. A face-down deck and an
+   empty graveyard look alike at 84px wide, which is exactly when the word is
+   worth having. */
 .mobileZones .pileCaption,
 .mobileZones .pileCount {
   position: absolute;
@@ -6825,8 +6851,39 @@
   pointer-events: none;
 }
 
+/* Zone name + count on one line, in a legible plate. The caption sits over card
+   art of any brightness, so it carries its own scrim rather than relying on the
+   text-shadow alone. */
+.mobileZones .pileCaption {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.25rem;
+  border-radius: var(--glacier-radius-sm);
+  background: oklch(0.12 0.02 265 / 0.62);
+  backdrop-filter: blur(2px);
+}
+
+/* The rule above pins BOTH selectors, which was right when the deck's count was
+   a bare span with no caption around it. Now that every pile captions, a count
+   inside one has to flow beside its label instead of being pinned over it -
+   left absolute it painted "53" straight across the word "Library". */
+.mobileZones .pileCaption .pileCount {
+  position: static;
+  inset: auto;
+  padding: 0;
+  /* Subtle grey is a surface colour; this text sits on card art. */
+  color: rgb(255 255 255 / 0.82);
+}
+
 .mobileZones .pileLabel {
-  display: none;
+  font-size: 0.55rem;
+  font-weight: var(--glacier-font-weight-medium);
+  color: rgb(255 255 255 / 0.92);
+  /* One line, always: "Graveyard" must not wrap a pile this narrow into two
+     rows and shove the count off the plate. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Piles shrink to the cascade's width so the stack stays a thumb-sized target
@@ -8437,4 +8494,32 @@ button.loyaltyBadge:hover {
   white-space: nowrap;
   font-size: var(--glacier-font-size-sm);
   color: var(--glacier-text-muted);
+}
+
+/* ---- phone: the felt runs under the hardware, the UI does not -------------
+   app.css stops insetting the shell at the table so .tableFelt reaches the
+   screen edges instead of sitting inside black bars. That inset has to land
+   somewhere, and it cannot be padding on .table: .tableFelt is
+   `position:absolute; inset:0`, which resolves against .table's PADDING box,
+   so padding there would shrink the mat again and change nothing.
+
+   So it goes on the flow layers instead. Every floating layer at the table
+   (nav pill, end-turn dock, side sheets, pack dock, card popups) already adds
+   env() to its own offsets and is untouched here - these two are the ones that
+   were relying on the shell. */
+:root[data-phone='on'] .tableTop {
+  padding-block-start: calc(var(--glacier-space-2) + env(safe-area-inset-top, 0px));
+  padding-inline: calc(var(--glacier-space-5) + env(safe-area-inset-left, 0px))
+    calc(var(--glacier-space-5) + env(safe-area-inset-right, 0px));
+}
+
+/* The LOBBY column only. Mid-match every board element that lives near an edge
+   already adds env() to its own offset (.mobileZones, .seatChipsTrigger, the
+   turn dock, the side sheets), so padding this container too would inset them
+   TWICE - about 120px of dead margin before the deck on a notched phone, which
+   reads as the piles floating away from the corner they are supposed to hug.
+   The lobby is ordinary flow content with no such self-insetting, so it is the
+   one that needs the container to carry it. */
+:root[data-phone='on'] .tableMain[data-lobby] {
+  padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
 }

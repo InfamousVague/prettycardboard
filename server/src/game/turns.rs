@@ -128,10 +128,14 @@ pub fn auto_turn_begin(room: &mut Room, seat: usize) -> Vec<String> {
     // untaps and draws by hand. ENFORCED tables run both for everyone, Arena
     // style - the rules forbid manual untapping there, so the engine owes it.
     let enforced = crate::rules::enforced(room);
+    // Yu-Gi-Oh has no untap step: a rotated card is in Defense Position, and
+    // straightening the board every turn would silently stand every set
+    // monster up into Attack Position.
+    let rotation_is_position = room.game == "yugioh";
     let Some(p) = room.players.iter_mut().find(|p| p.seat == seat) else {
         return Vec::new();
     };
-    let do_untap = p.auto_untap || enforced;
+    let do_untap = (p.auto_untap || enforced) && !rotation_is_position;
     // The starting player's very first turn skips its draw (standard / 2-player).
     let do_draw = (p.auto_draw || enforced) && !skip;
 

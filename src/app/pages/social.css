@@ -1068,3 +1068,56 @@
     transition: none;
   }
 }
+
+/* ---- competitive rank on the profile band -------------------------------
+   The art ships as three pieces per rank (emblem, ring, banner) in
+   public/ranks; rankTiers.ts owns the paths. Everything below is chrome
+   AROUND that art - the art itself brings its own colour. */
+
+/* The rank, as a pill in its own accent. The emblem rides inside it so the
+   pill reads as a badge rather than a label that happens to be tinted. */
+.pfRankPill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: 2px var(--glacier-space-2) 2px 2px;
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid
+    color-mix(in oklch, var(--rank-accent, var(--glacier-accent-solid)) 55%, transparent);
+  background: color-mix(in oklch, var(--rank-accent, var(--glacier-accent-solid)) 16%, transparent);
+  color: var(--rank-accent, var(--glacier-accent-text));
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-bold);
+  white-space: nowrap;
+}
+
+/* Overall level, at the foot of the portrait. A disc rather than a pill: it
+   sits ON the ring's lower arc, and a circle is the only shape that reads
+   cleanly against that scalloped edge. */
+.pfLevelBadge {
+  position: absolute;
+  inset-block-end: -2px;
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  z-index: 2;
+  min-inline-size: 1.6rem;
+  block-size: 1.6rem;
+  padding-inline: 0.3rem;
+  display: grid;
+  place-items: center;
+  border-radius: var(--glacier-radius-full);
+  border: 2px solid var(--glacier-bg);
+  background: var(--glacier-surface-raised);
+  color: var(--glacier-text);
+  font-size: var(--glacier-font-size-xs);
+  font-weight: var(--glacier-font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* The portrait is the level badge's positioning context. */
+.pfPortrait {
+  position: relative;
+}

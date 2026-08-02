@@ -1,4 +1,4 @@
-import { isTauri } from './tauri.ts';
+import { isDesktopApp, isTauri } from './tauri.ts';
 import pkg from '../../package.json' with { type: 'json' };
 
 /**
@@ -15,8 +15,16 @@ import pkg from '../../package.json' with { type: 'json' };
  * updateStore/UpdateHost — this module is only the Tauri boundary.
  */
 
-/** True when self-update is possible (i.e. running as the installed desktop app). */
-export const canSelfUpdate = isTauri();
+/**
+ * True when self-update is possible (i.e. running as the installed desktop app).
+ *
+ * iOS and Android are excluded, and not just as a nicety: the Rust side only
+ * registers the updater and process plugins under `#[cfg(desktop)]`, because an
+ * app replacing its own bundle is a desktop idea - a phone installs through the
+ * OS. Without this check the About tab would offer an update button whose only
+ * possible outcome is a rejected invoke for a plugin that isn't there.
+ */
+export const canSelfUpdate = isDesktopApp();
 
 /**
  * How long a check may hang before we give up. `check()` took no options at

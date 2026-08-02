@@ -27,6 +27,8 @@ import { SaltPile } from '../components/SaltPile.tsx';
 import { GameTag } from '../components/GameTag.tsx';
 import { RANKS, rankFor, winRate } from '../data/ranks.ts';
 import { RankEmblem, RankLadder } from '../components/RankEmblem.tsx';
+import { RankBadge, RankAvatarFrame } from '../components/RankBadge.tsx';
+import { divisionFor, RANK_META, RATING_SEED } from '../data/rankTiers.ts';
 import { deckSummaryArt } from '../data/deckCover.ts';
 import { useShowcaseId, writeShowcaseId } from '../data/showcase.ts';
 import { useMobileLayout } from '../hooks/useIsPhone.ts';
@@ -155,6 +157,10 @@ export function ProfilePage() {
     .slice(0, 3);
   const rank = stats ? rankFor(stats.played) : null;
   const rate = stats ? winRate(stats) : null;
+  // The competitive ladder, from the server's rating. Falls back to the seed
+  // so a server that predates the column still renders a badge rather than a
+  // hole - Silver III is what a brand-new account shows anyway.
+  const division = stats ? divisionFor(stats.rating ?? RATING_SEED) : null;
   const tier = rank ? Math.max(0, RANKS.findIndex((r) => r.at === rank.floor)) : 0;
 
   const memberSince = (() => {
@@ -189,7 +195,7 @@ export function ProfilePage() {
         {rank && <div className="pfRankWash" aria-hidden />}
         {rank && (
           <div className="pfRankMark" aria-hidden>
-            <RankEmblem rank={rank} size={104} />
+            {division ? <RankBadge division={division} size={104} /> : <RankEmblem rank={rank} size={104} />}
           </div>
         )}
         <Button variant="ghost" size="sm" onClick={signOut} className="pfSignOut">
@@ -198,16 +204,29 @@ export function ProfilePage() {
         <div className="pfBandMain">
           <div className="pfIdent">
             <span className="pfPortrait" data-ranked={rank ? '' : undefined}>
-              <Avatar name={identity?.username ?? '?'} size="xl" shape="rounded" />
-              {rank && (
-                <span className="pfPortraitBadge">
-                  <RankEmblem rank={rank} size={34} title={rank.title} />
-                </span>
+              {division ? (
+                <RankAvatarFrame rank={division.rank} size={104}>
+                  <Avatar name={identity?.username ?? '?'} size="xl" shape="circle" />
+                </RankAvatarFrame>
+              ) : (
+                <Avatar name={identity?.username ?? '?'} size="xl" shape="rounded" />
               )}
+              {/* Overall level rides the foot of the portrait - the ladder above
+                  says how good, this says how long. */}
+              {rank && <span className="pfLevelBadge">{rank.level}</span>}
             </span>
             <div className="pfIdText">
               {rank && (
                 <span className="pfRankLine">
+                  {division && (
+                    <span
+                      className="pfRankPill"
+                      style={{ ['--rank-accent' as string]: RANK_META[division.rank].accent }}
+                    >
+                      <RankBadge division={division} size={22} />
+                      {division.label}
+                    </span>
+                  )}
                   <RankLadder tier={tier} size={17} />
                   <span className="pfRankTitle">{rank.title}</span>
                   <span className="pfLevel">

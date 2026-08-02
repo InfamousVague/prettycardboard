@@ -31,6 +31,7 @@ export function BotsTab({ onClose }: { onClose: () => void }) {
   const [difficulty, setDifficulty] = useState<BotDifficulty>('normal');
   const [style, setStyle] = useState<BotStyle>('mixed');
   const [format, setFormat] = useState<'commander' | 'standard'>('commander');
+  const [game, setGame] = useState<'mtg' | 'yugioh'>('mtg');
   const [enforced, setEnforced] = useState(false);
   const [launching, setLaunching] = useState(false);
   // Launching means leaving the current room. Leaving a STARTED game concedes
@@ -43,6 +44,7 @@ export function BotsTab({ onClose }: { onClose: () => void }) {
     difficulty: BotDifficulty;
     style: BotStyle;
     format: 'commander' | 'standard';
+    game?: 'mtg' | 'yugioh';
     enforced: boolean;
     seat: boolean;
   }) => {
@@ -75,7 +77,7 @@ export function BotsTab({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const custom = { bots, difficulty, style, format, enforced };
+  const custom = { bots, difficulty, style, format, game, enforced: game === 'mtg' && enforced };
 
   return (
     <div style={{ display: 'grid', gap: 'var(--glacier-space-6)' }}>
@@ -112,6 +114,23 @@ export function BotsTab({ onClose }: { onClose: () => void }) {
             }
           >
             <Eye size={15} /> {t('botsPresetBrawl')}
+          </Button>
+          <Button
+            variant="soft"
+            disabled={launching}
+            onClick={() =>
+              void launch({
+                bots: 2,
+                difficulty: 'normal',
+                style: 'mixed',
+                format: 'standard',
+                game: 'yugioh',
+                enforced: false,
+                seat: false,
+              })
+            }
+          >
+            <Swords size={15} /> {t('botsPresetDuel')}
           </Button>
         </div>
       </Fieldset>
@@ -166,27 +185,46 @@ export function BotsTab({ onClose }: { onClose: () => void }) {
               />
             </div>
             <div className="control">
-              <Label>{t('botsFormat')}</Label>
+              <Label>{t('botsGame')}</Label>
               <SegmentedControl
-                aria-label={t('botsFormat')}
+                aria-label={t('botsGame')}
                 fullWidth
-                value={format}
-                onValueChange={(value) => setFormat(value as 'commander' | 'standard')}
+                value={game}
+                onValueChange={(value) => setGame(value as 'mtg' | 'yugioh')}
                 options={[
-                  { value: 'commander', label: 'Commander' },
-                  { value: 'standard', label: 'Standard' },
+                  { value: 'mtg', label: 'Magic' },
+                  { value: 'yugioh', label: 'Yu-Gi-Oh!' },
                 ]}
               />
             </div>
+            {game === 'mtg' && (
+              <div className="control">
+                <Label>{t('botsFormat')}</Label>
+                <SegmentedControl
+                  aria-label={t('botsFormat')}
+                  fullWidth
+                  value={format}
+                  onValueChange={(value) => setFormat(value as 'commander' | 'standard')}
+                  options={[
+                    { value: 'commander', label: 'Commander' },
+                    { value: 'standard', label: 'Standard' },
+                  ]}
+                />
+              </div>
+            )}
           </div>
-          <Switch
-            label={t('botsEnforced')}
-            checked={enforced}
-            onCheckedChange={setEnforced}
-          />
-          <Text size={Size.XSmall} tone={TextTone.Subtle}>
-            {t('botsEnforcedHint')}
-          </Text>
+          {game === 'mtg' && (
+            <>
+              <Switch
+                label={t('botsEnforced')}
+                checked={enforced}
+                onCheckedChange={setEnforced}
+              />
+              <Text size={Size.XSmall} tone={TextTone.Subtle}>
+                {t('botsEnforcedHint')}
+              </Text>
+            </>
+          )}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--glacier-space-2)' }}>
             <Button
               disabled={launching}

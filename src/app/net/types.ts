@@ -160,6 +160,10 @@ export interface MatchRow {
 
 /** GET /api/me/stats — the caller's all-time aggregates for the Home dashboard. */
 export interface UserStats {
+  /** Competitive ladder rating; feeds divisionFor() in data/rankTiers.ts. Only
+   *  ranked multiplayer results move it, so bot practice never grades a player.
+   *  Absent from a server that predates the column - treat as the seed. */
+  rating?: number;
   wins: number;
   losses: number;
   played: number;
@@ -468,6 +472,29 @@ export interface DraftState {
   seats: DraftSeat[];
 }
 
+/* Moved here from the game store: it is a protocol shape now - it arrives on
+   `room.state` as well as the live `chat` frame. The store re-exports it, so
+   every existing import site is unchanged. */
+export interface ChatLine {
+  from: { userId: string; username: string };
+  text: string;
+  ts: number;
+  /**
+   * Set when the line is a card someone opened rather than something they
+   * typed. The server already relays notable pulls to the whole table; folding
+   * them into the chat transcript is what makes a pack opened next to your
+   * friends feel shared instead of private. `text` still carries the card name
+   * so anything that only knows how to render plain lines stays readable.
+   */
+  pull?: {
+    scryfallId: string;
+    name: string;
+    setCode: string;
+    rarity: string;
+    foil: boolean;
+  };
+}
+
 export interface RoomState {
   roomId: string;
   name: string;
@@ -477,6 +504,10 @@ export interface RoomState {
   hostUserId: string;
   players: TablePlayer[];
   spectators: { userId: string; username: string }[];
+  /** The table's conversation so far, oldest first. Kept on the room by the
+   *  server, so a reconnect or a late join arrives with the transcript rather
+   *  than an empty pane. Absent on snapshots from a server that predates it. */
+  chat?: ChatLine[];
   /** Which card game this table plays ("mtg" | "cyberpunk" | "yugioh"); drives zone labels,
    * vitals, phases, and card-art resolution. Absent on pre-multigame snapshots
    * (treat as "mtg"). */
@@ -663,7 +694,15 @@ export type Phase = 'upkeep' | 'main1' | 'attack' | 'block' | 'damage' | 'main2'
  * creatures block which attackers. The server never resolves damage - players
  * inform each other and adjust life/creatures manually. */
 export interface CombatState {
-  attackers: { iid: string; defenderSeat?: number; power?: string; toughness?: string }[];
+  attackers: {
+    iid: string;
+    defenderSeat?: number;
+    /** The defending card being battled. Yu-Gi-Oh names its target on the
+     * attack declaration; Magic leaves this unset and answers with blocks. */
+    targetIid?: string;
+    power?: string;
+    toughness?: string;
+  }[];
   blocks: { blockerIid: string; attackerIid: string; power?: string; toughness?: string }[];
   /** Enforced rooms: attackers are final; blocks may be declared. */
   locked?: boolean;

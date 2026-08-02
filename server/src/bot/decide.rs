@@ -24,6 +24,11 @@ pub(crate) fn decide(app: &App, room: &Room, uid: &str, mind: &mut BotMind, now:
     if me.conceded {
         return Decision::none();
     }
+    // A duel is a different game, not a Magic variant: it has its own brain
+    // and shares none of the machinery below (no mana, no stack, no blocks).
+    if room.game == "yugioh" {
+        return ygo_decide(room, me, mind, now);
+    }
     let style = style_of(me);
     let mut say: Vec<String> = Vec::new();
 
@@ -506,6 +511,9 @@ pub(crate) fn own_turn(app: &App, room: &Room, me: &Player, mind: &mut BotMind, 
                 };
                 return Decision::act(Action::CombatAttack {
                     iid,
+                    // Magic answers an attack with blocks; nothing is targeted
+                    // on the declaration.
+                    target_iid: None,
                     defender_seat: explicit_defender.then_some(plan.defender_seat),
                     power: Some(power(card).to_string()),
                     toughness: Some(toughness(card).to_string()),

@@ -617,7 +617,7 @@ export function PregameLobby({
                 />
               </Popover>
             </li>
-          ) : isHost && !spectating && game === 'mtg' ? (
+          ) : isHost && !spectating && (game === 'mtg' || game === 'yugioh') ? (
             // The host's empty seat offers both fills from one control: a friend
             // via the share link, or one of the server's AI opponents.
             <li key={seat}>

@@ -683,6 +683,7 @@ pub async fn room_create(
         resolved_targets: Vec::new(),
         stack_passed: Vec::new(),
         stack_changed_ms: 0,
+        chat: Vec::new(),
         markers: Default::default(),
         marks: Default::default(),
         pending_cmd: Vec::new(),
@@ -777,7 +778,9 @@ pub async fn my_stats(
     let endorsements = db::user_endorsement_count(&conn, &user.id);
     let avg_turn_ms = db::user_avg_turn_ms(&conn, &user.id);
     let (salt_x100, salt_count) = db::user_deck_salt(&conn, &user.id);
+    let rating = db::user_rating(&conn, &user.id);
     Json(json!({
+        "rating": rating,
         "wins": wins,
         "losses": losses,
         "played": wins + losses,
@@ -800,7 +803,9 @@ pub async fn user_stats(State(app): State<Arc<App>>, Path(user_id): Path<String>
     let endorsements = db::user_endorsement_count(&conn, &user_id);
     let avg_turn_ms = db::user_avg_turn_ms(&conn, &user_id);
     let (salt_x100, salt_count) = db::user_deck_salt(&conn, &user_id);
+    let rating = db::user_rating(&conn, &user_id);
     Json(json!({
+        "rating": rating,
         "wins": wins,
         "losses": losses,
         "played": wins + losses,

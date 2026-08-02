@@ -98,3 +98,65 @@ pub(crate) fn damage_line(taken: i64, life_after: i64) -> String {
     }
 }
 
+
+// ------------------------------------------------------------- duel talk
+
+// Yu-Gi-Oh has its own vocabulary, and a duelist saying "creature" or
+// "blocking" would read as the wrong game entirely.
+
+pub(crate) fn ygo_summon_line(name: &str, atk: i64) -> String {
+    match rand::random_range(0..3) {
+        0 => format!("I summon {name} in Attack Position — {atk} ATK."),
+        1 => format!("{name}, attack mode. {atk} ATK."),
+        _ => format!("Here comes {name}, {atk} ATK."),
+    }
+}
+
+pub(crate) fn ygo_tribute_line(fodder: &str, summon: &str) -> String {
+    match rand::random_range(0..3) {
+        0 => format!("I tribute {fodder} to summon {summon}."),
+        1 => format!("{fodder} goes to the Graveyard — I'm summoning {summon}."),
+        _ => format!("Offering {fodder} for {summon}."),
+    }
+}
+
+pub(crate) fn ygo_set_line() -> String {
+    pick(&[
+        "I'll set a monster in Defense Position.",
+        "Setting a monster face-down.",
+        "One face-down in defense. Your move.",
+    ])
+    .to_string()
+}
+
+pub(crate) fn ygo_attack_line(attacker: &str, target: &str) -> String {
+    match rand::random_range(0..3) {
+        0 => format!("{attacker} attacks {target}!"),
+        1 => format!("Battle — {attacker} goes after {target}."),
+        _ => format!("I declare an attack: {attacker} on {target}."),
+    }
+}
+
+pub(crate) fn ygo_direct_line(attacker: &str, atk: i64) -> String {
+    match rand::random_range(0..3) {
+        0 => format!("Your field is empty — {attacker} attacks directly for {atk}!"),
+        1 => format!("{attacker} goes straight for your Life Points. {atk} damage."),
+        _ => format!("Direct attack with {attacker} — take {atk}."),
+    }
+}
+
+pub(crate) fn ygo_damage_line(taken: i64, lp_after: i64) -> String {
+    match rand::random_range(0..3) {
+        0 => format!("That's {taken} to my Life Points. I'm at {lp_after}."),
+        1 => format!("Taking {taken} battle damage — down to {lp_after} LP."),
+        _ => format!("{taken} damage. {lp_after} LP left."),
+    }
+}
+
+pub(crate) fn ygo_reflect_line(amount: i64) -> String {
+    match rand::random_range(0..3) {
+        0 => format!("My monster held — you take {amount} back."),
+        1 => format!("That bounced off. {amount} damage to you."),
+        _ => format!("Your attack failed: {amount} damage right back."),
+    }
+}

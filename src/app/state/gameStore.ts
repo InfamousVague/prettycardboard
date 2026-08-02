@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import * as ws from '../net/ws.ts';
-import type { CardInst, DraftCard, GameAction, GameActionV2, LimitedMode, ManaPool, RoomState, ServerMessage, TablePlayer, TimelineEntry, Zone } from '../net/types.ts';
+import type { CardInst, ChatLine, DraftCard, GameAction, GameActionV2, LimitedMode, ManaPool, RoomState, ServerMessage, TablePlayer, TimelineEntry, Zone } from '../net/types.ts';
+// Re-exported: ChatLine lives in net/types.ts now (it rides on room.state as
+// well as the chat frame), and every existing import site points here.
+export type { ChatLine } from '../net/types.ts';
 import { playSound } from '../sounds.ts';
 
 /**
@@ -11,25 +14,6 @@ import { playSound } from '../sounds.ts';
  * reconciles.
  */
 
-export interface ChatLine {
-  from: { userId: string; username: string };
-  text: string;
-  ts: number;
-  /**
-   * Set when the line is a card someone opened rather than something they
-   * typed. The server already relays notable pulls to the whole table; folding
-   * them into the chat transcript is what makes a pack opened next to your
-   * friends feel shared instead of private. `text` still carries the card name
-   * so anything that only knows how to render plain lines stays readable.
-   */
-  pull?: {
-    scryfallId: string;
-    name: string;
-    setCode: string;
-    rarity: string;
-    foil: boolean;
-  };
-}
 
 export interface LogLine {
   seq: number;
@@ -363,7 +347,16 @@ export const useGame = create<GameState>((set, get) => {
       // room we've left (bots playing on) just bump its activity indicator so
       // the Play page can show turns are happening - without yanking us back.
       if (message.state.roomId === get().joinedRoomId) {
-        set({ room: message.state });
+        // Seed the transcript from the snapshot, but only while ours is empty:
+        // after that the live `chat` frames are ahead of any snapshot, and
+        // overwriting on every state push would drop the newest lines and
+        // fight the local optimistic append.
+        const history = message.state.chat;
+        set((state) =>
+          state.chat.length === 0 && history && history.length > 0
+            ? { room: message.state, chat: history.slice(-200) }
+            : { room: message.state },
+        );
       } else {
         // ...and if the turn just came round to a seat we still hold there,
         // that is worth saying out loud: the table is waiting on a player who

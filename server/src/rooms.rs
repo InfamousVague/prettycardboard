@@ -313,6 +313,10 @@ pub struct Attacker {
     pub iid: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub defender_seat: Option<usize>,
+    /// The defending card being battled (Yu-Gi-Oh names a target on the
+    /// attack declaration; Magic leaves this None and answers with blocks).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_iid: Option<String>,
     /// Effective power/toughness as declared by the attacking client
     /// (counters included); strings, missing resolves as 0 (Combat v3).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1012,6 +1016,17 @@ pub fn format_default_life(format: &str) -> i64 {
         _ => 20,
     }
 }
+
+/// The life a seat starts on, honoring the host's override. Games disagree
+/// wildly (a duel opens at 8000 LP, a Cyberpunk run at 0), and every seating
+/// path - human join, bot seat, match start - must land on the same number.
+pub fn starting_life(game: &str, format: &str, settings: &GameSettings) -> i64 {
+    match game {
+        "cyberpunk" => 0,
+        "yugioh" => settings.starting_life.unwrap_or(8000),
+        _ => settings.starting_life.unwrap_or_else(|| format_default_life(format)),
+    }
+}
 fn default_game() -> String {
     "mtg".to_string()
 }
@@ -1051,6 +1066,24 @@ pub struct Snapshot {
 /// How many snapshots a room keeps. Bounds memory (~60KB each) and how far
 /// undo/replay can reach back; the oldest are dropped once exceeded.
 const MAX_HISTORY: usize = 400;
+
+/// One spoken line, kept with the room so a reconnect or a late join sees the
+/// conversation instead of an empty pane. Lives and dies with the match: it is
+/// part of `Room`, so it persists in `state_json` across a server restart and
+/// is gone the moment the table is closed. Never written to the match archive.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatLine {
+    pub from: ChatFrom,
+    pub text: String,
+    pub ts: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatFrom {
+    pub user_id: String,
+    pub username: String,
+}
 
 /// Serde is for SQLite persistence (state_json); spectators are live-only and
 /// reset on load.
@@ -1111,6 +1144,11 @@ pub struct Room {
     /// When the stack last changed (unix ms) - the response-timeout anchor.
     #[serde(default)]
     pub stack_changed_ms: i64,
+    /// The table's conversation, newest last, capped at CHAT_KEEP. `#[serde(default)]`
+    /// so rooms persisted before this field deserialize as an empty transcript.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub chat: Vec<ChatLine>,
     #[serde(default)]
     pub markers: Markers,
     /// Table markers by card iid (see `CardMark`). Fully public.
@@ -1626,11 +1664,34 @@ impl Room {
             "matchResult": self.match_result,
             "draft": self.draft_view(viewer),
             "players": players,
+            // Same shape the live `chat` frame uses, so the client can seed its
+            // transcript from a snapshot without a second code path.
+            "chat": self.chat,
             "spectators": self.spectators
                 .iter()
                 .map(|s| json!({"userId": s.user_id, "username": s.username}))
                 .collect::<Vec<_>>(),
         })
+    }
+}
+
+/// How much conversation a room carries. Chat rides in `state_json`, which is
+/// rewritten on every persist, so this is a storage bound as much as a UI one -
+/// the client already renders only the last 200 lines.
+pub const CHAT_KEEP: usize = 200;
+
+impl Room {
+    /// Record a spoken line, trimming the oldest once past CHAT_KEEP.
+    pub fn push_chat(&mut self, user_id: &str, username: &str, text: &str, ts: i64) {
+        self.chat.push(ChatLine {
+            from: ChatFrom { user_id: user_id.to_string(), username: username.to_string() },
+            text: text.to_string(),
+            ts,
+        });
+        if self.chat.len() > CHAT_KEEP {
+            let drop = self.chat.len() - CHAT_KEEP;
+            self.chat.drain(0..drop);
+        }
     }
 }
 

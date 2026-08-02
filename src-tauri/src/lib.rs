@@ -10,25 +10,40 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
+    let builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
+
+    // Desktop-only plugins. decorum decorates a native window, and the updater
+    // replaces the app's own bundle - neither idea exists on a phone, where the
+    // window is the whole screen and installs come from the device, not from us.
+    #[cfg(desktop)]
+    let builder = builder
         .plugin(tauri_plugin_decorum::init())
         // OTA self-update: the JS side checks GitHub Releases (latest.json),
         // downloads the signed artifact, and relaunches via the process plugin.
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
-        .setup(|app| {
-            use tauri::Manager;
-            let main = app.get_webview_window("main").expect("main window");
+        .plugin(tauri_plugin_process::init());
+
+    builder
+        .setup(|_app| {
             // Center the native macOS traffic lights in the taller custom title
             // bar. decorum's `y` is the extra title-bar height reserved BELOW the
             // buttons (container height = button_height + y), and the buttons
             // center in that container; ~30 centers a ~14px button set in the
             // 52px (3.25rem) bar. macOS re-lays-out the buttons on resize, so
             // re-apply the inset on every resize.
+            //
+            // The window lookup lives INSIDE this cfg on purpose. iOS does not
+            // build a window named "main" from tauri.conf.json's `app.windows`
+            // the way desktop does, so hoisting it out and unwrapping panicked
+            // during setup and killed the app on launch - the crash showed up on
+            // the phone as an instant bounce back to the home screen.
             #[cfg(target_os = "macos")]
             {
+                use tauri::Manager;
                 use tauri_plugin_decorum::WebviewWindowExt;
+                let Some(main) = _app.get_webview_window("main") else {
+                    return Ok(());
+                };
                 const INSET: (f32, f32) = (16.0, 30.0);
                 let _ = main.set_traffic_lights_inset(INSET.0, INSET.1);
                 let win = main.clone();

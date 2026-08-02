@@ -25,6 +25,7 @@
     "engine": "node scenarios/enforced-engine.js",
     "walkers": "node scenarios/planeswalker-audit.js",
     "botdecks": "node scenarios/bot-decks.js",
+    "duel": "node scenarios/yugioh-duel.js",
     "botspells": "node scenarios/bot-spells.js",
     "brawl": "node scenarios/enforced-brawl.js",
     "restart": "node scenarios/restart-resume.js",

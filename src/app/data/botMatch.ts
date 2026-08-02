@@ -10,8 +10,8 @@ import type { RoomState } from '../net/types.ts';
  * developer Bots tab in Settings - one launcher, so the two can never drift
  * on the fiddly parts (store-driven joins, waiting for seats, cleanup).
  *
- * Bots only play Magic tables (server rule), and each bot shuffles up a
- * random embedded precon suited to the table's format on its own.
+ * Bots play Magic and Yu-Gi-Oh tables (server rule), and each bot shuffles up
+ * a random embedded deck suited to the table's game and format on its own.
  *
  * Throws Error('offline') without touching anything when the socket is down;
  * any later failure tears the half-built room down before rethrowing.
@@ -29,6 +29,9 @@ export interface BotMatchOpts {
   difficulty: BotDifficulty;
   style: BotStyle;
   format: 'commander' | 'standard';
+  /** Which card game the table plays. Yu-Gi-Oh has one format ('standard'),
+   *  and no enforcement - the rules engine is Magic-only. */
+  game?: 'mtg' | 'yugioh';
   enforced: boolean;
   /** Take a chair myself; false = all-bot exhibition, spectated (auto-starts). */
   seat: boolean;
@@ -55,20 +58,24 @@ export async function launchBotMatch(opts: BotMatchOpts): Promise<void> {
   // would silently drop the joins and bot seats.
   if (!isConnected()) throw new Error('offline');
   const seats = opts.bots + (opts.seat ? 1 : 0);
-  const { roomId } = await createRoom(opts.name, seats, false, { format: opts.format, game: 'mtg' });
+  const game = opts.game ?? 'mtg';
+  const { roomId } = await createRoom(opts.name, seats, false, {
+    format: game === 'yugioh' ? 'standard' : opts.format,
+    game,
+  });
   let settled = false;
   try {
     // Through the store's own actions (raw sends would leave joinedRoomId
     // stale and the store would drop the new room's states): vacate whatever
     // room we were in, then take a chair or the spectator rail.
-    const game = useGame.getState();
-    if (game.joinedRoomId) game.leave();
-    if (opts.seat) game.join(roomId, opts.deckId);
-    else game.spectate(roomId);
+    const store = useGame.getState();
+    if (store.joinedRoomId) store.leave();
+    if (opts.seat) store.join(roomId, opts.deckId);
+    else store.spectate(roomId);
     const first = await awaitRoom(roomId, () => true);
     // The state always carries the room's full settings; enforcement is a
     // one-flag change on top of them.
-    if (opts.enforced && first.settings) {
+    if (opts.enforced && game === 'mtg' && first.settings) {
       send({ type: 'room.settings', settings: { ...first.settings, enforced: true } });
     }
     for (let i = 0; i < opts.bots; i += 1) {

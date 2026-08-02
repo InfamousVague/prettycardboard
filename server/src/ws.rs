@@ -524,15 +524,7 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
     let is_commander_room = rooms::format_has_commander(&room.format);
     // Honor the host's startingLife override (mirrors start_room) so lobby
     // seats and mid-game joiners match the table's actual rule.
-    let starting_life = if room.game == "cyberpunk" {
-        0
-    } else if room.game == "yugioh" {
-        room.settings.starting_life.unwrap_or(8000)
-    } else {
-        room.settings
-            .starting_life
-            .unwrap_or_else(|| rooms::format_default_life(&room.format))
-    };
+    let starting_life = rooms::starting_life(&room.game, &room.format, &room.settings);
     // Snapshot the deck's name now: match results must survive a later
     // rename or delete of the deck row.
     let deck_name = deck.as_ref().map(|d| d.name.clone());
@@ -810,16 +802,7 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
     // Reset each seat's life to the effective starting total (host override or
     // format/game default). Cyberpunk keeps its Net/RAM slots at 0; Yu-Gi-Oh
     // duels start at 8000 LP.
-    let base_life = match room.game.as_str() {
-        "cyberpunk" => 0,
-        "yugioh" => 8000,
-        _ => rooms::format_default_life(&room.format),
-    };
-    let starting_life = if room.game == "cyberpunk" {
-        0
-    } else {
-        room.settings.starting_life.unwrap_or(base_life)
-    };
+    let starting_life = rooms::starting_life(&room.game, &room.format, &room.settings);
     // Yu-Gi-Oh has no mulligans: seats start already "kept" so the first turn
     // begins the moment the hands are dealt.
     let mull_state = if room.game == "yugioh" { "kept" } else { "deciding" };
@@ -1082,10 +1065,15 @@ fn chat_send(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
         send_err(tx, "not_in_room", "you are not in a room");
         return;
     };
-    let Some(room) = app.rooms.get(&rref.room_id) else {
+    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
         send_err(tx, "room_not_found", "no such room");
         return;
     };
+    // Kept on the room, not just broadcast: a reconnect or a late join used to
+    // land in an empty pane because the line existed only in whoever was
+    // listening at the time.
+    let ts = crate::now_ms();
+    room.push_chat(&user.id, &user.username, text, ts);
     room_send_all(
         app,
         &room,
@@ -1093,7 +1081,7 @@ fn chat_send(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
             "type": "chat",
             "from": {"userId": user.id, "username": user.username},
             "text": text,
-            "ts": crate::now_ms(),
+            "ts": ts,
         }),
     );
 }
@@ -1101,7 +1089,11 @@ fn chat_send(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
 /// Broadcast a chat line spoken by a bot. Bots have no `db::User` or socket;
 /// the frame is byte-for-byte what a human's chat.send produces, so clients
 /// need no special handling to render bot table talk.
-pub fn bot_chat(app: &App, room: &Room, bot_id: &str, username: &str, text: &str) {
+pub fn bot_chat(app: &App, room: &mut Room, bot_id: &str, username: &str, text: &str) {
+    // &mut, so a bot's table talk is kept with the room exactly like a human's.
+    // Without it a reconnect would show one side of the conversation.
+    let ts = crate::now_ms();
+    room.push_chat(bot_id, username, text, ts);
     room_send_all(
         app,
         room,
@@ -1109,7 +1101,7 @@ pub fn bot_chat(app: &App, room: &Room, bot_id: &str, username: &str, text: &str
             "type": "chat",
             "from": {"userId": bot_id, "username": username},
             "text": text,
-            "ts": crate::now_ms(),
+            "ts": ts,
         }),
     );
 }
@@ -1142,8 +1134,8 @@ fn bot_add(
         send_err(tx, "already_started", "the game has already started");
         return;
     }
-    if room.game != "mtg" {
-        send_err(tx, "bad_game", "bots only play Magic tables");
+    if room.game != "mtg" && room.game != "yugioh" {
+        send_err(tx, "bad_game", "bots play Magic and Yu-Gi-Oh tables");
         return;
     }
     let taken: Vec<usize> = room.players.iter().map(|p| p.seat).collect();
@@ -1151,15 +1143,23 @@ fn bot_add(
         send_err(tx, "room_full", "room is full");
         return;
     };
-    // A bot brings a deck the TABLE can actually play: a Standard table gets
-    // a Standard deck, anything else the Commander precons. An explicit code
-    // still wins - the Bots settings tab and the playtests name decks.
-    let pool = crate::bot::decks_for_format(&room.format);
-    let all = &crate::bot::data().decks;
+    // A bot brings a deck the TABLE can actually play: a duel table gets a
+    // Yu-Gi-Oh deck, a Standard table a Standard deck, anything else the
+    // Commander precons. An explicit code still wins - the Bots settings tab
+    // and the playtests name decks.
+    let pool = crate::bot::decks_for(&room.game, &room.format);
+    let all: Vec<&crate::bot::BotDeck> =
+        crate::bot::data().decks.iter().chain(crate::bot::ygo_data().decks.iter()).collect();
     let deck: &crate::bot::BotDeck = match deck_code.as_deref() {
         None | Some("random") => pool[rand::random_range(0..pool.len())],
-        Some(code) => match all.iter().find(|d| d.code == code) {
-            Some(d) => d,
+        Some(code) => match all.iter().copied().find(|d| d.code == code) {
+            // A named deck still has to be for this game - a Commander precon
+            // at a duel table would be 100 cards of the wrong card game.
+            Some(d) if d.game.as_deref().unwrap_or("mtg") == room.game => d,
+            Some(_) => {
+                send_err(tx, "bad_deck", &format!("bot deck {code} is not a {} deck", room.game));
+                return;
+            }
             None => {
                 send_err(tx, "bad_deck", &format!("no bot deck {code}"));
                 return;
@@ -1185,10 +1185,7 @@ fn bot_add(
         .collect();
     let (command, library) =
         rooms::build_zones(&cards, rooms::format_has_commander(&room.format), &room.game);
-    let starting_life = room
-        .settings
-        .starting_life
-        .unwrap_or_else(|| rooms::format_default_life(&room.format));
+    let starting_life = rooms::starting_life(&room.game, &room.format, &room.settings);
     let gig_dice = rooms::new_gig_dice(&room.game);
     room.players.push(rooms::Player {
         user_id: bot_id.clone(),
@@ -1253,7 +1250,7 @@ fn bot_add(
     rooms::touch(app, &mut room);
     room_send_states(app, &room);
     room_log(app, &room, seq, &format!("{} takes seat {}", username, seat + 1));
-    bot_chat(app, &room, &bot_id, &username, &crate::bot::greeting_line());
+    bot_chat(app, &mut room, &bot_id, &username, &crate::bot::greeting_line());
 }
 
 /// {"type":"bot.remove"}: host-only, pre-start, target seat must hold a bot.

@@ -120,6 +120,19 @@ pub(crate) struct BotMind {
     responded_to: Option<String>,
     said_gg: bool,
     said_win: bool,
+
+    // --- Yu-Gi-Oh (the duel brain; unused at a Magic table) ---
+    /// The one Normal Summon this turn has already been spent.
+    ygo_summoned: bool,
+    /// Tributes already sent to the Graveyard toward the summon in progress,
+    /// so only the first one is announced.
+    ygo_tributes_paid: usize,
+    /// The monster a tribute summon in progress is paying for: held so paying
+    /// the cost cannot change the bot's mind about what it was buying.
+    ygo_summon_iid: Option<String>,
+    /// Monsters that have already declared an attack this turn - Yu-Gi-Oh
+    /// gives each monster one attack per Battle Phase.
+    ygo_attacked: Vec<String>,
 }
 
 /// A bot never chews on one turn longer than this before passing. Its own
@@ -201,7 +214,7 @@ pub async fn scheduler(app: Arc<App>) {
                             .map(|p| p.username.clone())
                             .unwrap_or_default();
                         for line in &decision.say {
-                            ws::bot_chat(&app, &room, &uid, &username, line);
+                            ws::bot_chat(&app, &mut room, &uid, &username, line);
                         }
                     }
                     let Some(action) = decision.action else { break };
@@ -257,6 +270,7 @@ mod decide;
 mod knowledge;
 mod lines;
 mod upkeep;
+mod yugioh;
 
 // One namespace for the whole brain: submodules see each other (and the types
 // above) through these globs plus `use super::*`, exactly like a tests module.
@@ -266,3 +280,4 @@ pub(crate) use decide::*;
 pub(crate) use knowledge::*;
 pub(crate) use lines::*;
 pub(crate) use upkeep::*;
+pub(crate) use yugioh::*;

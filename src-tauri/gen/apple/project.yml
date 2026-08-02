@@ -41,6 +41,23 @@ targets:
       properties:
         LSRequiresIPhoneOS: true
         UILaunchStoryboardName: LaunchScreen
+        # iOS 26+ TRAPS (EXC_BREAKPOINT in
+        # __UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption) any app
+        # that never adopted the scene lifecycle, so the app died on launch before
+        # showing a frame.
+        #
+        # Every field below is load-bearing. tao does NOT implement
+        # application:configurationForConnectingSceneSession:, so the delegate has
+        # to be named here or UIKit connects the scene with nothing and segfaults
+        # in _connectUISceneFromFBSScene. And tao gates on SupportsMultipleScenes:
+        # when true it defers did_finish_launching to the first scene setup, which
+        # only ever runs inside TaoSceneDelegate. The two settings are a pair.
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default Configuration
+                UISceneDelegateClassName: TaoSceneDelegate
         UIRequiredDeviceCapabilities: [arm64, metal]
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

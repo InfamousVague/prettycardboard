@@ -44,7 +44,7 @@ import {
   TITLEBAR_DOCK_END_ID,
   TITLEBAR_DOCK_START_ID,
 } from './titlebarDock.ts';
-import { isTauri } from './tauri.ts';
+import { isDesktopApp } from './tauri.ts';
 import { useApp } from './state/appStore.ts';
 import { useGame } from './state/gameStore.ts';
 import { useUi } from './state/uiStore.ts';
@@ -116,8 +116,11 @@ function requestPackDock(open: boolean): void {
 }
 
 // Window chrome (title bar + traffic lights) only makes sense as a desktop
-// window, so it is off in the browser and on under Tauri.
-const DESKTOP = isTauri();
+// window, so it is off in the browser and on under Tauri. NOT isTauri(): the
+// iOS build is Tauri too, and it was rendering the whole desktop title bar -
+// back/forward arrows and the account avatar - across the top of the phone,
+// where there is no window to traverse or drag.
+const DESKTOP = isDesktopApp();
 
 /** Suspense fallback for a lazily-loaded route: a centered spinner that fills
  *  the content area so the shell never collapses while a chunk streams in. */

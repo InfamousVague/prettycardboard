@@ -3,7 +3,7 @@ import { Button, Row, Switch, Text, Size, TextTone } from '@glacier/react';
 import { CircleUserRound, HardDrive, LogOut } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
-import { isLocalPlay, isTauri, localServerStart, localServerStop } from '../tauri.ts';
+import { isDesktopApp, isLocalPlay, localServerStart, localServerStop } from '../tauri.ts';
 
 /** Account tab: the signed-in name, sign-out, and (desktop) local play. */
 export function AccountTab({ onClose }: { onClose: () => void }) {
@@ -52,7 +52,7 @@ export function AccountTab({ onClose }: { onClose: () => void }) {
         </div>
       </Row>
 
-      {isTauri() && (
+      {isDesktopApp() && (
         <div style={{ display: 'grid', gap: 'var(--glacier-space-2)' }}>
           <Row align="center" gap={3}>
             <HardDrive size={18} aria-hidden />

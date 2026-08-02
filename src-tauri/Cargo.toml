@@ -27,3 +27,16 @@ serde_json = "1"
 [features]
 # Kept in sync with tauri.conf.json > app > security > csp.
 custom-protocol = ["tauri/custom-protocol"]
+
+# tao 0.35.3 returns a DANGLING pointer from the iOS app delegate's
+# application:configurationForConnectingSceneSession: - it hands UIKit a
+# UISceneConfiguration that its own Retained wrapper frees on return, so UIKit
+# retained freed memory and the app segfaulted on launch before drawing a
+# frame. iOS 26+ made this reachable by requiring scene-lifecycle adoption.
+# vendor/tao is 0.35.3 verbatim plus upstream's own one-line fix (autorelease
+# instead of borrow), which shipped in tao 0.36.0 - a version we cannot take,
+# because tauri-runtime-wry 2.11.4 pins tao ^0.35. Drop this patch when the
+# tauri stack moves to tao 0.36. The change is inside platform_impl/ios, so
+# desktop builds are byte-for-byte unaffected.
+[patch.crates-io]
+tao = { path = "vendor/tao" }

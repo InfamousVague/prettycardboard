@@ -533,7 +533,13 @@ export function ZonePiles({
   const libraryPile = (
     <div className="zonePile" data-drop={dropHint === 'library' || undefined} title={`${libLabel}: ${player.libraryCount}`}>
       <LibraryStack count={player.libraryCount} width={width} userId={player.userId} />
-      <span className="pileCount">{player.libraryCount}</span>
+      {/* The deck was the one pile with a bare count and no name, which left it
+          unlabelled on a phone (where the caption is the only text) and out of
+          line with graveyard/exile/command on desktop. Same shape as theirs. */}
+      <span className="pileCaption">
+        <span className="pileLabel">{libLabel}</span>
+        <span className="pileCount">{player.libraryCount}</span>
+      </span>
     </div>
   );
 

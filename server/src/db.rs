@@ -204,6 +204,14 @@ pub fn open(path: &std::path::Path) -> Connection {
     // Additive migration: accounts predating password auth have a NULL hash
     // (they keep working via their stored token but cannot log back in).
     let _ = conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT", []);
+    // Competitive rating (see rooms::rating). Added late, so every account that
+    // predates it is seeded at the ladder's start rather than at 0 - a 0 would
+    // read as Iron V for everyone who ever played before this shipped.
+    let _ = conn.execute("ALTER TABLE users ADD COLUMN rating INTEGER", []);
+    let _ = conn.execute(
+        "UPDATE users SET rating = ?1 WHERE rating IS NULL",
+        params![RATING_SEED],
+    );
     let _ = conn.execute("ALTER TABLE decks ADD COLUMN header TEXT", []);
     let _ = conn.execute("ALTER TABLE decks ADD COLUMN game TEXT", []);
     let _ = conn.execute("ALTER TABLE decks ADD COLUMN playmat TEXT", []);
@@ -340,6 +348,77 @@ pub fn matches_for(conn: &Connection, user_id: &str) -> Vec<serde_json::Value> {
     rows.filter_map(|r| r.ok()).collect()
 }
 
+/// The competitive ladder's arithmetic. These MIRROR src/app/data/rankTiers.ts -
+/// the client maps a rating onto Iron V..Mythic with the same numbers, so a
+/// change here without a change there would grade the same player differently
+/// on the two sides.
+pub const RATING_FLOOR: i64 = 600;
+/// Middle of Silver: a new account can be sorted up or down without either
+/// direction feeling like a punishment.
+pub const RATING_SEED: i64 = 1320;
+/// One game's maximum swing, before the field-size divisor below.
+const K_FACTOR: f64 = 24.0;
+
+/// Read a player's rating, seeding anyone the migration has not touched.
+pub fn user_rating(conn: &Connection, user_id: &str) -> i64 {
+    conn.query_row("SELECT rating FROM users WHERE id = ?", params![user_id], |r| {
+        r.get::<_, Option<i64>>(0)
+    })
+    .ok()
+    .flatten()
+    .unwrap_or(RATING_SEED)
+}
+
+/// Apply one match's result to every HUMAN seat's rating.
+///
+/// Free-for-all Elo: each seat is scored against every other seat, the winner
+/// beating all of them and the losers drawing with each other - nothing in the
+/// result says which loser placed second, so inventing an order would be
+/// fiction. The sum is divided by the number of opponents, so a six-player pod
+/// moves a rating about as far as a duel does rather than six times as far.
+///
+/// Bots are skipped, and the whole thing is gated on `result.ranked` - the flag
+/// the room already sets for a substantial multiplayer game, which is exactly
+/// the "not an instant-concede farm, not a bot stomp" test the ladder wants.
+/// Re-deriving that here would be a second definition of the same idea.
+fn apply_rating(conn: &Connection, result: &crate::rooms::MatchResult) {
+    if !result.ranked {
+        return;
+    }
+    let humans: Vec<&crate::rooms::MatchResultPlayer> =
+        result.players.iter().filter(|p| !p.is_bot).collect();
+    if humans.len() < 2 {
+        return;
+    }
+    let before: Vec<(String, f64)> = humans
+        .iter()
+        .map(|p| (p.user_id.clone(), user_rating(conn, &p.user_id) as f64))
+        .collect();
+    let n = before.len() as f64;
+    for (id, mine) in &before {
+        let mut delta = 0.0;
+        for (other_id, theirs) in &before {
+            if other_id == id {
+                continue;
+            }
+            let expected = 1.0 / (1.0 + 10f64.powf((theirs - mine) / 400.0));
+            let actual = if *id == result.winner_user_id {
+                1.0
+            } else if *other_id == result.winner_user_id {
+                0.0
+            } else {
+                0.5
+            };
+            delta += K_FACTOR * (actual - expected);
+        }
+        let next: i64 = (mine + delta / (n - 1.0)).round() as i64;
+        let _ = conn.execute(
+            "UPDATE users SET rating = ?1 WHERE id = ?2",
+            params![next.max(RATING_FLOOR), id],
+        );
+    }
+}
+
 /// Persist a finished match: one matches row plus one match_players row per
 /// seat (bots included; they anchor per-match display, not all-time stats).
 pub fn match_result_record(
@@ -385,6 +464,7 @@ pub fn match_result_record(
             ],
         );
     }
+    apply_rating(conn, result);
 }
 
 /// One participant of a stored match, straight from match_players.

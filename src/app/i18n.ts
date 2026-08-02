@@ -1706,6 +1706,8 @@ export const messages = {
   botsAggro: { en: 'Aggro', es: 'Agresivo', fr: 'Agressif', ar: 'هجومي' },
   botsDefensive: { en: 'Defensive', es: 'Defensivo', fr: 'Défensif', ar: 'دفاعي' },
   botsFormat: { en: 'Format', es: 'Formato', fr: 'Format', ar: 'الصيغة' },
+  botsGame: { en: 'Game', es: 'Juego', fr: 'Jeu', ar: 'اللعبة' },
+  botsPresetDuel: { en: 'Watch a Yu-Gi-Oh duel', es: 'Ver un duelo de Yu-Gi-Oh', fr: 'Regarder un duel Yu-Gi-Oh', ar: 'شاهد مبارزة يوغي أوه' },
   botsEnforced: { en: 'Enforced rules', es: 'Reglas aplicadas', fr: 'Règles appliquées', ar: 'قواعد مطبقة' },
   botsEnforcedHint: {
     en: 'The engine gates casting costs, combat legality, and applies parsed card text (triggers, discards, scry).',
