@@ -1196,6 +1196,11 @@ pub struct Room {
     /// passes the turn.
     #[serde(default)]
     pub end_fired: Option<(u64, usize)>,
+    /// (turn number, seat) whose beginning-of-combat triggers already fired.
+    /// Both ways into the attack phase (`phase.set` and `combat.begin`) share
+    /// it, so a player who begins combat twice does not get paid twice.
+    #[serde(default)]
+    pub combat_fired: Option<(u64, usize)>,
     /// When the current active player's turn began (unix ms; 0 = no clock).
     #[serde(default)]
     pub turn_started_ms: i64,

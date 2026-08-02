@@ -731,8 +731,12 @@ pub fn check(app: &App, room: &Room, pi: usize, action: &crate::game::Action) ->
             if !combat.locked {
                 return Err(err("attackers are not locked yet"));
             }
+            // Locking blocks twice is redundant, not illegal: two defenders
+            // (or a bot and its controller) can each decide they are done in
+            // the same beat, and the loser of that race should not be told
+            // off in the room log. The apply arm makes the repeat a no-op.
             if combat.blocks_ready {
-                return Err(err("blocks are already locked"));
+                return Ok(());
             }
             if !seat_defends(room, combat, me.seat) {
                 return Err(err("you are not being attacked"));
@@ -973,6 +977,135 @@ pub fn fire_card_triggers(app: &App, room: &mut Room, when: TriggerWhen, iid: &s
     let mut logs = Vec::new();
     for trigger in facts.triggers.iter().filter(|t| t.when == when) {
         logs.push(push_trigger(room, &owner, seat, &card.iid, &card.name, trigger, None));
+    }
+    logs
+}
+
+/// Queue the triggers that WATCH a permanent arrive or leave: landfall, "a
+/// creature you control enters", "a creature you control dies". The event's
+/// own card fires its `Etb`/`Dies` trigger separately (fire_card_triggers);
+/// this is everything ELSE on that player's battlefield noticing.
+///
+/// The witnessing permanent is never the event's own card: "whenever a
+/// creature you control enters" on a creature that just entered is the one
+/// reading these templates disagree on, and not firing is the reading that
+/// cannot over-apply.
+pub fn fire_witness_triggers(app: &App, room: &mut Room, iid: &str, leaving: bool) -> Vec<String> {
+    if !enforced(room) {
+        return Vec::new();
+    }
+    // Whose permanent, and what was it? A card that just left the battlefield
+    // is looked up wherever it landed.
+    let Some((seat, card)) = room.players.iter().find_map(|p| {
+        [&p.battlefield, &p.graveyard, &p.exile, &p.command]
+            .into_iter()
+            .find_map(|zone| zone.iter().find(|c| c.iid == iid))
+            .map(|c| (p.seat, c.clone()))
+    }) else {
+        return Vec::new();
+    };
+    let Some(f) = facts(app, &card) else { return Vec::new() };
+    let want = if leaving {
+        if !f.is_creature() {
+            return Vec::new();
+        }
+        TriggerWhen::CreatureDies
+    } else if f.type_line.to_lowercase().contains("land") {
+        TriggerWhen::LandEtb
+    } else if f.is_creature() {
+        TriggerWhen::CreatureEtb
+    } else {
+        return Vec::new();
+    };
+    fire_board_triggers(app, room, seat, want, Some(iid))
+}
+
+/// Queue every trigger of `when` on one seat's battlefield, optionally
+/// skipping the permanent the event was about.
+fn fire_board_triggers(
+    app: &App,
+    room: &mut Room,
+    seat: usize,
+    when: TriggerWhen,
+    skip_iid: Option<&str>,
+) -> Vec<String> {
+    let Some(player) = room.players.iter().find(|p| p.seat == seat) else {
+        return Vec::new();
+    };
+    let owner = player.user_id.clone();
+    let sources: Vec<(String, String, Vec<crate::oracle::Trigger>)> = player
+        .battlefield
+        .iter()
+        .filter(|c| Some(c.iid.as_str()) != skip_iid)
+        .filter_map(|c| {
+            let f = facts(app, c)?;
+            let matching: Vec<crate::oracle::Trigger> =
+                f.triggers.iter().filter(|t| t.when == when).cloned().collect();
+            (!matching.is_empty()).then(|| (c.iid.clone(), c.name.clone(), matching))
+        })
+        .collect();
+    let mut logs = Vec::new();
+    for (iid, name, triggers) in sources {
+        for trigger in &triggers {
+            logs.push(push_trigger(room, &owner, seat, &iid, &name, trigger, None));
+        }
+    }
+    logs
+}
+
+/// Queue "whenever you attack" for the attacking seat: once per combat, not
+/// once per attacker (which is what `Attacks` already does per creature).
+pub fn fire_attack_triggers(app: &App, room: &mut Room, seat: usize) -> Vec<String> {
+    if !enforced(room) {
+        return Vec::new();
+    }
+    fire_board_triggers(app, room, seat, TriggerWhen::YouAttack, None)
+}
+
+/// Queue "at the beginning of combat on your turn" for the active seat.
+pub fn fire_combat_start_triggers(app: &App, room: &mut Room, seat: usize) -> Vec<String> {
+    if !enforced(room) {
+        return Vec::new();
+    }
+    fire_board_triggers(app, room, seat, TriggerWhen::CombatStart, None)
+}
+
+/// Queue "at the beginning of each upkeep" across EVERY battlefield - the
+/// trigger belongs to each card's own controller, whoever's upkeep it is.
+pub fn fire_each_upkeep_triggers(app: &App, room: &mut Room) -> Vec<String> {
+    if !enforced(room) {
+        return Vec::new();
+    }
+    let seats: Vec<usize> = room.players.iter().map(|p| p.seat).collect();
+    let mut logs = Vec::new();
+    for seat in seats {
+        logs.extend(fire_board_triggers(app, room, seat, TriggerWhen::EachUpkeep, None));
+    }
+    logs
+}
+
+/// Queue "whenever you cast ..." for the caster, matching the narrowings the
+/// parser recognizes against what was actually cast.
+pub fn fire_cast_triggers(app: &App, room: &mut Room, seat: usize, card: &Card) -> Vec<String> {
+    if !enforced(room) {
+        return Vec::new();
+    }
+    let Some(f) = facts(app, card) else { return Vec::new() };
+    let type_line = f.type_line.to_lowercase();
+    let creature = f.is_creature();
+    let instant_sorcery = type_line.contains("instant") || type_line.contains("sorcery");
+    let mut wants = vec![TriggerWhen::CastSpell];
+    if creature {
+        wants.push(TriggerWhen::CastCreatureSpell);
+    } else {
+        wants.push(TriggerWhen::CastNoncreatureSpell);
+    }
+    if instant_sorcery {
+        wants.push(TriggerWhen::CastInstantOrSorcery);
+    }
+    let mut logs = Vec::new();
+    for when in wants {
+        logs.extend(fire_board_triggers(app, room, seat, when, None));
     }
     logs
 }

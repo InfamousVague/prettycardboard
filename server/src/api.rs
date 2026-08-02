@@ -693,6 +693,7 @@ pub async fn room_create(
         loyalty_used: Vec::new(),
         end_window: None,
         end_fired: None,
+        combat_fired: None,
         turn_started_ms: 0,
         turn_last_interaction_ms: 0,
         started_at_ms: 0,

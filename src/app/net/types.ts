@@ -585,7 +585,17 @@ export interface PendingTrigger {
     | 'dealsPlayerDamage'
     | 'activated'
     | 'youDraw'
-    | 'opponentDraws';
+    | 'opponentDraws'
+    | 'landEtb'
+    | 'creatureEtb'
+    | 'creatureDies'
+    | 'youAttack'
+    | 'combatStart'
+    | 'eachUpkeep'
+    | 'castSpell'
+    | 'castCreatureSpell'
+    | 'castNoncreatureSpell'
+    | 'castInstantOrSorcery';
   effects: TriggerEffect[];
   text: string;
   /** True = the engine can apply the parsed effects itself. */

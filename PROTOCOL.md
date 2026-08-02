@@ -909,6 +909,48 @@ stance as the other intents.
   prompts. Freeform rooms and solo tables advance exactly as before. Bots
   pass open windows within a tick and never draw rejections.
 
+### Watching triggers, oracle v11 (2026-08-01)
+
+The draw fix exposed the shape of the bug rather than the bug itself: the
+parser only ever recognized a trigger whose subject was ITS OWN CARD ("when
+this enters", "when this dies", "whenever this attacks"). Everything that
+watches the board instead was silent. Six more events, chosen by how many
+real cards use them:
+
+| event | template | cards |
+|---|---|---|
+| `landEtb` | "whenever a land you control enters" / Landfall | ~199 |
+| `creatureEtb` | "whenever (an)other creature you control enters" | ~126 |
+| `creatureDies` | "whenever (an)other creature you control dies" | ~62 |
+| `youAttack` | "whenever you attack" | ~163 |
+| `combatStart` | "at the beginning of combat on your turn" | ~302 |
+| `eachUpkeep` | "at the beginning of each upkeep" | ~66 |
+| `castSpell` + 3 narrowings | "whenever you cast a \[creature/noncreature/instant or sorcery\] spell" | ~887 |
+
+Notes that matter for reading the code:
+
+- **Ability words are stripped.** "Landfall — Whenever a land you control
+  enters, ..." is a trigger with an italic label; the label carries no rules
+  meaning. Only stripped when a trigger actually follows, so a modal
+  "choose one —" is left alone.
+- **A witness never witnesses itself.** The permanent the event was about is
+  excluded from the scan, so "whenever a creature you control enters" on the
+  creature that just entered does not fire. That is the conservative reading
+  of "a", and its own ETB trigger fires separately either way.
+- **`youAttack` fires once per declaration**, not once per attacker (which is
+  what `attacks` already does, per creature).
+- **`combatStart` fires once per turn**, guarded by `Room::combat_fired` -
+  both `phase.set` and `combat.begin` enter the attack phase.
+- **`eachUpkeep` belongs to every controller**, so it scans every battlefield
+  rather than the active seat's.
+- New effect: "<source> deals N damage to each opponent" (Impact Tremors,
+  Purphoros) applies as life loss - the engine models no damage prevention,
+  so the two are the same thing here.
+
+`ORACLE_VERSION` is **11**. Bump it whenever the parser learns a new shape:
+cached rows carry the version they were written with and only reparse when it
+moves, so a new event with no bump is invisible on any card already cached.
+
 ### Draw triggers, oracle v10 (2026-08-01)
 
 The oracle knew ETB, dies, attacks, upkeep, end step and combat damage, but

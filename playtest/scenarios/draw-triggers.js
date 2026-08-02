@@ -40,8 +40,21 @@ async function uploadDeck(client, t) {
   return existing ? existing.id : res.json.id;
 }
 
-/** Fetch Sheoldred out of the library onto the battlefield. */
+/** Fetch Sheoldred out of the library onto the battlefield.
+ *
+ *  The opening hand goes to the bottom first: one Sheoldred in sixty cards
+ *  opens in hand often enough that a library-only search is a coin flip, and
+ *  this scenario failed exactly that way inside the full suite. */
 async function landSheoldred(client, t, label) {
+  const seat = () => client.lastState().players.find((p) => p.userId === client.userId);
+  for (const c of [...(seat().hand ?? [])]) {
+    client.act({ kind: 'card.move', iid: c.iid, to: 'library', index: -1 });
+  }
+  await client.expectState(
+    (s) => s.players.find((p) => p.userId === client.userId)?.handCount === 0,
+    `${label}: opening hand bottomed`,
+    8000,
+  );
   const mark = client.mark();
   client.act({ kind: 'library.search' });
   const lib = await client.waitFor((m) => m.type === 'library.cards', { since: mark, timeoutMs: 6000 });

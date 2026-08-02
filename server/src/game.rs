@@ -448,6 +448,7 @@ pub fn advance_turn_core(app: &crate::App, room: &mut crate::rooms::Room, now: i
             crate::oracle::TriggerWhen::Upkeep,
             next,
         ));
+        logs.extend(crate::rules::fire_each_upkeep_triggers(app, room));
     }
     next
 }
@@ -1217,6 +1218,11 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                         );
                         resync |= !fired.is_empty();
                         extra_logs.extend(fired);
+                        // ...and everything else on that board noticing:
+                        // landfall, "whenever a creature you control enters".
+                        let seen = crate::rules::fire_witness_triggers(app, room, iid, false);
+                        resync |= !seen.is_empty();
+                        extra_logs.extend(seen);
                     } else if to == Zone::Graveyard && from == Zone::Battlefield {
                         let exiled = {
                             let p = &mut room.players[pi];
@@ -1247,6 +1253,9 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                             );
                             resync |= !fired.is_empty();
                             extra_logs.extend(fired);
+                            let seen = crate::rules::fire_witness_triggers(app, room, iid, true);
+                            resync |= !seen.is_empty();
+                            extra_logs.extend(seen);
                         }
                     }
                 }
@@ -2027,6 +2036,11 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                 return Err(("invalid_phase", format!("unknown phase {phase}")));
             }
             room.phase = phase.clone();
+            if phase == "attack" && room.combat_fired != Some((room.turn_number, room.active_seat)) {
+                room.combat_fired = Some((room.turn_number, room.active_seat));
+                let seat = room.active_seat;
+                extra_logs.extend(crate::rules::fire_combat_start_triggers(app, room, seat));
+            }
             // Entering the end phase fires end-step triggers (once per turn;
             // turn.pass fires them for players who never visit the phase).
             if phase == "end" && room.end_fired != Some((room.turn_number, room.active_seat)) {
@@ -2105,6 +2119,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                     crate::oracle::TriggerWhen::Etb,
                     iid,
                 ));
+                extra_logs.extend(crate::rules::fire_witness_triggers(app, room, iid, false));
             } else if let Some((caster, card)) = spell {
                 extra_logs.extend(crate::rules::apply_spell_intent(app, room, &caster, &card, &mut private));
             }
@@ -2389,6 +2404,13 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
         Action::CombatBegin => {
             room.combat = Some(Combat::default());
             room.phase = "attack".to_string();
+            // Beginning combat is the other way into the attack phase; the
+            // once-per-turn marker is shared so it cannot fire twice.
+            if room.combat_fired != Some((room.turn_number, room.active_seat)) {
+                room.combat_fired = Some((room.turn_number, room.active_seat));
+                let seat = room.active_seat;
+                extra_logs.extend(crate::rules::fire_combat_start_triggers(app, room, seat));
+            }
             empty_pools_if_enforced(room);
             log = format!("{username} begins combat");
             resync = true;
@@ -2559,6 +2581,10 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
             card.face_down = false;
             let name = card.name.clone();
             room.players[pi].cards_played += 1;
+            // "Whenever you cast ..." fires on the CAST, whichever place the
+            // spell itself goes - a creature spell that lands straight on the
+            // battlefield here was still cast.
+            let cast_witness = card.clone();
             if goes_to_stack {
                 // The spell rides the stack; its EFFECT is still the caster's
                 // to perform by hand before resolving it to the graveyard.
@@ -2584,6 +2610,16 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                     crate::oracle::TriggerWhen::Etb,
                     &entered_iid,
                 ));
+                extra_logs.extend(crate::rules::fire_witness_triggers(
+                    app,
+                    room,
+                    &entered_iid,
+                    false,
+                ));
+            }
+            {
+                let seat = room.players[pi].seat;
+                extra_logs.extend(crate::rules::fire_cast_triggers(app, room, seat, &cast_witness));
             }
             let paid = taps.len() as i64 + pool_spend.values().sum::<i64>();
             // Cascade / discover fire on the CAST, whichever place the spell
@@ -2640,6 +2676,12 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                     &iid,
                 ));
             }
+            // "Whenever you attack" is ONE trigger for the whole declaration,
+            // however many creatures are in it.
+            if n > 0 {
+                let seat = room.players[pi].seat;
+                extra_logs.extend(crate::rules::fire_attack_triggers(app, room, seat));
+            }
             log = format!("{username} attacks with {n} {}", plural(n, "creature", "creatures"));
             resync = true;
         }
@@ -2649,10 +2691,18 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
             let Some(combat) = room.combat.as_mut() else {
                 return Err(("no_combat", "combat has not begun".to_string()));
             };
-            combat.blocks_ready = true;
-            combat.preview = Some(preview);
-            log = format!("{username} locks in blocks");
-            resync = true;
+            // Already locked: a second defender finishing in the same beat
+            // is a redundant declaration, not a second one. Leave the preview
+            // and the log alone - an empty log broadcasts nothing.
+            if combat.blocks_ready {
+                // Nothing to say and nothing to change.
+                log = String::new();
+            } else {
+                combat.blocks_ready = true;
+                combat.preview = Some(preview);
+                log = format!("{username} locks in blocks");
+                resync = true;
+            }
         }
 
         Action::CombatResolve => {
@@ -2731,6 +2781,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                 crate::oracle::TriggerWhen::Etb,
                 iid,
             ));
+            extra_logs.extend(crate::rules::fire_witness_triggers(app, room, iid, false));
             log = format!("{username} casts {name} (tax {prior_tax})");
             resync = true; // commanderTax changed
         }
@@ -3121,6 +3172,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                     crate::oracle::TriggerWhen::Upkeep,
                     room.active_seat,
                 ));
+                extra_logs.extend(crate::rules::fire_each_upkeep_triggers(app, room));
             }
             resync = true;
         }
@@ -3238,6 +3290,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                             crate::oracle::TriggerWhen::Upkeep,
                             next,
                         ));
+                        extra_logs.extend(crate::rules::fire_each_upkeep_triggers(app, room));
                     }
                 }
             }
@@ -3252,6 +3305,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                         crate::oracle::TriggerWhen::Upkeep,
                         room.active_seat,
                     ));
+                    extra_logs.extend(crate::rules::fire_each_upkeep_triggers(app, room));
                 }
             }
             log = format!("{username} concedes");

@@ -20,7 +20,7 @@ use std::sync::Arc;
 /// Bumped whenever the parse below learns something new: cached rows stamped
 /// with an older version are treated as missing and refetched, so a deploy
 /// never leaves half the oracle table without the new fields.
-pub const ORACLE_VERSION: u32 = 10;
+pub const ORACLE_VERSION: u32 = 11;
 
 /// A characteristic-defining ability that sets power (and sometimes toughness)
 /// to a count of permanents - "...is equal to the number of artifacts you
@@ -80,6 +80,28 @@ pub enum TriggerWhen {
     /// PLAYER draws, and its effects land on them, not on every opponent
     /// (see PendingTrigger::subject).
     OpponentDraws,
+    /// Landfall: "whenever a land you control enters, ...", or the keyword
+    /// line "Landfall - ...". Fires for the land's controller.
+    LandEtb,
+    /// "Whenever (an)other creature you control enters, ..." - a permanent
+    /// WATCHING another creature arrive, not its own ETB.
+    CreatureEtb,
+    /// "Whenever (an)other creature you control dies, ..."
+    CreatureDies,
+    /// "Whenever you attack, ..." - once per combat when attackers are
+    /// declared, not once per attacker.
+    YouAttack,
+    /// "At the beginning of combat on your turn, ..."
+    CombatStart,
+    /// "At the beginning of each upkeep, ..." - every player's, not just the
+    /// controller's.
+    EachUpkeep,
+    /// "Whenever you cast a spell, ..." and its commonest narrowings. The
+    /// firing site checks the cast card's types against the variant.
+    CastSpell,
+    CastCreatureSpell,
+    CastNoncreatureSpell,
+    CastInstantOrSorcery,
     /// A loyalty ability the player just activated (not a trigger shape the
     /// parser finds - the activation queues its text through the same prompt).
     Activated,
@@ -378,6 +400,19 @@ fn parse_effect_part(part: &str, name_lower: &str, short_lower: &str) -> Option<
             return None;
         }
     }
+    // "<source> deals 2 damage to each opponent" - Impact Tremors, Purphoros.
+    // The engine models no damage prevention or replacement, so this is life
+    // loss by another name.
+    if let Some((_, rest)) = p.split_once(" deals ") {
+        if let Some(amount) = rest.strip_suffix(" damage to each opponent") {
+            let mut words = amount.split_whitespace();
+            let n = word_number(words.next()?)?;
+            if words.next().is_none() {
+                return Some(TriggerEffect::EachOpponentLoses { n });
+            }
+        }
+        return None;
+    }
     // "each opponent loses 2 life"
     if let Some(rest) = p.strip_prefix("each opponent loses ") {
         let mut words = rest.split_whitespace();
@@ -558,6 +593,20 @@ fn parse_triggers(name: &str, text: &str) -> Vec<Trigger> {
             continue;
         }
         let lower = line.to_lowercase();
+        // An ability word ("Landfall — Whenever a land you control enters, ...")
+        // is an italic marker with no rules meaning; the trigger is what
+        // follows it. Only strip it when a trigger really does follow, so a
+        // genuine em dash inside rules text is left alone.
+        let lower = match lower.split_once(" \u{2014} ").or_else(|| lower.split_once(" - ")) {
+            Some((_, rest))
+                if rest.starts_with("whenever ")
+                    || rest.starts_with("when ")
+                    || rest.starts_with("at the beginning of") =>
+            {
+                rest.to_string()
+            }
+            _ => lower,
+        };
         let Some((cond, effect_clause)) = lower.split_once(", ") else { continue };
         // The verbatim sentence (original case) for prompts.
         let text_orig = line.clone();
@@ -566,6 +615,8 @@ fn parse_triggers(name: &str, text: &str) -> Vec<Trigger> {
         for (prefix, when) in [
             ("at the beginning of your upkeep", TriggerWhen::Upkeep),
             ("at the beginning of your end step", TriggerWhen::EndStep),
+            ("at the beginning of each upkeep", TriggerWhen::EachUpkeep),
+            ("at the beginning of combat on your turn", TriggerWhen::CombatStart),
         ] {
             if cond == prefix {
                 out.push(Trigger {
@@ -583,6 +634,36 @@ fn parse_triggers(name: &str, text: &str) -> Vec<Trigger> {
         for (prefix, when) in [
             ("whenever you draw a card", TriggerWhen::YouDraw),
             ("whenever an opponent draws a card", TriggerWhen::OpponentDraws),
+            // Watching another permanent arrive or leave. "another" and "a"
+            // both land here; the firing site never counts the source itself,
+            // which is the conservative reading of "a".
+            ("whenever a land you control enters", TriggerWhen::LandEtb),
+            ("whenever a land enters the battlefield under your control", TriggerWhen::LandEtb),
+            ("whenever another creature you control enters", TriggerWhen::CreatureEtb),
+            ("whenever a creature you control enters", TriggerWhen::CreatureEtb),
+            (
+                "whenever another creature enters the battlefield under your control",
+                TriggerWhen::CreatureEtb,
+            ),
+            (
+                "whenever a creature enters the battlefield under your control",
+                TriggerWhen::CreatureEtb,
+            ),
+            // The aristocrats line covers both halves at once; it fires for
+            // the source's own death and for every other creature's.
+            (
+                "whenever this creature or another creature you control dies",
+                TriggerWhen::CreatureDies,
+            ),
+            ("whenever another creature you control dies", TriggerWhen::CreatureDies),
+            ("whenever a creature you control dies", TriggerWhen::CreatureDies),
+            ("whenever you attack", TriggerWhen::YouAttack),
+            // Cast triggers, narrowest first so "creature spell" never matches
+            // the bare "a spell" rule.
+            ("whenever you cast a creature spell", TriggerWhen::CastCreatureSpell),
+            ("whenever you cast a noncreature spell", TriggerWhen::CastNoncreatureSpell),
+            ("whenever you cast an instant or sorcery spell", TriggerWhen::CastInstantOrSorcery),
+            ("whenever you cast a spell", TriggerWhen::CastSpell),
         ] {
             if cond == prefix {
                 out.push(Trigger {
@@ -2039,5 +2120,111 @@ mod draw_trigger_tests {
         // to the card-subject verb table and become somebody's ETB.
         let t = parse_triggers("Whatever", "Whenever you draw a card, you gain 2 life.");
         assert!(t.iter().all(|x| x.when == TriggerWhen::YouDraw));
+    }
+}
+
+
+#[cfg(test)]
+mod witness_trigger_tests {
+    use super::*;
+
+    /// Every text here is verbatim Scryfall oracle text (2026-08-01).
+    fn parsed(name: &str, text: &str) -> Vec<Trigger> {
+        parse_triggers(name, text)
+    }
+
+    #[test]
+    fn landfall_reads_past_its_ability_word() {
+        let t = parsed(
+            "Lotus Cobra",
+            "Landfall — Whenever a land you control enters, add one mana of any color.",
+        );
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].when, TriggerWhen::LandEtb);
+        // Mana is not an effect the engine performs: it prompts, it does not
+        // pretend.
+        assert_eq!(t[0].effects, vec![TriggerEffect::Manual]);
+    }
+
+    #[test]
+    fn pingers_fire_and_apply() {
+        let t = parsed(
+            "Impact Tremors",
+            "Whenever a creature you control enters, this enchantment deals 1 damage to each opponent.",
+        );
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].when, TriggerWhen::CreatureEtb);
+        assert_eq!(t[0].effects, vec![TriggerEffect::EachOpponentLoses { n: 1 }]);
+        assert!(t[0].auto());
+
+        let t = parsed(
+            "Purphoros, God of the Forge",
+            "Whenever another creature you control enters, Purphoros deals 2 damage to each opponent.",
+        );
+        assert_eq!(t[0].when, TriggerWhen::CreatureEtb);
+        assert_eq!(t[0].effects, vec![TriggerEffect::EachOpponentLoses { n: 2 }]);
+    }
+
+    #[test]
+    fn aristocrats_drain_on_any_of_my_creatures_dying() {
+        let t = parsed(
+            "Zulaport Cutthroat",
+            "Whenever this creature or another creature you control dies, each opponent loses 1 life and you gain 1 life.",
+        );
+        assert!(t.iter().any(|x| x.when == TriggerWhen::CreatureDies));
+        let d = t.iter().find(|x| x.when == TriggerWhen::CreatureDies).unwrap();
+        assert_eq!(
+            d.effects,
+            vec![TriggerEffect::EachOpponentLoses { n: 1 }, TriggerEffect::GainLife { n: 1 }]
+        );
+    }
+
+    #[test]
+    fn combat_and_cast_and_attack_shapes() {
+        let t = parsed(
+            "Goblin Rabblemaster",
+            "At the beginning of combat on your turn, create a 1/1 red Goblin creature token with haste.",
+        );
+        assert_eq!(t[0].when, TriggerWhen::CombatStart);
+        // A token with a keyword is a stub the engine cannot make faithfully.
+        assert_eq!(t[0].effects, vec![TriggerEffect::Manual]);
+
+        let t = parsed(
+            "Talrand, Sky Summoner",
+            "Whenever you cast an instant or sorcery spell, create a 2/2 blue Drake creature token with flying.",
+        );
+        assert_eq!(t[0].when, TriggerWhen::CastInstantOrSorcery);
+
+        let t = parsed("Test", "Whenever you attack, each opponent loses 1 life.");
+        assert_eq!(t[0].when, TriggerWhen::YouAttack);
+        assert_eq!(t[0].effects, vec![TriggerEffect::EachOpponentLoses { n: 1 }]);
+
+        let t = parsed("Test", "At the beginning of each upkeep, you gain 1 life.");
+        assert_eq!(t[0].when, TriggerWhen::EachUpkeep);
+        assert_eq!(t[0].effects, vec![TriggerEffect::GainLife { n: 1 }]);
+    }
+
+    #[test]
+    fn cast_narrowings_do_not_collide() {
+        let creature = parsed("Test", "Whenever you cast a creature spell, you gain 1 life.");
+        assert_eq!(creature[0].when, TriggerWhen::CastCreatureSpell);
+        let noncreature = parsed("Test", "Whenever you cast a noncreature spell, you gain 1 life.");
+        assert_eq!(noncreature[0].when, TriggerWhen::CastNoncreatureSpell);
+        let any = parsed("Test", "Whenever you cast a spell, you gain 1 life.");
+        assert_eq!(any[0].when, TriggerWhen::CastSpell);
+        // Each shape produces exactly one trigger - a narrowing must never
+        // also match the bare rule, or the payoff would fire twice.
+        for t in [creature, noncreature, any] {
+            assert_eq!(t.len(), 1);
+        }
+    }
+
+    #[test]
+    fn an_em_dash_in_rules_text_is_not_an_ability_word() {
+        // Only a trigger following the dash is an ability word; a modal
+        // "choose one —" must not eat the line.
+        let t = parsed("Test", "When this creature enters, choose one — you gain 2 life.");
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].when, TriggerWhen::Etb);
     }
 }
