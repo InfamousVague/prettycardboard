@@ -497,16 +497,22 @@
     padding: var(--glacier-space-4);
     border-radius: var(--glacier-radius-xl);
   }
-  /* Full-bleed and the visible viewport tall; the safe areas come back as
-     padding so nothing hides behind a notch or the home bar. */
+  /* Full-bleed and the visible viewport tall.
+     PLAIN gutters, not safe-area ones: `.appWindow` already pads by the
+     insets on phones (app.css), and this band is nested inside it, so adding
+     env() again applied the same inset TWICE. In landscape, where the left and
+     right insets are the widest, that read as a black bar down both sides of
+     the menu - the app letterboxing itself. The shell pads once; everything
+     inside it just uses a gutter.
+     The shell pads TOP, LEFT and RIGHT - so those three are plain gutters
+     here. It does NOT pad the bottom, so that one inset is still ours. */
   :root[data-phone='on'] .homePage .gmBand {
     min-block-size: var(--pc-vh, 100dvh);
     border: none;
     border-radius: 0;
-    padding-block-start: calc(var(--glacier-space-4) + env(safe-area-inset-top, 0px));
+    padding-block-start: var(--glacier-space-4);
     padding-block-end: calc(var(--glacier-space-4) + env(safe-area-inset-bottom, 0px));
-    padding-inline-start: calc(var(--glacier-space-4) + env(safe-area-inset-left, 0px));
-    padding-inline-end: calc(var(--glacier-space-4) + env(safe-area-inset-right, 0px));
+    padding-inline: var(--glacier-space-4);
   }
   .gmBadge {
     position: static;
