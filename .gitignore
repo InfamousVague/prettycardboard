@@ -44,3 +44,10 @@ playtest/logs/
 # Throwaway debug/probe pages. vite copies public/ verbatim into dist/ and
 # redeploy rsyncs dist/ to the web root, so anything left here ships publicly.
 public/__*.html
+
+# Tauri mobile scaffolding. `tauri ios init` regenerates the Xcode project from
+# project.yml, and the build drops DerivedData-style artefacts in here; the two
+# files worth versioning are checked in explicitly below.
+src-tauri/gen/apple/*
+!src-tauri/gen/apple/project.yml
+!src-tauri/gen/apple/ExportOptions.plist
