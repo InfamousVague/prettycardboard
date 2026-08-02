@@ -61,7 +61,7 @@ targets:
         RUST_LOG: info
     settings:
       base:
-        DEVELOPMENT_TEAM: VSD85U298V
+        DEVELOPMENT_TEAM: F6ZAL7ANAD
         CODE_SIGN_STYLE: Automatic
         ENABLE_BITCODE: false
         ARCHS: [arm64]

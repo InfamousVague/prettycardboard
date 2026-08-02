@@ -50,4 +50,8 @@ public/__*.html
 # files worth versioning are checked in explicitly below.
 src-tauri/gen/apple/*
 !src-tauri/gen/apple/project.yml
+# The iOS app icons are hand-composited from the brand mark (opaque, full-bleed
+# - see the commit that added them), NOT regenerable by `tauri icon`, so they
+# are versioned rather than treated as build output.
+!src-tauri/gen/apple/Assets.xcassets/**
 !src-tauri/gen/apple/ExportOptions.plist
