@@ -2722,6 +2722,8 @@ export const messages = {
   gpRewindHere: { en: 'Rewind table to here', es: 'Rebobinar la mesa aquí', fr: 'Rembobiner la table ici', ar: 'أرجِع الطاولة إلى هنا' },
   gpRewindConfirm: { en: 'Rewind the whole table to this point? Everyone’s later moves are discarded.', es: '¿Rebobinar toda la mesa a este punto? Se descartan las jugadas posteriores de todos.', fr: 'Rembobiner toute la table à ce point ? Les coups suivants de chacun sont abandonnés.', ar: 'هل ترجع الطاولة كلها إلى هذه النقطة؟ ستُلغى تحركات الجميع اللاحقة.' },
   gpAttackHint: { en: 'Click your creatures to send them in, then', es: 'Haz clic en tus criaturas para atacar, luego', fr: 'Cliquez sur vos créatures pour attaquer, puis', ar: 'انقر على مخلوقاتك لإرسالها للهجوم، ثم' },
+  gpAimLabel: { en: 'Aim', es: 'Apuntar', fr: 'Viser', ar: 'التصويب' },
+  gpAimNobody: { en: 'anyone', es: 'cualquiera', fr: "n'importe qui", ar: 'أي شخص' },
   gpChooseBlocker: { en: 'Block with…', es: 'Bloquear con…', fr: 'Bloquer avec…', ar: 'صد بواسطة…' },
   gpNoCreatures: { en: 'No untapped creatures', es: 'Sin criaturas sin girar', fr: 'Aucune créature dégagée', ar: 'لا مخلوقات غير مستنفدة' },
   gpBlockPrompt: { en: 'Being attacked, click an attacker to block it', es: 'Te atacan: haz clic en un atacante para bloquearlo', fr: 'Attaqué : cliquez sur un attaquant pour le bloquer', ar: 'أنت مُهاجَم، انقر على مهاجم لصدّه' },

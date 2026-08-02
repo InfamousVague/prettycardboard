@@ -794,7 +794,7 @@ export type GameActionV2 =
   | { kind: 'stack.resolve'; iid: string; to: Zone; x?: number; y?: number }
   | { kind: 'stack.counter'; iid: string; to: Zone }
   | { kind: 'combat.begin' }
-  | { kind: 'combat.attack'; iid: string; defenderSeat?: number; power?: string; toughness?: string }
+  | { kind: 'combat.attack'; iid: string; defenderSeat?: number; targetIid?: string; power?: string; toughness?: string }
   | { kind: 'combat.block'; blockerIid: string; attackerIid: string; power?: string; toughness?: string }
   | { kind: 'combat.end' }
   | { kind: 'cmd.cast'; iid: string; x: number; y: number }

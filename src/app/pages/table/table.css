@@ -8560,3 +8560,51 @@ button.loyaltyBadge:hover {
 :root[data-phone='on'] .tableMain[data-lobby] {
   padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
 }
+
+/* Attack aiming: which player or planeswalker each attacker is hitting.
+   Sits directly under the combat banner, and only appears when there is a
+   choice worth making (a pod, or an opponent with a planeswalker) - a duel
+   with no planeswalkers has one answer and does not need a row of buttons. */
+.combatAim {
+  /* Below the banner rather than beside it: the banner is a strict one-liner
+     and the aim row is two, so stacking keeps both readable. */
+  top: calc(-1 * var(--glacier-space-1));
+  translate: -50% calc(-100% - 2.4rem);
+  flex-wrap: wrap;
+  white-space: normal;
+  row-gap: var(--glacier-space-1);
+}
+
+.combatAimRow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  flex-wrap: wrap;
+}
+
+.combatAimChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  background: color-mix(in oklch, var(--glacier-surface) 70%, transparent);
+  color: var(--glacier-text-muted);
+  font-size: var(--glacier-text-xs);
+  cursor: pointer;
+}
+
+/* The attacker the aim buttons will act on. */
+.combatAimChipOn {
+  border-color: color-mix(in oklch, var(--glacier-danger-solid) 60%, var(--glacier-border));
+  color: var(--glacier-text);
+}
+
+.combatAimArrow {
+  opacity: 0.55;
+}
+
+.combatAimWho {
+  color: var(--glacier-text);
+}

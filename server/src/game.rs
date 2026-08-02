@@ -2480,7 +2480,35 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                 .attackers
                 .iter()
                 .any(|a| a.iid == *iid);
-            if already {
+            // Re-declaring with a DIFFERENT aim re-points the attacker rather
+            // than withdrawing it: "actually, hit the planeswalker" is a
+            // change of mind about the target, not about attacking. A plain
+            // re-click (no aim) still toggles it off, which is how a player
+            // takes an attacker back.
+            let re_aim = already
+                && (defender_seat.is_some() || target_iid.is_some())
+                && room.combat.as_ref().unwrap().attackers.iter().any(|a| {
+                    a.iid == *iid && (a.defender_seat != defender_seat || a.target_iid != *target_iid)
+                });
+            if re_aim {
+                let aim = target_iid
+                    .as_deref()
+                    .and_then(|t| {
+                        room.players
+                            .iter()
+                            .flat_map(|p| p.battlefield.iter())
+                            .find(|c| c.iid == t)
+                            .map(|c| if c.face_down { "a set card".to_string() } else { c.name.clone() })
+                    })
+                    .or_else(|| defender_seat.map(|s| seat_username(room, s)))
+                    .unwrap_or_else(|| "no one in particular".to_string());
+                let combat = room.combat.as_mut().unwrap();
+                if let Some(a) = combat.attackers.iter_mut().find(|a| a.iid == *iid) {
+                    a.defender_seat = defender_seat;
+                    a.target_iid = target_iid.clone();
+                }
+                log = format!("{card_name} now attacks {aim}");
+            } else if already {
                 // Toggling an attacker off removes its block pairings too.
                 let combat = room.combat.as_mut().unwrap();
                 combat.attackers.retain(|a| a.iid != *iid);

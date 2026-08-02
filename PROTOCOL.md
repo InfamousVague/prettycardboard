@@ -909,6 +909,22 @@ stance as the other intents.
   prompts. Freeform rooms and solo tables advance exactly as before. Bots
   pass open windows within a tick and never draw rejections.
 
+### Aiming an attacker (2026-08-02)
+
+A pod could declare attackers but not say who they were hitting: the client
+sent an "open swing" with no `defenderSeat`, and `targetIid` (added for
+Yu-Gi-Oh) had no Magic UI at all. The declaration existed and the aim did not.
+
+- **`combat.attack` re-aims instead of toggling** when it carries a
+  `defenderSeat` or `targetIid` that differs from the one on record. "Actually,
+  hit the planeswalker" is a change of mind about the target, not about
+  attacking. A bare re-click - no aim - still withdraws the attacker, which is
+  how one is taken back.
+- The board grows an **aim row** under the combat banner: a chip per declared
+  attacker showing what it is pointed at, and a button per legal defender
+  (every opponent, plus any planeswalker they control). It only appears when
+  there is a choice worth making - a duel with no planeswalkers has one answer.
+
 ### Reminders on freeform tables, and `*` as a number (2026-08-02)
 
 Two things a player needs whether or not an engine is refereeing.

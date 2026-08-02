@@ -376,6 +376,37 @@ export function MyBoard({
   // Enforced machine: attacker picks stop at the lock; blocks only open after
   // it and close at ready. Freeform keeps the loose overlay behavior.
   const attackMode = started && combat != null && myTurn && (!enforced || !combat.locked);
+  // Who an attacker can be pointed AT. Magic declares attacks at a player or
+  // a planeswalker, and until now a pod could only make an open swing that
+  // named nobody - the declaration was there, the aim was not.
+  const aimTargets = useMemo(() => {
+    if (!attackMode || !me) return [];
+    const out: { key: string; label: string; defenderSeat: number; targetIid?: string }[] = [];
+    for (const p of room.players) {
+      if (p.seat === me.seat || p.conceded) continue;
+      out.push({ key: `seat:${p.seat}`, label: p.username, defenderSeat: p.seat });
+      for (const card of p.battlefield ?? []) {
+        if (card.faceDown) continue;
+        if (oracleFacts(card.scryfallId)?.typeLine.includes('Planeswalker')) {
+          out.push({
+            key: `pw:${card.iid}`,
+            label: card.name,
+            defenderSeat: p.seat,
+            targetIid: card.iid,
+          });
+        }
+      }
+    }
+    return out;
+  }, [attackMode, me, room.players]);
+  // The attacker currently being aimed: whichever was declared last, unless
+  // the player picked another by clicking its chip.
+  const [aimingIid, setAimingIid] = useState<string | null>(null);
+  const declaredIids = (combat?.attackers ?? []).map((a) => a.iid).join('|');
+  useEffect(() => {
+    const ids = declaredIids ? declaredIids.split('|') : [];
+    setAimingIid((prev) => (prev && ids.includes(prev) ? prev : (ids.at(-1) ?? null)));
+  }, [declaredIids]);
   const attackersTargetMe =
     combat != null &&
     combat.attackers.length > 0 &&
@@ -1485,6 +1516,66 @@ export function MyBoard({
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* Aim: which player or planeswalker each attacker is hitting. Only
+          worth showing when there is a choice to make - a duel with no
+          planeswalkers has exactly one answer and says nothing. */}
+      {attackMode && (combat?.attackers.length ?? 0) > 0 && aimTargets.length > 1 && (
+        <div className="combatBanner combatAim" data-mode="attack">
+          <CircleDot size={13} />
+          <Text as="span" size={Size.XSmall} tone={TextTone.Muted}>
+            {t('gpAimLabel')}
+          </Text>
+          <div className="combatAimRow">
+            {(combat?.attackers ?? []).map((a) => {
+              const card = (me?.battlefield ?? []).find((c) => c.iid === a.iid);
+              if (!card) return null;
+              const aimed = a.targetIid
+                ? aimTargets.find((x) => x.targetIid === a.targetIid)?.label
+                : a.defenderSeat != null
+                  ? room.players.find((p) => p.seat === a.defenderSeat)?.username
+                  : undefined;
+              return (
+                <button
+                  key={a.iid}
+                  type="button"
+                  className={aimingIid === a.iid ? 'combatAimChip combatAimChipOn' : 'combatAimChip'}
+                  onClick={() => setAimingIid(a.iid)}
+                >
+                  {card.name}
+                  <span className="combatAimArrow">→</span>
+                  <span className="combatAimWho">{aimed ?? t('gpAimNobody')}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="combatAimRow">
+            {aimTargets.map((target) => (
+              <Button
+                key={target.key}
+                size="sm"
+                variant={target.targetIid ? 'soft' : 'ghost'}
+                disabled={!aimingIid}
+                onClick={() => {
+                  if (!aimingIid) return;
+                  const card = (me?.battlefield ?? []).find((c) => c.iid === aimingIid);
+                  const pt = card ? effectivePT(card) : { power: undefined, toughness: undefined };
+                  act({
+                    kind: 'combat.attack',
+                    iid: aimingIid,
+                    defenderSeat: target.defenderSeat,
+                    targetIid: target.targetIid,
+                    power: pt.power,
+                    toughness: pt.toughness,
+                  });
+                }}
+              >
+                {target.label}
+              </Button>
+            ))}
+          </div>
         </div>
       )}
 

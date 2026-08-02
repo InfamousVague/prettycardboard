@@ -29,6 +29,7 @@
     "altart": "node scenarios/alt-art-oracle.js",
     "reminders": "node scenarios/freeform-reminders.js",
     "starpt": "node scenarios/star-pt.js",
+    "aim": "node scenarios/attack-aim.js",
     "scripted": "node scripted-match.mjs",
     "walkers": "node scenarios/planeswalker-audit.js",
     "botdecks": "node scenarios/bot-decks.js",
