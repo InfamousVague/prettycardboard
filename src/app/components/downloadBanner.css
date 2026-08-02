@@ -46,3 +46,13 @@
     display: none;
   }
 }
+
+/* Touch: the banner sits above `.appBody`, outside `.page`, so the shell's 44px
+   floor misses it - its dismiss measured 20x20 on a phone, well under the HIG
+   minimum and the smallest target in the app. */
+@media (pointer: coarse) {
+  .downloadBanner button {
+    min-inline-size: 2.75rem;
+    min-block-size: 2.75rem;
+  }
+}

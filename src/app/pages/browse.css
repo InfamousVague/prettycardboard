@@ -21,10 +21,27 @@
   min-width: 14rem;
 }
 
+/* The WUBRG filter row. It is one flex ITEM of the wrapping toolbar, so the
+   toolbar's wrap cannot break it up - at 390px the label plus five chips
+   measured 532px and ran 155px off the screen. It scrolls instead, the same
+   way .browseJump does, so the whole set stays reachable on a phone. */
 .browseColors {
   display: flex;
   align-items: center;
   gap: var(--glacier-space-1);
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.browseColors::-webkit-scrollbar {
+  display: none;
+}
+
+.browseColors > * {
+  flex: none;
 }
 
 .browseToolbarLabel {

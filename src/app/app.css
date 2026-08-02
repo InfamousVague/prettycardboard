@@ -1207,16 +1207,38 @@ select,
 /* On touch devices, controls that a mouse only reveals on hover must always be
    reachable, and hover-only tap targets get comfortable hit areas. */
 @media (pointer: coarse) {
-  /* Icon buttons and small controls hit the 44px comfortable minimum. */
   button,
+  a,
   [role='button'],
-  a {
+  [role='tab'],
+  input,
+  select {
     touch-action: manipulation; /* removes the 300ms tap delay */
   }
 
   .appRail button,
   .appRail [role='button'] {
     min-block-size: 3rem;
+  }
+
+  /* Apple's HIG floor is 44px and an audit at 390x844 found controls at 20-36px
+     across every page - the banner's dismiss was 20x20. This lifts anything on
+     a PAGE that falls short.
+
+     Scoped to `.page` on purpose: the table is not a document, it is a playing
+     surface whose chrome (mana pips, counter steppers, zone piles) was sized by
+     hand against the board and would be wrecked by a blanket minimum. Modals
+     and popovers portal to body and are covered separately below. */
+  .page button,
+  .page a[href],
+  .page [role='button'],
+  .page select {
+    min-block-size: 2.75rem;
+  }
+
+  /* An icon-only control needs the width too, or it is a 44px-tall sliver. */
+  .page button:not(:has(> :not(svg))) {
+    min-inline-size: 2.75rem;
   }
 }
 
@@ -1291,17 +1313,6 @@ select,
 /* Suppress residual browser zoom/gesture entry points inside the app: iOS
    ignores user-scalable in some versions, but honors touch-action. Buttons and
    controls get 'manipulation' (kills double-tap zoom during rapid tapping). */
-@media (pointer: coarse) {
-  button,
-  a,
-  [role='button'],
-  [role='tab'],
-  input,
-  select {
-    touch-action: manipulation;
-  }
-}
-
 /* ---- phone shell (same breakpoint as the table's mobile layout) ---------- */
 
 /* Desktop: the tab bar never renders visually. */

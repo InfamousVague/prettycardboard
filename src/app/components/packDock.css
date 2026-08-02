@@ -2005,3 +2005,16 @@ body:has(.tableDock:not(:empty)):not(:has(.tableSideScroll)) .pdDock {
   }
 }
 
+/* Touch: the pill is fixed chrome outside `.page`, so the shell's 44px floor
+   does not reach it. It measured 126x36 on a phone - comfortably tappable by
+   width, short by height. */
+@media (pointer: coarse) {
+  .pdPill {
+    min-block-size: 2.75rem;
+  }
+
+  .pdPillClose {
+    min-inline-size: 2.25rem;
+    min-block-size: 2.25rem;
+  }
+}
