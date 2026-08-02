@@ -553,6 +553,25 @@ pub struct PendingDiscard {
     pub deadline: i64, // unix ms
 }
 
+/// A forced sacrifice awaiting its owner's choice. Grave Pact says "each
+/// opponent sacrifices a creature of their choice" - the choice is genuinely
+/// theirs, so the engine may not make it for a human. Bots answer on their
+/// next tick; the deadline sacrifices the worst creature so one absent player
+/// cannot stall the table, exactly like PendingDiscard.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingSacrifice {
+    pub id: String,
+    pub owner: String,
+    pub seat: usize,
+    /// How many creatures (clamped to what they control at resolution time).
+    pub n: i64,
+    pub source_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub in_response_to: Option<String>,
+    pub deadline: i64, // unix ms
+}
+
 /// The finished-match record, kept on the room (so reconnects still see the
 /// post-match screen) and mirrored into SQLite for all-time stats.
 #[derive(Clone, Serialize, Deserialize)]
@@ -1168,6 +1187,10 @@ pub struct Room {
     /// Forced discards awaiting their owners' picks (see PendingDiscard).
     #[serde(default)]
     pub pending_discards: Vec<PendingDiscard>,
+    /// Forced sacrifices awaiting their owner's pick (see PendingSacrifice).
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub pending_sacrifices: Vec<PendingSacrifice>,
     /// Enforced rooms: players currently flagged in a loss state (life,
     /// poison, commander damage) - announced once, cleared on recovery.
     #[serde(default)]
@@ -1661,6 +1684,7 @@ impl Room {
             "stackPassed": self.stack_passed,
             "pendingTriggers": self.pending_triggers,
             "pendingDiscards": self.pending_discards,
+            "pendingSacrifices": self.pending_sacrifices,
             "endWindow": self.end_window,
             // Grants are public - who is handling whose cards is exactly the
             // kind of thing a table needs to see. Unanswered REQUESTS are not:
@@ -1963,6 +1987,7 @@ pub fn expire_pending(app: &App) {
             r.pending_cmd.iter().any(|p| p.deadline <= now)
                 || r.pending_triggers.iter().any(|p| p.deadline <= now)
                 || r.pending_discards.iter().any(|p| p.deadline <= now)
+                || r.pending_sacrifices.iter().any(|p| p.deadline <= now)
                 || r.board_grants.iter().any(|g| g.deadline.map(|d| d <= now).unwrap_or(false))
                 || r.board_requests.iter().any(|q| q.deadline <= now)
         })
@@ -1986,6 +2011,11 @@ pub fn expire_pending(app: &App) {
                 .into_iter()
                 .partition(|p| p.deadline <= now);
         room.pending_discards = waiting;
+        let (unsacked, still_choosing): (Vec<PendingSacrifice>, Vec<PendingSacrifice>) =
+            std::mem::take(&mut room.pending_sacrifices)
+                .into_iter()
+                .partition(|p| p.deadline <= now);
+        room.pending_sacrifices = still_choosing;
         // Grants that ran out their clock, and asks nobody answered. Both are
         // logged: access quietly appearing or disappearing is exactly the kind
         // of thing a table should not have to guess at.
@@ -2001,6 +2031,7 @@ pub fn expire_pending(app: &App) {
         if due.is_empty()
             && lapsed.is_empty()
             && owed.is_empty()
+            && unsacked.is_empty()
             && done.is_empty()
             && ignored.is_empty()
         {
@@ -2058,6 +2089,25 @@ pub fn expire_pending(app: &App) {
                 pi,
                 pending.n,
                 true,
+                &pending.source_name,
+                pending.in_response_to.as_deref(),
+            );
+            for line in lines {
+                room.seq += 1;
+                let seq = room.seq;
+                ws::room_log(app, &room, seq, &line);
+            }
+        }
+        for pending in unsacked {
+            // Nobody chose in time: the engine sacrifices the least valuable
+            // creature, which is what a player stalling on this decision was
+            // going to be given anyway.
+            let lines = crate::rules::sacrifice_creatures(
+                app,
+                &mut room,
+                &pending.owner,
+                pending.n,
+                &[],
                 &pending.source_name,
                 pending.in_response_to.as_deref(),
             );

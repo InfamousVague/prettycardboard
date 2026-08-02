@@ -310,6 +310,11 @@ pub enum Action {
     LoyaltyActivate { iid: String, index: usize },
     #[serde(rename = "discard.resolve", rename_all = "camelCase")]
     DiscardResolve { id: String, iids: Vec<String> },
+    /// Answer a forced sacrifice (see rooms::PendingSacrifice) by naming the
+    /// creatures to give up. Empty `iids` = let the engine choose (the least
+    /// valuable), which is also what the deadline does.
+    #[serde(rename = "sacrifice.resolve", rename_all = "camelCase")]
+    SacrificeResolve { id: String, iids: Vec<String> },
     /// Cascade for `n` (enforced rooms): the server reveals from the top of
     /// your library until a nonland card with mana value < n, puts the hit
     /// on the stack revealed and free to cast, and bottoms the rest in a
@@ -2306,6 +2311,30 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
             extra_logs.push(crate::rules::queue_trigger(room, &actor_id, seat, iid, &name, &trig));
             let sign = if delta > 0 { format!("+{delta}") } else { delta.to_string() };
             log = format!("{username} activates {name}'s {sign} ability (loyalty {after})");
+            resync = true;
+        }
+
+        Action::SacrificeResolve { ref id, ref iids } => {
+            let Some(pos) = room.pending_sacrifices.iter().position(|d| d.id == *id) else {
+                return Err(("no_sacrifice", "that sacrifice prompt is gone".to_string()));
+            };
+            if room.pending_sacrifices[pos].owner != actor_id {
+                return Err(("forbidden", "that sacrifice is not yours to make".to_string()));
+            }
+            let pending = room.pending_sacrifices.remove(pos);
+            // An empty list is "you choose", the same policy the deadline
+            // applies; anything named must be a creature the actor controls,
+            // and sacrifice_creatures tops the list up if it is short.
+            extra_logs = crate::rules::sacrifice_creatures(
+                app,
+                room,
+                &pending.owner,
+                pending.n,
+                iids,
+                &pending.source_name,
+                pending.in_response_to.as_deref(),
+            );
+            log = String::new();
             resync = true;
         }
 

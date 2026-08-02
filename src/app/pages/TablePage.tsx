@@ -102,7 +102,7 @@ import { OpponentHand } from './table/OpponentHand.tsx';
 import { CyberpunkDicePanel } from './table/CyberpunkDicePanel.tsx';
 import { CombatPreviewCard, PhaseRibbon } from './table/PhaseRibbon.tsx';
 import { StackTray } from './table/StackTray.tsx';
-import { CmdChoiceDialog, DiscardPrompts, LibraryViewer, MulliganOverlay, PileViewer, RevealTray, RollBanner, TargetPicker, TriggerPrompts } from './table/overlays.tsx';
+import { CmdChoiceDialog, DiscardPrompts, LibraryViewer, MulliganOverlay, PileViewer, RevealTray, RollBanner, SacrificePrompts, TargetPicker, TriggerPrompts } from './table/overlays.tsx';
 import { EventToasts } from './table/EventToasts.tsx';
 import { PriorityPrompt } from './table/PriorityPrompt.tsx';
 import { TablePresence } from './table/TablePresence.tsx';
@@ -1206,6 +1206,7 @@ export function TablePage() {
       {me && !spectating && !replay.active && <CmdChoiceDialog me={me} />}
       {me && !spectating && !replay.active && <TriggerPrompts room={room} me={me} />}
       {me && !spectating && !replay.active && <DiscardPrompts room={room} me={me} />}
+      {me && !spectating && !replay.active && <SacrificePrompts room={room} me={me} />}
       {me && !spectating && !replay.active && <PriorityPrompt room={room} me={me} />}
       {me && !spectating && !replay.active && <TargetPicker room={room} me={me} />}
       {preMatch && <PreMatch room={room} onClose={() => setPreMatch(false)} />}

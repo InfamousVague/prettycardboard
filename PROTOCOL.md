@@ -909,6 +909,46 @@ stance as the other intents.
   prompts. Freeform rooms and solo tables advance exactly as before. Bots
   pass open windows within a tick and never draw rejections.
 
+### Curated art is still the card, oracle v13 (2026-08-01)
+
+The bug behind "Sheoldred is in play but the AI didn't take damage for
+drawing". Every fix to the draw trigger was real and none of it helped,
+because the Sheoldred on the table was `pc-sheoldred-the-apocalypse`: a
+synthetic printing id from the alt-art pipeline. `oracle::ensure` skipped any
+id that was not Scryfall-shaped, so a curated-art card arrived with **no type
+line, no keywords and no triggers**. A deck of custom art played as a deck of
+blanks - no ETB, no deathtouch, no enforcement.
+
+The alt-art catalog has always carried each art's `oracleId` (it is how the
+client finds the paper printing). The server now reads the same file, fetches
+by that identity (`/cards/search?q=oracleid:…`, one request per art - there is
+no batch endpoint for oracle ids), and caches the parse under the ART's id, so
+every later lookup is a plain hit. Anything with no identity stays unknown,
+exactly as before.
+
+**Publishing art without an `oracleId` makes those cards rules-invisible.**
+`playtest/scenarios/alt-art-oracle.js` asserts every published art has one.
+
+### Edicts and wraths, oracle v12 (2026-08-01)
+
+The two effects a mono-black aristocrats deck is built on:
+
+- `EachOpponentSacrifices { n }` - "each opponent sacrifices a creature" and
+  the older "each **other player** sacrifices a creature" (Grave Pact's
+  wording; both mean the same set of players here). A sacrifice is a real
+  choice, so it follows the discard pattern: bots pick their worst creature
+  immediately, humans get a `PendingSacrifice` prompt answered with
+  `sacrifice.resolve`, and the deadline picks for anyone who stalls. The
+  sacrifice goes through `kill_permanents`, so "whenever a creature you
+  control dies" fires on it - which is the entire point of the deck.
+- `DestroyAllCreatures` - "destroy all creatures", and nothing narrower. Any
+  qualifier ("with flying", "your opponents control") is NOT a wrath and must
+  never be read as one; the scenario asserts that.
+
+Also: "<source> deals N damage to each opponent" now resolves as life loss.
+The engine models no damage prevention, so for Impact Tremors and Purphoros
+the two are the same thing.
+
 ### Watching triggers, oracle v11 (2026-08-01)
 
 The draw fix exposed the shape of the bug rather than the bug itself: the

@@ -20,7 +20,7 @@ use std::sync::Arc;
 /// Bumped whenever the parse below learns something new: cached rows stamped
 /// with an older version are treated as missing and refetched, so a deploy
 /// never leaves half the oracle table without the new fields.
-pub const ORACLE_VERSION: u32 = 11;
+pub const ORACLE_VERSION: u32 = 13;
 
 /// A characteristic-defining ability that sets power (and sometimes toughness)
 /// to a count of permanents - "...is equal to the number of artifacts you
@@ -125,6 +125,12 @@ pub enum TriggerEffect {
     /// value; truly random when `random`) - a player who wants a specific card
     /// answers "resolve by hand" instead, which is the existing button.
     Discard { n: i64, random: bool },
+    /// Every opponent sacrifices N creatures. The engine cannot pick for a
+    /// human (which creature is a real decision), so bots choose immediately
+    /// and humans get a PendingSacrifice prompt.
+    EachOpponentSacrifices { n: i64 },
+    /// A wrath: every creature on every battlefield dies.
+    DestroyAllCreatures,
     /// Every opponent discards N: bots choose immediately, humans get a
     /// PendingDiscard prompt with a lapse-to-random deadline.
     EachOpponentDiscards { n: i64, random: bool },
@@ -412,6 +418,34 @@ fn parse_effect_part(part: &str, name_lower: &str, short_lower: &str) -> Option<
             }
         }
         return None;
+    }
+    // "each opponent sacrifices a creature" (Grave Pact, Dictate of Erebos,
+    // Liliana's Triumph). The "of their choice" tail is the rules text saying
+    // out loud that it is not a targeted choice - which is exactly why the
+    // prompt goes to the sacrificing player.
+    // Two templates say the same thing: modern cards use "each opponent",
+    // older ones (Grave Pact) "each other player". In every format this
+    // engine runs, the set of other players IS the set of opponents.
+    if let Some(rest) = p
+        .strip_prefix("each opponent sacrifices ")
+        .or_else(|| p.strip_prefix("each other player sacrifices "))
+    {
+        let rest = rest.trim_end_matches(" of their choice").trim();
+        let mut words = rest.split_whitespace();
+        let n = word_number(words.next()?)?;
+        if words.next().map(|w| w.starts_with("creature")).unwrap_or(false)
+            && words.next().is_none()
+        {
+            return Some(TriggerEffect::EachOpponentSacrifices { n });
+        }
+        return None;
+    }
+    // "destroy all creatures" - a wrath, and nothing narrower. A rider
+    // ("...they can't be regenerated") is stripped as an aside upstream, but
+    // any surviving qualifier means this is NOT the whole board and must not
+    // be treated as one.
+    if p == "destroy all creatures" {
+        return Some(TriggerEffect::DestroyAllCreatures);
     }
     // "each opponent loses 2 life"
     if let Some(rest) = p.strip_prefix("each opponent loses ") {
@@ -1122,7 +1156,11 @@ fn parse_spell_effects(text: &str, name: &str) -> Vec<TriggerEffect> {
         .filter(|e| {
             matches!(
                 e,
-                TriggerEffect::Token { .. } | TriggerEffect::GainLife { .. } | TriggerEffect::Mill { .. }
+                TriggerEffect::Token { .. }
+                    | TriggerEffect::GainLife { .. }
+                    | TriggerEffect::Mill { .. }
+                    | TriggerEffect::EachOpponentSacrifices { .. }
+                    | TriggerEffect::DestroyAllCreatures
             )
         })
         .collect()
@@ -1320,16 +1358,124 @@ pub fn get(app: &App, scryfall_id: &str) -> Option<Arc<OracleCard>> {
 /// Make sure every id in `ids` is cached: memory first, then the SQLite
 /// mirror, then Scryfall in /cards/collection batches of 75. Failures leave
 /// ids unknown (retried the next time something asks).
+/// `pc-<slug>` -> Scryfall oracle id, read once from the alt-art catalog the
+/// server already serves at /api/alt-art/catalog.json.
+///
+/// Without this, every card wearing curated art is invisible to the rules
+/// engine: the id is not a Scryfall id, so the oracle skipped it and the card
+/// arrived with no triggers, no keywords and no type line. A deck of custom
+/// art played as a deck of blanks - Sheoldred in a Goth Mommy frame drew for
+/// turn and did nothing at all.
+fn alt_art_identities(app: &Arc<App>) -> Arc<BTreeMap<String, String>> {
+    static MAP: std::sync::OnceLock<Arc<BTreeMap<String, String>>> = std::sync::OnceLock::new();
+    MAP.get_or_init(|| {
+        #[derive(Deserialize)]
+        struct Entry {
+            id: String,
+            #[serde(rename = "oracleId")]
+            oracle_id: Option<String>,
+        }
+        #[derive(Deserialize)]
+        struct Catalog {
+            #[serde(default)]
+            arts: Vec<Entry>,
+        }
+        let path = app.alt_art_dir.join("catalog.json");
+        let mut out = BTreeMap::new();
+        match std::fs::read_to_string(&path) {
+            Ok(raw) => match serde_json::from_str::<Catalog>(&raw) {
+                Ok(cat) => {
+                    for e in cat.arts {
+                        if let Some(oid) = e.oracle_id {
+                            out.insert(e.id, oid);
+                        }
+                    }
+                }
+                Err(e) => eprintln!("oracle: alt-art catalog did not parse ({e})"),
+            },
+            // No catalog is normal on a fresh install; custom art simply has
+            // no identities to map yet.
+            Err(_) => {}
+        }
+        Arc::new(out)
+    })
+    .clone()
+}
+
+/// Fetch one card by ORACLE id (the only handle a `pc-` art has) and cache the
+/// parse under the art's own id, so every later lookup is a plain hit.
+async fn fetch_by_oracle_id(app: &Arc<App>, art_id: &str, oracle_id: &str) {
+    let url = format!(
+        "https://api.scryfall.com/cards/search?q=oracleid%3A{oracle_id}&unique=cards&order=released"
+    );
+    let output = tokio::process::Command::new("curl")
+        .arg("-s")
+        .arg("-m")
+        .arg("20")
+        .arg("-H")
+        .arg("user-agent: PrettyCardboard/0.5 (tabletop; oracle cache)")
+        .arg("-H")
+        .arg("accept: application/json")
+        .arg(&url)
+        .output()
+        .await;
+    let Ok(out) = output else {
+        eprintln!("oracle: could not run curl for {art_id}");
+        return;
+    };
+    #[derive(Deserialize)]
+    struct Search {
+        #[serde(default)]
+        data: Vec<ScryCard>,
+    }
+    let Ok(parsed) = serde_json::from_slice::<Search>(&out.stdout) else {
+        eprintln!(
+            "oracle: no card for oracle id {oracle_id} ({art_id}): {}",
+            String::from_utf8_lossy(&out.stdout).chars().take(160).collect::<String>()
+        );
+        return;
+    };
+    let Some(raw) = parsed.data.first() else {
+        eprintln!("oracle: oracle id {oracle_id} ({art_id}) matched no printing");
+        return;
+    };
+    let Some(card) = parse_card(raw) else { return };
+    {
+        let conn = app.db.lock().unwrap();
+        if let Ok(json) = serde_json::to_string(&card) {
+            crate::db::oracle_store(&conn, art_id, &json);
+        }
+    }
+    app.oracle.insert(art_id.to_string(), Arc::new(card));
+}
+
 pub async fn ensure(app: &Arc<App>, ids: Vec<String>) {
     let mut missing: Vec<String> = Vec::new();
+    // Curated art ids, which Scryfall answers to only by oracle identity.
+    let mut art_missing: Vec<(String, String)> = Vec::new();
+    let identities = alt_art_identities(app);
     {
         let conn = app.db.lock().unwrap();
         for id in ids {
             if app.oracle.contains_key(&id) {
                 continue;
             }
-            // Custom art ids have no Scryfall identity to ask about.
-            if !id.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
+            // A custom art id is not a Scryfall id, but the catalog knows
+            // which card it IS. Anything with no identity stays unknown, as
+            // before - the rules engine treats unknown cards permissively.
+            let is_scryfall_shaped = id.chars().all(|c| c.is_ascii_hexdigit() || c == '-');
+            if !is_scryfall_shaped {
+                if let Some(oracle_id) = identities.get(&id) {
+                    if let Some(json) = crate::db::oracle_load(&conn, &id) {
+                        if let Ok(card) = serde_json::from_str::<OracleCard>(&json) {
+                            if card.v == ORACLE_VERSION {
+                                app.oracle.insert(id, Arc::new(card));
+                                continue;
+                            }
+                        }
+                    }
+                    art_missing.push((id, oracle_id.clone()));
+                }
                 continue;
             }
             if let Some(json) = crate::db::oracle_load(&conn, &id) {
@@ -1391,12 +1537,22 @@ pub async fn ensure(app: &Arc<App>, ids: Vec<String>) {
             missing.push(id);
         }
     }
-    if missing.is_empty() {
+    if missing.is_empty() && art_missing.is_empty() {
         return;
     }
     // One fetch at a time server-wide keeps us far inside Scryfall's limits
     // even if several enforced rooms start at once.
     let _guard = app.oracle_lock.lock().await;
+    // Curated art first: one request each (there is no batch endpoint for
+    // oracle ids), and a deck of custom art is otherwise a deck of blanks.
+    art_missing.retain(|(id, _)| !app.oracle.contains_key(id));
+    for (art_id, oracle_id) in &art_missing {
+        fetch_by_oracle_id(app, art_id, oracle_id).await;
+        tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+    }
+    if missing.is_empty() {
+        return;
+    }
     missing.retain(|id| !app.oracle.contains_key(id));
     for batch in missing.chunks(75) {
         let identifiers: Vec<serde_json::Value> =
@@ -2226,5 +2382,58 @@ mod witness_trigger_tests {
         let t = parsed("Test", "When this creature enters, choose one — you gain 2 life.");
         assert_eq!(t.len(), 1);
         assert_eq!(t[0].when, TriggerWhen::Etb);
+    }
+}
+
+#[cfg(test)]
+mod edict_and_wrath_tests {
+    use super::*;
+
+    #[test]
+    fn grave_pact_and_dictate_read_as_edicts() {
+        // Verbatim Scryfall (2026-08-01).
+        let t = parse_triggers(
+            "Grave Pact",
+            "Whenever a creature you control dies, each other player sacrifices a creature of their choice.",
+        );
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].when, TriggerWhen::CreatureDies);
+        assert_eq!(t[0].effects, vec![TriggerEffect::EachOpponentSacrifices { n: 1 }]);
+        assert!(t[0].auto());
+
+        let t = parse_triggers(
+            "Dictate of Erebos",
+            "Flash\nWhenever a creature you control dies, each opponent sacrifices a creature of their choice.",
+        );
+        assert_eq!(t[0].effects, vec![TriggerEffect::EachOpponentSacrifices { n: 1 }]);
+    }
+
+    #[test]
+    fn damnation_is_a_wrath() {
+        // "Destroy all creatures. They can't be regenerated." - the second
+        // sentence is a rider the engine does not model, and a wrath that
+        // ignored it would still destroy exactly the same creatures.
+        let e = parse_spell_effects("Destroy all creatures. They can't be regenerated.", "Damnation");
+        assert!(e.contains(&TriggerEffect::DestroyAllCreatures), "{e:?}");
+    }
+
+    #[test]
+    fn a_narrower_sweeper_is_not_a_wrath() {
+        // Anything qualified is NOT "all creatures", and treating it as one
+        // would wipe boards it should never touch.
+        for text in [
+            "Destroy all creatures with flying.",
+            "Destroy all creatures your opponents control.",
+            "Destroy all creatures with mana value 3 or less.",
+        ] {
+            let e = parse_spell_effects(text, "Test");
+            assert!(!e.contains(&TriggerEffect::DestroyAllCreatures), "{text} -> {e:?}");
+        }
+    }
+
+    #[test]
+    fn a_narrower_edict_is_not_an_each_opponent_edict() {
+        let e = parse_spell_effects("Each opponent sacrifices an artifact.", "Test");
+        assert!(!e.iter().any(|x| matches!(x, TriggerEffect::EachOpponentSacrifices { .. })), "{e:?}");
     }
 }

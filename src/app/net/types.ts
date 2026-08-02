@@ -530,6 +530,7 @@ export interface RoomState {
   pendingTriggers?: PendingTrigger[];
   /** Enforced rooms: owed discards awaiting a choice of cards (rules pass D). */
   pendingDiscards?: PendingDiscard[];
+  pendingSacrifices?: PendingSacrifice[];
   /** Enforced rooms: the open end-step response window's deadline (unix ms).
    * Present while the active player waits for the table to pass. */
   endWindow?: number | null;
@@ -616,6 +617,19 @@ export interface PendingDiscard {
    *  there is one - "in response to X" in the eventual log line. */
   inResponseTo?: string | null;
   random: boolean;
+  deadline: number;
+}
+
+/** An owed sacrifice (Grave Pact, Dictate of Erebos, an edict): pick `n`
+ *  creatures you control, or let the engine take the least valuable. Lapses
+ *  at the server's deadline the same way a discard does. */
+export interface PendingSacrifice {
+  id: string;
+  owner: string;
+  seat: number;
+  n: number;
+  sourceName: string;
+  inResponseTo?: string;
   deadline: number;
 }
 
@@ -819,6 +833,7 @@ export type GameActionV2 =
   /** Answer an owed discard: exactly `n` distinct in-hand iids, or `[]` to
    *  let the engine choose (highest mana value first). */
   | { kind: 'discard.resolve'; id: string; iids: string[] }
+  | { kind: 'sacrifice.resolve'; id: string; iids: string[] }
   /** Activate a planeswalker's parsed loyalty ability by index (enforced
    *  rooms): the server moves the counter and queues the ability's text. */
   | { kind: 'loyalty.activate'; iid: string; index: number }

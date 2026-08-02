@@ -15,7 +15,7 @@
 //! data) are treated permissively rather than bricking a deck.
 
 use crate::oracle::{self, OracleCard, TriggerEffect, TriggerWhen};
-use crate::rooms::{Card, Combat, CombatPreview, PendingDiscard, PendingTrigger, Player, PreviewRow, Room};
+use crate::rooms::{Card, Combat, CombatPreview, PendingDiscard, PendingSacrifice, PendingTrigger, Player, PreviewRow, Room};
 use crate::App;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -1242,6 +1242,13 @@ pub fn effects_summary(effects: &[TriggerEffect]) -> String {
             TriggerEffect::GainLife { n } => format!("gain {n} life"),
             TriggerEffect::LoseLife { n } => format!("lose {n} life"),
             TriggerEffect::EachOpponentLoses { n } => format!("each opponent loses {n} life"),
+            TriggerEffect::EachOpponentSacrifices { n } if *n == 1 => {
+                "each opponent sacrifices a creature".to_string()
+            }
+            TriggerEffect::EachOpponentSacrifices { n } => {
+                format!("each opponent sacrifices {n} creatures")
+            }
+            TriggerEffect::DestroyAllCreatures => "destroy all creatures".to_string(),
             TriggerEffect::SelfCounters { counter, n } if *n == 1 => {
                 format!("put a {counter} counter on it")
             }
@@ -1331,7 +1338,7 @@ pub fn apply_spell_intent(
     if let Some(n) = f.scry_spell {
         effects.push(TriggerEffect::Scry { n });
     }
-    // Clause-parsed extras: token-making, lifegain, self-mill.
+    // Clause-parsed extras: token-making, lifegain, self-mill, wraths, edicts.
     effects.extend(f.spell_effects.iter().cloned());
     if effects.is_empty() {
         return Vec::new();
@@ -1510,6 +1517,68 @@ fn apply_effects(
                     }
                 }
             }
+            TriggerEffect::EachOpponentSacrifices { n } => {
+                let owner_seat = room.players[pi].seat;
+                let opponents: Vec<usize> = room
+                    .players
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, p)| p.seat != owner_seat && !p.conceded)
+                    .map(|(i, _)| i)
+                    .collect();
+                for oi in opponents {
+                    if room.players[oi].is_bot {
+                        // A bot's pick is the worst creature either way, so
+                        // making it here keeps the state simple.
+                        let owner = room.players[oi].user_id.clone();
+                        logs.extend(sacrifice_creatures(
+                            app,
+                            room,
+                            &owner,
+                            *n,
+                            &[],
+                            source_name,
+                            None,
+                        ));
+                    } else {
+                        let p = &room.players[oi];
+                        room.pending_sacrifices.push(PendingSacrifice {
+                            id: crate::hex_id(6),
+                            owner: p.user_id.clone(),
+                            seat: p.seat,
+                            n: *n,
+                            source_name: source_name.to_string(),
+                            in_response_to: None,
+                            deadline: crate::now_ms() + crate::game::TRIGGER_CHOICE_MS,
+                        });
+                        logs.push(format!(
+                            "{} must sacrifice {} ({source_name})",
+                            p.username,
+                            if *n == 1 {
+                                "a creature".to_string()
+                            } else {
+                                format!("{n} creatures")
+                            },
+                        ));
+                    }
+                }
+            }
+            TriggerEffect::DestroyAllCreatures => {
+                // A wrath is symmetric: it takes the caster's board too.
+                let dead: Vec<String> = room
+                    .players
+                    .iter()
+                    .flat_map(|p| p.battlefield.iter())
+                    .filter(|c| is_creature_card(app, c))
+                    .map(|c| c.iid.clone())
+                    .collect();
+                if dead.is_empty() {
+                    logs.push(format!("{source_name} finds no creatures to destroy"));
+                } else {
+                    logs.push(format!("{source_name} destroys every creature"));
+                    logs.extend(kill_permanents(app, room, dead));
+                }
+            }
             TriggerEffect::Scry { n } => {
                 let p = &room.players[pi];
                 if p.is_bot {
@@ -1549,6 +1618,89 @@ fn apply_effects(
 /// the highest mana value first (facts when known, embedded attrs otherwise).
 /// The line reads "... in response to X" when the discard answered a live
 /// stack, which is exactly the sentence a table wants to hear.
+/// Sacrifice `n` creatures from `owner`'s battlefield. `chosen` names the
+/// iids the player picked; anything short of `n` is filled with the least
+/// valuable creatures they control, which is what a lapsed prompt gives them
+/// and what a bot would pick anyway.
+///
+/// "Least valuable" is the bot's own creature evaluation, so the engine and
+/// the AI never disagree about which body is the worst one.
+pub fn sacrifice_creatures(
+    app: &App,
+    room: &mut Room,
+    owner: &str,
+    n: i64,
+    chosen: &[String],
+    source: &str,
+    in_response_to: Option<&str>,
+) -> Vec<String> {
+    let Some(pi) = room.players.iter().position(|p| p.user_id == owner) else {
+        return Vec::new();
+    };
+    let mut picked: Vec<String> = Vec::new();
+    for iid in chosen {
+        if picked.len() as i64 >= n {
+            break;
+        }
+        if room.players[pi]
+            .battlefield
+            .iter()
+            .any(|c| c.iid == *iid && is_creature_card(app, c))
+        {
+            picked.push(iid.clone());
+        }
+    }
+    if (picked.len() as i64) < n {
+        // Worst first. Power+toughness is the whole measure available for a
+        // card the oracle has never seen, and it is the right tiebreak here:
+        // a player forced to sacrifice gives up their smallest body.
+        let mut rest: Vec<(i64, String)> = room.players[pi]
+            .battlefield
+            .iter()
+            .filter(|c| is_creature_card(app, c) && !picked.contains(&c.iid))
+            .map(|c| {
+                let (p, t) = effective_pt(app, room, c);
+                (p + t, c.iid.clone())
+            })
+            .collect();
+        rest.sort();
+        for (_, iid) in rest {
+            if picked.len() as i64 >= n {
+                break;
+            }
+            picked.push(iid);
+        }
+    }
+    if picked.is_empty() {
+        let name = room.players[pi].username.clone();
+        return vec![format!("{name} controls no creatures to sacrifice ({source})")];
+    }
+    let names: Vec<String> = picked
+        .iter()
+        .filter_map(|iid| {
+            room.players[pi].battlefield.iter().find(|c| c.iid == *iid).map(|c| c.name.clone())
+        })
+        .collect();
+    let who = room.players[pi].username.clone();
+    let mut logs = vec![match in_response_to {
+        Some(spell) => {
+            format!("{who} sacrifices {} in response to {spell} ({source})", names.join(", "))
+        }
+        None => format!("{who} sacrifices {} ({source})", names.join(", ")),
+    }];
+    // Through the same door every other death goes through, so "whenever a
+    // creature you control dies" fires on a sacrifice too - which is the
+    // entire point of a sacrifice deck.
+    logs.extend(kill_permanents(app, room, picked));
+    logs
+}
+
+/// A creature as far as the board can tell: typed by the oracle, or carrying
+/// printed power (a token, or a card nobody has facts for).
+fn is_creature_card(app: &App, card: &Card) -> bool {
+    facts(app, card).map(|f| f.is_creature()).unwrap_or(false) || card.power.is_some()
+}
+
 pub fn discard_from_hand(
     room: &mut Room,
     pi: usize,

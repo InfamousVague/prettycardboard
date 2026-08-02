@@ -878,6 +878,95 @@ export function TriggerPrompts({ room, me }: { room: RoomState; me: TablePlayer 
 /* Discard prompts (enforced rooms, rules pass D)                            */
 /* ------------------------------------------------------------------------ */
 
+/** An owed sacrifice (Grave Pact, Dictate of Erebos, an edict): pick `n`
+ * creatures you control, or let the engine take the least valuable. Lapses at
+ * the server's deadline, so there is no urgency theater here either.
+ *
+ * The board is the picker rather than the hand - the only structural
+ * difference from DiscardPrompts, and the reason this is its own component. */
+export function SacrificePrompts({ room, me }: { room: RoomState; me: TablePlayer | undefined }) {
+  const t = useT();
+  const act = useGame((state) => state.act);
+  const mine = useMemo(
+    () => (room.pendingSacrifices ?? []).filter((p) => p.owner === me?.userId),
+    [room.pendingSacrifices, me?.userId],
+  );
+  const [picked, setPicked] = useState<string[]>([]);
+  const promptId = mine[0]?.id;
+  useEffect(() => setPicked([]), [promptId]);
+  useEffect(() => {
+    if (promptId) playSound('ping');
+  }, [promptId]);
+  const p = mine[0];
+  if (!me || !p) return null;
+  // Only creatures can be sacrificed to an edict, and only face-up ones are
+  // identifiable enough to choose between.
+  const creatures = (me.battlefield ?? []).filter((c) => !c.faceDown && c.power != null);
+  const want = Math.min(p.n, creatures.length);
+  const toggle = (iid: string) =>
+    setPicked((prev) =>
+      prev.includes(iid)
+        ? prev.filter((x) => x !== iid)
+        : prev.length < want
+          ? [...prev, iid]
+          : prev,
+    );
+  return (
+    <div className="discardPrompt">
+      <div className="triggerPromptText">
+        <Text size={Size.Small} weight="semibold">
+          {t('gpSacrificeN')} {p.n} — {p.sourceName}
+        </Text>
+        {p.inResponseTo ? (
+          <Text size={Size.XSmall} tone={TextTone.Subtle}>
+            {t('gpInResponseTo')} {p.inResponseTo}
+          </Text>
+        ) : null}
+      </div>
+      <div className="discardPromptHand">
+        {creatures.map((c) => (
+          <button
+            key={c.iid}
+            type="button"
+            className={picked.includes(c.iid) ? 'discardPick discardPickOn' : 'discardPick'}
+            onClick={() => toggle(c.iid)}
+          >
+            <GameCard
+              name={c.name}
+              imageUrl={c.imageUrl || cardImage(c.scryfallId)}
+              width={64}
+              tilt={0}
+            />
+          </button>
+        ))}
+      </div>
+      <div className="triggerPromptActions">
+        <Button
+          size="sm"
+          variant="soft"
+          disabled={picked.length !== want}
+          onClick={() => {
+            act({ kind: 'sacrifice.resolve', id: p.id, iids: picked });
+            setPicked([]);
+          }}
+        >
+          {t('gpSacrificeConfirm')} ({picked.length}/{want})
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            act({ kind: 'sacrifice.resolve', id: p.id, iids: [] });
+            setPicked([]);
+          }}
+        >
+          {t('gpDiscardEngine')}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /** An owed discard (Hymn, wheels, discard triggers): pick exactly `n` cards
  * from hand, or let the engine choose (highest mana value first). Lapses into
  * a random discard at the server's deadline, so no urgency theater needed. */

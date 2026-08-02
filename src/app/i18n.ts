@@ -2691,6 +2691,8 @@ export const messages = {
   gpInResponseTo: { en: 'in response to', es: 'en respuesta a', fr: 'en réponse à', ar: 'ردًا على' },
   gpDiscardConfirm: { en: 'Discard these', es: 'Descartar estas', fr: 'Défausser celles-ci', ar: 'ارمِ هذه' },
   gpDiscardEngine: { en: 'Choose for me', es: 'Elige por mí', fr: 'Choisis pour moi', ar: 'اختر عني' },
+  gpSacrificeN: { en: 'Sacrifice', es: 'Sacrifica', fr: 'Sacrifiez', ar: 'ضحِّ بـ' },
+  gpSacrificeConfirm: { en: 'Sacrifice these', es: 'Sacrificar estas', fr: 'Sacrifier celles-ci', ar: 'ضحِّ بهذه' },
   gpMullBottom: {
     en: 'Choose cards to put on the bottom',
     es: 'Elige cartas para poner en el fondo',
