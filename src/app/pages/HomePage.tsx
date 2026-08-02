@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { motion } from 'motion/react';
 import {
+  AlertDialog,
   Avatar,
   Button,
   Carousel,
   Heading,
   Input,
+  Menu,
+  MenuItem,
   OtpField,
   Pill,
   ProgressBar,
@@ -17,7 +20,7 @@ import {
   TextTone,
   useToast,
 } from '@glacier/react';
-import { ChevronRight, Compass, Heart, Play, Plus, Swords, Target, Ticket, Timer, Trophy } from '@glacier/icons';
+import { Bot, ChevronRight, Compass, Dices, Eye, Heart, Play, Plus, Swords, Target, Ticket, Timer, Trophy } from '@glacier/icons';
 import { PlayingCardDeck, PlayingCardPack, PlayingCardStack, PlayingCardSwap } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
@@ -36,6 +39,7 @@ import { cyberpunkImage, cyberpunkStarters } from '../data/cyberpunk.ts';
 import { yugiohImage, yugiohStarters } from '../data/yugioh.ts';
 import { deckSummaryArt, deckSummaryCover } from '../data/deckCover.ts';
 import { DEFAULT_PLAYMAT, playmatBackground } from '../data/playmats.ts';
+import { launchBotMatch } from '../data/botMatch.ts';
 import { useShowcaseId } from '../data/showcase.ts';
 import { usePreference } from '../hooks/usePreference.ts';
 import { DeckStack } from '../components/DeckStack.tsx';
@@ -187,6 +191,59 @@ function GameMenu({
   const played = stats?.played ?? 0;
   const rank = rankFor(played);
 
+  // The Play plate's bot door: three one-click shapes against the house.
+  // Bots always shuffle a random precon of their own (server rule); the
+  // 'random' preset deals ME a random Commander deck too and starts straight
+  // away, 'byod' lands in the lobby with the deck picker, 'watch' spectates
+  // a two-bot exhibition.
+  const [botsBusy, setBotsBusy] = useState(false);
+  // Being HERE does not mean being free: a seat at a live table survives
+  // wandering home (that is what the Continue plate is), and launching would
+  // concede it silently. The launch waits behind a plain question instead.
+  const [confirmBots, setConfirmBots] = useState<'random' | 'byod' | 'watch' | null>(null);
+  const launchBots = async (mode: 'random' | 'byod' | 'watch') => {
+    if (resume?.started) {
+      setConfirmBots(mode);
+      return;
+    }
+    await doLaunchBots(mode);
+  };
+  const doLaunchBots = async (mode: 'random' | 'byod' | 'watch') => {
+    if (botsBusy) return;
+    setBotsBusy(true);
+    const base = {
+      name: t('botsRoomName'),
+      difficulty: 'normal',
+      style: 'mixed',
+      format: 'commander',
+      enforced: false,
+    } as const;
+    try {
+      if (mode === 'watch') {
+        await launchBotMatch({ ...base, bots: 2, difficulty: 'hard', seat: false });
+      } else if (mode === 'byod') {
+        await launchBotMatch({ ...base, bots: 1, seat: true });
+      } else {
+        const pool = decks.filter(
+          (deck) => (deck.game || 'mtg') === 'mtg' && deck.format.toLowerCase() === 'commander',
+        );
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        if (!pick) {
+          toast({ tone: 'warning', message: t('botsQuickNoDeck') });
+          return;
+        }
+        await launchBotMatch({ ...base, bots: 1, seat: true, deckId: pick.id, autoStart: true });
+      }
+    } catch (error) {
+      toast({
+        tone: 'danger',
+        message: (error as Error).message === 'offline' ? t('botsOffline') : t('setBotDuelFailed'),
+      });
+    } finally {
+      setBotsBusy(false);
+    }
+  };
+
   // Join-by-code lives in the band now: six cells, and filling the last one IS
   // the join - no separate button to find. The code resets on a bad code so
   // the cells are immediately typeable again.
@@ -268,15 +325,58 @@ function GameMenu({
           single list to assistive tech. */}
       <nav className="gmNav" aria-label={t('hmQuickPlay')}>
         <div className="gmMenu">
-        <button type="button" className="gmItem gmPrimary" onClick={() => (window.location.hash = '/new')}>
-          <span className="gmItemInner">
-            <span className="gmItemText">
-              <span className="gmItemTitle">{t('playTitle')}</span>
-              <span className="gmItemSub">{t('hmStartTableSub')}</span>
+        {/* The Play plate is split: the first two thirds host or join as
+            always, the last third is the bot door - quick presets that build
+            a table against the house through the same launcher as the dev
+            Bots tab. */}
+        <div className="gmItem gmPrimary gmSplit">
+          <button type="button" className="gmSplitMain" onClick={() => (window.location.hash = '/new')}>
+            <span className="gmItemInner">
+              <span className="gmItemText">
+                <span className="gmItemTitle">{t('playTitle')}</span>
+                <span className="gmItemSub">{t('hmStartTableSub')}</span>
+              </span>
+              <Swords size={26} className="gmItemIcon" aria-hidden />
             </span>
-            <Swords size={26} className="gmItemIcon" aria-hidden />
-          </span>
-        </button>
+          </button>
+          <Menu
+            aria-label={t('gmPlayBots')}
+            trigger={
+              <button type="button" className="gmSplitBot" aria-label={t('gmPlayBots')}>
+                <span className="gmItemInner">
+                  <Bot size={24} className="gmItemIcon" aria-hidden />
+                </span>
+              </button>
+            }
+          >
+            <MenuItem onSelect={() => void launchBots('random')}>
+              <Dices size={14} /> {t('botsQuickRandom')}
+            </MenuItem>
+            <MenuItem onSelect={() => void launchBots('byod')}>
+              <PlayingCardDeck size={14} /> {t('botsQuickByod')}
+            </MenuItem>
+            <MenuItem onSelect={() => void launchBots('watch')}>
+              <Eye size={14} /> {t('botsQuickWatch')}
+            </MenuItem>
+          </Menu>
+        </div>
+
+        {confirmBots != null && (
+          <AlertDialog
+            open
+            onClose={() => setConfirmBots(null)}
+            title={t('botsQuickConcedeTitle')}
+            description={t('botsQuickConcedeBody')}
+            actionLabel={t('botsQuickConcedeGo')}
+            cancelLabel={t('dbCancel')}
+            dismissible
+            onAction={() => {
+              const mode = confirmBots;
+              setConfirmBots(null);
+              void doLaunchBots(mode);
+            }}
+          />
+        )}
 
         {resume && (
           <button type="button" className="gmItem gmResume" onClick={() => join(resume.roomId)}>

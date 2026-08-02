@@ -1635,6 +1635,50 @@ export const messages = {
   emOops: { en: 'Oops.', es: 'Ups.', fr: 'Oups.', ar: 'عفوًا.' },
   emThreaten: { en: 'This will be over quickly.', es: 'Esto acabará rápido.', fr: 'Ce sera vite terminé.', ar: 'سينتهي هذا بسرعة.' },
   botsRoomName: { en: 'Bot exhibition', es: 'Exhibición de bots', fr: 'Exhibition de bots', ar: 'عرض الروبوتات' },
+  // the Play plate's bot door (Home)
+  gmPlayBots: { en: 'Play against bots', es: 'Jugar contra bots', fr: 'Jouer contre des bots', ar: 'اللعب ضد الروبوتات' },
+  botsQuickRandom: {
+    en: 'Random decks for everyone',
+    es: 'Mazos aleatorios para todos',
+    fr: 'Decks aléatoires pour tous',
+    ar: 'مجموعات عشوائية للجميع',
+  },
+  botsQuickByod: {
+    en: 'Bring your own deck',
+    es: 'Trae tu propio mazo',
+    fr: 'Apportez votre propre deck',
+    ar: 'أحضر مجموعتك الخاصة',
+  },
+  botsQuickWatch: {
+    en: 'Watch a bot match',
+    es: 'Ver una partida de bots',
+    fr: 'Regarder un match de bots',
+    ar: 'مشاهدة مباراة روبوتات',
+  },
+  botsQuickNoDeck: {
+    en: 'No Commander deck to shuffle up — build or import one first.',
+    es: 'No hay mazo de Commander para barajar: crea o importa uno primero.',
+    fr: 'Aucun deck Commander à mélanger — créez ou importez-en un d’abord.',
+    ar: 'لا توجد مجموعة قائد لخلطها — أنشئ أو استورد واحدة أولاً.',
+  },
+  botsQuickConcedeTitle: {
+    en: 'Concede your current match?',
+    es: '¿Conceder tu partida actual?',
+    fr: 'Concéder votre partie en cours ?',
+    ar: 'هل تستسلم في مباراتك الحالية؟',
+  },
+  botsQuickConcedeBody: {
+    en: 'You are still seated at a live table. Starting a bot match gives that game up.',
+    es: 'Sigues sentado en una mesa en curso. Iniciar una partida contra bots la abandona.',
+    fr: 'Vous êtes encore assis à une table en cours. Lancer un match contre des bots l’abandonne.',
+    ar: 'ما زلت جالسًا على طاولة نشطة. بدء مباراة ضد الروبوتات يعني التخلي عنها.',
+  },
+  botsQuickConcedeGo: {
+    en: 'Concede & play bots',
+    es: 'Conceder y jugar con bots',
+    fr: 'Concéder et jouer contre les bots',
+    ar: 'الاستسلام واللعب ضد الروبوتات',
+  },
   botsPresets: { en: 'Quick launches', es: 'Lanzamientos rápidos', fr: 'Lancements rapides', ar: 'تشغيل سريع' },
   botsPresetsHint: {
     en: 'One click builds the table, seats the bots, and starts the match for you to watch.',

@@ -260,6 +260,60 @@
   color: var(--glacier-text-subtle);
 }
 
+/* --- the split Play plate: two thirds Play, the last third the bot door --- */
+
+/* The wrapper keeps the parallelogram, the accent edge and the hover chrome;
+   the padding moves onto the two segments so the divider can run full height. */
+.gmSplit {
+  display: flex;
+  align-items: stretch;
+  padding: 0;
+}
+
+.gmSplitMain,
+.gmSplitBot {
+  appearance: none;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.gmSplitMain {
+  flex: 2 1 0;
+  text-align: start;
+  padding: var(--glacier-space-5) var(--glacier-space-5);
+}
+
+.gmSplitBot {
+  flex: 1 1 0;
+  display: grid;
+  place-items: center;
+  padding: var(--glacier-space-5) var(--glacier-space-4);
+  border-inline-start: var(--glacier-hairline) solid
+    color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border));
+  color: var(--glacier-text-muted);
+  transition:
+    color var(--glacier-duration-fast) var(--glacier-ease-out),
+    background-color var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.gmSplitBot:hover,
+.gmSplitBot:focus-visible {
+  color: var(--glacier-text);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 16%, transparent);
+}
+
+/* The plate clips its corners (overflow: hidden), so the segments' focus
+   rings draw inset rather than being cut off at the skewed edges. */
+.gmSplitMain:focus-visible,
+.gmSplitBot:focus-visible {
+  outline: 2px solid var(--glacier-accent-solid);
+  outline-offset: -3px;
+}
+
 /* RESUME: live-table row with the pulse dot and the table's name. */
 .gmResumeSub {
   display: flex;
