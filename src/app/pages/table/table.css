@@ -6870,7 +6870,14 @@
    carrying the art and the name anyway. The caption rides at the bottom of that
    band (it is positioned against .zonePile, not the crop). */
 .mobileZones .zonePiles > *:not(:first-child) .zonePile > div:first-child {
-  block-size: 2.5rem;
+  /* 2.5rem was a flat guess that held for the narrowest phone and looked
+     shrunken on every other one - a 40px sliver with a caption plate over it
+     leaves almost no art, so the three piles read as labels rather than as
+     cards. Scaled to the viewport instead: 18vh is ~72px on a 400px-tall
+     landscape phone, which fits the ~155px the column had going spare above it,
+     and the clamp keeps a short screen from collapsing them or a tall one from
+     pushing the library off the bottom. */
+  block-size: clamp(3.25rem, 18vh, 5.25rem);
   overflow: hidden;
   border-radius: 6px;
   /* An empty zone is still a slot you can drop onto, so it has to look like
@@ -6887,10 +6894,11 @@
 }
 
 /* An empty zone draws its icon at 0.56 of the card width - 47px, taller than
-   the crop it now lives in. */
+   the crop it now lives in. Sized off the same viewport measure as the crop so
+   the icon keeps its share of the plate as that grows. */
 .mobileZones .zonePiles > *:not(:first-child) .pileEmptyIcon svg {
-  inline-size: 1.15rem;
-  block-size: 1.15rem;
+  inline-size: clamp(1.15rem, 7vh, 1.9rem);
+  block-size: clamp(1.15rem, 7vh, 1.9rem);
 }
 
 .mobileZones .zonePiles > *:not(:first-child) .pileEmpty {
@@ -6972,6 +6980,15 @@
   inset-inline-end: 2.9rem;
 }
 
+/* Dice stacks straight ABOVE settings rather than continuing the arc: the next
+   stop round from concede lands on the combat button, and the stop the other
+   way would hang off the screen's end edge. Straight up is clear at every
+   phone size and keeps the column reading as one cluster. */
+.turnOrbitBtn[data-slot='dice'] {
+  top: -5.05rem;
+  inset-inline-end: 0.35rem;
+}
+
 /* The combat button is a satellite, not a second primary: it matches the
    give-turn menu and the board tools rather than sitting between them and the
    play button at its own in-between size. */
@@ -7001,11 +7018,17 @@
 
 /* No card chrome: the row itself is the surface, and it matches the height of
    every other cluster along the top edge (--pc-top-h). */
+/* The pill was locked to --pc-top-h with 0.25rem of inline padding and none at
+   all on the block axis, so its buttons sat hard against the rounded ends and
+   the whole thing read as a squeezed capsule. The height is a FLOOR now, not a
+   fixed size: it still lines up with the rest of the top row, but it can grow
+   for its own contents instead of clipping them. */
 .timelineFloat {
   display: flex;
   align-items: center;
-  height: var(--pc-top-h);
-  padding-inline: 0.25rem;
+  gap: var(--glacier-space-1);
+  min-height: var(--pc-top-h);
+  padding: var(--glacier-space-1) var(--glacier-space-2);
   border-radius: var(--glacier-radius-full);
   background: var(--glacier-surface);
 }

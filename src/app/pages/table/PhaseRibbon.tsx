@@ -3,7 +3,9 @@ import { Button, IconButton, Menu, MenuItem, SplitButton, Text, Size, TextTone, 
 import {
   Check,
   ChevronDown,
+  Coins,
   Crown,
+  Dices,
   Flag,
   Moon,
   Settings,
@@ -16,6 +18,7 @@ import {
   Zap,
 } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
+import { DICE_SIDES, DiceIcon } from '../../components/DiceIcon.tsx';
 import { isCreature } from './boardModes.ts';
 import { seatColor } from './seatColors.ts';
 import { enforcedRoom } from './enforce.ts';
@@ -212,6 +215,37 @@ export function PhaseRibbon({
             </IconButton>
             {/* Satellites riding the end-turn circle's outer edge. */}
             <span className="turnOrbit" aria-hidden={false}>
+              {/* Dice: rolled a few times a game, not every turn, so it tucks in
+                  with the other satellites instead of spending a slot in the
+                  board-tools row where the thumb reaches for Leave. */}
+              <Menu
+                aria-label={t('gpDice')}
+                placement="top-end"
+                trigger={
+                  <IconButton
+                    size="sm"
+                    variant="soft"
+                    className="turnOrbitBtn"
+                    data-slot="dice"
+                    aria-label={t('gpDice')}
+                  >
+                    <Dices size={15} />
+                  </IconButton>
+                }
+              >
+                {DICE_SIDES.map((sides) => (
+                  <MenuItem
+                    key={sides}
+                    icon={<DiceIcon sides={sides} size={16} />}
+                    onSelect={() => act({ kind: 'dice.roll', sides })}
+                  >
+                    d{sides}
+                  </MenuItem>
+                ))}
+                <MenuItem icon={<Coins size={16} />} onSelect={() => act({ kind: 'dice.roll', sides: 2 })}>
+                  {t('tblCoin')}
+                </MenuItem>
+              </Menu>
               <IconButton
                 size="sm"
                 variant="soft"

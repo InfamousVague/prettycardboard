@@ -1220,16 +1220,28 @@
     gap: var(--glacier-space-4);
   }
 
-  /* The badge becomes the leading column instead of a full-width header. */
+  /* The badge goes back to the corner it owns on desktop. The phone block above
+     makes it `position: static` so it can head a stacked column; in a ROW that
+     turned it into the leading flex item, so the chip sat mid-height against the
+     inline-start edge - the opposite corner from every other layout. Absolute
+     takes it out of the row entirely: the menu and the code entry split the full
+     width, and the chip floats over the art where players look for it. */
   :root[data-phone='on'] .homePage .gmBadge {
-    flex: 0 1 13rem;
-    min-inline-size: 0;
-    align-self: center;
+    position: absolute;
+    inset-block-start: var(--glacier-space-3);
+    inset-inline-end: var(--glacier-space-3);
+    inset-block-end: auto;
+    inset-inline-start: auto;
+    inline-size: auto;
+    max-inline-size: min(15rem, 42%);
+    border-radius: var(--glacier-radius-full);
   }
 
-  /* The menu takes the rest - it is what the player came for. */
+  /* The menu takes the rest - it is what the player came for. Basis 0, not
+     auto, so it absorbs ALL the shrinkage: with both columns shrinkable the
+     code plate lost width too and clipped its last two cells. */
   :root[data-phone='on'] .homePage .gmMenu {
-    flex: 1 1 auto;
+    flex: 1 1 0;
     inline-size: auto;
     min-inline-size: 0;
     padding: 0;
@@ -1237,13 +1249,19 @@
     gap: var(--glacier-space-2);
   }
 
-  /* The code entry rides along rather than claiming a third of the width. */
+  /* The code entry rides along rather than claiming a third of the width, and
+     bottom-anchors so the badge above it keeps the corner clear at any height -
+     the same division of the end column desktop uses. */
   :root[data-phone='on'] .homePage .gmSide {
-    flex: 0 1 11rem;
+    /* 17.5rem, not 11: six sm OTP cells plus the plate's padding need that
+       much, and at 11 the row simply overflowed the plate - cells five and six
+       were painted outside it and the fourth was sliced in half. */
+    flex: 0 0 17.5rem;
     inline-size: auto;
     min-inline-size: 0;
+    align-self: stretch;
+    justify-content: flex-end;
     padding: 0;
-    justify-content: center;
   }
 
   /* Tighter rows: everything has to fit 375px minus the safe areas. */

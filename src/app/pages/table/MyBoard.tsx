@@ -7,8 +7,6 @@ import {
   ChevronUp,
   CircleDot,
   Crown,
-  Coins,
-  Dices,
   LayoutGrid,
   LogOut,
   Minus,
@@ -66,7 +64,6 @@ import { isYugiohTrap } from '../../data/yugioh.ts';
 import { TokenPicker } from './TokenPicker.tsx';
 import { HandCard, HAND_PEEK_ZONE } from './HandCard.tsx';
 import { DiceRoll3D } from './DiceRoll3D.tsx';
-import { DICE_SIDES, DiceIcon } from '../../components/DiceIcon.tsx';
 import { send } from '../../net/ws.ts';
 import { formatFor } from '../../data/formats.ts';
 import { playSound } from '../../sounds.ts';
@@ -1597,15 +1594,6 @@ export function MyBoard({
 
         {/* dice + markers toolbar, docked bottom-end of the field */}
         <div className="boardTools boardToolsEnd">
-          {/* Phones have no header, so Leave joins the board tools rather than
-              floating alone - it leads the row and inherits its button size. */}
-          {mobile && (
-            <Tooltip content={t('tblLeave')}>
-              <IconButton size="sm" variant="soft" aria-label={t('tblLeave')} onClick={leaveTable}>
-                <LogOut size={15} />
-              </IconButton>
-            </Tooltip>
-          )}
           {mtg && !matEdit && (
             <Tooltip content={t('gpMatEdit')}>
               <IconButton size="sm" variant="soft" aria-label={t('gpMatEdit')} onClick={startMatEdit}>
@@ -1645,30 +1633,6 @@ export function MyBoard({
               <Plus size={15} />
             </IconButton>
           </Tooltip>
-          <Menu
-            aria-label={t('gpDice')}
-            placement="top-end"
-            trigger={
-              <IconButton size="sm" variant="soft" aria-label={t('gpDice')}>
-                <Dices size={15} />
-              </IconButton>
-            }
-          >
-            {/* The same set, order and glyphs as the sidebar's dice tray - the
-                two must never offer different dice. */}
-            {DICE_SIDES.map((sides) => (
-              <MenuItem
-                key={sides}
-                icon={<DiceIcon sides={sides} size={16} />}
-                onSelect={() => act({ kind: 'dice.roll', sides })}
-              >
-                d{sides}
-              </MenuItem>
-            ))}
-            <MenuItem icon={<Coins size={16} />} onSelect={() => act({ kind: 'dice.roll', sides: 2 })}>
-              {t('tblCoin')}
-            </MenuItem>
-          </Menu>
           {mtg && (
           <Menu
             aria-label={t('gpMarkers')}
@@ -1712,6 +1676,16 @@ export function MyBoard({
               </MenuItem>
             )}
           </Menu>
+          )}
+          {/* Last in the row, hard against the trailing edge - it is the one
+              control here you do not want to hit by accident, so it sits where
+              nothing else will be reached for. */}
+          {mobile && (
+            <Tooltip content={t('tblLeave')}>
+              <IconButton size="sm" variant="soft" aria-label={t('tblLeave')} onClick={leaveTable}>
+                <LogOut size={15} />
+              </IconButton>
+            </Tooltip>
           )}
         </div>
       </div>

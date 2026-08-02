@@ -25,6 +25,8 @@ import {
   GraduationCap,
   Heart,
   LayoutGrid,
+  Coins,
+  Dices,
   LogOut,
   PanelRight,
   PanelRightClose,
@@ -116,6 +118,7 @@ import { ChatBall } from './table/ChatBall.tsx';
 import { LobbyChat } from './table/LobbyChat.tsx';
 import { DraftRoom } from './table/DraftRoom.tsx';
 import { TimelineCard } from './table/TimelineCard.tsx';
+import { DICE_SIDES, DiceIcon } from '../components/DiceIcon.tsx';
 import { TurnCue } from './table/TurnCue.tsx';
 import { flightAnchor, flyCard } from './table/juice.ts';
 import { onMessage, onStatus, send } from '../net/ws.ts';
@@ -2024,6 +2027,36 @@ function SidePanel({
           </IconButton>
         </Tooltip>
       )}
+      {/* Dice moved here off the board's tool row, which was crowded enough
+          that the row wrapped on a phone. It is ambient chrome - reached for
+          occasionally, never mid-drag - so it belongs with the rest of the
+          ambient chrome rather than beside the card-size steppers.
+          `useGame.getState()` because this nav is rendered by SidePanel, not
+          by TablePage, so the component's own `act` is out of scope here. */}
+      <Menu
+        aria-label={t('gpDice')}
+        placement="top-end"
+        trigger={
+          <IconButton size="sm" variant="ghost" aria-label={t('gpDice')}>
+            <Dices size={16} />
+          </IconButton>
+        }
+      >
+        {/* The same set, order and glyphs as the rail's dice tray - the two
+            must never offer different dice. */}
+        {DICE_SIDES.map((sides) => (
+          <MenuItem
+            key={sides}
+            icon={<DiceIcon sides={sides} size={16} />}
+            onSelect={() => useGame.getState().act({ kind: 'dice.roll', sides })}
+          >
+            d{sides}
+          </MenuItem>
+        ))}
+        <MenuItem icon={<Coins size={16} />} onSelect={() => useGame.getState().act({ kind: 'dice.roll', sides: 2 })}>
+          {t('tblCoin')}
+        </MenuItem>
+      </Menu>
       <Tooltip content={t('tblLeave')}>
         <IconButton size="sm" variant="ghost" aria-label={t('tblLeave')} onClick={onLeave}>
           <LogOut size={16} />
