@@ -6991,6 +6991,14 @@
   z-index: 44;
 }
 
+/* A touch TABLET runs the desktop-shaped table, which keeps its top strip -
+   so the history strip ducks under it instead of landing on the ribbon.
+   Phones (data-mobile) drop the strip once the match starts and keep the
+   0.5rem perch above. */
+.table:not([data-mobile]) .mobileHistory {
+  top: calc(var(--pc-strip-clear) + env(safe-area-inset-top, 0px));
+}
+
 /* No card chrome: the row itself is the surface, and it matches the height of
    every other cluster along the top edge (--pc-top-h). */
 .timelineFloat {

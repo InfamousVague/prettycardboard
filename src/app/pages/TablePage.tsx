@@ -119,7 +119,7 @@ import { TimelineCard } from './table/TimelineCard.tsx';
 import { TurnCue } from './table/TurnCue.tsx';
 import { flightAnchor, flyCard } from './table/juice.ts';
 import { onMessage, onStatus, send } from '../net/ws.ts';
-import { isDesktopApp } from '../tauri.ts';
+import { isDesktopApp, isMobileOS } from '../tauri.ts';
 import {
   TITLEBAR_DOCK_CENTER_ID,
   TITLEBAR_DOCK_END_ID,
@@ -1141,8 +1141,12 @@ export function TablePage() {
         </div>
         </Drawer>
       )}
-      {/* History controls ride the top centre of the mat: undo, timeline, redo. */}
-      {mobile && room.started && !spectating && (
+      {/* History controls ride the top centre of the mat: undo, timeline,
+          redo. Phones AND touch tablets: an iPad runs the desktop-shaped
+          table, where these lived only inside the rail's timeline card - no
+          keyboard for Cmd-Z, and gone entirely with the rail collapsed. The
+          strip sits below the top bar there (see table.css). */}
+      {(mobile || isMobileOS()) && room.started && !spectating && (
         <div className="mobileHistory" inert={companion || undefined}>
           <TimelineCard floating />
         </div>
@@ -1867,9 +1871,10 @@ function SidePanel({
       {room.game === 'cyberpunk' && (
         <CyberpunkDicePanel me={me} others={room.players.filter((p) => p.userId !== me.userId)} />
       )}
-      {/* Phones fly undo / timeline / redo on the mat instead (see the board's
-          .mobileHistory); a second card here would own a rival timeline bar. */}
-      {!mobile && <TimelineCard />}
+      {/* Phones AND touch tablets fly undo / timeline / redo on the mat
+          instead (see the board's .mobileHistory); a second card here would
+          own a rival timeline bar. */}
+      {!mobile && !isMobileOS() && <TimelineCard />}
     </>
   );
   const playersEl = (
