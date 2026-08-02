@@ -592,6 +592,62 @@ export const messages = {
     ar: 'لم يكن لزرّي «مجموعة جديدة» و«استيراد» أي تباعد فكانا يقصّان نصّهما. ولم يعد الشريط الأيمن يقع تحت شريط تمريره، وأُزيلت خاصية كتم اللاعبين.',
   },
 
+  // --- 0.9.0 ---
+  clHeadline090: {
+    en: 'A ladder to climb, and a phone menu that fits one screen.',
+    es: 'Una escalera que subir y un menú que cabe en una pantalla.',
+    fr: 'Une échelle à gravir, et un menu qui tient sur un écran.',
+    ar: 'سُلّم تتسلقه، وقائمة هاتف تتّسع لشاشة واحدة.',
+  },
+  clLadder: {
+    en: 'Ranks, from Iron to Mythic',
+    es: 'Rangos, de Hierro a Mítico',
+    fr: 'Des rangs, de Fer à Mythique',
+    ar: 'رتب، من الحديد إلى الأسطوري',
+  },
+  clLadderDesc: {
+    en: 'Eight ranks with five divisions each, each with its own crest and its own ring around your portrait. Only ranked multiplayer moves your rating - practising against the bots never counts, in either direction.',
+    es: 'Ocho rangos con cinco divisiones cada uno, cada uno con su emblema y su anillo alrededor de tu retrato. Solo el multijugador clasificatorio mueve tu puntuación: practicar contra los bots nunca cuenta, en ningún sentido.',
+    fr: 'Huit rangs de cinq divisions chacun, chacun avec son blason et son anneau autour de votre portrait. Seul le multijoueur classé fait bouger votre classement : s’entraîner contre les bots ne compte jamais, dans aucun sens.',
+    ar: 'ثماني رتب بخمس درجات لكلٍّ منها، ولكل رتبة شعارها وحلقتها حول صورتك. المباريات التنافسية وحدها تُحرّك تصنيفك؛ التدرّب ضد الروبوتات لا يُحتسب في أي اتجاه.',
+  },
+  clPhoneMenu: {
+    en: 'One screen, no scrolling',
+    es: 'Una pantalla, sin desplazamiento',
+    fr: 'Un écran, sans défilement',
+    ar: 'شاشة واحدة بلا تمرير',
+  },
+  clPhoneMenuDesc: {
+    en: 'The home screen on a phone is a main menu now: everything on one screen, laid out for landscape, with nothing to scroll past. It also stopped insetting itself twice, which had been painting black bars down both sides.',
+    es: 'La pantalla de inicio en el teléfono es ahora un menú principal: todo en una pantalla, pensado para horizontal y sin nada que desplazar. Además dejó de aplicarse el margen dos veces, lo que pintaba franjas negras a ambos lados.',
+    fr: 'L’accueil sur téléphone est désormais un menu principal : tout sur un écran, pensé pour l’horizontale, sans rien à faire défiler. Il a aussi cessé de s’appliquer deux fois ses marges, ce qui peignait des bandes noires de chaque côté.',
+    ar: 'صارت الشاشة الرئيسية على الهاتف قائمةً رئيسية: كل شيء في شاشة واحدة، مُهيّأة للوضع الأفقي، بلا تمرير. كما توقّفت عن تطبيق الهوامش مرتين، وهو ما كان يرسم شريطين أسودين على الجانبين.',
+  },
+  clChatHistory: {
+    en: 'Chat stays with the table',
+    es: 'El chat se queda con la mesa',
+    fr: 'Le chat reste avec la table',
+    ar: 'الدردشة تبقى مع الطاولة',
+  },
+  clChatHistoryDesc: {
+    en: 'The conversation is kept with the match until the table closes, so reconnecting or joining late shows you what was said instead of an empty pane. Bots\u2019 table talk is kept too.',
+    es: 'La conversación se guarda con la partida hasta que se cierra la mesa, así que reconectarte o llegar tarde te muestra lo dicho en vez de un panel vacío. También se guarda la charla de los bots.',
+    fr: 'La conversation est conservée avec la partie jusqu\u2019à la fermeture de la table : se reconnecter ou arriver en retard montre ce qui s\u2019est dit plutôt qu\u2019un volet vide. Les répliques des bots sont gardées aussi.',
+    ar: 'تُحفظ المحادثة مع المباراة حتى تُغلق الطاولة، فإعادة الاتصال أو الانضمام متأخرًا تعرض ما قيل بدل لوحة فارغة. وتُحفظ أيضًا أحاديث الروبوتات.',
+  },
+  clZoneRail: {
+    en: 'Every zone, always on screen',
+    es: 'Cada zona, siempre visible',
+    fr: 'Chaque zone, toujours à l\u2019écran',
+    ar: 'كل منطقة، ظاهرة دائمًا',
+  },
+  clZoneRailDesc: {
+    en: 'Graveyard, exile and the command zone sit beside your deck on a phone instead of hiding behind a swipe. An empty zone drew nothing, so at the start of a game there was no sign they were there at all.',
+    es: 'El cementerio, el exilio y la zona de mando están junto a tu mazo en el teléfono en vez de esconderse tras un gesto. Una zona vacía no dibujaba nada, así que al empezar no había señal de que existieran.',
+    fr: 'Cimetière, exil et zone de commandement sont à côté de votre deck sur téléphone au lieu de se cacher derrière un balayage. Une zone vide n\u2019affichait rien : en début de partie, rien n\u2019indiquait leur existence.',
+    ar: 'المقبرة والنفي ومنطقة القيادة صارت بجانب مجموعتك على الهاتف بدل الاختباء خلف سحبة. المنطقة الفارغة لم تكن ترسم شيئًا، فلم يكن هناك في بداية اللعبة ما يدل على وجودها.',
+  },
+
   clRoutine: {
     en: 'Fixes and polish',
     es: 'Correcciones y mejoras',

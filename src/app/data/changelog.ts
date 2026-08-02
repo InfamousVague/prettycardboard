@@ -72,6 +72,46 @@ export interface ChangelogRelease {
  *  load-bearing, but keep the literal in order for whoever reads it. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: '0.9.0',
+    date: '2026-08-02',
+    headline: 'clHeadline090',
+    entries: [
+      {
+        id: 'ranked-ladder',
+        icon: Crown,
+        title: 'clLadder',
+        desc: 'clLadderDesc',
+        kind: 'new',
+        category: 'clCatApp',
+        featured: true,
+      },
+      {
+        id: 'phone-menu',
+        icon: Smartphone,
+        title: 'clPhoneMenu',
+        desc: 'clPhoneMenuDesc',
+        kind: 'improved',
+        category: 'clCatLayout',
+      },
+      {
+        id: 'chat-history',
+        icon: ScrollText,
+        title: 'clChatHistory',
+        desc: 'clChatHistoryDesc',
+        kind: 'new',
+        category: 'clCatSocial',
+      },
+      {
+        id: 'zone-rail',
+        icon: LayoutGrid,
+        title: 'clZoneRail',
+        desc: 'clZoneRailDesc',
+        kind: 'improved',
+        category: 'clCatTable',
+      },
+    ],
+  },
+  {
     version: '0.8.1',
     date: '2026-08-01',
     entries: [

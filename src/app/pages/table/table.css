@@ -6781,11 +6781,16 @@
   z-index: 36;
 }
 
-/* A row: the library (first in DOM order) leads at the inline start and the
-   other three follow it, all four always present. */
+/* A COLUMN, not a row, and that is forced by the hand rather than chosen: the
+   fanned cards start at x=106 on an 852px landscape screen, so the only
+   horizontal room beside them is the ~96px the deck already fills. Four piles
+   across would run to 366px and sit on top of the player's own hand. Stacked up
+   the inline-start edge they occupy a strip the fan never reaches.
+   column-reverse puts the library - first in DOM order, and the pile tapped
+   every single turn - at the BOTTOM, nearest the thumb. */
 .mobileZones .zonePiles {
-  flex-direction: row;
-  align-items: flex-end;
+  flex-direction: column-reverse;
+  align-items: flex-start;
   gap: var(--glacier-space-1);
 }
 
@@ -6855,17 +6860,42 @@
   text-overflow: ellipsis;
 }
 
-/* The deck leads at full card width - it is the pile that gets tapped every
-   turn. The other three ride narrower: three more full-size cards would put the
-   rail at 4x84 + gaps = 366px of an 852px landscape screen, straight through
-   the middle of the hand fan. At 0.62 the rail lands near 250px, which clears
-   the fanned cards while leaving each zone a comfortable target. */
 .mobileZones .zonePiles > * {
   width: var(--pc-zone-peek, 5rem);
 }
 
-.mobileZones .zonePiles > *:not(:first-child) {
-  width: calc(var(--pc-zone-peek, 5rem) * 0.62);
+/* Four full card faces stacked would be 468px tall on a 393px screen. The deck
+   keeps its face - you need to see the deck - and the other three show only the
+   top band of theirs, which reads as a pile seen edge-on and is the part
+   carrying the art and the name anyway. The caption rides at the bottom of that
+   band (it is positioned against .zonePile, not the crop). */
+.mobileZones .zonePiles > *:not(:first-child) .zonePile > div:first-child {
+  block-size: 2.5rem;
+  overflow: hidden;
+  border-radius: 6px;
+  /* An empty zone is still a slot you can drop onto, so it has to look like
+     one. Without a plate the icon and its word floated loose on the playmat and
+     read as decoration rather than as three targets. */
+  background: oklch(0.14 0.02 265 / 0.55);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  backdrop-filter: blur(2px);
+}
+
+/* The live drop highlight the desktop piles use, carried onto the crop. */
+.mobileZones .zonePiles > *:not(:first-child) .zonePile[data-drop] > div:first-child {
+  box-shadow: inset 0 0 0 2px var(--glacier-accent-solid);
+}
+
+/* An empty zone draws its icon at 0.56 of the card width - 47px, taller than
+   the crop it now lives in. */
+.mobileZones .zonePiles > *:not(:first-child) .pileEmptyIcon svg {
+  inline-size: 1.15rem;
+  block-size: 1.15rem;
+}
+
+.mobileZones .zonePiles > *:not(:first-child) .pileEmpty {
+  block-size: 100%;
+  aspect-ratio: auto;
 }
 
 /* The deck's decorative lean foreshortens it, so it renders visibly shorter and
