@@ -260,14 +260,15 @@
   color: var(--glacier-text-subtle);
 }
 
-/* --- the Play plate's bot door: a quiet chip in the bottom-end corner --- */
+/* --- the Play plate's bot door: a full-height slice off the trailing end --- */
 
 /* The wrapper keeps the parallelogram, the accent edge and the hover chrome;
-   the main button spans the whole plate and the bot chip floats over its
-   corner rather than taking a slice of it. */
+   the padding moves onto the two segments so the divider can run the plate's
+   full height. The divider is a straight line in the plate's own skewed
+   space, so it draws at exactly the parallelogram's slice angle. */
 .gmSplit {
-  position: relative;
-  display: block;
+  display: flex;
+  align-items: stretch;
   padding: 0;
 }
 
@@ -279,45 +280,37 @@
   color: inherit;
   font: inherit;
   cursor: pointer;
+  min-width: 0;
 }
 
 .gmSplitMain {
-  display: block;
-  inline-size: 100%;
-  min-width: 0;
+  flex: 1 1 auto;
   text-align: start;
   padding: var(--glacier-space-5) var(--glacier-space-5);
 }
 
+/* Sized to its glyph, not to a share of the plate: a tight full-height slice. */
 .gmSplitBot {
-  position: absolute;
-  inset-block-end: var(--glacier-space-2);
-  inset-inline-end: var(--glacier-space-2);
-  z-index: 1;
+  flex: none;
+  inline-size: 4rem;
   display: grid;
   place-items: center;
-  inline-size: 2rem;
-  block-size: 2rem;
-  border-radius: var(--glacier-radius-sm);
-  border: var(--glacier-hairline) solid
-    color-mix(in oklch, var(--glacier-accent-solid) 35%, var(--glacier-border));
-  background: color-mix(in oklch, var(--glacier-bg) 45%, transparent);
+  border-inline-start: var(--glacier-hairline) solid
+    color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border));
   color: var(--glacier-text-muted);
   transition:
     color var(--glacier-duration-fast) var(--glacier-ease-out),
-    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
     background-color var(--glacier-duration-fast) var(--glacier-ease-out);
 }
 
 .gmSplitBot:hover,
 .gmSplitBot:focus-visible {
   color: var(--glacier-text);
-  border-color: color-mix(in oklch, var(--glacier-accent-solid) 70%, var(--glacier-border));
-  background: color-mix(in oklch, var(--glacier-accent-solid) 18%, transparent);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 16%, transparent);
 }
 
-/* The plate clips its corners (overflow: hidden), so focus rings draw inset
-   rather than being cut off at the skewed edges. */
+/* The plate clips its corners (overflow: hidden), so the segments' focus
+   rings draw inset rather than being cut off at the skewed edges. */
 .gmSplitMain:focus-visible,
 .gmSplitBot:focus-visible {
   outline: 2px solid var(--glacier-accent-solid);
