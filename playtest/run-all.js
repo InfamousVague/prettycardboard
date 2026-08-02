@@ -32,6 +32,8 @@ const STEPS = [
   ['witness-triggers', join(HERE, 'scenarios', 'witness-triggers.js')],
   ['edict-wrath', join(HERE, 'scenarios', 'edict-wrath.js')],
   ['alt-art-oracle', join(HERE, 'scenarios', 'alt-art-oracle.js')],
+  ['freeform-reminders', join(HERE, 'scenarios', 'freeform-reminders.js')],
+  ['star-pt', join(HERE, 'scenarios', 'star-pt.js')],
   ['planeswalker-audit', join(HERE, 'scenarios', 'planeswalker-audit.js')],
   ['bot-decks', join(HERE, 'scenarios', 'bot-decks.js')],
   ['yugioh-duel', join(HERE, 'scenarios', 'yugioh-duel.js')],

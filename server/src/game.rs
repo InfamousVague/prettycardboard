@@ -1210,11 +1210,19 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                     resync |= !banked.is_empty();
                     extra_logs.extend(banked);
                 }
+                // Two different questions. REPLACEMENTS ("enters tapped", "enters
+                // with counters") are the engine changing the board, and belong
+                // to enforcement. REMINDERS are just the card telling you what
+                // it says, which a freeform table wants too.
                 if crate::rules::enforced(room) && !lands_hidden {
                     if to == Zone::Battlefield && from != Zone::Battlefield {
                         let repl = crate::rules::apply_enters_replacements(app, room, iid);
                         resync |= !repl.is_empty();
                         extra_logs.extend(repl);
+                    }
+                }
+                if crate::rules::reminders(room) && !lands_hidden {
+                    if to == Zone::Battlefield && from != Zone::Battlefield {
                         let fired = crate::rules::fire_card_triggers(
                             app,
                             room,
@@ -1229,7 +1237,11 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                         resync |= !seen.is_empty();
                         extra_logs.extend(seen);
                     } else if to == Zone::Graveyard && from == Zone::Battlefield {
-                        let exiled = {
+                        // "Exile it instead of dying" is a replacement, so it
+                        // only happens where the engine is running.
+                        let exiled = if !crate::rules::enforced(room) {
+                            None
+                        } else {
                             let p = &mut room.players[pi];
                             let pos = p
                                 .graveyard
@@ -2398,8 +2410,11 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
         }
 
         Action::TriggerAnswer { ref id, apply } => {
-            if !crate::rules::enforced(room) {
-                return Err(("not_enforced", "trigger prompts only exist on enforced tables".to_string()));
+            // Reminders exist on freeform tables too; what does NOT happen
+            // there is the engine performing the effect, which `trigger.auto`
+            // already carries (push_trigger clears it off an unenforced table).
+            if !crate::rules::reminders(room) {
+                return Err(("no_triggers", "this table has no trigger prompts".to_string()));
             }
             let Some(pos) = room.pending_triggers.iter().position(|t| t.id == *id) else {
                 return Err(("no_trigger", "that trigger prompt is gone".to_string()));
@@ -3375,6 +3390,14 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
     // loyalty) and loss states worth announcing. Cheap, and always correct.
     // A sweep that did anything forces a resync - counter edits and life
     // taps do not resync on their own, and a death must never be invisible.
+    // A `*` power is a continuously-true fact, so it is refreshed in the same
+    // breath as state-based actions - BEFORE the sweep, since a Master of
+    // Etherium whose last artifact left is a 0/0 and dies to it.
+    let restated = crate::rules::refresh_cda_stats(app, room);
+    if !restated.is_empty() {
+        resync = true;
+    }
+    extra_logs.extend(restated);
     let swept = crate::rules::check_state_based(app, room);
     if !swept.is_empty() {
         resync = true;

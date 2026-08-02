@@ -77,7 +77,10 @@ async function main() {
   await me.expectState((s) => s.settings?.enforced === true, 'enforced on', 5000);
   // A bot opponent with a board of its own: the edict has to take one of ITS
   // creatures, chosen by it, without a human in the loop.
-  me.send({ type: 'bot.add', style: 'casual' });
+  // A NAMED deck, not a random one. The pool has control archetypes with
+  // almost no creatures, and this scenario needs an opponent that puts bodies
+  // on the table - drawing one of those at random is how it failed.
+  me.send({ type: 'bot.add', style: 'aggro', deckCode: 'STD-R-aggro' });
   await me.expectState((s) => s.players.filter((p) => p.isBot).length === 1, 'bot seated', 10_000);
   me.setReady(true);
   await sleep(4500); // oracle prefetch for both decks

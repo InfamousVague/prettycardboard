@@ -114,6 +114,67 @@ fn cda_count(app: &App, room: &Room, controller: usize, cda: &crate::oracle::Cou
         .count() as i64
 }
 
+/// Keep a characteristic-defining power/toughness stamped on the card itself.
+///
+/// Master of Etherium reads `*/*` on its face and is a 3/3 on a board with
+/// three artifacts. Nothing downstream can read a `*` - the board chip shows
+/// the printed string, a combat declaration parses it to zero - so the CURRENT
+/// number lives on the instance, refreshed whenever the board moves. It is the
+/// same idea as state-based actions: a continuously-true fact the engine keeps
+/// true rather than something a player has to maintain by hand.
+///
+/// Runs on every Magic table, enforced or not: this is the card telling you
+/// what it is, not the engine playing for you.
+pub fn refresh_cda_stats(app: &App, room: &mut Room) -> Vec<String> {
+    if !reminders(room) {
+        return Vec::new();
+    }
+    // Gather first: counting artifacts reads the whole table while the write
+    // needs it mutable.
+    let mut updates: Vec<(String, String, String, String)> = Vec::new();
+    for player in room.players.iter() {
+        for card in player.battlefield.iter() {
+            let Some(f) = facts(app, card) else { continue };
+            let Some(cda) = f.cda.as_ref() else { continue };
+            let n = cda_count(app, room, player.seat, cda);
+            let power = n.to_string();
+            // Only a "power AND toughness" ability defines toughness; a card
+            // whose toughness is printed keeps it.
+            let toughness = if cda.toughness {
+                power.clone()
+            } else {
+                f.toughness.map(|t| t.to_string()).unwrap_or_else(|| power.clone())
+            };
+            if card.power.as_deref() != Some(power.as_str())
+                || card.toughness.as_deref() != Some(toughness.as_str())
+            {
+                updates.push((card.iid.clone(), card.name.clone(), power, toughness));
+            }
+        }
+    }
+    if updates.is_empty() {
+        return Vec::new();
+    }
+    let mut logs = Vec::new();
+    for (iid, name, power, toughness) in updates {
+        for player in room.players.iter_mut() {
+            if let Some(card) = player.battlefield.iter_mut().find(|c| c.iid == iid) {
+                let was = card.power.clone();
+                card.power = Some(power.clone());
+                card.toughness = Some(toughness.clone());
+                // Only narrate a CHANGE, not the first stamp: "* is now 3/3"
+                // on arrival is noise, but a Master of Etherium quietly
+                // growing when an artifact lands is worth a line.
+                if was.is_some() {
+                    logs.push(format!("{name} is now {power}/{toughness}"));
+                }
+                break;
+            }
+        }
+    }
+    logs
+}
+
 /// Effective power/toughness: oracle printed stats (a `*` counted from its
 /// defining ability), +N/+N-style counters, and (pass B) anthems projected by
 /// the controller's other permanents. Tokens and unknowns fall back to the
@@ -959,8 +1020,20 @@ pub fn run_cascade(app: &App, room: &mut Room, pi: usize, n: i64, source: &str) 
 /// controller. The card is looked up in every zone (a dies trigger's source
 /// is already in the graveyard when it fires). Returns log lines; freeform
 /// rooms and trigger-less cards return nothing.
+/// Whether this table shows trigger reminders at all.
+///
+/// A freeform table is still a table where players forget their triggers, and
+/// "Chrome Mox entered - here is what it says" is useful whether or not an
+/// engine is going to do it for you. So reminders are on for every Magic
+/// table; ENFORCEMENT is the separate question of whether the engine then
+/// performs the effect (see `push_trigger`, which marks a freeform prompt
+/// acknowledge-only).
+pub fn reminders(room: &Room) -> bool {
+    room.game == "mtg"
+}
+
 pub fn fire_card_triggers(app: &App, room: &mut Room, when: TriggerWhen, iid: &str) -> Vec<String> {
-    if !enforced(room) {
+    if !reminders(room) {
         return Vec::new();
     }
     let Some((owner, seat, card)) = room.players.iter().find_map(|p| {
@@ -976,7 +1049,10 @@ pub fn fire_card_triggers(app: &App, room: &mut Room, when: TriggerWhen, iid: &s
     };
     let mut logs = Vec::new();
     for trigger in facts.triggers.iter().filter(|t| t.when == when) {
-        logs.push(push_trigger(room, &owner, seat, &card.iid, &card.name, trigger, None));
+        let line = push_trigger(room, &owner, seat, &card.iid, &card.name, trigger, None);
+        if !line.is_empty() {
+            logs.push(line);
+        }
     }
     logs
 }
@@ -991,7 +1067,7 @@ pub fn fire_card_triggers(app: &App, room: &mut Room, when: TriggerWhen, iid: &s
 /// reading these templates disagree on, and not firing is the reading that
 /// cannot over-apply.
 pub fn fire_witness_triggers(app: &App, room: &mut Room, iid: &str, leaving: bool) -> Vec<String> {
-    if !enforced(room) {
+    if !reminders(room) {
         return Vec::new();
     }
     // Whose permanent, and what was it? A card that just left the battlefield
@@ -1047,7 +1123,10 @@ fn fire_board_triggers(
     let mut logs = Vec::new();
     for (iid, name, triggers) in sources {
         for trigger in &triggers {
-            logs.push(push_trigger(room, &owner, seat, &iid, &name, trigger, None));
+            let line = push_trigger(room, &owner, seat, &iid, &name, trigger, None);
+            if !line.is_empty() {
+                logs.push(line);
+            }
         }
     }
     logs
@@ -1056,7 +1135,7 @@ fn fire_board_triggers(
 /// Queue "whenever you attack" for the attacking seat: once per combat, not
 /// once per attacker (which is what `Attacks` already does per creature).
 pub fn fire_attack_triggers(app: &App, room: &mut Room, seat: usize) -> Vec<String> {
-    if !enforced(room) {
+    if !reminders(room) {
         return Vec::new();
     }
     fire_board_triggers(app, room, seat, TriggerWhen::YouAttack, None)
@@ -1064,7 +1143,7 @@ pub fn fire_attack_triggers(app: &App, room: &mut Room, seat: usize) -> Vec<Stri
 
 /// Queue "at the beginning of combat on your turn" for the active seat.
 pub fn fire_combat_start_triggers(app: &App, room: &mut Room, seat: usize) -> Vec<String> {
-    if !enforced(room) {
+    if !reminders(room) {
         return Vec::new();
     }
     fire_board_triggers(app, room, seat, TriggerWhen::CombatStart, None)
@@ -1073,7 +1152,7 @@ pub fn fire_combat_start_triggers(app: &App, room: &mut Room, seat: usize) -> Ve
 /// Queue "at the beginning of each upkeep" across EVERY battlefield - the
 /// trigger belongs to each card's own controller, whoever's upkeep it is.
 pub fn fire_each_upkeep_triggers(app: &App, room: &mut Room) -> Vec<String> {
-    if !enforced(room) {
+    if !reminders(room) {
         return Vec::new();
     }
     let seats: Vec<usize> = room.players.iter().map(|p| p.seat).collect();
@@ -1087,7 +1166,7 @@ pub fn fire_each_upkeep_triggers(app: &App, room: &mut Room) -> Vec<String> {
 /// Queue "whenever you cast ..." for the caster, matching the narrowings the
 /// parser recognizes against what was actually cast.
 pub fn fire_cast_triggers(app: &App, room: &mut Room, seat: usize, card: &Card) -> Vec<String> {
-    if !enforced(room) {
+    if !reminders(room) {
         return Vec::new();
     }
     let Some(f) = facts(app, card) else { return Vec::new() };
@@ -1123,7 +1202,7 @@ pub fn fire_draw_triggers(
     drawer_seat: usize,
     count: usize,
 ) -> Vec<String> {
-    if !enforced(room) || count == 0 {
+    if !reminders(room) || count == 0 {
         return Vec::new();
     }
     let Some(drawer) = room.players.iter().find(|p| p.seat == drawer_seat).map(|p| p.user_id.clone())
@@ -1156,7 +1235,10 @@ pub fn fire_draw_triggers(
     let mut logs = Vec::new();
     for _ in 0..count {
         for (owner, seat, subject, iid, name, trigger) in &queued {
-            logs.push(push_trigger(room, owner, *seat, iid, name, trigger, subject.as_deref()));
+            let line = push_trigger(room, owner, *seat, iid, name, trigger, subject.as_deref());
+            if !line.is_empty() {
+                logs.push(line);
+            }
         }
     }
     logs
@@ -1169,7 +1251,7 @@ pub fn fire_phase_triggers(
     when: TriggerWhen,
     seat: usize,
 ) -> Vec<String> {
-    if !enforced(room) {
+    if !reminders(room) {
         return Vec::new();
     }
     let Some(player) = room.players.iter().find(|p| p.seat == seat) else {
@@ -1189,7 +1271,10 @@ pub fn fire_phase_triggers(
     let mut logs = Vec::new();
     for (iid, name, triggers) in sources {
         for trigger in &triggers {
-            logs.push(push_trigger(room, &owner, seat, &iid, &name, trigger, None));
+            let line = push_trigger(room, &owner, seat, &iid, &name, trigger, None);
+            if !line.is_empty() {
+                logs.push(line);
+            }
         }
     }
     logs
@@ -1216,6 +1301,12 @@ fn push_trigger(
     trigger: &crate::oracle::Trigger,
     subject: Option<&str>,
 ) -> String {
+    // A bot does not need reminding, and on a freeform table it has no code
+    // path that answers one - the prompt would sit there until it lapsed.
+    let engine_runs = enforced(room);
+    if !engine_runs && room.players.iter().any(|p| p.user_id == owner && p.is_bot) {
+        return String::new();
+    }
     room.pending_triggers.push(PendingTrigger {
         id: crate::hex_id(6),
         owner: owner.to_string(),
@@ -1226,7 +1317,9 @@ fn push_trigger(
         when: trigger.when,
         effects: trigger.effects.clone(),
         text: trigger.text.clone(),
-        auto: trigger.auto(),
+        // Freeform: the server records and never judges, so even a trigger
+        // the engine COULD perform is offered as a reminder to acknowledge.
+        auto: engine_runs && trigger.auto(),
         deadline: crate::now_ms() + crate::game::TRIGGER_CHOICE_MS,
     });
     format!("Trigger: {source_name} — {}", trigger.text)

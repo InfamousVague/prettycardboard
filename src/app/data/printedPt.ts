@@ -103,7 +103,19 @@ export function printedPT(card: CardInst): PrintedPT | null | undefined {
       ? { power: faces.backPower, toughness: faces.backToughness }
       : null;
   }
-  return cache.get(card.scryfallId);
+  const printed = cache.get(card.scryfallId);
+  // A characteristic-defining `*` is not a number a client can compute: it
+  // depends on the whole board. The server keeps the current value stamped on
+  // the instance (rules::refresh_cda_stats), so when the printed face says
+  // `*` and the instance carries a number, the instance is the truth.
+  //
+  // Without this the chip read "*+6/*+6" - the printed star with its counters
+  // hung off it, which is not a P/T anyone can act on.
+  if (printed && card.power != null && card.toughness != null) {
+    const starred = printed.power.includes('*') || printed.toughness.includes('*');
+    if (starred) return { power: card.power, toughness: card.toughness };
+  }
+  return printed;
 }
 
 /* A breath between batches; Scryfall asks for ~10 requests a second at most. */

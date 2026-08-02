@@ -909,6 +909,35 @@ stance as the other intents.
   prompts. Freeform rooms and solo tables advance exactly as before. Bots
   pass open windows within a tick and never draw rejections.
 
+### Reminders on freeform tables, and `*` as a number (2026-08-02)
+
+Two things a player needs whether or not an engine is refereeing.
+
+**Trigger reminders everywhere.** Prompts used to exist only under
+enforcement, so the commonest way to play got no help at all - a Chrome Mox
+entered and said nothing. `rules::reminders(room)` (any Magic table) now gates
+the firing, and `enforced` gates only what happens next:
+
+- A freeform prompt is **acknowledge-only**. `push_trigger` clears `auto` off
+  an unenforced table, so the engine can never perform the effect - the
+  freeform contract is unchanged.
+- **Replacements stay enforced-only.** "Enters tapped", "enters with
+  counters", "exile instead of dying" are the engine changing the board, and
+  the `card.move` site now splits those from the reminder.
+- **Bots get none.** Nothing reads them, and on a freeform table a bot has no
+  code path that answers one, so it would sit until it lapsed.
+- An unanswered reminder lapses after `TRIGGER_CHOICE_MS` and is logged, never
+  applied - which was already true and is what makes this safe.
+
+**A `*` power is stamped on the card.** Master of Etherium reads `*/*` and IS
+a 3/3 on a board with three artifacts. The engine counted that for combat, but
+nothing downstream could read a `*`: the board chip showed the printed string
+and a combat declaration parsed it to zero. `rules::refresh_cda_stats` writes
+the current number onto the instance and runs in the same breath as
+state-based actions - BEFORE the sweep, since a Master whose last artifact
+left is a 0/0 and dies to it. Changes are logged ("Master of Etherium is now
+2/2"); the first stamp is silent.
+
 ### Curated art is still the card, oracle v13 (2026-08-01)
 
 The bug behind "Sheoldred is in play but the AI didn't take damage for
