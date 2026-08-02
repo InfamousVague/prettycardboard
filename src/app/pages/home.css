@@ -260,13 +260,14 @@
   color: var(--glacier-text-subtle);
 }
 
-/* --- the split Play plate: two thirds Play, the last third the bot door --- */
+/* --- the Play plate's bot door: a quiet chip in the bottom-end corner --- */
 
 /* The wrapper keeps the parallelogram, the accent edge and the hover chrome;
-   the padding moves onto the two segments so the divider can run full height. */
+   the main button spans the whole plate and the bot chip floats over its
+   corner rather than taking a slice of it. */
 .gmSplit {
-  display: flex;
-  align-items: stretch;
+  position: relative;
+  display: block;
   padding: 0;
 }
 
@@ -278,36 +279,45 @@
   color: inherit;
   font: inherit;
   cursor: pointer;
-  min-width: 0;
 }
 
 .gmSplitMain {
-  flex: 2 1 0;
+  display: block;
+  inline-size: 100%;
+  min-width: 0;
   text-align: start;
   padding: var(--glacier-space-5) var(--glacier-space-5);
 }
 
 .gmSplitBot {
-  flex: 1 1 0;
+  position: absolute;
+  inset-block-end: var(--glacier-space-2);
+  inset-inline-end: var(--glacier-space-2);
+  z-index: 1;
   display: grid;
   place-items: center;
-  padding: var(--glacier-space-5) var(--glacier-space-4);
-  border-inline-start: var(--glacier-hairline) solid
-    color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border));
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: var(--glacier-radius-sm);
+  border: var(--glacier-hairline) solid
+    color-mix(in oklch, var(--glacier-accent-solid) 35%, var(--glacier-border));
+  background: color-mix(in oklch, var(--glacier-bg) 45%, transparent);
   color: var(--glacier-text-muted);
   transition:
     color var(--glacier-duration-fast) var(--glacier-ease-out),
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
     background-color var(--glacier-duration-fast) var(--glacier-ease-out);
 }
 
 .gmSplitBot:hover,
 .gmSplitBot:focus-visible {
   color: var(--glacier-text);
-  background: color-mix(in oklch, var(--glacier-accent-solid) 16%, transparent);
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 70%, var(--glacier-border));
+  background: color-mix(in oklch, var(--glacier-accent-solid) 18%, transparent);
 }
 
-/* The plate clips its corners (overflow: hidden), so the segments' focus
-   rings draw inset rather than being cut off at the skewed edges. */
+/* The plate clips its corners (overflow: hidden), so focus rings draw inset
+   rather than being cut off at the skewed edges. */
 .gmSplitMain:focus-visible,
 .gmSplitBot:focus-visible {
   outline: 2px solid var(--glacier-accent-solid);
