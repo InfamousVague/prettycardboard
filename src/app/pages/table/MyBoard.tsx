@@ -120,10 +120,6 @@ const ATTACH_DWELL_MS = 500;
  *  already cancelled). */
 const PILE_DWELL_MS = 1100;
 
-/** Drag origins that live in the phone's zone row, where a leftward stroke
- *  gathers the row instead of lifting the card under the finger. */
-const PILE_ZONES = new Set<DragFrom>(['library', 'graveyard', 'exile', 'command']);
-
 /**
  * The bottom band of the playmat (where the deck/piles float) is reserved:
  * cards never land there. Small now that the hand auto-peeks away instead of
@@ -235,10 +231,6 @@ export function MyBoard({
   const cardEls = useRef(new Map<string, HTMLElement>());
   const prevFaces = useRef(new Map<string, boolean>());
   const [drag, setDrag] = useState<DragState | null>(null);
-  // The phone zone cascade's dealt/gathered state. Owned here, not inside
-  // MobileZones, because the board opens it on a dwelling drag and closes it on
-  // a leftward swipe that starts on any of the piles.
-  const [zonesOpen, setZonesOpen] = useState(false);
   // Mat editor: while editing, the working pile layout lives here (the server's
   // copy is committed on each pile drop).
   const [matEdit, setMatEdit] = useState(false);
@@ -652,24 +644,6 @@ export function MyBoard({
         clearHold();
         setDrag(null);
         updateScrub(event.clientX, event.clientY);
-        return;
-      }
-      // The same idea for the open zone row: a stroke that starts on ANY pile
-      // and runs left is gathering the row, not pulling a card out of it. The
-      // axis decides - cards come out upward, onto the board - so the two
-      // gestures never have to be aimed, only pointed.
-      if (
-        event.pointerType !== 'mouse' &&
-        mobile &&
-        zonesOpen &&
-        PILE_ZONES.has(drag.from) &&
-        dx < 0 &&
-        Math.abs(dx) > Math.abs(dy)
-      ) {
-        clearHold();
-        setDrag(null);
-        setZonesOpen(false);
-        haptics('selection');
         return;
       }
       origin.armed = true;
@@ -1342,16 +1316,6 @@ export function MyBoard({
   const hoverPiles =
     hoverHost != null && wantsPile(hoverHost, drag ? cardOf(drag.from, drag.iid) : undefined, drag?.shift ?? false);
 
-  const dwellOverDeck = mobile && dropPile === 'library';
-  useEffect(() => {
-    if (!dwellOverDeck) return;
-    const timer = setTimeout(() => {
-      setZonesOpen(true);
-      haptics('selection');
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [dwellOverDeck, haptics]);
-
   // The zone piles. In Cyberpunk they leave the bottom strip for the mat
   // quadrants (Deck/Trash right rail, Legends/Eddies bottom tray) via `mat`.
   // ---- mat editor: free-place the zone piles, synced to every viewer ----
@@ -1770,7 +1734,7 @@ export function MyBoard({
           always peeks, and tapping (or swiping from the edge) slides the rest
           out. Desktop keeps them inline in the bottom strip. */}
       {mtg && !matActive && !hideField && mobile && (
-        <MobileZones piles={zonePilesEl} peek={fieldCardWidth} open={zonesOpen} onOpenChange={setZonesOpen} />
+        <MobileZones piles={zonePilesEl} peek={fieldCardWidth} />
       )}
 
       {/* bottom strip: zones | hand | vitals */}

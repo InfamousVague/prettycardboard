@@ -6769,60 +6769,29 @@
 .mobileZones {
   position: absolute;
   inset-inline-start: calc(var(--glacier-space-2) + env(safe-area-inset-left, 0px));
-  /* Anchored inside .myBoard, which is flow content and therefore already sits
-     above the table's reserved home-indicator strip - so this is measured from
-     the real bottom edge and must NOT add the inset again. (.mobileTurnDock is
-     the one that anchors to .table's padding box and does add it.)
-     Flush, not gutter-ed: this is the bottom-left corner element, so any offset
-     here is the most visible "the deck sits too high/low" on the board. */
-  bottom: 0;
-  z-index: 34;
-}
-
-/* A row: the library (first in DOM order) sits at the inline start and the
-   other zones deal out beside it, each fully clear of its neighbour. */
-.mobileZones .zonePiles {
-  flex-direction: row;
-  align-items: flex-end;
-  gap: var(--glacier-space-2);
-}
-
-
-
-
-
-/* Dealt out, the row reaches under the hand fan (both sat at z-34, and the
-   strip wins a tie by DOM order). Lift it while open so the zones stay visible
-   and draggable; gathered, it drops back so the hand owns the corner. */
-.mobileZones[data-open] {
+  /* The comment that used to live here said .myBoard already sat above a
+     reserved home-indicator strip, so this must not add the inset again. That
+     stopped being true: .appWindow[data-in-game] zeroes the shell's bottom
+     padding precisely so the felt can run under the gesture bar. With `bottom:
+     0` the rail's bottom edge measured exactly the viewport's (393 of 393 at
+     852x393), which put the deck's caption inside the home-indicator strip -
+     the "deck sits too low" this comment was worried about, arrived by the
+     other route. The felt still bleeds under the bar; only the piles clear it. */
+  bottom: calc(var(--glacier-space-1) + env(safe-area-inset-bottom, 0px));
   z-index: 36;
 }
 
-/* Gathered in: only the deck shows. display:none keeps the row's spacing
-   honest - a zero-width flex item would still take a gap. */
-.mobileZones:not([data-open]) .zonePiles > *:not(:first-child) {
-  display: none;
+/* A row: the library (first in DOM order) leads at the inline start and the
+   other three follow it, all four always present. */
+.mobileZones .zonePiles {
+  flex-direction: row;
+  align-items: flex-end;
+  gap: var(--glacier-space-1);
 }
 
-/* The swipe surface over the deck's face: right deals the zones out, left
-   gathers them back, a tap falls through to the library's draw. */
-.mobileZonesSwipe {
-  position: absolute;
-  inset-inline-start: 0;
-  bottom: 0;
-  width: var(--pc-zone-peek, 5rem);
-  /* Only the deck's bottom band. The card face above it must stay live so the
-     library's long-press menu (peek / search / reveal / mulligan) and dragging
-     the top card out still reach .pileBtn underneath - covering the whole face
-     left drawing as the deck's ONLY reachable action. */
-  height: calc(var(--pc-zone-peek, 5rem) * 0.42);
-  /* Above .zonePiles (z-7) or the deck's own card paints over the surface and
-     a real finger never reaches this handler. */
-  z-index: 9;
-  cursor: pointer;
-  /* The gesture owns the touch so the board never pans under it. */
-  touch-action: none;
-}
+
+
+
 
 /* Captions would double the stack's height, so they ride ON the pile instead of
    under it - an empty graveyard still says what it is without costing a row. */
@@ -6886,10 +6855,17 @@
   text-overflow: ellipsis;
 }
 
-/* Piles shrink to the cascade's width so the stack stays a thumb-sized target
-   without crowding the battlefield. */
+/* The deck leads at full card width - it is the pile that gets tapped every
+   turn. The other three ride narrower: three more full-size cards would put the
+   rail at 4x84 + gaps = 366px of an 852px landscape screen, straight through
+   the middle of the hand fan. At 0.62 the rail lands near 250px, which clears
+   the fanned cards while leaving each zone a comfortable target. */
 .mobileZones .zonePiles > * {
   width: var(--pc-zone-peek, 5rem);
+}
+
+.mobileZones .zonePiles > *:not(:first-child) {
+  width: calc(var(--pc-zone-peek, 5rem) * 0.62);
 }
 
 /* The deck's decorative lean foreshortens it, so it renders visibly shorter and
