@@ -480,14 +480,27 @@
 /* --- phone (PHONE_QUERY): stacked band, full-bleed rows, nothing skewed --- */
 
 @media (max-width: 700px), (max-height: 480px) {
-  /* The band IS the phone's first screen: the page sheds its gutters so the
-     hero runs edge to edge, and the sections below it take their own inline
-     padding instead. */
+  /* On a phone the band IS the home page - one screen, no scroll, like a
+     console main menu. Everything the sections below carried is already a
+     destination on the menu itself (Play, Continue, Open packs, Decks,
+     Browse, Collection, Matches), so on this size they are a second copy of
+     the navigation rather than content, and they go.
+
+     `block-size` + `overflow: hidden` rather than just hiding the sections:
+     without a definite height the band could still outgrow the content area
+     and hand the page a scrollbar. */
   :root[data-phone='on'] .homePage {
     padding: 0;
+    /* GROW, do not ask for 100%. As a shrinkable flex item of .routeFrame a
+       percentage height resolved to the content's own height (measured 581px
+       in an 844px viewport), so the menu stopped short of the bottom. flex
+       fills whatever the route frame actually has. */
+    flex: 1 1 auto;
+    min-block-size: 0;
+    overflow: hidden;
   }
-  :root[data-phone='on'] .homePage > section:not(.gmBand) {
-    padding-inline: var(--glacier-space-4);
+  :root[data-phone='on'] .homePage > *:not(.gmBand) {
+    display: none;
   }
   .homePage .gmBand {
     flex-direction: column;
@@ -507,7 +520,13 @@
      The shell pads TOP, LEFT and RIGHT - so those three are plain gutters
      here. It does NOT pad the bottom, so that one inset is still ours. */
   :root[data-phone='on'] .homePage .gmBand {
-    min-block-size: var(--pc-vh, 100dvh);
+    /* Fills the page, which fills the route frame. NOT 100dvh: the content
+       area already stops short of the viewport by the nav (the tab bar in
+       portrait, the rail in landscape), so a band sized to the whole viewport
+       was taller than the box holding it - which is what put a scrollbar on a
+       page that is meant to be exactly one screen. */
+    flex: 1 1 auto;
+    min-block-size: 0;
     border: none;
     border-radius: 0;
     padding-block-start: var(--glacier-space-4);
@@ -1176,4 +1195,63 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4em;
+}
+
+/* ---- landscape phone: the band keeps its columns ------------------------
+   Landscape-first, per docs/mobile-orientation.md. Portrait still works - it
+   is simply not the case this block is tuned for.
+
+   Height is the scarce axis on a phone held sideways (~375px), and the phone
+   rules above stack the band into one column, so the badge spends a whole row
+   before the menu even starts. Here it stays a row: the badge takes the width
+   that was going begging and the menu keeps the height for its items.
+
+   Targets .gmBadge / .gmMenu / .gmSide directly, NOT .gmNav - that is
+   `display: contents`, so it has no box and flex properties on it do nothing;
+   its children are the band's real flex items.
+
+   Keyed on the SHORT viewport, not a narrow one: a landscape phone is wide, so
+   `(max-width: 700px)` would miss it. Same idiom as the onboarding and
+   card-popup landscape blocks. */
+@media (max-height: 480px) and (orientation: landscape) {
+  :root[data-phone='on'] .homePage .gmBand {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--glacier-space-4);
+  }
+
+  /* The badge becomes the leading column instead of a full-width header. */
+  :root[data-phone='on'] .homePage .gmBadge {
+    flex: 0 1 13rem;
+    min-inline-size: 0;
+    align-self: center;
+  }
+
+  /* The menu takes the rest - it is what the player came for. */
+  :root[data-phone='on'] .homePage .gmMenu {
+    flex: 1 1 auto;
+    inline-size: auto;
+    min-inline-size: 0;
+    padding: 0;
+    margin-inline-end: 0;
+    gap: var(--glacier-space-2);
+  }
+
+  /* The code entry rides along rather than claiming a third of the width. */
+  :root[data-phone='on'] .homePage .gmSide {
+    flex: 0 1 11rem;
+    inline-size: auto;
+    min-inline-size: 0;
+    padding: 0;
+    justify-content: center;
+  }
+
+  /* Tighter rows: everything has to fit 375px minus the safe areas. */
+  :root[data-phone='on'] .homePage .gmItem {
+    padding-block: var(--glacier-space-2);
+  }
+
+  :root[data-phone='on'] .homePage .gmPrimary .gmItemTitle {
+    font-size: clamp(1.4rem, 4vw, 1.9rem);
+  }
 }
