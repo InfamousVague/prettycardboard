@@ -1151,10 +1151,14 @@ fn bot_add(
         send_err(tx, "room_full", "room is full");
         return;
     };
-    let decks = &crate::bot::data().decks;
-    let deck = match deck_code.as_deref() {
-        None | Some("random") => &decks[rand::random_range(0..decks.len())],
-        Some(code) => match decks.iter().find(|d| d.code == code) {
+    // A bot brings a deck the TABLE can actually play: a Standard table gets
+    // a Standard deck, anything else the Commander precons. An explicit code
+    // still wins - the Bots settings tab and the playtests name decks.
+    let pool = crate::bot::decks_for_format(&room.format);
+    let all = &crate::bot::data().decks;
+    let deck: &crate::bot::BotDeck = match deck_code.as_deref() {
+        None | Some("random") => pool[rand::random_range(0..pool.len())],
+        Some(code) => match all.iter().find(|d| d.code == code) {
             Some(d) => d,
             None => {
                 send_err(tx, "bad_deck", &format!("no bot deck {code}"));

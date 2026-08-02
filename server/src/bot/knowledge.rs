@@ -16,6 +16,10 @@ pub struct BotData {
 pub struct BotDeck {
     pub code: String,
     pub name: String,
+    /// Which format this deck is legal for. Absent on the bundled Commander
+    /// precons, which predate the field.
+    #[serde(default)]
+    pub format: Option<String>,
     pub cards: Vec<BotDeckCard>,
 }
 
@@ -95,8 +99,35 @@ static DATA: OnceLock<BotData> = OnceLock::new();
 
 pub fn data() -> &'static BotData {
     DATA.get_or_init(|| {
-        serde_json::from_str(include_str!("../data/bot_data.json")).expect("bot_data.json parses")
+        let mut data: BotData =
+            serde_json::from_str(include_str!("../data/bot_data.json")).expect("bot_data.json parses");
+        // The Standard pool is generated separately (scripts/gen-standard-decks.mjs,
+        // rerun each rotation) and merged here, so a Standard table has real
+        // 60-card opponents instead of a Commander precon.
+        let standard: BotData = serde_json::from_str(include_str!("../data/bot_decks_standard.json"))
+            .expect("bot_decks_standard.json parses");
+        data.decks.extend(standard.decks);
+        data.attrs.extend(standard.attrs);
+        data
     })
+}
+
+/// The decks a table of this format should draw bots from. Standard tables
+/// get the 60-card Standard pool; everything else keeps the Commander
+/// precons (the historical behaviour, and the right answer for Commander,
+/// Brawl and freeform pods alike). Falls back to the whole pool if a format
+/// somehow has no decks, so a bot always brings SOMETHING.
+pub fn decks_for_format(format: &str) -> Vec<&'static BotDeck> {
+    let all = &data().decks;
+    let want_standard = format.eq_ignore_ascii_case("standard");
+    let picked: Vec<&BotDeck> = all
+        .iter()
+        .filter(|d| {
+            let is_standard = d.format.as_deref() == Some("standard");
+            is_standard == want_standard
+        })
+        .collect();
+    if picked.is_empty() { all.iter().collect() } else { picked }
 }
 
 // ------------------------------------------------------------ card reading

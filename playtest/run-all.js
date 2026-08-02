@@ -29,6 +29,7 @@ const STEPS = [
   ['enforced-scry-mill', join(HERE, 'scenarios', 'enforced-scry-mill.js')],
   ['enforced-engine', join(HERE, 'scenarios', 'enforced-engine.js')],
   ['planeswalker-audit', join(HERE, 'scenarios', 'planeswalker-audit.js')],
+  ['bot-decks', join(HERE, 'scenarios', 'bot-decks.js')],
   ['bot-spells', join(HERE, 'scenarios', 'bot-spells.js')],
   ['ai-match', join(HERE, 'scenarios', 'ai-match.js')],
   ['enforced-brawl', join(HERE, 'scenarios', 'enforced-brawl.js')],
