@@ -118,6 +118,9 @@ pub(crate) struct BotMind {
     /// iid of the opposing stack spell this bot already answered - one
     /// response per threat, never the whole hand.
     responded_to: Option<String>,
+    /// This bot's lifetime draw count as of the last tick: the delta is what
+    /// a freeform draw tax is charged on.
+    drawn_seen: Option<u64>,
     said_gg: bool,
     said_win: bool,
 

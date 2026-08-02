@@ -576,7 +576,16 @@ export interface PendingTrigger {
   seat: number;
   sourceIid: string;
   sourceName: string;
-  when: 'etb' | 'dies' | 'attacks' | 'upkeep' | 'endStep';
+  when:
+    | 'etb'
+    | 'dies'
+    | 'attacks'
+    | 'upkeep'
+    | 'endStep'
+    | 'dealsPlayerDamage'
+    | 'activated'
+    | 'youDraw'
+    | 'opponentDraws';
   effects: TriggerEffect[];
   text: string;
   /** True = the engine can apply the parsed effects itself. */

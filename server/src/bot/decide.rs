@@ -93,6 +93,34 @@ pub(crate) fn decide(app: &App, room: &Room, uid: &str, mind: &mut BotMind, now:
         };
     }
 
+    // Cards I drew since the last tick cost (or pay) me life, when someone's
+    // board says so - Sheoldred taxing my draw step is the standard case.
+    // ENFORCED tables fire the real trigger and this must stay out of the way;
+    // freeform ones follow the usual contract, where each player applies what
+    // happened to their own life total.
+    if !crate::rules::enforced(room) {
+        match mind.drawn_seen {
+            // A fresh mind (boot/restart) adopts the count instead of paying
+            // for every card this bot has ever drawn.
+            None => mind.drawn_seen = Some(me.cards_drawn),
+            Some(prev) if me.cards_drawn > prev => {
+                let drew = (me.cards_drawn - prev) as i64;
+                mind.drawn_seen = Some(me.cards_drawn);
+                let per_draw = draw_life_delta(app, room, me);
+                if per_draw != 0 {
+                    let total = per_draw * drew;
+                    say.push(draw_tax_line(-total, me.life + total));
+                    return Decision {
+                        action: Some(Action::LifeAdd { delta: total }),
+                        say,
+                        fast: true,
+                    };
+                }
+            }
+            _ => {}
+        }
+    }
+
     if let Some(action) = mind.queue.pop_front() {
         return Decision { action: Some(action), say, fast: true };
     }
@@ -672,3 +700,37 @@ pub(crate) fn own_turn(app: &App, room: &Room, me: &Player, mind: &mut BotMind, 
     }
 }
 
+
+/// What ONE card drawn by this bot does to its life total, read off every
+/// board on the table: its own "whenever you draw a card, you gain N life"
+/// less every opponent's "whenever an opponent draws a card, they lose N
+/// life". Positive gains, negative loses, zero means nothing cares.
+///
+/// Closed set, exactly like the trigger engine: a draw trigger carrying any
+/// effect the engine cannot perform is skipped whole rather than half-applied.
+pub(crate) fn draw_life_delta(app: &App, room: &Room, me: &Player) -> i64 {
+    use crate::oracle::{TriggerEffect, TriggerWhen};
+    let mut delta = 0i64;
+    for player in room.players.iter().filter(|p| !p.conceded) {
+        let mine = player.seat == me.seat;
+        let want = if mine { TriggerWhen::YouDraw } else { TriggerWhen::OpponentDraws };
+        for card in player.battlefield.iter() {
+            let Some(facts) = crate::rules::facts(app, card) else { continue };
+            for trigger in facts.triggers.iter().filter(|t| t.when == want) {
+                if !trigger.auto() {
+                    continue;
+                }
+                for effect in &trigger.effects {
+                    match effect {
+                        TriggerEffect::GainLife { n } if mine => delta += n,
+                        TriggerEffect::LoseLife { n } => delta -= n,
+                        // Anything else is somebody else's bookkeeping, or a
+                        // shape this shortcut has no business performing.
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+    delta
+}

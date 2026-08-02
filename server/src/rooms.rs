@@ -515,6 +515,12 @@ pub struct PendingTrigger {
     pub id: String,
     pub owner: String, // user_id of the controller
     pub seat: usize,
+    /// The player this trigger's effects land on, when that is NOT the
+    /// controller: "whenever an opponent draws a card, they lose 2 life"
+    /// takes 2 from the one who drew, not from every opponent. None = the
+    /// controller, which is every other trigger shape.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
     pub source_iid: String,
     pub source_name: String,
     pub when: crate::oracle::TriggerWhen,

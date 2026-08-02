@@ -880,7 +880,7 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
     // Yu-Gi-Oh seats were dealt already "kept" (no mulligan flow): the first
     // turn begins right now. A no-op for every other game, whose seats are
     // still deciding (their keeps trigger it via MullKeep/Concede).
-    let first_turn_logs = game::maybe_begin_first_turn(&mut room, started_now);
+    let first_turn_logs = game::maybe_begin_first_turn(app, &mut room, started_now);
 
     rooms::touch(app, &mut room);
     room_send_states(app, &room);

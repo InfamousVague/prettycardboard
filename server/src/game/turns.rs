@@ -73,7 +73,7 @@ pub fn turn_clock_begin(room: &mut Room, seat: usize, now: i64) {
 /// or a concede can be the closing event), restart the active player's turn
 /// clock — table-wide deliberation is not their turn time — and, under
 /// auto-turn, fire the first untap/draw. Idempotent via first_turn_begun.
-pub fn maybe_begin_first_turn(room: &mut Room, now: i64) -> Vec<String> {
+pub fn maybe_begin_first_turn(app: &crate::App, room: &mut Room, now: i64) -> Vec<String> {
     if room.first_turn_begun
         || !room.started
         || room.turn_number != 1
@@ -89,7 +89,10 @@ pub fn maybe_begin_first_turn(room: &mut Room, now: i64) -> Vec<String> {
     room.turn_started_ms = now;
     room.turn_last_interaction_ms = now;
     if room.auto_turn {
-        auto_turn_begin(room, room.active_seat)
+        let seat = room.active_seat;
+        let (mut logs, drew) = auto_turn_begin(room, seat);
+        logs.extend(crate::rules::fire_draw_triggers(app, room, seat, drew));
+        logs
     } else {
         Vec::new()
     }
@@ -116,7 +119,10 @@ pub(super) fn free_first_mulls(room: &Room) -> u32 {
 /// Auto-turn bookkeeping for the player whose turn is starting: untap their
 /// battlefield and draw 1 — unless the first-turn skip applies (starting seat,
 /// turn 1, standard or 2-player) or their library is empty.
-pub fn auto_turn_begin(room: &mut Room, seat: usize) -> Vec<String> {
+///
+/// Returns the log lines and how many cards were drawn: the turn draw is a
+/// draw like any other, and the caller (which has `app`) fires its triggers.
+pub fn auto_turn_begin(room: &mut Room, seat: usize) -> (Vec<String>, usize) {
     let skip = room.turn_number == 1
         && seat == room.starting_seat
         && match room.settings.skip_first_draw {
@@ -133,7 +139,7 @@ pub fn auto_turn_begin(room: &mut Room, seat: usize) -> Vec<String> {
     // monster up into Attack Position.
     let rotation_is_position = room.game == "yugioh";
     let Some(p) = room.players.iter_mut().find(|p| p.seat == seat) else {
-        return Vec::new();
+        return (Vec::new(), 0);
     };
     let do_untap = (p.auto_untap || enforced) && !rotation_is_position;
     // The starting player's very first turn skips its draw (standard / 2-player).
@@ -157,7 +163,7 @@ pub fn auto_turn_begin(room: &mut Room, seat: usize) -> Vec<String> {
     };
     let empty = do_draw && !drew; // wanted to draw but the library was empty
 
-    if do_untap && drew {
+    let logs = if do_untap && drew {
         vec![format!("{} untaps and draws a card", p.username)]
     } else if do_untap && empty {
         vec![format!("{} untaps, no cards left to draw", p.username)]
@@ -167,7 +173,8 @@ pub fn auto_turn_begin(room: &mut Room, seat: usize) -> Vec<String> {
         vec![format!("{} draws a card", p.username)]
     } else {
         Vec::new()
-    }
+    };
+    (logs, usize::from(drew))
 }
 
 #[cfg(test)]

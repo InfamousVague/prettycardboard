@@ -439,7 +439,9 @@ pub fn advance_turn_core(app: &crate::App, room: &mut crate::rooms::Room, now: i
     room.stack_passed.clear();
     if room.auto_turn {
         room.phase = "main1".to_string();
-        logs.extend(auto_turn_begin(room, next));
+        let (turn_logs, drew) = auto_turn_begin(room, next);
+        logs.extend(turn_logs);
+        logs.extend(crate::rules::fire_draw_triggers(app, room, next, drew));
         logs.extend(crate::rules::fire_phase_triggers(
             app,
             room,
@@ -1642,7 +1644,11 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
             p.peeked.clear();
             for_actor["cards"] = serde_json::to_value(&drawn).unwrap();
             p.hand.extend(drawn);
+            let seat = p.seat;
             log = format!("{username} draws {n} {}", plural(n as i64, "card", "cards"));
+            // Each card drawn is its own trigger event ("whenever you draw a
+            // card"), and the source usually sits on an OPPONENT's board.
+            extra_logs.extend(crate::rules::fire_draw_triggers(app, room, seat, n));
             resync = true;
         }
 
@@ -1999,7 +2005,9 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
             clear_combat(room);
             if room.auto_turn {
                 room.phase = "main1".to_string();
-                extra_logs.extend(auto_turn_begin(room, seat));
+                let (turn_logs, drew) = auto_turn_begin(room, seat);
+                extra_logs.extend(turn_logs);
+                extra_logs.extend(crate::rules::fire_draw_triggers(app, room, seat, drew));
             }
             let target = seat_username(room, seat);
             for v in [&mut for_actor, &mut for_others] {
@@ -2357,7 +2365,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
             }
             let trigger = room.pending_triggers.remove(pos);
             if apply && trigger.auto {
-                extra_logs = crate::rules::apply_trigger_effects(room, &trigger, &mut private);
+                extra_logs = crate::rules::apply_trigger_effects(app, room, &trigger, &mut private);
                 // Life or counters may have moved under a showing preview.
                 refresh_combat_preview(app, room);
                 log = format!(
@@ -3105,7 +3113,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
             // clock reset + untap (a no-op) + draw, honoring the first-draw
             // skip. Conceded seats never keep, so they do not hold this up.
             let first_turn_pending = !room.first_turn_begun;
-            extra_logs.extend(maybe_begin_first_turn(room, now));
+            extra_logs.extend(maybe_begin_first_turn(app, room, now));
             if first_turn_pending && room.first_turn_begun {
                 extra_logs.extend(crate::rules::fire_phase_triggers(
                     app,
@@ -3221,7 +3229,9 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                         .all(|p| p.mulligan.as_ref().map(|m| m.state == "kept").unwrap_or(true));
                     if room.auto_turn && room.first_turn_begun && mull_done {
                         room.phase = "main1".to_string();
-                        extra_logs.extend(auto_turn_begin(room, next));
+                        let (turn_logs, drew) = auto_turn_begin(room, next);
+                        extra_logs.extend(turn_logs);
+                        extra_logs.extend(crate::rules::fire_draw_triggers(app, room, next, drew));
                         extra_logs.extend(crate::rules::fire_phase_triggers(
                             app,
                             room,
@@ -3234,7 +3244,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
             // This concede may have been the mulligan window's closing event.
             if survivors > 1 {
                 let first_turn_pending = !room.first_turn_begun;
-                extra_logs.extend(maybe_begin_first_turn(room, now));
+                extra_logs.extend(maybe_begin_first_turn(app, room, now));
                 if first_turn_pending && room.first_turn_begun {
                     extra_logs.extend(crate::rules::fire_phase_triggers(
                         app,

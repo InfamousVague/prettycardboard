@@ -160,3 +160,17 @@ pub(crate) fn ygo_reflect_line(amount: i64) -> String {
         _ => format!("Your attack failed: {amount} damage right back."),
     }
 }
+
+/// Life a draw cost (positive `lost`) or paid (negative), announced so the
+/// table can see the bot doing its own bookkeeping rather than drifting.
+pub(crate) fn draw_tax_line(lost: i64, life_after: i64) -> String {
+    if lost > 0 {
+        match rand::random_range(0..3) {
+            0 => format!("Drawing costs me {lost}. Down to {life_after}."),
+            1 => format!("That draw hurts - {lost} life, I'm at {life_after}."),
+            _ => format!("{lost} for the draw. {life_after} left."),
+        }
+    } else {
+        format!("The draw pays me {}. Up to {life_after}.", -lost)
+    }
+}

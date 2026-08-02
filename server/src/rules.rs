@@ -972,7 +972,59 @@ pub fn fire_card_triggers(app: &App, room: &mut Room, when: TriggerWhen, iid: &s
     };
     let mut logs = Vec::new();
     for trigger in facts.triggers.iter().filter(|t| t.when == when) {
-        logs.push(push_trigger(room, &owner, seat, &card.iid, &card.name, trigger));
+        logs.push(push_trigger(room, &owner, seat, &card.iid, &card.name, trigger, None));
+    }
+    logs
+}
+
+/// Queue draw triggers for `count` cards drawn by `drawer_seat`.
+///
+/// Unlike every other trigger, the source is usually on SOMEONE ELSE'S
+/// battlefield - Sheoldred punishes the opponent's draws from her controller's
+/// side of the table - so this scans every seat rather than the actor's. Each
+/// card drawn is its own trigger, which is what makes a "draw three" hurt
+/// three times.
+pub fn fire_draw_triggers(
+    app: &App,
+    room: &mut Room,
+    drawer_seat: usize,
+    count: usize,
+) -> Vec<String> {
+    if !enforced(room) || count == 0 {
+        return Vec::new();
+    }
+    let Some(drawer) = room.players.iter().find(|p| p.seat == drawer_seat).map(|p| p.user_id.clone())
+    else {
+        return Vec::new();
+    };
+    // (controller, seat, subject, source iid, source name, trigger)
+    let mut queued: Vec<(String, usize, Option<String>, String, String, crate::oracle::Trigger)> =
+        Vec::new();
+    for player in room.players.iter() {
+        let mine = player.seat == drawer_seat;
+        let want = if mine { TriggerWhen::YouDraw } else { TriggerWhen::OpponentDraws };
+        for card in player.battlefield.iter() {
+            let Some(f) = facts(app, card) else { continue };
+            for trigger in f.triggers.iter().filter(|t| t.when == want) {
+                // "you gain 2 life" pays its own controller; "they lose 2
+                // life" charges the player who drew.
+                let subject = (!mine).then(|| drawer.clone());
+                queued.push((
+                    player.user_id.clone(),
+                    player.seat,
+                    subject,
+                    card.iid.clone(),
+                    card.name.clone(),
+                    trigger.clone(),
+                ));
+            }
+        }
+    }
+    let mut logs = Vec::new();
+    for _ in 0..count {
+        for (owner, seat, subject, iid, name, trigger) in &queued {
+            logs.push(push_trigger(room, owner, *seat, iid, name, trigger, subject.as_deref()));
+        }
     }
     logs
 }
@@ -1004,7 +1056,7 @@ pub fn fire_phase_triggers(
     let mut logs = Vec::new();
     for (iid, name, triggers) in sources {
         for trigger in &triggers {
-            logs.push(push_trigger(room, &owner, seat, &iid, &name, trigger));
+            logs.push(push_trigger(room, &owner, seat, &iid, &name, trigger, None));
         }
     }
     logs
@@ -1019,7 +1071,7 @@ pub fn queue_trigger(
     source_name: &str,
     trigger: &crate::oracle::Trigger,
 ) -> String {
-    push_trigger(room, owner, seat, source_iid, source_name, trigger)
+    push_trigger(room, owner, seat, source_iid, source_name, trigger, None)
 }
 
 fn push_trigger(
@@ -1029,11 +1081,13 @@ fn push_trigger(
     source_iid: &str,
     source_name: &str,
     trigger: &crate::oracle::Trigger,
+    subject: Option<&str>,
 ) -> String {
     room.pending_triggers.push(PendingTrigger {
         id: crate::hex_id(6),
         owner: owner.to_string(),
         seat,
+        subject: subject.map(str::to_string),
         source_iid: source_iid.to_string(),
         source_name: source_name.to_string(),
         when: trigger.when,
@@ -1093,11 +1147,15 @@ pub fn effects_summary(effects: &[TriggerEffect]) -> String {
 /// Effects apply best-effort against CURRENT state: a source that left the
 /// battlefield just skips its counters, an empty library stops a draw.
 pub fn apply_trigger_effects(
+    app: &App,
     room: &mut Room,
     t: &PendingTrigger,
     private: &mut Vec<(String, serde_json::Value)>,
 ) -> Vec<String> {
-    apply_effects(room, &t.owner, &t.source_iid, &t.source_name, &t.effects, private)
+    // The subject when the trigger names one (the opponent who drew), else
+    // the controller.
+    let target = t.subject.as_deref().unwrap_or(&t.owner);
+    apply_effects(app, room, target, &t.source_iid, &t.source_name, &t.effects, private)
 }
 
 /// A resolving instant or sorcery whose text the oracle parser understood
@@ -1145,12 +1203,13 @@ pub fn apply_spell_intent(
     if effects.is_empty() {
         return Vec::new();
     }
-    apply_effects(room, caster_id, &card.iid, &card.name, &effects, private)
+    apply_effects(app, room, caster_id, &card.iid, &card.name, &effects, private)
 }
 
 /// The shared muscle behind triggers and spell intent: apply a list of parsed
 /// effects for `owner`, narrating every one of them into the room log.
 fn apply_effects(
+    app: &App,
     room: &mut Room,
     owner: &str,
     source_iid: &str,
@@ -1159,6 +1218,9 @@ fn apply_effects(
     private: &mut Vec<(String, serde_json::Value)>,
 ) -> Vec<String> {
     let mut logs = Vec::new();
+    // `owner` here is the player the effects LAND on. For nearly every trigger
+    // that is the controller; a "whenever an opponent draws" trigger passes
+    // the drawer instead (PendingTrigger::subject).
     let Some(pi) = room.players.iter().position(|p| p.user_id == owner) else {
         return logs;
     };
@@ -1182,7 +1244,13 @@ fn apply_effects(
                     p.peeked.clear();
                     let plural =
                         if drew == 1 { "a card".to_string() } else { format!("{drew} cards") };
+                    let seat = p.seat;
                     logs.push(format!("{} draws {plural} ({})", p.username, source_name));
+                    // A draw is a draw wherever it came from: an effect that
+                    // draws feeds "whenever you draw a card" like the turn
+                    // draw does. Triggers only QUEUE here, so this cannot
+                    // recurse.
+                    logs.extend(fire_draw_triggers(app, room, seat, drew as usize));
                 }
             }
             TriggerEffect::GainLife { n } => {

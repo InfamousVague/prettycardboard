@@ -23,6 +23,7 @@
     "discard": "node scenarios/enforced-discard.js",
     "scrymill": "node scenarios/enforced-scry-mill.js",
     "engine": "node scenarios/enforced-engine.js",
+    "draws": "node scenarios/draw-triggers.js",
     "walkers": "node scenarios/planeswalker-audit.js",
     "botdecks": "node scenarios/bot-decks.js",
     "duel": "node scenarios/yugioh-duel.js",

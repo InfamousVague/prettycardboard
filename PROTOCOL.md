@@ -909,6 +909,37 @@ stance as the other intents.
   prompts. Freeform rooms and solo tables advance exactly as before. Bots
   pass open windows within a tick and never draw rejections.
 
+### Draw triggers, oracle v10 (2026-08-01)
+
+The oracle knew ETB, dies, attacks, upkeep, end step and combat damage, but
+had no notion of a DRAW. So Sheoldred, the Apocalypse sat on the battlefield
+doing nothing: the opponent drew for turn and took no damage. Two new trigger
+events, `youDraw` and `opponentDraws`, parsed from exactly two shapes:
+
+    Whenever you draw a card, ...
+    Whenever an opponent draws a card, ...
+
+Their subject is a PLAYER, not the card, so they are matched before the
+card-subject verb table. `ORACLE_VERSION` is now **10** - cached rows reparse
+on next use.
+
+"They lose 2 life" charges the player who DREW, not every opponent, so
+`PendingTrigger` gains an optional **`subject`**: the player a trigger's
+effects land on when that is not the controller. Every other trigger leaves it
+unset and keeps applying to its controller.
+
+They fire from every path that actually moves a card from library to hand -
+the `draw` action, the auto-turn draw, and a draw performed by another
+trigger or a resolving spell - once per CARD, so "draw three" hurts three
+times. Triggers only queue here, so nothing recurses.
+
+**Freeform tables have no engine triggers, by design.** A bot there charges
+itself instead, the same way it settles its own combat damage: it watches its
+own draw count and applies the net of its opponents' "they lose N life" and
+its own "you gain N life". Closed set, as always - a draw trigger carrying
+any effect the engine cannot perform is skipped whole rather than
+half-applied.
+
 ### Yu-Gi-Oh bots (2026-08-01)
 
 `bot.add` used to answer `bad_game` at anything but a Magic table, so the

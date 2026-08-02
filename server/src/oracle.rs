@@ -20,7 +20,7 @@ use std::sync::Arc;
 /// Bumped whenever the parse below learns something new: cached rows stamped
 /// with an older version are treated as missing and refetched, so a deploy
 /// never leaves half the oracle table without the new fields.
-pub const ORACLE_VERSION: u32 = 9;
+pub const ORACLE_VERSION: u32 = 10;
 
 /// A characteristic-defining ability that sets power (and sometimes toughness)
 /// to a count of permanents - "...is equal to the number of artifacts you
@@ -74,6 +74,12 @@ pub enum TriggerWhen {
     EndStep,
     /// "Whenever ~ deals combat damage to a player, ..." (saboteurs).
     DealsPlayerDamage,
+    /// "Whenever you draw a card, ..." - fires once per card drawn.
+    YouDraw,
+    /// "Whenever an opponent draws a card, ..." - fires once per card THAT
+    /// PLAYER draws, and its effects land on them, not on every opponent
+    /// (see PendingTrigger::subject).
+    OpponentDraws,
     /// A loyalty ability the player just activated (not a trigger shape the
     /// parser finds - the activation queues its text through the same prompt).
     Activated,
@@ -342,7 +348,10 @@ fn is_self_target(target: &str, name_lower: &str, short_lower: &str) -> bool {
 /// Parse one effect part ("draw a card", "you gain 2 life", "create a 2/2
 /// black Zombie creature token"). None = not in the closed set.
 fn parse_effect_part(part: &str, name_lower: &str, short_lower: &str) -> Option<TriggerEffect> {
-    let p = part.trim().trim_start_matches("you ").trim();
+    // "you" is the controller and "they" the trigger's subject (the opponent
+    // who drew): which player an effect lands on is carried by the trigger,
+    // not by this clause, so both pronouns strip the same way.
+    let p = part.trim().trim_start_matches("you ").trim_start_matches("they ").trim();
 
     // "draw a card" / "draw two cards"
     if let Some(rest) = p.strip_prefix("draw ") {
@@ -565,6 +574,27 @@ fn parse_triggers(name: &str, text: &str) -> Vec<Trigger> {
                     text: text_orig.clone(),
                 });
             }
+        }
+
+        // "whenever you/an opponent draws a card, ..." - the subject is a
+        // PLAYER, not this card, so it never reaches the card-subject verbs
+        // below. Closed set: exactly these two shapes.
+        let mut player_trigger = false;
+        for (prefix, when) in [
+            ("whenever you draw a card", TriggerWhen::YouDraw),
+            ("whenever an opponent draws a card", TriggerWhen::OpponentDraws),
+        ] {
+            if cond == prefix {
+                out.push(Trigger {
+                    when,
+                    effects: parse_effects(effect_clause, &name_lower, &short_lower),
+                    text: text_orig.clone(),
+                });
+                player_trigger = true;
+            }
+        }
+        if player_trigger {
+            continue;
         }
 
         // "when(ever) SUBJECT <verb>, ..."
@@ -1971,4 +2001,43 @@ pub fn prefetch_room(app: &Arc<App>, room: &crate::rooms::Room) {
     tokio::spawn(async move {
         ensure(&app, ids.into_iter().collect()).await;
     });
+}
+
+#[cfg(test)]
+mod draw_trigger_tests {
+    use super::*;
+
+    #[test]
+    fn sheoldred_parses_both_draw_triggers() {
+        let text = "Deathtouch\nWhenever you draw a card, you gain 2 life.\nWhenever an opponent draws a card, they lose 2 life.";
+        let t = parse_triggers("Sheoldred, the Apocalypse", text);
+        assert_eq!(t.len(), 2, "both draw triggers parse: {t:?}");
+        assert_eq!(t[0].when, TriggerWhen::YouDraw);
+        assert_eq!(t[0].effects, vec![TriggerEffect::GainLife { n: 2 }]);
+        assert!(t[0].auto());
+        assert_eq!(t[1].when, TriggerWhen::OpponentDraws);
+        assert_eq!(t[1].effects, vec![TriggerEffect::LoseLife { n: 2 }]);
+        assert!(t[1].auto());
+    }
+
+    #[test]
+    fn unknown_draw_payoffs_stay_manual() {
+        // Closed set: a payoff the engine cannot perform must never auto-apply.
+        let t = parse_triggers(
+            "Nezahal, Primal Tide",
+            "Whenever an opponent draws a card, exile the top three cards of your library.",
+        );
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].when, TriggerWhen::OpponentDraws);
+        assert_eq!(t[0].effects, vec![TriggerEffect::Manual]);
+        assert!(!t[0].auto());
+    }
+
+    #[test]
+    fn a_draw_trigger_never_becomes_a_card_trigger() {
+        // "whenever you draw" has a PLAYER subject; it must not fall through
+        // to the card-subject verb table and become somebody's ETB.
+        let t = parse_triggers("Whatever", "Whenever you draw a card, you gain 2 life.");
+        assert!(t.iter().all(|x| x.when == TriggerWhen::YouDraw));
+    }
 }
