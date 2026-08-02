@@ -480,13 +480,33 @@
 /* --- phone (PHONE_QUERY): stacked band, full-bleed rows, nothing skewed --- */
 
 @media (max-width: 700px), (max-height: 480px) {
+  /* The band IS the phone's first screen: the page sheds its gutters so the
+     hero runs edge to edge, and the sections below it take their own inline
+     padding instead. */
+  :root[data-phone='on'] .homePage {
+    padding: 0;
+  }
+  :root[data-phone='on'] .homePage > section:not(.gmBand) {
+    padding-inline: var(--glacier-space-4);
+  }
   .homePage .gmBand {
-    min-block-size: 0;
     flex-direction: column;
     align-items: stretch;
+    justify-content: space-between;
     gap: var(--glacier-space-4);
     padding: var(--glacier-space-4);
     border-radius: var(--glacier-radius-xl);
+  }
+  /* Full-bleed and the visible viewport tall; the safe areas come back as
+     padding so nothing hides behind a notch or the home bar. */
+  :root[data-phone='on'] .homePage .gmBand {
+    min-block-size: var(--pc-vh, 100dvh);
+    border: none;
+    border-radius: 0;
+    padding-block-start: calc(var(--glacier-space-4) + env(safe-area-inset-top, 0px));
+    padding-block-end: calc(var(--glacier-space-4) + env(safe-area-inset-bottom, 0px));
+    padding-inline-start: calc(var(--glacier-space-4) + env(safe-area-inset-left, 0px));
+    padding-inline-end: calc(var(--glacier-space-4) + env(safe-area-inset-right, 0px));
   }
   .gmBadge {
     position: static;
@@ -496,14 +516,37 @@
   .gmBadge > :last-child {
     margin-inline-start: auto;
   }
+  /* The buttons size down instead of spanning the screen: a capped column,
+     compact padding, one step smaller type. */
   .gmMenu {
-    inline-size: 100%;
+    inline-size: min(22rem, 88%);
     padding: 0;
     margin-inline-end: 0;
   }
-  /* Stacked band: the side column flows under the primaries, full width. */
+  .gmItem {
+    padding: var(--glacier-space-2) var(--glacier-space-4);
+  }
+  .gmItemTitle {
+    font-size: var(--glacier-font-size-md);
+  }
+  .gmItemSub {
+    font-size: var(--glacier-font-size-xs);
+  }
+  /* The 2x2 quarter cells are half the (already capped) column: one step
+     down, and the label keeps the room the icon was spending - at this size
+     the word IS the identity, and COLLECTION must never ellipsize. */
+  .gmHalf {
+    padding-inline: var(--glacier-space-3);
+  }
+  .gmHalf .gmItemTitle {
+    font-size: var(--glacier-font-size-sm);
+  }
+  .gmHalf .gmItemIcon {
+    display: none;
+  }
+  /* Stacked band: the side column flows under the primaries. */
   .gmSide {
-    inline-size: 100%;
+    inline-size: min(24rem, 100%);
     align-self: auto;
     padding: 0;
   }
@@ -517,8 +560,17 @@
   [dir='rtl'] .gmItemInner {
     transform: none;
   }
+  .gmPrimary {
+    padding-block: var(--glacier-space-3);
+  }
   .gmPrimary .gmItemTitle {
     font-size: var(--glacier-font-size-2xl);
+  }
+  .gmSplitMain {
+    padding: var(--glacier-space-3) var(--glacier-space-4);
+  }
+  .gmSplitBot {
+    inline-size: 3.25rem;
   }
   /* text spans the full art now: one even scrim */
   .gmScrim,

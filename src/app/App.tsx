@@ -543,6 +543,9 @@ function Shell({
       className="appWindow"
       data-layout={preferences.layout}
       data-in-game={inRoom || undefined}
+      /* The current route, for route-scoped chrome: the phone home hides the
+         nav bars entirely (the hero band is the menu there). */
+      data-route={route}
     >
       {/* The chosen playmat backs the whole window; the shell's rail and
           content panels float over it as glass. A scrim keeps text legible

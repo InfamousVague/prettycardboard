@@ -784,8 +784,15 @@ select,
 /* Light takes the kit's own background token; dark goes to true black through
    the same two selectors the tokens use to resolve dark mode, so `system`
    follows the OS and an explicit choice always wins. */
+/* fixed, not absolute: this is the app's wallpaper and it must cover the whole
+   SCREEN, not the shell's box. As an absolute layer it inherited every way the
+   shell falls short of the glass - the safe-area padding on phones, and
+   `height: var(--pc-vh)`, which is a ROUNDED pixel count and so left a hairline
+   of black along the top and bottom edges on a 3x display. Fixed takes the
+   viewport directly, so the playmat runs under the notch and the home indicator
+   and there is no seam to round off. */
 .appBackdrop {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 0;
   background-color: var(--glacier-bg);
@@ -1328,6 +1335,15 @@ select,
   }
 }
 
+/* PHONE home: no nav chrome at all - the hero band IS the menu there (Play,
+   Decks, Browse, Collection, Matches, packs and the join code all live on
+   it), and the band owns the whole screen. Every other route keeps its bars,
+   so one tap on any band item brings the chrome back. */
+:root[data-phone='on'] .appWindow[data-route='home']:not([data-in-game]) .appRail,
+:root[data-phone='on'] .appWindow[data-route='home']:not([data-in-game]) .appTabBar {
+  display: none !important;
+}
+
 :root[data-phone='on'] .appTabBar {
   display: flex;
   flex: none;
@@ -1475,6 +1491,20 @@ select,
   padding-top: env(safe-area-inset-top, 0px);
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* ...except at the table, for the same reason the bottom inset is released
+   further down: the felt IS the screen there. Insetting the shell shrinks
+   .table, and .tableFelt is `position:absolute; inset:0` inside it, so the mat
+   stopped short of the hardware and left black bars down both sides in
+   landscape - the app painting a letterbox around the very edges it should be
+   running under. The mat goes edge to edge here and the UI carries the insets
+   instead: the table's floating chrome already pads itself with env(), and the
+   two flow layers (.tableTop, .tableMain) pick it up in table.css. */
+:root[data-phone='on'] .appWindow[data-in-game] {
+  padding-top: 0;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 /* Pages keep a slimmer gutter on phones. */
