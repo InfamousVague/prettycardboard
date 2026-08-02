@@ -909,6 +909,26 @@ stance as the other intents.
   prompts. Freeform rooms and solo tables advance exactly as before. Bots
   pass open windows within a tick and never draw rejections.
 
+### Table chrome: history on the mat, tools in a column (2026-08-02)
+
+Three layout fixes, all client-side.
+
+- **Floating mana no longer resizes the life card.** `.manaTail` reserves its
+  height everywhere so banking the first mana fades the total pill in; the
+  floating card used to drop that reservation on the reasoning that nothing
+  sits below it, but the CARD is what moved - growing over the mat mid-turn
+  and snapping back when the pool emptied. It keeps the reservation now and
+  gives up its own block-end padding in exchange, since the reserved row
+  already supplies that breathing room.
+- **Undo / timeline / redo ride the top centre of the mat on every size.** On
+  desktop they lived only in the rail's timeline card: behind a collapse, and
+  off the surface the player is looking at. The mobile placement already
+  ducked under the top strip on desktop-shaped tables, so this is one gate.
+- **`.boardToolsEnd` stacks down the right edge** instead of running across
+  the top, which is now shared with the history strip. A column also keeps
+  every button at a fixed x - easier to hit twice in a row than a row that
+  reflows as buttons appear.
+
 ### Aiming an attacker (2026-08-02)
 
 A pod could declare attackers but not say who they were hitting: the client

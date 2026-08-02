@@ -2538,8 +2538,25 @@
   inset-inline-start: var(--glacier-space-3);
 }
 
+/* The board's own tools stack DOWN the right edge rather than running across
+   the top. The top edge is now shared with the history strip and the seat
+   chrome, and a horizontal row there was competing for the same band; a
+   column also keeps every button at a fixed x, which is easier to hit twice
+   in a row than a row that reflows as buttons appear. */
 .boardToolsEnd {
   inset-inline-end: var(--glacier-space-3);
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--glacier-space-1);
+}
+
+/* QuickControls is itself a row; inside the column it becomes a column too,
+   so draw / untap / shuffle / token / settings read as one vertical list
+   instead of a row hanging off the stack. */
+.boardToolsEnd .convenience {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--glacier-space-1);
 }
 
 /* ---- the stack tray ---- */
@@ -2969,6 +2986,48 @@
   gap: var(--glacier-space-2);
 }
 
+/* The mana pad rides under the life total on the floating card (see LifeCard).
+   The card is a grid sized by its widest row, and the life block alone is only
+   ~115px, so six 2.35rem pips would wrap to 4+2. WUBRG plus colourless reads as
+   ONE row - a wrapped pair looks like two different controls - so the pips
+   refuse to wrap and the card sizes to them instead (~260px).
+   .manaTail keeps its own row regardless (flex-basis: 100%). */
+.lifeFloat .manaPips {
+  flex-wrap: nowrap;
+}
+
+/* Full width inside the card, so the mana bar's top hairline spans the whole
+   card rather than stopping at the pips. */
+.lifeFloat .manaBar {
+  justify-self: stretch;
+  justify-content: center;
+}
+
+/* .manaTail reserves its height so banking the first mana fades the total pill
+   in without shifting anything.
+   The floating card used to drop that reservation, on the reasoning that
+   nothing sits below it - but the card itself is what moves: banking the
+   first mana grew it downward over the mat, and spending the last one snapped
+   it back. That IS the layout shifting, and it happens under the player's
+   cursor mid-turn.
+   So the row is reserved here too, and the card gives up its own block-end
+   padding in exchange: the reserved row already supplies that breathing room,
+   and paying for both is what made the empty card look bottom-heavy. */
+.lifeFloat:has(.manaBar) {
+  padding-block-end: 0;
+}
+
+.lifeFloat .manaTail {
+  /* Tall enough for the total pill, tight enough to read as padding when the
+     pool is empty. */
+  min-height: 1.5rem;
+}
+
+/* The conveniences' spacing inside the toolbar is set by .boardToolsEnd
+   .convenience further up, alongside the rule that turns the toolbar into a
+   vertical stack. Nothing to add here. */
+
+
 /* Damage tracker: one row per kind of damage (commander damage per opponent,
    then poison) with +/- steppers; a row goes danger at its lethal threshold. */
 .dmgTrack {
@@ -3104,31 +3163,40 @@
 
 .manaPips {
   display: flex;
-  align-items: center;
-  gap: 2px;
+  align-items: flex-end;
+  gap: var(--glacier-space-1);
   flex-wrap: wrap;
 }
 
+/* Two stacked rows: the count sits ABOVE its glyph rather than clinging to the
+   corner as a badge. The first row is sized whether or not a number is in it,
+   so banking or spending mana never nudges the glyphs - and the glyph is placed
+   in row 2 explicitly, because grid auto-placement would otherwise drop it into
+   the empty counter row of every colour you have none of. */
 .manaPip {
   position: relative;
-  display: inline-grid;
-  place-items: center;
-  /* Roomier so the mana glyph sits comfortably inside its container instead of
-     spilling over the edge. */
-  width: 2.35rem;
-  height: 2.35rem;
-  padding: 0.28rem;
+  display: grid;
+  grid-template-rows: 0.95rem auto;
+  justify-items: center;
+  align-items: center;
+  gap: 1px;
+  width: 2.5rem;
+  padding: 0.15rem 0.1rem 0.25rem;
   box-sizing: border-box;
   border: 0;
   background: transparent;
   cursor: pointer;
-  border-radius: var(--glacier-radius-full);
+  border-radius: var(--glacier-radius-lg);
   opacity: 0.45;
   filter: grayscale(0.35);
   transition: opacity 120ms, transform 120ms, filter 120ms, background 120ms;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
   user-select: none;
+}
+
+.manaPip > img {
+  grid-row: 2;
 }
 .manaPip[data-has] {
   background: color-mix(in oklch, var(--glacier-surface) 55%, transparent);
@@ -3153,22 +3221,19 @@
   transform: scale(0.9);
 }
 
+/* The counter, in its own row above the glyph. No badge chrome: a pill that
+   size was mostly border, and stacked over the symbol it competed with the
+   symbol's own ring. Bare numerals in the accent read faster and leave the
+   glyph whole. */
 .manaCount {
-  position: absolute;
-  top: -3px;
-  inset-inline-end: -3px;
-  min-width: 1rem;
-  height: 1rem;
-  padding-inline: 0.2rem;
-  display: grid;
-  place-items: center;
-  border-radius: var(--glacier-radius-full);
-  background: var(--glacier-accent-solid);
-  color: var(--glacier-accent-contrast, #fff);
+  grid-row: 1;
   font-family: var(--glacier-font-mono);
-  font-size: 0.6rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--glacier-accent-text);
+  text-shadow: 0 1px 3px oklch(0.05 0.02 265 / 0.9);
   pointer-events: none;
 }
 
@@ -8607,4 +8672,103 @@ button.loyaltyBadge:hover {
 
 .combatAimWho {
   color: var(--glacier-text);
+}
+
+/* ---- playmat chrome: the gacha pass ---------------------------------------
+   The on-mat controls are game furniture, not document UI, so they get the
+   look mobile card games use: chunky rounded slabs with a lit top edge, a dark
+   base, a real drop shadow to lift them off the felt, and a press that actually
+   travels. Everything is built from Glacier tokens (accent, surface, border) so
+   a theme change carries, and it is scoped to the floating mat chrome - the
+   rail, the sheets and every page keep the flat kit look.
+
+   SPECIFICITY: the kit's own button rules reach three chained hashed classes
+   (0,3,0) and the class names are hashed at build time, so they cannot be
+   named. Repeating .boardTools takes these to (0,3,1), which is the smallest
+   thing that wins. Drop a repeat and the kit's background silently returns. */
+.table {
+  /* One lighting model for every slab: lit from above. */
+  --pc-gacha-face: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--glacier-surface-raised) 92%, transparent),
+    color-mix(in oklch, oklch(0.16 0.02 265) 92%, transparent)
+  );
+  --pc-gacha-edge: inset 0 1px 0 rgb(255 255 255 / 0.14),
+    inset 0 -1px 0 oklch(0.05 0.02 265 / 0.5);
+  --pc-gacha-lift: 0 4px 10px oklch(0.05 0.02 265 / 0.45);
+  --pc-gacha-border: color-mix(in oklch, var(--glacier-border) 85%, transparent);
+}
+
+/* The toolbar itself becomes a slab the buttons sit in, rather than loose icons
+   floating on the art - a side rail down the mat's edge, which is where this
+   kind of game puts its verbs. Idle opacity goes up: a gacha HUD is confident,
+   and the old 0.72 read as half-disabled next to the new chrome.
+   The stack direction and the gaps are NOT set here - .boardToolsEnd owns
+   those, and this only dresses whatever shape it has chosen. */
+.boardTools {
+  padding: 0.3rem;
+  border-radius: 0.85rem;
+  background: var(--pc-gacha-face);
+  border: 1px solid var(--pc-gacha-border);
+  box-shadow: var(--pc-gacha-edge), var(--pc-gacha-lift);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  opacity: 0.94;
+}
+
+.boardTools.boardTools.boardTools button {
+  border-radius: 0.6rem;
+  background: var(--pc-gacha-face);
+  border: 1px solid var(--pc-gacha-border);
+  box-shadow: var(--pc-gacha-edge);
+  color: var(--glacier-text);
+  transition:
+    transform 110ms var(--glacier-ease-out),
+    box-shadow 110ms var(--glacier-ease-out),
+    border-color 110ms var(--glacier-ease-out);
+}
+
+.boardTools.boardTools.boardTools button:hover:not(:disabled) {
+  border-color: var(--glacier-accent-border);
+  box-shadow: var(--pc-gacha-edge), 0 0 12px color-mix(in oklch, var(--glacier-accent-solid) 34%, transparent);
+}
+
+/* The press travels - the slab sinks into its own shadow instead of just
+   dimming, which is the whole tactile trick of this style. */
+.boardTools.boardTools.boardTools button:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 5px oklch(0.05 0.02 265 / 0.55);
+}
+
+.boardTools.boardTools.boardTools button:disabled {
+  opacity: 0.4;
+  box-shadow: none;
+}
+
+/* The life/mana card gets the same slab treatment, one size up: it is the
+   player's own readout and should read as the heaviest object on the mat. */
+.lifeFloat {
+  padding: var(--glacier-space-3);
+  border-radius: 1rem;
+  background: var(--pc-gacha-face);
+  border: 1px solid var(--pc-gacha-border);
+  box-shadow:
+    var(--pc-gacha-edge),
+    0 10px 26px oklch(0.05 0.02 265 / 0.5),
+    0 0 0 1px oklch(0.05 0.02 265 / 0.35);
+}
+
+/* The total is the hero number on the board, so it carries a soft accent bloom
+   rather than sitting flat like body copy. */
+.lifeFloat .lifeBig {
+  text-shadow: 0 2px 10px color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent);
+}
+
+/* A colour you actually hold reads as charged: a lit well behind the glyph,
+   instead of the flat grey chip it shared with the empty colours. */
+.manaPip[data-has] {
+  background: radial-gradient(
+    circle at 50% 78%,
+    color-mix(in oklch, var(--glacier-accent-solid) 26%, transparent),
+    transparent 70%
+  );
 }

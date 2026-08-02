@@ -1144,12 +1144,12 @@ export function TablePage() {
         </div>
         </Drawer>
       )}
-      {/* History controls ride the top centre of the mat: undo, timeline,
-          redo. Phones AND touch tablets: an iPad runs the desktop-shaped
-          table, where these lived only inside the rail's timeline card - no
-          keyboard for Cmd-Z, and gone entirely with the rail collapsed. The
-          strip sits below the top bar there (see table.css). */}
-      {(mobile || isMobileOS()) && room.started && !spectating && (
+      {/* History controls ride the top centre of the mat on every size: undo,
+          timeline, redo. They used to live in the rail on desktop, which put them
+          behind a collapse and off the surface the player is looking at - the
+          history of the mat belongs on the mat. The strip ducks under the top
+          bar on desktop-shaped tables (see table.css). */}
+      {room.started && !spectating && (
         <div className="mobileHistory" inert={companion || undefined}>
           <TimelineCard floating />
         </div>
@@ -1878,7 +1878,7 @@ function SidePanel({
       {/* Phones AND touch tablets fly undo / timeline / redo on the mat
           instead (see the board's .mobileHistory); a second card here would
           own a rival timeline bar. */}
-      {!mobile && !isMobileOS() && <TimelineCard />}
+
     </>
   );
   const playersEl = (
