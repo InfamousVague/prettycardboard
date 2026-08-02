@@ -115,7 +115,26 @@ async function resolveNames(names) {
 
 // ------------------------------------------------------------------- table
 
+/** Fail fast and legibly when the game server is not up. Without this the
+ *  first symptom is a raw ECONNREFUSED thirty seconds into the Scryfall
+ *  lookups, which reads like a network problem rather than "start the
+ *  server". */
+async function requireServer() {
+  const base = process.env.PC_BASE || 'http://127.0.0.1:8787';
+  try {
+    await fetch(`${base}/api/art/catalog`);
+    return;
+  } catch {
+    console.error(`\nNo PrettyCardboard server answering at ${base}.\n`);
+    console.error('Start one in another terminal:\n');
+    console.error('    cd server && cargo run\n');
+    console.error('...then run this again. (PC_BASE overrides the address.)\n');
+    process.exit(1);
+  }
+}
+
 async function main() {
+  await requireServer();
   const t = new Assert('scripted-match');
   const deck = parseDeckFile(DECK_FILE);
   console.log(`Deck file: ${DECK_FILE}`);
