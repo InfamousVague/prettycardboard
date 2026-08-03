@@ -22,6 +22,8 @@ import {
 } from '@glacier/react';
 import { Bot, ChevronRight, Compass, Dices, Eye, Heart, Play, Plus, Swords, Target, Ticket, Timer, Trophy } from '@glacier/icons';
 import { PlayingCardDeck, PlayingCardPack, PlayingCardStack, PlayingCardSwap } from '../icons/cards.ts';
+import { HomeUpdateBanner } from '../components/HomeUpdateBanner.tsx';
+import { NewsTicker } from '../components/NewsTicker.tsx';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
@@ -158,6 +160,14 @@ export function HomePage() {
   const showCyber = useVisibleGames().some((g) => g.id === 'cyberpunk');
   return (
     <div className="page homePage">
+      {/* Above the band on purpose: an update you can install and the news of
+          what shipped are both about the app rather than about this session,
+          so they sit over the menu rather than inside it. Both are hidden on
+          phones by home.css - the phone home is deliberately one screen with
+          nothing above the band - and the corner UpdateNotice still covers
+          that case wherever the player is. */}
+      <HomeUpdateBanner />
+      <NewsTicker />
       <GameMenu identity={identity} stats={stats} resume={resume} />
       <StatStrip stats={stats} order={1} />
       <TableSetup order={2} />

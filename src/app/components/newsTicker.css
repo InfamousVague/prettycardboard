@@ -1,0 +1,133 @@
+/* The home page's headline strip: a tag, then a seamless marquee of the last
+   few releases' headlines. Sized to read as a status bar, not as content. */
+
+.newsTicker {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  min-inline-size: 0;
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-lg);
+  background: var(--glacier-surface-sunken);
+}
+
+.tickerTag {
+  flex: none;
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 22%, transparent);
+  color: var(--glacier-accent-text);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* The window the marquee travels through. min-inline-size:0 is load-bearing:
+   without it a flex item sizes to its content, and the track is two full runs
+   wide, so the ticker would push the page into a horizontal scrollbar instead
+   of clipping. */
+.tickerViewport {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  /* Fade both ends so headlines enter and leave rather than being chopped. */
+  mask-image: linear-gradient(90deg, transparent, black 3rem, black calc(100% - 3rem), transparent);
+}
+
+.tickerTrack {
+  display: flex;
+  inline-size: max-content;
+  animation: tickerScroll 42s linear infinite;
+}
+
+/* Pausing on hover is the whole reason a headline is readable at all: the
+   strip moves at a browsing pace, not a reading one. */
+.newsTicker:hover .tickerTrack,
+.newsTicker:focus-within .tickerTrack {
+  animation-play-state: paused;
+}
+
+.tickerRun {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--glacier-space-6);
+  padding-inline-end: var(--glacier-space-6);
+}
+
+/* -50% is exactly one run: the track is two identical runs, so at the moment
+   the animation resets, run two is sitting where run one began. Any other
+   number would show a seam. */
+@keyframes tickerScroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* RTL reads the other way, so the strip has to travel the other way too - the
+   shared keyframe would send headlines off the side they enter from. */
+[dir='rtl'] .tickerTrack {
+  animation-name: tickerScrollRtl;
+}
+
+@keyframes tickerScrollRtl {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(50%);
+  }
+}
+
+.tickerItem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--glacier-space-2);
+  white-space: nowrap;
+}
+
+.tickerVersion {
+  font-size: var(--glacier-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--glacier-accent-text);
+}
+
+.tickerText {
+  font-size: var(--glacier-font-size-sm);
+  color: var(--glacier-text-subtle);
+}
+
+/* The accessible copy: present to assistive tech, absent to everyone else.
+   Not `display: none`, which would take it out of the accessibility tree too
+   and leave the marquee - which is aria-hidden - as the only account. */
+.tickerSr {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A strip that never stops moving is exactly what this setting is for. It
+   still says everything - it just says it all at once, statically, and lets
+   the row scroll if it must. */
+@media (prefers-reduced-motion: reduce) {
+  .tickerTrack {
+    animation: none;
+  }
+  .tickerViewport {
+    overflow-x: auto;
+    mask-image: none;
+  }
+  /* One run is the whole content; the duplicate exists only to hide the loop's
+     seam, and with no loop it is just the same news printed twice. */
+  .tickerTrack > .tickerRun:nth-child(2) {
+    display: none;
+  }
+}

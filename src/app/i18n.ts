@@ -1773,6 +1773,13 @@ export const messages = {
   preQuickDealing: { en: 'Dealing…', es: 'Repartiendo…', fr: 'Distribution…', ar: 'جارٍ التوزيع…' },
   preQuickReroll: { en: 'Reroll', es: 'Volver a tirar', fr: 'Relancer', ar: 'إعادة الرمي' },
   preQuickNoRolls: { en: 'No rerolls left', es: 'Sin tiradas', fr: 'Plus de relances', ar: 'لا إعادات متبقية' },
+  tickerTag: { en: 'New', es: 'Novedades', fr: 'Nouveau', ar: 'جديد' },
+  tickerLabel: {
+    en: 'Recent updates',
+    es: 'Actualizaciones recientes',
+    fr: 'Mises à jour récentes',
+    ar: 'التحديثات الأخيرة',
+  },
   gridYou: { en: 'You', es: 'Tú', fr: 'Vous', ar: 'أنت' },
   gridTurn: { en: 'Turn', es: 'Turno', fr: 'Tour', ar: 'دور' },
   gpCountersAlways: { en: 'Always', es: 'Siempre', fr: 'Toujours', ar: 'دائمًا' },

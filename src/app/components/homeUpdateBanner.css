@@ -1,0 +1,80 @@
+/* The pending update, across the top of the home page. Reads as a status bar
+   rather than a card: it is one row of the page, not a thing floating over it
+   (that is UpdateNotice's job). */
+
+.homeUpdate {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-4);
+  padding: var(--glacier-space-3) var(--glacier-space-4);
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-border));
+  border-radius: var(--glacier-radius-lg);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 12%, var(--glacier-surface));
+}
+
+.homeUpdateIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border-radius: var(--glacier-radius-full);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 24%, transparent);
+  color: var(--glacier-accent-text);
+}
+
+/* Staged and waiting on one click: the icon earns a pulse. Only in this state,
+   and only on the icon - a whole banner that breathes is a banner you learn to
+   stop seeing. */
+.homeUpdate[data-ready] .homeUpdateIcon {
+  animation: homeUpdatePulse 2.4s var(--glacier-ease-out) infinite;
+}
+
+@keyframes homeUpdatePulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent);
+  }
+  60% {
+    box-shadow: 0 0 0 0.5rem color-mix(in oklch, var(--glacier-accent-solid) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .homeUpdate[data-ready] .homeUpdateIcon {
+    animation: none;
+  }
+}
+
+.homeUpdateText {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.homeUpdateHead {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  min-inline-size: 0;
+}
+
+.homeUpdateActions {
+  flex: none;
+}
+
+/* Narrow: the banner stacks rather than squeezing the headline to nothing. */
+@media (max-width: 640px) {
+  .homeUpdate {
+    flex-wrap: wrap;
+  }
+  .homeUpdateText {
+    flex: 1 1 100%;
+    order: 1;
+  }
+  .homeUpdateActions {
+    order: 2;
+    margin-inline-start: auto;
+  }
+}
