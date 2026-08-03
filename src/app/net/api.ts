@@ -1,5 +1,5 @@
 import { isTauri } from '../tauri.ts';
-import type { Deck, DeckCard, DeckStats, DeckSummary, FriendsPayload, Identity, MatchRow, LadderEntry, MatchStatsPlayer, MyDeckStats, MyRoom, RoomInfo, UserHit, UserStats } from './types.ts';
+import type { ArchidektHit, Deck, DeckCard, DeckStats, DeckSummary, FriendsPayload, Identity, MatchRow, LadderEntry, MatchStatsPlayer, MyDeckStats, MyRoom, RoomInfo, UserHit, UserStats } from './types.ts';
 
 /**
  * REST client for the PrettyCardboard server (see PROTOCOL.md). Where it points:
@@ -253,6 +253,22 @@ export function closeRoom(id: string): Promise<void> {
  */
 export function moxfieldDeck(deckId: string): Promise<unknown> {
   return request('GET', `/api/import/moxfield/${encodeURIComponent(deckId)}`);
+}
+
+/**
+ * Search Archidekt for public decks, through the server.
+ *
+ * Archidekt is the searchable source because Moxfield's API says it "is not
+ * intended for public use" and answers its search endpoints with a Cloudflare
+ * challenge. Moxfield import by URL is unaffected.
+ */
+export function searchArchidektDecks(term: string): Promise<{ results: ArchidektHit[]; total?: number }> {
+  return request('GET', `/api/decks/search/archidekt?q=${encodeURIComponent(term)}`);
+}
+
+/** Fetch one Archidekt deck through the server. Returns their raw JSON. */
+export function archidektDeck(deckId: string): Promise<unknown> {
+  return request('GET', `/api/import/archidekt/${encodeURIComponent(deckId)}`);
 }
 
 // --- custom playmats ---

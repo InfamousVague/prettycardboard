@@ -2442,6 +2442,18 @@ export const messages = {
   dbImportTitle: { en: 'Import a deck', es: 'Importar un mazo', fr: 'Importer un deck', ar: 'استيراد مجموعة' },
   dbImportTabText: { en: 'Text', es: 'Texto', fr: 'Texte', ar: 'نص' },
   dbImportTabMoxfield: { en: 'Moxfield', es: 'Moxfield', fr: 'Moxfield', ar: 'Moxfield' },
+  dbImportTabArchidekt: { en: 'Search decks', es: 'Buscar mazos', fr: 'Chercher des decks', ar: 'ابحث عن مجموعات' },
+  dbImportArkHint: {
+    en: 'Search public Archidekt decks and import one without leaving the app.',
+    es: 'Busca mazos públicos de Archidekt e importa uno sin salir de la app.',
+    fr: 'Cherchez des decks Archidekt publics et importez-en un sans quitter l\u2019app.',
+    ar: 'ابحث في مجموعات Archidekt العامة واستورد واحدة دون مغادرة التطبيق.',
+  },
+  dbImportArkPlaceholder: { en: 'Deck name, or paste an Archidekt URL', es: 'Nombre del mazo o URL de Archidekt', fr: 'Nom du deck, ou URL Archidekt', ar: 'اسم المجموعة أو رابط Archidekt' },
+  dbImportArkSearching: { en: 'Searching…', es: 'Buscando…', fr: 'Recherche…', ar: 'جارٍ البحث…' },
+  dbImportArkNone: { en: 'No decks matched.', es: 'Ningún mazo coincide.', fr: 'Aucun deck trouvé.', ar: 'لا توجد مجموعات مطابقة.' },
+  dbImportArkFail: { en: 'Could not import that Archidekt deck.', es: 'No se pudo importar ese mazo de Archidekt.', fr: 'Impossible d\u2019importer ce deck Archidekt.', ar: 'تعذر استيراد تلك المجموعة.' },
+  dbImportArkCards: { en: 'cards', es: 'cartas', fr: 'cartes', ar: 'بطاقات' },
   dbImportPaste: {
     en: 'Paste a decklist: one card per line, with optional Commander / Deck / Sideboard headers.',
     es: 'Pega una lista: una carta por línea, con encabezados opcionales Commander / Deck / Sideboard.',

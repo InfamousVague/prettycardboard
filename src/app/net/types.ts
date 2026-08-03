@@ -117,6 +117,18 @@ export interface FriendEntry {
   endorsements?: number;
 }
 
+/** One row of the Archidekt deck picker (GET /api/decks/search/archidekt).
+ *  Reshaped server-side, so the client never sees Archidekt's own schema. */
+export interface ArchidektHit {
+  id: string;
+  name: string;
+  size: number;
+  owner?: string | null;
+  format?: number | null;
+  updatedAt?: string | null;
+  featured?: string | null;
+}
+
 /** One row of the global ladder (GET /api/leaderboard). */
 export interface LadderEntry {
   position: number;

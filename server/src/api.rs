@@ -576,6 +576,94 @@ pub async fn deck_delete(
 
 // --- deck import proxy ---
 
+/// GET /api/decks/search/archidekt?q=&page=: search Archidekt for public decks.
+///
+/// Archidekt runs a documented public API that answers a plain request, which
+/// is why deck SEARCH lives here and not on Moxfield: Moxfield's API root says
+/// out loud that it "is not intended for public use", and its search endpoints
+/// answer a Cloudflare challenge rather than JSON. Moxfield import by URL stays
+/// (see import_moxfield); searching it would mean building on something its
+/// owners have asked people not to build on.
+///
+/// Proxied server-side for the same reason the art cache is: one place to set
+/// a truthful User-Agent, and no CORS to negotiate from the browser.
+pub async fn search_archidekt(Query(q): Query<DeckSearchQuery>) -> Response {
+    let term = q.q.unwrap_or_default();
+    let term = term.trim();
+    if term.is_empty() {
+        return Json(json!({ "results": [] })).into_response();
+    }
+    if term.len() > 120 {
+        return err(StatusCode::BAD_REQUEST, "bad_query", "search term is too long");
+    }
+    let page = q.page.unwrap_or(1).clamp(1, 50);
+    let url = format!(
+        "https://archidekt.com/api/decks/v3/?name={}&pageSize=24&page={page}&orderBy=-viewCount",
+        urlencode(term)
+    );
+    let Some(body) = curl_out(&url).await else {
+        return err(StatusCode::BAD_GATEWAY, "archidekt_unreachable", "could not reach Archidekt");
+    };
+    let Ok(parsed) = serde_json::from_slice::<serde_json::Value>(&body) else {
+        return err(StatusCode::BAD_GATEWAY, "archidekt_bad_shape", "Archidekt returned no deck list");
+    };
+    // Reshaped rather than passed through: the raw row is large and carries
+    // fields the picker has no use for, and a stable shape here means the
+    // client never has to know Archidekt's schema.
+    let results: Vec<Value> = parsed
+        .get("results")
+        .and_then(|r| r.as_array())
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|row| {
+                    let id = row.get("id")?.as_i64()?;
+                    Some(json!({
+                        "id": id.to_string(),
+                        "name": row.get("name").and_then(|v| v.as_str()).unwrap_or("Untitled"),
+                        "size": row.get("size").and_then(|v| v.as_i64()).unwrap_or(0),
+                        "owner": row
+                            .get("owner")
+                            .and_then(|o| o.get("username"))
+                            .and_then(|v| v.as_str()),
+                        "format": row.get("deckFormat").and_then(|v| v.as_i64()),
+                        "updatedAt": row.get("updatedAt").and_then(|v| v.as_str()),
+                        "featured": row.get("featured").and_then(|v| v.as_str()),
+                    }))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Json(json!({ "results": results, "total": parsed.get("count").and_then(|v| v.as_i64()) }))
+        .into_response()
+}
+
+#[derive(Deserialize)]
+pub struct DeckSearchQuery {
+    pub q: Option<String>,
+    pub page: Option<i64>,
+}
+
+/// GET /api/import/archidekt/{id}: one deck, verbatim.
+///
+/// Archidekt answers browsers directly, but this goes through the server too so
+/// import has ONE shape whichever site it came from, and so a future rate limit
+/// is handled in one place.
+pub async fn import_archidekt(Path(deck_id): Path<String>) -> Response {
+    if deck_id.is_empty() || deck_id.len() > 24 || !deck_id.chars().all(|c| c.is_ascii_digit()) {
+        return err(StatusCode::BAD_REQUEST, "bad_ref", "not an Archidekt deck id");
+    }
+    let url = format!("https://archidekt.com/api/decks/{deck_id}/");
+    let Some(body) = curl_out(&url).await else {
+        // curl -f turns a 404 into a failure too, so this covers both "no such
+        // deck" and "site down"; the client says so without guessing which.
+        return err(StatusCode::BAD_GATEWAY, "archidekt_unreachable", "could not reach that deck");
+    };
+    match serde_json::from_slice::<serde_json::Value>(&body) {
+        Ok(value) => Json(value).into_response(),
+        Err(_) => err(StatusCode::BAD_GATEWAY, "archidekt_bad_shape", "Archidekt returned no deck"),
+    }
+}
+
 /// Moxfield's deck API sits behind Cloudflare and rejects browser requests, so
 /// the client cannot read it directly. This proxies the fetch server-side and
 /// returns Moxfield's JSON verbatim; the client parses it (the per-card

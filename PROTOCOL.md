@@ -909,6 +909,41 @@ stance as the other intents.
   prompts. Freeform rooms and solo tables advance exactly as before. Bots
   pass open windows within a tick and never draw rejections.
 
+### Deck search in the app: Archidekt (2026-08-03)
+
+Import worked by URL only, so finding a deck meant leaving the app, copying a
+link and coming back. Search now lives in the import dialog.
+
+**Why not Moxfield.** Its API root answers, verbatim:
+
+```json
+{"name":"Moxfield API","notice":"This API is not intended for public use.
+ Please refer to https://moxfield.com/help/help-articles/faq#moxfield-api"}
+```
+
+and every search endpoint (`v2/decks/search`, `search-sfw`, and the api.
+host) returns a Cloudflare challenge rather than JSON. `robots.txt` also
+disallows `/search/*`. Searching it would mean building on something its
+owners have asked people not to build on. **Moxfield import by URL is
+unchanged** - but note the v3 endpoint it uses answered 403 from a dev machine
+on 2026-08-03, so that path may already be broken in the wild; worth checking
+from the VPS, which has a different IP.
+
+**Endpoints** (both proxied, so import has one shape whichever site it came
+from, and a future rate limit is handled in one place):
+
+- `GET /api/decks/search/archidekt?q=&page=` - reshaped to OUR row (id, name,
+  size, owner, format, updatedAt), never Archidekt's schema, so the client
+  cannot come to depend on their fields. Empty term short-circuits without a
+  request.
+- `GET /api/import/archidekt/{id}` - one deck, verbatim. Numeric ids only.
+
+**Boards come from CATEGORIES**, not separate lists: `Commander` is the
+commander, any category the deck marks `includedInDeck: false` (Maybeboard,
+Sideboard) is a sideboard card, everything else is maindeck. The per-card
+`uid` is the Scryfall id of the printing the author chose, so alternate art
+survives an import exactly as it does from Moxfield.
+
 ### The hand fan in a grid cell (2026-08-02)
 
 The bottom strip lays the zone piles and the hand fan out side by side, which

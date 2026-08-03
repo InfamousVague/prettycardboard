@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Callout, Checkbox, Modal, Size, Tabs, Text, TextTone, Textarea, Input, useToast } from '@glacier/react';
 import { useT } from '../../i18n.ts';
 import * as api from '../../net/api.ts';
@@ -8,6 +8,14 @@ import { useUi } from '../../state/uiStore.ts';
 import { parseDecklist } from '../../data/decklist.ts';
 import { aliasCardMeta, altArtById, altArtForFace, altArtsFor, hasAltArt, loadAltArtCatalog, resolvePrintings } from '../../data/scryfall.ts';
 import { fetchMoxfieldDeck, MoxfieldError, parseMoxfieldRef } from '../../data/moxfield.ts';
+import {
+  archidektFormatName,
+  ArchidektError,
+  fetchArchidektDeck,
+  parseArchidektRef,
+  searchArchidekt,
+  type ArchidektHit,
+} from '../../data/archidekt.ts';
 
 /**
  * The import dialog: paste a text decklist (Moxfield/MTGA-style) or pull a
@@ -20,6 +28,9 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
   const [tab, setTab] = useState('text');
   const [text, setText] = useState('');
   const [moxRef, setMoxRef] = useState('');
+  const [arkQuery, setArkQuery] = useState('');
+  const [hits, setHits] = useState<ArchidektHit[]>([]);
+  const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState<string[]>([]);
@@ -128,6 +139,55 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
     }
   };
 
+  /** Import one Archidekt deck, whether it came from the picker or a pasted
+   *  URL - both land in the same fetch. */
+  const importArchidekt = async (ref: string) => {
+    setError(null);
+    const deckId = parseArchidektRef(ref);
+    if (!deckId) {
+      setError(t('dbImportBadRef'));
+      return;
+    }
+    setBusy(true);
+    try {
+      const deck = await fetchArchidektDeck(deckId);
+      await finish(deck.name, deck.cards);
+    } catch (cause) {
+      setError(cause instanceof ArchidektError ? t('dbImportArkFail') : t('obOffline'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Search as the player types, one request per settled term. The sequence
+   *  guard is what keeps a slow earlier response from overwriting a newer one -
+   *  the same pattern the friends search uses. */
+  const searchSeq = useRef(0);
+  useEffect(() => {
+    const term = arkQuery.trim();
+    if (term.length < 2) {
+      setHits([]);
+      return;
+    }
+    const seq = ++searchSeq.current;
+    setSearching(true);
+    const timer = window.setTimeout(() => {
+      searchArchidekt(term)
+        .then((results) => {
+          if (seq === searchSeq.current) setHits(results);
+        })
+        .catch(() => {
+          if (seq === searchSeq.current) setHits([]);
+        })
+        .finally(() => {
+          if (seq === searchSeq.current) setSearching(false);
+        });
+    }, 350);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [arkQuery]);
+
   const importMoxfield = async () => {
     setError(null);
     const deckId = parseMoxfieldRef(moxRef);
@@ -194,6 +254,72 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
                     {t('dbImportRun')}
                   </Button>
                 </div>
+              </div>
+            ),
+          },
+          {
+            value: 'archidekt',
+            label: t('dbImportTabArchidekt'),
+            content: (
+              <div className="importPane">
+                <Text size={Size.Small} tone={TextTone.Muted}>
+                  {t('dbImportArkHint')}
+                </Text>
+                <Input
+                  value={arkQuery}
+                  onChange={(event) => setArkQuery(event.target.value)}
+                  placeholder={t('dbImportArkPlaceholder')}
+                  aria-label={t('dbImportTabArchidekt')}
+                />
+                {/* A pasted URL is still a URL: skip the picker and import it,
+                    so one field answers both ways of arriving here. */}
+                {parseArchidektRef(arkQuery) ? (
+                  <div className="importActions">
+                    <Button variant="ghost" onClick={onClose}>
+                      {t('dbCancel')}
+                    </Button>
+                    <Button onClick={() => importArchidekt(arkQuery)} loading={busy}>
+                      {t('dbImportRun')}
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="importHits" role="list">
+                      {hits.map((hit) => (
+                        <button
+                          key={hit.id}
+                          type="button"
+                          role="listitem"
+                          className="importHit"
+                          disabled={busy}
+                          onClick={() => importArchidekt(hit.id)}
+                        >
+                          <span className="importHitName">{hit.name}</span>
+                          <span className="importHitMeta">
+                            {[
+                              archidektFormatName(hit.format),
+                              `${hit.size} ${t('dbImportArkCards')}`,
+                              hit.owner ? `@${hit.owner}` : null,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    {searching && (
+                      <Text size={Size.XSmall} tone={TextTone.Subtle}>
+                        {t('dbImportArkSearching')}
+                      </Text>
+                    )}
+                    {!searching && arkQuery.trim().length >= 2 && hits.length === 0 && (
+                      <Text size={Size.XSmall} tone={TextTone.Subtle}>
+                        {t('dbImportArkNone')}
+                      </Text>
+                    )}
+                  </>
+                )}
+                {errorBlock}
               </div>
             ),
           },

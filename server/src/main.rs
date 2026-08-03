@@ -287,6 +287,8 @@ async fn main() {
         )
         .route("/api/decks/{id}/stats", get(api::deck_stats))
         .route("/api/import/moxfield/{id}", get(api::import_moxfield))
+        .route("/api/import/archidekt/{id}", get(api::import_archidekt))
+        .route("/api/decks/search/archidekt", get(api::search_archidekt))
         .route("/api/rooms", post(api::room_create))
         .route("/api/rooms/mine", get(api::rooms_mine))
         .route("/api/collection", get(api::collection_get))

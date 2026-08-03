@@ -2054,3 +2054,60 @@
     transform: none;
   }
 }
+
+/* Archidekt deck picker: results scroll inside the dialog rather than growing
+   it, so the modal stays the size it opened at however many decks match. */
+.importHits {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-1);
+  max-height: 20rem;
+  overflow-y: auto;
+  /* Room for the scrollbar so the last row is not sliced by it. */
+  padding-inline-end: var(--glacier-space-1);
+}
+
+.importHit {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  width: 100%;
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  border-radius: var(--glacier-radius-md);
+  background: color-mix(in oklch, var(--glacier-surface) 70%, transparent);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    border-color var(--glacier-duration-fast) var(--glacier-ease-out),
+    background-color var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.importHit:hover:not(:disabled),
+.importHit:focus-visible {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 55%, var(--glacier-border));
+  background: color-mix(in oklch, var(--glacier-accent-solid) 10%, var(--glacier-surface));
+}
+
+.importHit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.importHitName {
+  font-weight: var(--glacier-weight-medium);
+  /* One line: a deck name can be a paragraph, and wrapping turns the list into
+     a wall. */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.importHitMeta {
+  font-size: var(--glacier-text-xs);
+  color: var(--glacier-text-muted);
+}

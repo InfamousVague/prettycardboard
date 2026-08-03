@@ -22,6 +22,7 @@ const STEPS = [
   ['sealed', join(HERE, 'scenarios', 'sealed.js')],
   ['lobby-escape', join(HERE, 'scenarios', 'lobby-escape.js')],
   ['leaderboard', join(HERE, 'scenarios', 'leaderboard.js')],
+  ['archidekt', join(HERE, 'scenarios', 'archidekt.js')],
   ['enforced-duel', join(HERE, 'scenarios', 'enforced-duel.js')],
   ['enforced-triggers', join(HERE, 'scenarios', 'enforced-triggers.js')],
   ['enforced-statics', join(HERE, 'scenarios', 'enforced-statics.js')],

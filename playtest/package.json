@@ -17,6 +17,7 @@
     "aimatch": "node scenarios/ai-match.js",
     "escape": "node scenarios/lobby-escape.js",
     "ladder": "node scenarios/leaderboard.js",
+    "archidekt": "node scenarios/archidekt.js",
     "enforced": "node scenarios/enforced-duel.js",
     "triggers": "node scenarios/enforced-triggers.js",
     "statics": "node scenarios/enforced-statics.js",

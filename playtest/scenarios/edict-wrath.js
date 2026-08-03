@@ -199,9 +199,14 @@ async function main() {
   await clearPrompts().catch(() => {});
 
   // ---- Grave Pact: one of my creatures dying costs the bot one of its own.
+  // A fresh bear rather than one of the two placed before the loop: the bot
+  // plays an aggro deck and spends those turns attacking, so whether either
+  // survived is a coin flip that has nothing to do with what this tests.
   const myBoard = () => mine().battlefield ?? [];
-  const bearIid = bears.find((iid) => myBoard().some((c) => c.iid === iid));
-  t.ok(bearIid, 'a Grizzly Bears of mine survived to be sacrificed', '');
+  let bearIid = bears.find((iid) => myBoard().some((c) => c.iid === iid));
+  if (!bearIid) bearIid = await fetchTo(CARDS.bear.name, 'battlefield', 0.52, 0.62);
+  t.ok(bearIid, 'a Grizzly Bears of mine to sacrifice', '');
+  await clearPrompts().catch(() => {});
   const botBefore = (await botCreatures()).length;
   const sacMark = me.mark();
   me.act({ kind: 'card.move', iid: bearIid, to: 'graveyard' });
