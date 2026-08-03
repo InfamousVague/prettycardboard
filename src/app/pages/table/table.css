@@ -7026,6 +7026,25 @@
   color: var(--glacier-accent-contrast);
 }
 
+/* Hand count sits just before life, both pushed to the far end, so the two
+   numbers line up down the column. */
+.playerGridHand {
+  flex: none;
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: var(--glacier-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--glacier-text-subtle);
+}
+
+/* ...which means life gives up the auto margin it used to carry, or the two
+   would be pushed apart to opposite ends of the plate. */
+.playerGridHand + .playerGridLife {
+  margin-inline-start: 0;
+}
+
 .playerGridLife {
   flex: none;
   margin-inline-start: auto;
@@ -7053,6 +7072,49 @@
    I can read and respond on but never manage, so nothing tool-shaped is drawn
    over someone else's mat. */
 .playerGridCell:not([data-mine]) .boardTools {
+  display: none;
+}
+
+/* ---- the seat header, folded away -------------------------------------
+   SeatFrame draws its own header - avatar, name, life, hand, library - and in
+   a grid cell that is the SECOND time all of it appears, directly under the
+   name plate above. Worse, it is the illegible copy: it lives inside
+   .playerGridPreview, so at four seats it paints at half size and at six at a
+   quarter, which is the whole reason the plate exists.
+
+   Everything is hidden and then the situational signals are put back, rather
+   than the other way round. The plate covers identity, turn and life, and the
+   zone rail already prints the library and the graveyard - but poison is a
+   loss condition, the monarch and the initiative decide who is being attacked,
+   and floating mana says what an opponent can still respond with. None of
+   those are anywhere else on this cell, so none of them can go.
+
+   `> *` and not a list of names because two of the children - the avatar and
+   the mulligan pill - are kit components with hashed classes there is no
+   stable selector for. (The mulligan pill cannot appear here anyway: the grid
+   only renders once the room has started.) */
+.playerGridCell .oppHead > * {
+  display: none;
+}
+
+/* The `:has()` arm is load-bearing: the bot, monarch and initiative markers are
+   each wrapped in a Tooltip, so .seatMarker is a GRANDCHILD and matching it as
+   a direct child would restore nothing while its wrapper stayed hidden. The
+   two plain arms cover the children that are not wrapped today; the third
+   covers them if a Tooltip is ever added or removed. */
+.playerGridCell .oppHead > .oppPoison,
+.playerGridCell .oppHead > .manaReadout,
+.playerGridCell .oppHead > .seatMarker,
+.playerGridCell .oppHead > :has(> .seatMarker),
+.playerGridCell .oppHead > :has(> .oppPoison),
+.playerGridCell .oppHead > :has(> .manaReadout) {
+  display: inline-flex;
+}
+
+/* With nothing situational to carry - which is the common case - the row goes
+   entirely, rather than leaving an empty band of padding and a hairline under
+   every plate. */
+.playerGridCell .oppHead:not(:has(.seatMarker, .oppPoison, .manaReadout)) {
   display: none;
 }
 

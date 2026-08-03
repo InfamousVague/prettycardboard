@@ -1015,6 +1015,14 @@ export function TablePage() {
                     {room.activeSeat === player.seat && (
                       <span className="playerGridTurn">{t('gridTurn')}</span>
                     )}
+                    {/* Hand count rides the plate because the old seat header
+                        below it - which is where it used to be - is folded away
+                        in the grid (see table.css). It is the one thing that
+                        row carried and nothing else shows: the library, the
+                        graveyard and the rest are all on the zone rail. */}
+                    <span className="playerGridHand" title={t('tblHand')}>
+                      <PlayingCardHand size={12} aria-hidden /> {player.handCount}
+                    </span>
                     <span className="playerGridLife" data-low={player.life <= 5 || undefined}>
                       <Heart size={12} aria-hidden /> {player.life}
                     </span>
