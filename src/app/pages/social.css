@@ -70,18 +70,31 @@
   box-shadow: var(--glacier-shadow-3);
 }
 
-/* The showcase deck's wide art fills the plate. */
+/* The showcase deck's wide art fills the plate.
+   Dropped to -3 so the rank wash can sit between the art and the scrim rather
+   than on top of both - see .pfRankWash.
+   The brightness clamp is the floor under every other legibility rule here:
+   the art is whatever card the player picked, and a bright one (a green Lotus
+   Petal, a white plains) walked straight through a scrim tuned on dark art and
+   left the name unreadable. Taming it at the source means the scrim only has
+   to do the rest, and no future art can undo it. */
 .pfBandArt {
   position: absolute;
   inset: 0;
-  z-index: -2;
+  z-index: -3;
   background-size: cover;
   background-position: center 22%;
-  filter: saturate(1.08);
+  filter: saturate(1.02) brightness(0.55);
 }
 
 /* Heavy on the identity side so type always reads, thin over the art, plus a
-   floor vignette. */
+   floor vignette.
+   The stops were tuned on dark card art: 76% at 42% of the width and 30% by
+   74% meant the cover had already thinned to nearly nothing while the name was
+   still running - a long handle reaches past 55% - and the Sign out button in
+   the far corner sat on 10%, which is no cover at all. Held near-solid across
+   the whole identity side and floored at 34% on the trailing edge, so every
+   piece of type on this plate has something behind it. */
 .pfBandScrim {
   position: absolute;
   inset: 0;
@@ -89,10 +102,10 @@
   background:
     linear-gradient(
       90deg,
-      color-mix(in oklch, var(--glacier-bg) 92%, transparent) 0%,
-      color-mix(in oklch, var(--glacier-bg) 76%, transparent) 42%,
-      color-mix(in oklch, var(--glacier-bg) 30%, transparent) 74%,
-      color-mix(in oklch, var(--glacier-bg) 10%, transparent) 100%
+      color-mix(in oklch, var(--glacier-bg) 94%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-bg) 88%, transparent) 46%,
+      color-mix(in oklch, var(--glacier-bg) 62%, transparent) 74%,
+      color-mix(in oklch, var(--glacier-bg) 34%, transparent) 100%
     ),
     linear-gradient(180deg, transparent 55%, color-mix(in oklch, var(--glacier-bg) 55%, transparent) 100%);
 }
@@ -101,10 +114,10 @@
   background:
     linear-gradient(
       -90deg,
-      color-mix(in oklch, var(--glacier-bg) 92%, transparent) 0%,
-      color-mix(in oklch, var(--glacier-bg) 76%, transparent) 42%,
-      color-mix(in oklch, var(--glacier-bg) 30%, transparent) 74%,
-      color-mix(in oklch, var(--glacier-bg) 10%, transparent) 100%
+      color-mix(in oklch, var(--glacier-bg) 94%, transparent) 0%,
+      color-mix(in oklch, var(--glacier-bg) 88%, transparent) 46%,
+      color-mix(in oklch, var(--glacier-bg) 62%, transparent) 74%,
+      color-mix(in oklch, var(--glacier-bg) 34%, transparent) 100%
     ),
     linear-gradient(180deg, transparent 55%, color-mix(in oklch, var(--glacier-bg) 55%, transparent) 100%);
 }
@@ -112,6 +125,18 @@
 /* No showcase yet: a plain surface plate, no gradient haze. */
 .pfBand:not([data-has-art]) .pfBandScrim {
   background: none;
+}
+
+/* Last line of defence, and only where there is art to fight: the identity
+   block, the ring's label and Sign out carry their own shadow. The brightness
+   clamp and the scrim above should already be enough - this costs nothing and
+   means the next bright showcase deck cannot put us back here. Deliberately
+   NOT on .pfShowcasePick: the Select inside it has its own solid surface, and
+   an inherited shadow on text sitting on a filled control reads as a smudge. */
+.pfBand[data-has-art] .pfIdText,
+.pfBand[data-has-art] .pfRingLabel,
+.pfBand[data-has-art] .pfSignOut {
+  text-shadow: 0 1px 3px oklch(0.05 0.02 265 / 0.85);
 }
 
 /* In the band's flow, not floating over it. Absolutely positioned it sat on
@@ -193,28 +218,38 @@
 /* The tier's colour wash over the showcase art: the hero READS as the rank
    even before the title is read, and a plate with no deck art still has an
    identity of its own. */
+/* The tier's colour as a tint on the art - UNDER the scrim, not over it.
+   At z-index -1 it tied with .pfBandScrim and, being later in the DOM, won:
+   a 62% colour wash centred at 6% 46% painted straight over the identity side,
+   which is exactly where the name, the handle line and the progress label sit.
+   The scrim was darkening the art and then this was lightening it back, so on
+   bright card art the whole plate came out a pale wash with white type on it.
+   -2 puts it between the art (-3) and the scrim (-1), so it tints the picture
+   and the scrim still darkens both. Lower percentages to match: it is reading
+   as a tint over darkened art now, not competing with a photo. */
 .pfRankWash {
   position: absolute;
   inset: 0;
-  z-index: -1;
+  z-index: -2;
   pointer-events: none;
   background:
     radial-gradient(
       125% 105% at 6% 46%,
-      color-mix(in oklch, var(--pf-rank, var(--glacier-accent-solid)) 62%, transparent),
+      color-mix(in oklch, var(--pf-rank, var(--glacier-accent-solid)) 45%, transparent),
       transparent 66%
     ),
     linear-gradient(
       100deg,
-      color-mix(in oklch, var(--pf-rank, var(--glacier-accent-solid)) 34%, transparent) 12%,
+      color-mix(in oklch, var(--pf-rank, var(--glacier-accent-solid)) 26%, transparent) 12%,
       transparent 58%
     );
 }
 
 /* The tier emblem, oversized and quiet, as the plate's watermark. */
-/* The tier's emblem as the plate's maker-mark: ABOVE the art and its scrim
-   (z-index 0 against their -2 / -1) so it is an emblem rather than a smudge
-   seen through a photo, and low enough in opacity to stay a watermark. It
+/* The tier's emblem as the plate's maker-mark: ABOVE the art, its rank tint
+   and its scrim (z-index 0 against their -3 / -2 / -1) so it is an emblem
+   rather than a smudge seen through a photo, and low enough in opacity to
+   stay a watermark. It
    sits in the bottom trailing corner, bleeding off the edge - the win-rate
    ring owns the middle of that side. */
 .pfRankMark {
