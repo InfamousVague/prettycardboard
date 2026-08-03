@@ -2,9 +2,11 @@
 
 Cover art for each page, plus a background symbol in the top-left corner.
 
-Every prompt is **self-contained** — paste one into an image generator with
-nothing else. The shared rules are repeated in each rather than referenced,
-because you are pasting them one at a time.
+All 24 prompts are **self-contained** — paste any one into an image generator
+with nothing else and it works. Every prompt states its own aspect ratio, its
+own style, and its own negative list; the shared parts are repeated verbatim in
+each rather than factored out, because a prompt that sends you to another
+section for half of itself is not a prompt you can paste.
 
 ---
 
@@ -230,32 +232,166 @@ together.
 
 # Corner symbols
 
-One emblem each, for the faint oversized mark behind the top-left of the page.
+One emblem per page, for the faint oversized mark behind the top-left of the
+page. Each of these is complete on its own - paste one, get one image.
 
-**The shared tail** — append this to every symbol prompt below, verbatim:
+The last four sentences are identical across all twelve and that is deliberate:
+they are what keeps the mark a mark at six percent opacity, and a prompt that
+referred you elsewhere for them would not be a prompt you could paste.
 
-> Rendered as a single flat silhouette in pure white on a pure black square
-> background, centred with generous margin, 1:1. One connected shape or a small
-> number of clearly separated shapes — no scene, no perspective, no shading, no
-> gradient, no outline-plus-fill mixing, no texture. It will be recoloured and
-> dropped to about six percent opacity, so anything with internal detail turns
-> to an indistinct grey blob. Bold, closed, poster-like forms only. No text, no
+## `home-mark` — Home
+
+> A card table seen from directly above, reduced to a single bold rounded-
+> rectangle slab with four thick seat arcs spaced evenly around its edge, each
+> arc separated from the slab by a clear gap. Rendered as a single flat
+> silhouette in pure white on a pure black square background, centred with
+> generous margin, 1:1. One connected shape or a small number of clearly
+> separated shapes - no scene, no perspective, no shading, no gradient, no
+> mixing of outline and fill, no texture. It will be recoloured and dropped to
+> about six percent opacity, so anything with internal detail turns to an
+> indistinct grey blob. Bold, closed, poster-like forms only. No text, no
 > letters, no numerals, no logos, no watermark, no signature.
 
-| id | Prompt (prepend to the shared tail) |
-|---|---|
-| `home-mark` | A stylised card table seen from above as a simple rounded rectangle with four seat arcs around it. |
-| `play-mark` | Two crossed swords with broad flat blades. |
-| `decks-mark` | Three stacked cards fanned into a shallow arc. |
-| `collection-mark` | A tight honeycomb cluster of seven hexagons. |
-| `browse-mark` | A compass rose with four broad cardinal points. |
-| `boosters-mark` | A sealed pack silhouette with a torn top edge. |
-| `leaderboard-mark` | A three-step podium with a laurel crown above the tallest step. |
-| `friends-mark` | Three overlapping circles arranged as a triangle, joined into one shape. |
-| `profile-mark` | A shield crest with a simple bust silhouette inside it. |
-| `settings-mark` | A six-toothed gear with a solid hexagonal core. |
-| `customize-mark` | A paint-swatch fan of five blades opening from one pivot. |
-| `new-mark` | A circle with a bold plus sign cut out of its centre. |
+## `play-mark` — Play
+
+> Two swords crossed in an X, with broad flat blades, plain crossguards and
+> solid grips - the pair reading as one bold mark rather than two thin
+> outlines. Rendered as a single flat silhouette in pure white on a pure black
+> square background, centred with generous margin, 1:1. One connected shape or
+> a small number of clearly separated shapes - no scene, no perspective, no
+> shading, no gradient, no mixing of outline and fill, no texture. It will be
+> recoloured and dropped to about six percent opacity, so anything with
+> internal detail turns to an indistinct grey blob. Bold, closed, poster-like
+> forms only. No text, no letters, no numerals, no logos, no watermark, no
+> signature.
+
+## `decks-mark` — Decks
+
+> Three cards stacked and fanned into a shallow arc, each a solid rounded
+> rectangle, the two behind rotated a few degrees either way and separated
+> from the front one by clear gaps so all three stay legible as distinct
+> shapes. Rendered as a single flat silhouette in pure white on a pure black
+> square background, centred with generous margin, 1:1. One connected shape or
+> a small number of clearly separated shapes - no scene, no perspective, no
+> shading, no gradient, no mixing of outline and fill, no texture. It will be
+> recoloured and dropped to about six percent opacity, so anything with
+> internal detail turns to an indistinct grey blob. Bold, closed, poster-like
+> forms only. No text, no letters, no numerals, no logos, no watermark, no
+> signature.
+
+## `collection-mark` — Collection
+
+> A tight honeycomb cluster of seven solid hexagons - one in the centre ringed
+> by six - with clear gaps between them so the cluster reads as seven shapes
+> and not one blob. Rendered as a single flat silhouette in pure white on a
+> pure black square background, centred with generous margin, 1:1. One
+> connected shape or a small number of clearly separated shapes - no scene, no
+> perspective, no shading, no gradient, no mixing of outline and fill, no
+> texture. It will be recoloured and dropped to about six percent opacity, so
+> anything with internal detail turns to an indistinct grey blob. Bold,
+> closed, poster-like forms only. No text, no letters, no numerals, no logos,
+> no watermark, no signature.
+
+## `browse-mark` — Browse
+
+> A compass rose with four broad cardinal points, each a solid elongated
+> diamond, meeting at a small solid circle at the centre. Rendered as a single
+> flat silhouette in pure white on a pure black square background, centred
+> with generous margin, 1:1. One connected shape or a small number of clearly
+> separated shapes - no scene, no perspective, no shading, no gradient, no
+> mixing of outline and fill, no texture. It will be recoloured and dropped to
+> about six percent opacity, so anything with internal detail turns to an
+> indistinct grey blob. Bold, closed, poster-like forms only. No text, no
+> letters, no numerals, no logos, no watermark, no signature.
+
+## `boosters-mark` — Open Packs
+
+> A sealed booster pack: one solid upright rectangle with a jagged torn edge
+> across its top, as if just ripped open. Rendered as a single flat silhouette
+> in pure white on a pure black square background, centred with generous
+> margin, 1:1. One connected shape or a small number of clearly separated
+> shapes - no scene, no perspective, no shading, no gradient, no mixing of
+> outline and fill, no texture. It will be recoloured and dropped to about six
+> percent opacity, so anything with internal detail turns to an indistinct
+> grey blob. Bold, closed, poster-like forms only. No text, no letters, no
+> numerals, no logos, no watermark, no signature.
+
+## `leaderboard-mark` — Leaderboard
+
+> A three-step podium of solid blocks - a tall centre flanked by a medium and
+> a short block - with a simple laurel crown floating as a separate solid arc
+> above the tallest step. Rendered as a single flat silhouette in pure white
+> on a pure black square background, centred with generous margin, 1:1. One
+> connected shape or a small number of clearly separated shapes - no scene, no
+> perspective, no shading, no gradient, no mixing of outline and fill, no
+> texture. It will be recoloured and dropped to about six percent opacity, so
+> anything with internal detail turns to an indistinct grey blob. Bold,
+> closed, poster-like forms only. No text, no letters, no numerals, no logos,
+> no watermark, no signature.
+
+## `friends-mark` — Friends
+
+> Three circles of equal size arranged in a triangle and overlapping into one
+> single connected silhouette, so the union reads as a group rather than as
+> three rings. Rendered as a single flat silhouette in pure white on a pure
+> black square background, centred with generous margin, 1:1. One connected
+> shape or a small number of clearly separated shapes - no scene, no
+> perspective, no shading, no gradient, no mixing of outline and fill, no
+> texture. It will be recoloured and dropped to about six percent opacity, so
+> anything with internal detail turns to an indistinct grey blob. Bold,
+> closed, poster-like forms only. No text, no letters, no numerals, no logos,
+> no watermark, no signature.
+
+## `profile-mark` — Profile
+
+> A heraldic shield - a broad solid crest tapering to a point at the bottom -
+> with a simple head-and-shoulders bust cut cleanly out of its centre as
+> negative space. Rendered as a single flat silhouette in pure white on a pure
+> black square background, centred with generous margin, 1:1. One connected
+> shape or a small number of clearly separated shapes - no scene, no
+> perspective, no shading, no gradient, no mixing of outline and fill, no
+> texture. It will be recoloured and dropped to about six percent opacity, so
+> anything with internal detail turns to an indistinct grey blob. Bold,
+> closed, poster-like forms only. No text, no letters, no numerals, no logos,
+> no watermark, no signature.
+
+## `settings-mark` — Settings
+
+> A gear with six broad square teeth and a solid hexagonal hole cut through
+> its centre. Rendered as a single flat silhouette in pure white on a pure
+> black square background, centred with generous margin, 1:1. One connected
+> shape or a small number of clearly separated shapes - no scene, no
+> perspective, no shading, no gradient, no mixing of outline and fill, no
+> texture. It will be recoloured and dropped to about six percent opacity, so
+> anything with internal detail turns to an indistinct grey blob. Bold,
+> closed, poster-like forms only. No text, no letters, no numerals, no logos,
+> no watermark, no signature.
+
+## `customize-mark` — Customize
+
+> A paint-swatch fan of five blades opening from a single pivot at the bottom,
+> each blade a solid rounded rectangle at its own angle, with clear gaps
+> between them. Rendered as a single flat silhouette in pure white on a pure
+> black square background, centred with generous margin, 1:1. One connected
+> shape or a small number of clearly separated shapes - no scene, no
+> perspective, no shading, no gradient, no mixing of outline and fill, no
+> texture. It will be recoloured and dropped to about six percent opacity, so
+> anything with internal detail turns to an indistinct grey blob. Bold,
+> closed, poster-like forms only. No text, no letters, no numerals, no logos,
+> no watermark, no signature.
+
+## `new-mark` — New Table
+
+> A solid filled circle with a bold plus sign cut cleanly out of its centre as
+> negative space, the plus arms thick and reaching most of the way to the rim.
+> Rendered as a single flat silhouette in pure white on a pure black square
+> background, centred with generous margin, 1:1. One connected shape or a
+> small number of clearly separated shapes - no scene, no perspective, no
+> shading, no gradient, no mixing of outline and fill, no texture. It will be
+> recoloured and dropped to about six percent opacity, so anything with
+> internal detail turns to an indistinct grey blob. Bold, closed, poster-like
+> forms only. No text, no letters, no numerals, no logos, no watermark, no
+> signature.
 
 ---
 
