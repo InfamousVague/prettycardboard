@@ -4,6 +4,9 @@ import { Button, IconButton, Input, Menu, MenuItem, MenuSub, Pill, Size, Text, T
 import {
   AlignStartVertical,
   ChevronDown,
+  Coins,
+  Dices,
+  ScrollText,
   ChevronUp,
   CircleDot,
   Crown,
@@ -58,7 +61,9 @@ import { zoneLabel } from '../../data/games.ts';
 import { playmatBackground } from '../../data/playmats.ts';
 import { usePreference } from '../../hooks/usePreference.ts';
 import { useMobileLayout } from '../../hooks/useIsPhone.ts';
+import { DICE_SIDES, DiceIcon } from '../../components/DiceIcon.tsx';
 import { MobileZones } from './MobileZones.tsx';
+import { QuickControls } from './Vitals.tsx';
 import { YUGIOH_PILE_LAYOUT, YugiohZoneGrid, nearestYugiohCell, snapToYugiohCell } from './yugiohZones.tsx';
 import { isYugiohTrap } from '../../data/yugioh.ts';
 import { TokenPicker } from './TokenPicker.tsx';
@@ -221,6 +226,7 @@ export function MyBoard({
   const ambientCards = usePreference('ambientCards');
   // The running P/T total on each creature, so nobody adds counters by hand.
   const cardTotals = usePreference('cardTotals');
+  const cardNames = usePreference('cardNames');
 
   const fieldRef = useRef<HTMLDivElement>(null);
   const handRef = useRef<HTMLDivElement | null>(null);
@@ -1198,6 +1204,10 @@ export function MyBoard({
       >
         {marks?.[card.iid] && <CardMark mark={marks[card.iid]!} />}
         <div className="fieldCardShell">
+          {/* Inside the shell so it travels with the card; it anchors to
+              .fieldCard, which is the positioned box carrying the tap/tilt
+              transform. Face-down cards have no name to print. */}
+          {cardNames && !card.faceDown && <span className="fieldCardName">{displayName}</span>}
           <GameCard
             name={displayName}
             imageUrl={displayImg}
@@ -1683,8 +1693,51 @@ export function MyBoard({
           </div>
         )}
 
-        {/* dice + markers toolbar, docked bottom-end of the field */}
+        {/* The board's floating toolbar, top-inline-end of the field. */}
         <div className="boardTools boardToolsEnd">
+          {/* Draw / untap / shuffle / token / settings. Desktop only: on a
+              phone these live in the bottom sheet under the life total, where
+              there is room for them (see Vitals). */}
+          {!mobile && <QuickControls me={me} room={room} />}
+          {/* Dice and the log came off the rail: with the roster the only thing
+              left in the sidebar, these two belong with the other verbs. Both
+              desktop-only - the phone reaches them from its sheet nav. */}
+          {!mobile && (
+            <Tooltip content={t('tblLog')}>
+              <IconButton
+                size="sm"
+                variant="soft"
+                aria-label={t('tblLog')}
+                onClick={() => window.dispatchEvent(new Event('pc:open-log'))}
+              >
+                <ScrollText size={15} />
+              </IconButton>
+            </Tooltip>
+          )}
+          {!mobile && (
+            <Menu
+              aria-label={t('gpDice')}
+              placement="bottom-end"
+              trigger={
+                <IconButton size="sm" variant="soft" aria-label={t('gpDice')}>
+                  <Dices size={15} />
+                </IconButton>
+              }
+            >
+              {DICE_SIDES.map((sides) => (
+                <MenuItem
+                  key={sides}
+                  icon={<DiceIcon sides={sides} size={16} />}
+                  onSelect={() => act({ kind: 'dice.roll', sides })}
+                >
+                  d{sides}
+                </MenuItem>
+              ))}
+              <MenuItem icon={<Coins size={16} />} onSelect={() => act({ kind: 'dice.roll', sides: 2 })}>
+                {t('tblCoin')}
+              </MenuItem>
+            </Menu>
+          )}
           {mtg && !matEdit && (
             <Tooltip content={t('gpMatEdit')}>
               <IconButton size="sm" variant="soft" aria-label={t('gpMatEdit')} onClick={startMatEdit}>

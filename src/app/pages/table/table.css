@@ -1,3 +1,5 @@
+@import '../../components/plates.css';
+
 /* The live table. A deep, vignetted felt under free-floating cards; layout is
    column: top strip -> ribbon -> opponents -> my board, with the chat dock
    absolutely positioned on the inline-end edge. Colors ride the Glacier
@@ -10,8 +12,15 @@
   --pc-strip-h: 11.5rem;
   /* The right rail: its width and the gutter the main column clears for it.
      Tokenized so the phone layout can zero both in one place. */
-  --pc-rail-w: 20rem;
-  --pc-rail-band: 21rem;
+  /* Thinner now that the rail carries only the roster: the vitals, dice and
+     log that needed 20rem all live elsewhere. */
+  --pc-rail-w: 15rem;
+  /* Exactly one gutter between the mat and the rail - the band used to be a
+     whole rem wider than the rail, which is the empty stripe down the side. */
+  /* mat-right + gutter == rail-left. The mat is already inset by
+     --pc-mat-edge-inline inside the reserved band, so that has to come back out
+     of the band or it reads as a second margin. */
+  --pc-rail-band: calc(var(--pc-rail-w) + 2 * var(--pc-mat-gutter) - var(--pc-mat-edge-inline));
 
   /* A DOCKED side panel's column (see THE DOCK CONTRACT in
      components/panels.css). Folded into the clearance the layout ALREADY
@@ -42,6 +51,23 @@
      strip docks into the desktop title bar there is no strip to clear, so the
      override below collapses the whole band to an ordinary gutter. */
   --pc-strip-clear: 4.4rem;
+  /* ONE inset for every floating layer on the mat - the life card, the control
+     rail, the zone rail, the turn dock, the chat ball and the side rail. They
+     had grown five different values (space-3, space-4, a hand-added 28px, 8px
+     and 4px), so nothing lined up with anything and each edge read as a
+     different margin. Change the breathing room here, not in six places. */
+  --pc-mat-gutter: var(--glacier-space-3);
+
+  /* Where the playmat's own edge sits inside .table, MEASURED rather than
+     guessed: .myBoard carries space-4 of inline padding and .myField a space-1
+     margin, so the mat starts 26.3px in horizontally and space-1 down from the
+     top strip. An earlier pass assumed space-1 + a hairline for both and put
+     the life card 4px OUTSIDE the mat's border.
+     Layers anchored to .table (the life card, the side rail, the chat ball)
+     add these; layers already inside .myField - the control rails - must not. */
+  --pc-mat-edge-inline: calc(var(--glacier-space-4) + var(--glacier-space-1));
+  --pc-mat-edge-block: var(--glacier-space-1);
+
   /* The staged playmat card: shared radius + resting/active glow. */
   --pc-mat-radius: 1.4rem;
   --pc-mat-shadow:
@@ -2514,7 +2540,7 @@
    and pile stacks along the bottom. */
 .boardTools {
   position: absolute;
-  top: var(--glacier-space-3);
+  top: var(--pc-mat-gutter);
   z-index: 8;
   display: flex;
   align-items: center;
@@ -2535,7 +2561,7 @@
 }
 
 .boardToolsStart {
-  inset-inline-start: var(--glacier-space-3);
+  inset-inline-start: var(--pc-mat-gutter);
 }
 
 /* The board's own tools stack DOWN the right edge rather than running across
@@ -2544,7 +2570,7 @@
    column also keeps every button at a fixed x, which is easier to hit twice
    in a row than a row that reflows as buttons appear. */
 .boardToolsEnd {
-  inset-inline-end: var(--glacier-space-3);
+  inset-inline-end: var(--pc-mat-gutter);
   flex-direction: column;
   align-items: flex-end;
   gap: var(--glacier-space-1);
@@ -2966,34 +2992,48 @@
    the timeline/turn chrome: below the top strip, inside the mat's gutter. */
 .lifeFloat {
   position: absolute;
-  inset-block-start: calc(var(--pc-strip-clear) + var(--glacier-space-2));
-  inset-inline-start: calc(var(--glacier-space-4) + var(--glacier-space-3));
+  inset-block-start: calc(var(--pc-strip-clear) + var(--pc-mat-edge-block) + var(--pc-mat-gutter));
+  inset-inline-start: calc(var(--pc-mat-edge-inline) + var(--pc-mat-gutter));
   z-index: 30;
   display: grid;
   gap: var(--glacier-space-1);
   justify-items: center;
-  padding: var(--glacier-space-2) var(--glacier-space-3);
-  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
-  border-radius: var(--glacier-radius-xl);
-  background: color-mix(in oklch, oklch(0.18 0.02 265) 82%, transparent);
-  backdrop-filter: blur(var(--glacier-blur-md));
-  box-shadow: 0 12px 32px oklch(0.05 0.02 265 / 0.45);
+  /* The card chrome is back: the plates read as one instrument on the felt
+     rather than three loose shapes, and the panel is what separates them from
+     whatever card art happens to be underneath. */
+  padding: var(--glacier-space-2);
+  border: 1px solid var(--pc-gacha-border);
+  border-radius: 0.85rem;
+  background: var(--pc-gacha-face);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  box-shadow:
+    var(--pc-gacha-edge),
+    0 10px 26px oklch(0.05 0.02 265 / 0.5);
 }
 
-.lifeBlock {
-  display: flex;
-  align-items: center;
-  gap: var(--glacier-space-2);
-}
 
-/* The mana pad rides under the life total on the floating card (see LifeCard).
-   The card is a grid sized by its widest row, and the life block alone is only
-   ~115px, so six 2.35rem pips would wrap to 4+2. WUBRG plus colourless reads as
-   ONE row - a wrapped pair looks like two different controls - so the pips
-   refuse to wrap and the card sizes to them instead (~260px).
-   .manaTail keeps its own row regardless (flex-basis: 100%). */
+
+/* The mana pad rides under the life total on the floating card (see LifeCard),
+   and stretches to the card rather than shrinking to its own content.
+
+   It used to say `flex-wrap: nowrap` here, which did nothing at all: .manaPips
+   is a GRID, and flex-wrap on a grid container is ignored. So the pad fell back
+   to being a plain flex ITEM of .manaBar, sized to max-content - and since a
+   plate's only content is a 16px glyph and its count, six of them huddled into
+   about half the width the life row had already given the card, which is what
+   read as scrunched. Stretching it lets the `repeat(3, 1fr)` columns do the job
+   they were written for and spreads the six evenly under the total. */
 .lifeFloat .manaPips {
-  flex-wrap: nowrap;
+  inline-size: 100%;
+}
+
+/* Room around the glyph. .manaPipInner pads on the block axis only, so on the
+   floating card - where the plates are now wide enough for it to show - the
+   symbol ran into the plate's edges and under the 3px colour edge that
+   .manaPip::before paints down the leading side. Scoped to .lifeFloat: the
+   compact pips on the seat frames are sized for their own row. */
+.lifeFloat .manaPipInner {
+  padding-inline: 0.4rem 0.3rem;
 }
 
 /* Full width inside the card, so the mana bar's top hairline spans the whole
@@ -3003,25 +3043,10 @@
   justify-content: center;
 }
 
-/* .manaTail reserves its height so banking the first mana fades the total pill
-   in without shifting anything.
-   The floating card used to drop that reservation, on the reasoning that
-   nothing sits below it - but the card itself is what moves: banking the
-   first mana grew it downward over the mat, and spending the last one snapped
-   it back. That IS the layout shifting, and it happens under the player's
-   cursor mid-turn.
-   So the row is reserved here too, and the card gives up its own block-end
-   padding in exchange: the reserved row already supplies that breathing room,
-   and paying for both is what made the empty card look bottom-heavy. */
-.lifeFloat:has(.manaBar) {
-  padding-block-end: 0;
-}
-
-.lifeFloat .manaTail {
-  /* Tall enough for the total pill, tight enough to read as padding when the
-     pool is empty. */
-  min-height: 1.5rem;
-}
+/* With the total pill gone there is no tail row at all, so nothing in the mana
+   pad can appear or disappear: banking or spending only ever changes colour.
+   The card therefore keeps its own symmetric padding - the block-end zeroing
+   that used to pay for the reserved row would now leave it bottom-light. */
 
 /* The conveniences' spacing inside the toolbar is set by .boardToolsEnd
    .convenience further up, alongside the rule that turns the toolbar into a
@@ -3076,12 +3101,7 @@
 
 /* The number and what it counts, as one unit - so the steppers stay on the
    outside and the label cannot be mistaken for a third button. */
-.lifeStack {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-}
+
 
 .lifeBig {
   font-family: var(--glacier-font-mono);
@@ -3151,90 +3171,225 @@
   border-block-start-color: color-mix(in oklch, var(--glacier-border) 40%, transparent);
 }
 
-/* Always-present tail row for the total pill: reserves its height so the pill
-   fades in without shifting the layout. */
-.manaTail {
-  flex-basis: 100%;
-  min-height: 1.6rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
+/* Two rows of three. Six across left each plate too narrow for a glyph AND a
+   number side by side; three per row gives the digits room beside their
+   symbol. */
 .manaPips {
-  display: flex;
-  align-items: flex-end;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--glacier-space-1);
-  flex-wrap: wrap;
 }
 
-/* Two stacked rows: the count sits ABOVE its glyph rather than clinging to the
-   corner as a badge. The first row is sized whether or not a number is in it,
-   so banking or spending mana never nudges the glyphs - and the glyph is placed
-   in row 2 explicitly, because grid auto-placement would otherwise drop it into
-   the empty counter row of every colour you have none of. */
-.manaPip {
+/* ---- the mana bank -------------------------------------------------------
+   Six slanted plates, the same parallelogram the home band and the armory wear
+   (components/plates.css owns the angle, so changing the lean there changes it
+   here too). Each plate is one colour's holding: the count above, the glyph
+   below, both centred on a single counter-skewed wrapper.
+
+   The plate IS the affordance. Before, the pips were bare glyphs with a badge
+   stuck on one corner, so a colour you held and a colour you did not differed
+   by opacity alone - unreadable at arm's length - and the badge sat off-centre
+   over the glyph it belonged to. A lit plate with a colour-tinted leading edge
+   reads across the table, and the count has its own centred row. */
+/* The plate skin, worn by the mana pips and by the life row's three plates.
+   One rule so the two rows of the card cannot drift apart. */
+.manaPip,
+.lifeStep,
+.lifeTotal {
   position: relative;
-  display: grid;
-  grid-template-rows: 0.95rem auto;
-  justify-items: center;
-  align-items: center;
-  gap: 1px;
-  width: 2.5rem;
-  padding: 0.15rem 0.1rem 0.25rem;
-  box-sizing: border-box;
-  border: 0;
-  background: transparent;
+  overflow: hidden;
+  transform: skewX(var(--pc-slant));
+  padding: 0;
+  border: 1px solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
+  border-radius: 5px;
+  background: color-mix(in oklch, oklch(0.17 0.02 265) 70%, transparent);
   cursor: pointer;
-  border-radius: var(--glacier-radius-lg);
-  opacity: 0.45;
-  filter: grayscale(0.35);
-  transition: opacity 120ms, transform 120ms, filter 120ms, background 120ms;
+  transition:
+    background 140ms var(--glacier-ease-out),
+    border-color 140ms var(--glacier-ease-out),
+    box-shadow 140ms var(--glacier-ease-out),
+    transform 110ms var(--glacier-ease-out);
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
   user-select: none;
 }
 
-.manaPip > img {
-  grid-row: 2;
-}
-.manaPip[data-has] {
-  background: color-mix(in oklch, var(--glacier-surface) 55%, transparent);
-}
-.manaPip > img {
-  max-width: 100%;
-  max-height: 100%;
+/* The mana plates opt out of the shared skin's lean: a skewed box crops its own
+   corners, which is exactly where the digits sit now that the count is beside
+   the glyph. The life row keeps the slant. */
+.manaPip {
+  inline-size: auto;
+  transform: none;
 }
 
-.manaBar[data-active] .manaPip,
+/* ---- the life row -------------------------------------------------------
+   Step / total / step, stretched to exactly the mana row's width so the two
+   line up: the mana row sets the card's width (six fixed plates), and the life
+   row's centre plate takes whatever is left. Change the pip size and the life
+   row follows on its own. */
+.lifeBlock {
+  display: flex;
+  align-items: stretch;
+  gap: 3px;
+}
+
+.lifeFloat .lifeBlock {
+  justify-self: stretch;
+}
+
+/* Blue, not slate: the life row is the player's OWN readout and the accent is
+   what marks "yours" everywhere else at the table. The mana plates stay neutral
+   and take their colour from the mana itself, so the two rows never compete. */
+.lifeStep,
+.lifeTotal {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 42%, transparent);
+  background: linear-gradient(
+    170deg,
+    color-mix(in oklch, var(--glacier-accent-solid) 26%, transparent),
+    color-mix(in oklch, var(--glacier-accent-solid) 12%, transparent)
+  );
+}
+
+.lifeStep {
+  inline-size: 1.9rem;
+  flex: none;
+  color: var(--glacier-accent-text);
+}
+
+.lifeStep:hover {
+  background: linear-gradient(
+    170deg,
+    color-mix(in oklch, var(--glacier-accent-solid) 38%, transparent),
+    color-mix(in oklch, var(--glacier-accent-solid) 20%, transparent)
+  );
+}
+
+.lifeTotal {
+  /* Grows into the row; the min keeps it sane in the phone sheet, where the
+     row is centred at its natural width instead of stretched. */
+  flex: 1;
+  min-inline-size: 6rem;
+  cursor: default;
+}
+
+.lifeStepInner,
+.lifeTotalInner {
+  transform: skewX(var(--pc-slant-back));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  block-size: 100%;
+}
+
+.lifeStepInner {
+  padding-block: 0.35rem;
+}
+
+.lifeTotalInner {
+  flex-direction: column;
+  gap: 0;
+  padding-block: 0.5rem;
+  padding-inline: 0.6rem;
+}
+
+.lifeStep:hover {
+  border-color: var(--glacier-accent-border);
+}
+
+/* The skew has to be restated in any later transform, or the press un-skews. */
+.lifeStep:active {
+  transform: skewX(var(--pc-slant)) translateY(1px);
+}
+
+/* The ONE counter-skewed child (see the note in Vitals.tsx). All layout lives
+   here and never on the <button> itself. */
+.manaPipInner {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  padding-block: 0.28rem;
+}
+
+.manaPipInner > img {
+  display: block;
+}
+
+/* The plate's leading edge, lit in the colour it holds - the .pcEdge idea from
+   plates.css, keyed to mana rather than to the accent. */
+.manaPip::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 3px;
+  background: var(--pc-mana-hue, var(--glacier-border));
+  opacity: 0.25;
+  transition: opacity 140ms var(--glacier-ease-out);
+}
+
+/* MTG's five colours plus colourless. Literals on purpose: these are the game's
+   identity colours, not the theme's - a blue island pip has to look blue in
+   every Glacier theme. */
+.manaPip[data-color='W'] { --pc-mana-hue: #f4e9c8; }
+.manaPip[data-color='U'] { --pc-mana-hue: #3f8fd0; }
+.manaPip[data-color='B'] { --pc-mana-hue: #8b7a97; }
+.manaPip[data-color='R'] { --pc-mana-hue: #d9533b; }
+.manaPip[data-color='G'] { --pc-mana-hue: #46a05c; }
+.manaPip[data-color='C'] { --pc-mana-hue: #a6b0bb; }
+
+/* Holding this colour: the plate lights from its own edge inward. */
 .manaPip[data-has] {
+  background: linear-gradient(
+    100deg,
+    color-mix(in oklch, var(--pc-mana-hue) 30%, transparent),
+    color-mix(in oklch, oklch(0.17 0.02 265) 85%, transparent) 62%
+  );
+  border-color: color-mix(in oklch, var(--pc-mana-hue) 55%, transparent);
+  box-shadow: 0 0 12px color-mix(in oklch, var(--pc-mana-hue) 28%, transparent);
+}
+
+.manaPip[data-has]::before {
   opacity: 1;
-  filter: none;
 }
 
+/* Empty colours recede but stay legible - they are still tap targets. */
+.manaPip:not([data-has]) .manaPipInner {
+  opacity: 0.5;
+  filter: grayscale(0.4);
+}
+
+/* The skew has to be repeated in every transform that follows, or the hover
+   lift silently un-skews the plate. */
 .manaPip:hover {
-  opacity: 1;
+  border-color: color-mix(in oklch, var(--pc-mana-hue) 70%, transparent);
   transform: translateY(-1px);
 }
 
 .manaPip:active {
-  transform: scale(0.9);
+  transform: translateY(1px);
 }
 
-/* The counter, in its own row above the glyph. No badge chrome: a pill that
-   size was mostly border, and stacked over the symbol it competed with the
-   symbol's own ring. Bare numerals in the accent read faster and leave the
-   glyph whole. */
+/* The count, centred over its glyph. Always in the DOM - hidden, not removed,
+   at zero - so the row cannot reflow as mana is banked and spent, and there is
+   no empty slot left behind to paint itself. */
 .manaCount {
-  grid-row: 1;
   font-family: var(--glacier-font-mono);
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
-  color: var(--glacier-accent-text);
-  text-shadow: 0 1px 3px oklch(0.05 0.02 265 / 0.9);
+  color: #fff;
+  text-shadow: 0 1px 4px oklch(0.05 0.02 265 / 0.95);
   pointer-events: none;
+}
+
+/* A dim zero rather than a hidden one: the plate reads as "this colour, none
+   of it" instead of an unlabelled symbol. Nothing reflows either way - the
+   digit was always in the box. */
+.manaCount[data-zero] {
+  opacity: 0.35;
 }
 
 .manaMinus {
@@ -3257,12 +3412,6 @@
   border-color: var(--glacier-text-muted);
 }
 
-/* The running total lives in a native Glacier Pill (its onRemove is the clear
-   button); only nudge the number to tabular figures so it does not jitter. */
-.manaTotalPill {
-  font-variant-numeric: tabular-nums;
-}
-
 .manaReadout {
   display: inline-flex;
   align-items: center;
@@ -3282,58 +3431,6 @@
 
 .manaReadoutPip > img {
   flex: none;
-}
-
-/* Sidebar dice tray (Magic): compact d20…d4 + coin, rolling the 3D mat dice. */
-.diceTray {
-  align-self: stretch;
-  display: flex;
-  flex-direction: column;
-  gap: var(--glacier-space-1);
-  padding-block-start: var(--glacier-space-2);
-  border-block-start: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 40%, transparent);
-}
-.diceTrayLabel {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--glacier-font-size-xs);
-  color: var(--glacier-text-muted);
-}
-.diceTrayDice {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--glacier-space-1);
-}
-.diceTrayDie {
-  flex: 1 1 2.3rem;
-  min-width: 2.3rem;
-  min-height: 2.3rem;
-  display: grid;
-  place-items: center;
-  padding: 0.2rem;
-  border-radius: var(--glacier-radius-md);
-  border: var(--glacier-hairline) solid var(--glacier-border);
-  background: var(--glacier-surface-sunken);
-  color: var(--glacier-text);
-  font-family: var(--glacier-font-mono);
-  font-size: var(--glacier-font-size-xs);
-  font-weight: var(--glacier-font-weight-semibold);
-  cursor: pointer;
-  transition: background 120ms, border-color 120ms, transform 80ms;
-}
-.diceTrayDie > svg {
-  display: block;
-}
-.diceTrayDie:hover {
-  border-color: var(--glacier-accent-border);
-  background: color-mix(in oklch, var(--glacier-accent-solid) 12%, var(--glacier-surface-sunken));
-}
-.diceTrayDie:active {
-  transform: scale(0.94);
-}
-.diceTrayCoin {
-  flex-basis: 100%;
 }
 
 /* counters on cards */
@@ -4527,9 +4624,9 @@
 /* The right rail owns a scrollable card stack and a pinned navigation row. */
 .tableSide {
   position: absolute;
-  top: var(--pc-strip-clear);
-  bottom: var(--glacier-space-3);
-  inset-inline-end: var(--glacier-space-3);
+  top: calc(var(--pc-strip-clear) + var(--pc-mat-edge-block));
+  bottom: calc(var(--pc-mat-edge-block) + var(--pc-mat-gutter));
+  inset-inline-end: var(--pc-mat-gutter);
   width: var(--pc-rail-w);
   display: flex;
   flex-direction: column;
@@ -4585,42 +4682,20 @@
      to the column's own edge. The padding is what actually keeps content out
      from under it; the gutter stays for the classic case, where the two simply
      add up to a slightly wider inset rather than a collision. */
-  scrollbar-gutter: stable;
   scrollbar-width: thin;
-  padding-inline-end: var(--glacier-space-2);
+  /* No pane to keep content off any more, and overlay scrollbars reserve
+     nothing - the padding was pure inset on the cards. */
+  padding-inline-end: 0;
   pointer-events: auto;
-  /* ONE aside, not a stack of floating cards: the scroller itself is the
-     glass surface and the sections divide it with hairlines below. */
-  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
-  border-radius: var(--glacier-radius-xl);
-  background: color-mix(in oklch, oklch(0.18 0.02 265) 80%, transparent);
-  backdrop-filter: blur(var(--glacier-blur-md));
-  box-shadow: 0 12px 32px oklch(0.05 0.02 265 / 0.45);
+  /* No surface of its own. That "ONE aside" was right when the rail held the
+     vitals, the log, the timeline and the roster and needed something to bind
+     them; it now holds one list, and a pane around a list of cards is a second
+     frame around framed things. The cards are the objects. */
 }
 
 .tableSideScroll > * {
   flex-shrink: 0;
   pointer-events: auto;
-}
-
-/* The sections shed their own card chrome inside the unified aside - they are
-   bands of one surface now, parted by hairlines. Their inner padding and
-   layout rules stay untouched. */
-.tableSideScroll > .myVitals,
-.tableSideScroll > .playersCard,
-.tableSideScroll > .sideLogCard,
-.tableSideScroll > .timelineCard,
-.tableSideScroll > .cpDicePanel {
-  border: none;
-  border-radius: 0;
-  background: none;
-  backdrop-filter: none;
-  box-shadow: none;
-}
-
-.tableSideScroll > * + * {
-  border-block-start: var(--glacier-hairline) solid
-    color-mix(in oklch, var(--glacier-border) 45%, transparent);
 }
 
 .tableSideNav {
@@ -4634,11 +4709,9 @@
   flex-wrap: wrap;
   gap: var(--glacier-space-1);
   padding: var(--glacier-space-1);
-  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
-  border-radius: 8px;
-  background: color-mix(in oklch, oklch(0.16 0.02 265) 92%, transparent);
-  backdrop-filter: blur(var(--glacier-blur-md));
-  box-shadow: 0 10px 28px rgb(0 0 0 / 0.38);
+  /* No pill. With most of its buttons gone to the board rail and the top strip,
+     the few that remain are chrome on the rail's own edge, not a floating
+     object that needs a card to sit on. */
   pointer-events: auto;
   /* The table's own chrome outranks every floating extra (the pack dock pill
      sits at z 95, the stack tray and card menus higher still): the nav must
@@ -4744,27 +4817,33 @@
   padding-inline-end: var(--glacier-space-1);
 }
 
-.playerRow {
+.playerCard {
   position: relative;
   display: flex;
   align-items: center;
   gap: var(--glacier-space-2);
   padding: var(--glacier-space-2);
-  border: var(--glacier-hairline) solid transparent;
+  /* Its own surface. The seats used to be rows inside one glass pane, so a
+     transparent border was enough to mark them apart; with the pane gone every
+     seat has to draw its own card or the list reads as loose text on the mat. */
+  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
+  background: color-mix(in oklch, oklch(0.18 0.02 265) 82%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  box-shadow: 0 8px 20px oklch(0.05 0.02 265 / 0.4);
   border-radius: var(--glacier-radius-lg);
   transition:
     background var(--glacier-duration-fast) var(--glacier-ease-out),
     border-color var(--glacier-duration-fast) var(--glacier-ease-out);
 }
 
-.playerRow[data-me] {
+.playerCard[data-me] {
   background: color-mix(in oklch, var(--glacier-surface-sunken) 70%, transparent);
 }
 
 /* The active player reads GREEN (their board's frame reads blue): two
    different questions - "whose turn is it" vs "which board am I looking at" -
    get two different colours. */
-.playerRow[data-active] {
+.playerCard[data-active] {
   border-color: color-mix(in oklch, var(--glacier-success-solid) 55%, transparent);
   background: color-mix(in oklch, var(--glacier-success-solid) 12%, transparent);
 }
@@ -4922,11 +5001,11 @@
 }
 
 /* Dock rows stage that player's board in the top strip. */
-.playerRow[data-focusable] {
+.playerCard[data-focusable] {
   cursor: pointer;
 }
 
-.playerRow[data-focusable]:hover {
+.playerCard[data-focusable]:hover {
   background: color-mix(in oklch, var(--glacier-accent-solid) 10%, transparent);
 }
 
@@ -4949,8 +5028,13 @@
 .stageArea .seatFrame[data-stage] {
   flex: 1;
   min-height: 0;
-  /* The opponent's staged playmat matches my own: a glowing floating card. */
-  margin: var(--glacier-space-3) 0;
+  /* The opponent's staged playmat matches my own: a glowing floating card -
+     and it has to match it in SIZE too, which it did not. My mat is
+     .myField's `margin: space-1` inside .myBoard's space-4 padding; this was
+     `space-3 0`, so a staged opponent's mat was ~15px shorter and 10px wider
+     than mine. Same margin, same box: the two boards must not read as
+     different sizes when you flip between them. */
+  margin: var(--glacier-space-1);
   border-radius: var(--pc-mat-radius);
   box-shadow: var(--pc-mat-shadow);
 }
@@ -5275,11 +5359,11 @@
 
 /* ---- conceded players on the side panel ---- */
 
-.playerRow[data-dead] {
+.playerCard[data-dead] {
   opacity: 0.55;
 }
 
-.playerRow[data-dead] .playerName {
+.playerCard[data-dead] .playerName {
   text-decoration: line-through;
   text-decoration-thickness: 1px;
   text-decoration-color: color-mix(in oklch, var(--glacier-text-subtle) 70%, transparent);
@@ -6078,17 +6162,17 @@
 
 /* ---- right rail cards: life (Vitals), players, log ---- */
 
+/* A list of cards, not a card of lists: each seat already draws its own edge,
+   so a container around them was a second frame around framed things. */
 .playersCard {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: var(--glacier-space-2);
-  border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 55%, transparent);
-  border-radius: var(--glacier-radius-xl);
-  background: color-mix(in oklch, oklch(0.18 0.02 265) 80%, transparent);
-  backdrop-filter: blur(var(--glacier-blur-md));
-  box-shadow: 0 12px 32px oklch(0.05 0.02 265 / 0.45);
-  max-height: 38vh;
+  gap: var(--glacier-space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  max-height: 60vh;
   overflow-y: auto;
 }
 
@@ -6594,11 +6678,6 @@
     inset: -8px;
   }
 
-  .diceTrayDie,
-  .diceTrayCoin {
-    min-height: 2.75rem;
-    min-width: 2.75rem;
-  }
 }
 
 /* ---- phone layout (.table[data-mobile]) ---------------------------------- */
@@ -6949,7 +7028,7 @@
    back in - so no drawer stands between the player and their piles. */
 .mobileZones {
   position: absolute;
-  inset-inline-start: calc(var(--glacier-space-2) + env(safe-area-inset-left, 0px));
+  inset-inline-start: calc(var(--pc-mat-gutter) + env(safe-area-inset-left, 0px));
   /* The comment that used to live here said .myBoard already sat above a
      reserved home-indicator strip, so this must not add the inset again. That
      stopped being true: .appWindow[data-in-game] zeroes the shell's bottom
@@ -6958,7 +7037,7 @@
      852x393), which put the deck's caption inside the home-indicator strip -
      the "deck sits too low" this comment was worried about, arrived by the
      other route. The felt still bleeds under the bar; only the piles clear it. */
-  bottom: calc(var(--glacier-space-1) + env(safe-area-inset-bottom, 0px));
+  bottom: calc(var(--pc-mat-gutter) + env(safe-area-inset-bottom, 0px));
   z-index: 36;
 }
 
@@ -7470,8 +7549,8 @@
   position: absolute;
   /* Truly in the corner - hard against the bottom edge, clearing the reserved
      home-indicator strip the same way the zone row does. */
-  bottom: var(--pc-safe-b, 0px);
-  inset-inline-end: 0.75rem;
+  bottom: calc(var(--pc-mat-gutter) + var(--pc-safe-b, 0px));
+  inset-inline-end: var(--pc-mat-gutter);
   z-index: 42;
 }
 
@@ -8915,22 +8994,13 @@ button.loyaltyBadge:hover {
   box-shadow: none;
 }
 
-/* The life/mana card gets the same slab treatment, one size up: it is the
-   player's own readout and should read as the heaviest object on the mat. */
-.lifeFloat {
-  padding: var(--glacier-space-3);
-  border-radius: 1rem;
-  background: var(--pc-gacha-face);
-  border: 1px solid var(--pc-gacha-border);
-  box-shadow:
-    var(--pc-gacha-edge),
-    0 10px 26px oklch(0.05 0.02 265 / 0.5),
-    0 0 0 1px oklch(0.05 0.02 265 / 0.35);
-}
-
 /* The total is the hero number on the board, so it carries a soft accent bloom
    rather than sitting flat like body copy. */
+/* Smaller on the mat than in the sheet. The 2.6rem total is right in a bottom
+   sheet the player is looking straight at; floated over the battlefield it was
+   a third of the mat's width, so the card competed with the cards. */
 .lifeFloat .lifeBig {
+  font-size: 1.6rem;
   text-shadow: 0 2px 10px color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent);
 }
 
@@ -8942,4 +9012,150 @@ button.loyaltyBadge:hover {
     color-mix(in oklch, var(--glacier-accent-solid) 26%, transparent),
     transparent 70%
   );
+}
+
+
+/* ---- the rail's player cards --------------------------------------------
+   With the vitals, dice and log all moved out, the rail is the roster - so a
+   seat gets a card rather than a line of text: their mat with their deck's
+   face on it, their name, and the numbers that change during a turn. The whole
+   card is the click target that stages that seat, which it already was. */
+.playerCard {
+  /* The identity + stat column wraps under the preview instead of beside it. */
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.playerCardPreview {
+  position: relative;
+  flex-basis: 100%;
+  /* The playmat art is 2731x1536 - exactly 16:9 - so the thumbnail is too. */
+  aspect-ratio: 16 / 9;
+  border-radius: var(--glacier-radius-md);
+  overflow: hidden;
+  /* Read-only: the card's own click stages the seat, and nothing inside the
+     miniature should take a pointer. */
+  pointer-events: none;
+  /* Dimmed so the name and numbers below stay the loudest thing on the card. */
+  filter: brightness(0.72) saturate(0.95);
+  box-shadow: inset 0 0 0 1px oklch(0.05 0.02 265 / 0.5);
+}
+
+/* The board itself, laid out full size and painted small. `zoom` rather than a
+   transform for the same reason the grid uses it: the board lays out against
+   the wider box first, so cards land where they really are instead of being
+   squashed by a scale applied after layout. */
+.playerCardBoard {
+  /* Laid out at a full desktop board's size, then painted at thumbnail scale.
+     --pc-seat-thumb-src is the width the board THINKS it has; the zoom is the
+     ratio between the real thumbnail and that. Both sides are derived from
+     --pc-rail-w, so widening the rail rescales the miniature on its own rather
+     than leaving the board stranded in a corner of the slot. */
+  --pc-seat-thumb-src: 1400;
+  --pc-seat-thumb-w: calc(var(--pc-rail-w) - 2 * var(--glacier-space-2));
+  inline-size: calc(var(--pc-seat-thumb-src) * 1px);
+  aspect-ratio: 16 / 9;
+  zoom: calc(var(--pc-seat-thumb-w) / (var(--pc-seat-thumb-src) * 1px));
+  /* SeatFrame sizes to its content, so in a fixed 16:9 box it drew its board at
+     natural height and left the bottom of the thumbnail empty. Flex + stretch
+     makes it fill the slot, the same way .stageArea does it on the real table
+     (`flex: 1` on the staged frame). */
+  display: flex;
+}
+
+.playerCardBoard > * {
+  flex: 1;
+  min-block-size: 0;
+}
+
+/* The seat's board fills the thumbnail; its own floating chrome would be
+   unreadable at this size, so it goes. */
+.playerCardBoard .boardTools,
+.playerCardBoard .mobileZones,
+.playerCardBoard .myHand {
+  display: none;
+}
+
+/* The seat's colour, riding the preview's corner rather than floating loose in
+   a text row - same hue as that seat's cursor, arrows and markers. */
+.playerCard .playerSeatDot {
+  position: absolute;
+  inset-block-end: var(--glacier-space-1);
+  inset-inline-end: var(--glacier-space-1);
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: var(--glacier-radius-full);
+  background: var(--pc-seat-color);
+  box-shadow: 0 0 0 2px oklch(0.05 0.02 265 / 0.55);
+}
+
+/* A conceded seat's board is history; grey the thumbnail rather than only the
+   text, or the card still reads as live at a glance. */
+.playerCard[data-dead] .playerCardPreview {
+  filter: brightness(0.35) grayscale(0.8);
+}
+
+.playerCard[data-active] .playerCardPreview {
+  filter: brightness(0.78) saturate(1.05);
+}
+
+/* The damage tracker inside the life counter's dropdown. .dmgTrack was styled
+   for the rail's full width; in a menu it sets its own comfortable measure. */
+.lifeDmgMenu {
+  min-inline-size: 15rem;
+  padding: var(--glacier-space-2);
+}
+
+.lifeDmgMenu .dmgTrack {
+  margin: 0;
+}
+
+
+/* The optional name plate above a battlefield card (Settings -> Table -> Card
+   names on the board). Absolute so it cannot change the card's own footprint -
+   turning names on must not reflow the battlefield - and centred over the card
+   it belongs to. NOTE: .fieldCardShell has no rule of its own and is therefore
+   static, so this resolves against .fieldCard, which is the positioned box that
+   also carries the tap/tilt transform. That is the behaviour we want; do not
+   "fix" it by making the shell relative, which would re-parent the counter and
+   loyalty badges that currently resolve against .fieldCard too. */
+.fieldCardName {
+  position: absolute;
+  inset-block-end: calc(100% + 2px);
+  inset-inline: -12%;
+  z-index: 3;
+  pointer-events: none;
+  display: block;
+  padding: 1px 4px;
+  border-radius: var(--glacier-radius-sm);
+  background: oklch(0.12 0.02 265 / 0.82);
+  backdrop-filter: blur(2px);
+  color: rgb(255 255 255 / 0.94);
+  font-size: 0.62rem;
+  font-weight: var(--glacier-font-weight-medium);
+  line-height: 1.25;
+  text-align: center;
+  /* One line. A three-line plate over a scaled-down card hides the board it is
+     meant to be helping you read. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 3px oklch(0.05 0.02 265 / 0.9);
+}
+
+/* ---- phone: the board's control rail lies down -------------------------- */
+
+/* .boardToolsEnd is a vertical stack on desktop, where it has a tall mat edge
+   to run down. A phone in landscape has ~390px of height and none to spare, so
+   the same buttons read across the top instead. */
+.table[data-mobile] .boardToolsEnd {
+  flex-direction: row;
+  align-items: center;
+}
+
+/* The zone rail moves in toward the mat's corner: the gutter that lines the
+   floating chrome up on desktop is a bigger share of a phone's width, and the
+   piles are the one cluster that wants to hug the edge. */
+.table[data-mobile] .mobileZones {
+  inset-inline-start: calc(var(--glacier-space-1) + env(safe-area-inset-left, 0px));
 }

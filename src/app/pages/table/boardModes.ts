@@ -35,7 +35,9 @@ export function saveBoardMode(userId: string | undefined, mode: BoardMode): void
 /* ------------------------------------------------------------------------ */
 /* Battlefield card scale: a display preference, persisted per user.         */
 
-export const CARD_SCALE_MIN = 0.6;
+// Two steps lower than it used to sit (was 0.6): a crowded battlefield needs to
+// zoom out further than a comfortable reading size.
+export const CARD_SCALE_MIN = 0.4;
 export const CARD_SCALE_MAX = 1.6;
 export const CARD_SCALE_STEP = 0.1;
 
@@ -61,7 +63,9 @@ export function loadCardScale(userId: string | undefined): number {
    range left the +/- buttons looking broken (several presses with nothing on
    screen changing). Three sizes is what actually fits: one step either side of
    the default. */
-export const MOBILE_SCALE_MIN = 0.55;
+// Two steps lower than it used to sit (was 0.55), same reasoning as the desktop
+// floor - a phone runs out of board first.
+export const MOBILE_SCALE_MIN = 0.25;
 export const MOBILE_SCALE_MAX = 0.85;
 export const MOBILE_SCALE_STEP = 0.15;
 export const MOBILE_SCALE_DEFAULT = 0.7;

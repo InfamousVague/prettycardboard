@@ -13,10 +13,17 @@
    (130), which are all things the player opened on purpose. */
 
 .chatBallRoot {
-  position: fixed;
+  /* absolute, not fixed: fixed anchors to the viewport, which includes the app
+     rail and the table's own chrome, so the ball could not line up with the mat
+     no matter what inset it was given. .table is the positioned ancestor. */
+  position: absolute;
   z-index: 94;
-  inset-block-end: calc(var(--glacier-space-4) + env(safe-area-inset-bottom, 0px));
-  inset-inline-start: calc(var(--glacier-space-4) + env(safe-area-inset-left, 0px));
+  inset-block-end: calc(
+    var(--pc-mat-edge-block, 0px) + var(--pc-mat-gutter, var(--glacier-space-3)) + env(safe-area-inset-bottom, 0px)
+  );
+  inset-inline-start: calc(
+    var(--pc-mat-edge-inline, 0px) + var(--pc-mat-gutter, var(--glacier-space-3)) + env(safe-area-inset-left, 0px)
+  );
   display: flex;
   flex-direction: column;
   align-items: flex-start;

@@ -68,6 +68,10 @@ export interface Preferences {
   /** Lay battlefield cards perfectly upright instead of the natural slight
    * per-card tilt. */
   verticalCards: boolean;
+  /** Print each battlefield card's name on a plate above it. Off by default:
+   *  at full card size the art already names the card, and the plates cost
+   *  vertical room. It earns its keep once the cards are scaled down. */
+  cardNames: boolean;
   /** Show a staged opponent's board mirrored 180deg (across-the-table view,
    * cards upside down). Off shows their board upright. */
   mirrorOpponent: boolean;
@@ -150,6 +154,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   customPlaymats: [],
   customCardBack: '',
   verticalCards: false,
+  cardNames: false,
   // Across-the-table mirroring is a taste, not a default: new players read
   // an upright board faster, and anyone who wants the tabletop feel can
   // still flip it on in Settings -> Table.

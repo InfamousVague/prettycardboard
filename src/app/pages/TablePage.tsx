@@ -252,6 +252,27 @@ export function TablePage() {
 
   const [menu, setMenu] = useState<Menu | null>(null);
   const [pinnedSeat, setPinnedSeat] = useState<number | null>(null);
+  // --pc-strip-clear was a hardcoded 4.4rem standing in for the top strip's
+  // height, and every layer anchored under the strip (the side rail, the life
+  // card, the timeline) inherited whatever that guess was wrong by. Measure the
+  // real strip and publish it, so those layers line up with the mat instead of
+  // with an estimate. Docked chrome has no strip to measure and keeps the CSS
+  // default.
+  const stripRef = useRef<HTMLElement | null>(null);
+  const tableRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const strip = stripRef.current;
+    const root = tableRef.current;
+    if (!strip || !root) return;
+    const sync = () => root.style.setProperty('--pc-strip-clear', `${Math.round(strip.offsetHeight)}px`);
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(strip);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty('--pc-strip-clear');
+    };
+  });
   const [confirmConcede, setConfirmConcede] = useState(false);
   // Phones hide the roster behind a top-left players icon rather than a chip row
   // across the board's top edge.
@@ -266,7 +287,14 @@ export function TablePage() {
   // The right rail, collapsed to its nav pill so the mats get its width. Phones
   // have no rail to collapse (it is already a bottom sheet there).
   const railHidden = useTableUi((state) => state.railHidden);
-  const railCollapsed = railHidden && !mobile;
+  // railHidden is retired: the rail collapses to its condensed form instead of
+  // vanishing, and with the top-strip toggle gone nothing sets it. Honouring a
+  // value left in storage by the old control would hide the rail permanently.
+  // The rail's band is reserved unless there is no rail to reserve it for. Grid
+  // view is the one case: it renders every seat's board itself, so the roster is
+  // hidden - and the board must take the width back rather than leaving an empty
+  // stripe where the rail used to be.
+  const railCollapsed = gridActive;
   // The matchup splash: only for the false->true start transition witnessed
   // live (a reload into a running game skips straight to the table).
   const [preMatch, setPreMatch] = useState(false);
@@ -859,28 +887,38 @@ export function TablePage() {
                   </Tooltip>
                 </div>
               )}
-              {/* The rail's collapse toggle rides up here (top-right, by
-                  Concede) rather than in the rail's own nav pill - so hiding
-                  and showing the sidebar is one fixed control, not one that
-                  moves with the thing it hides. */}
-              {room.started && !mobile && (
-                <Tooltip content={railHidden ? t('tblRailShow') : t('tblRailHide')}>
-                  <IconButton
-                    size="sm"
-                    variant="ghost"
-                    aria-pressed={railHidden}
-                    aria-label={railHidden ? t('tblRailShow') : t('tblRailHide')}
-                    onClick={() => useTableUi.getState().setRailHidden(!railHidden, identity?.userId)}
-                  >
-                    {railHidden ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
-                  </IconButton>
-                </Tooltip>
-              )}
+              {/* No collapse control here. The rail carries its own, directly
+                  above the players - two buttons for one job read as two
+                  different jobs. */}
               {room.started && me && !spectating && !me.conceded && !room.matchResult && (
                 <Tooltip content={t('tblConcede')}>
                   <Button size="sm" variant="ghost" onClick={() => setConfirmConcede(true)}>
                     <Flag size={15} /> <span className="ttActionLabel">{t('tblConcede')}</span>
                   </Button>
+                </Tooltip>
+              )}
+              {/* Leaving and settings were buried in the rail's footer, which is
+                  the one part of the table that can be collapsed away. They are
+                  table-level actions, so they belong beside Concede in the strip
+                  that is always up. The rail keeps its own copies on phones,
+                  where this header is hidden mid-match. */}
+              {!mobile && (
+                <Tooltip content={t('tblLeave')}>
+                  <Button size="sm" variant="ghost" onClick={leave}>
+                    <LogOut size={15} /> <span className="ttActionLabel">{t('tblLeave')}</span>
+                  </Button>
+                </Tooltip>
+              )}
+              {!mobile && (
+                <Tooltip content={t('setTitle')}>
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    aria-label={t('setTitle')}
+                    onClick={() => window.dispatchEvent(new CustomEvent('pc:open-settings'))}
+                  >
+                    <Settings size={16} />
+                  </IconButton>
                 </Tooltip>
               )}
             </div>
@@ -902,7 +940,7 @@ export function TablePage() {
             );
           }
           return (
-            <header className="tableTop">
+            <header className="tableTop" ref={stripRef}>
               {metaEl}
               {ribbonEl}
               {combatEl}
@@ -1096,6 +1134,9 @@ export function TablePage() {
         room={room}
         me={me}
         spectating={spectating}
+        // Grid view already shows every seat's board full size; the roster
+        // cards would be a second, smaller copy of the same information.
+        rosterHidden={gridActive}
         meId={identity?.userId}
         onFocusSeat={setPinnedSeat}
         onPingPlayer={pingPlayer}
@@ -1181,10 +1222,11 @@ export function TablePage() {
           <TimelineCard floating />
         </div>
       )}
-      {/* Desktop: the health steppers float top-left of the mat, out of the
-          rail - always visible, even while another seat's board is staged
-          (it is MY life either way). Phones keep them in the bottom sheet. */}
-      {!mobile && room.started && me && !spectating && (
+      {/* Desktop: my life and mana float top-left of the mat, out of the rail.
+          Only over MY OWN board, though - the card reads as belonging to the
+          mat it sits on, so parked over an opponent's staged board it looked
+          like their life total and their pool. Phones keep it in the sheet. */}
+      {!mobile && !gridActive && room.started && me && !spectating && stagedSeat === me.seat && (
         <div className="lifeFloat">
           <LifeCard me={me} room={room} />
         </div>
@@ -1817,6 +1859,7 @@ function SidePanel({
   onPingPlayer,
   pingCooling,
   onLeave,
+  rosterHidden,
   onConcede,
   inviteTargets,
   onInviteFriend,
@@ -1830,6 +1873,8 @@ function SidePanel({
   onPingPlayer?: (player: TablePlayer) => void;
   pingCooling?: boolean;
   onLeave: () => void;
+  /** Grid view renders every board already - the roster cards are redundant. */
+  rosterHidden?: boolean;
   /** Present while conceding is possible; the phone sheet nav surfaces it
       because the header (and its Concede button) is hidden mid-match there. */
   onConcede?: () => void;
@@ -1887,6 +1932,17 @@ function SidePanel({
   }, [chatVisible, chat.length]);
   const chatUnread = Math.max(0, chat.length - chatSeen);
   const seated = me != null && !spectating;
+  // The log is a drawer off the nav now, not a card taking permanent rail
+  // height for something read a few times a game.
+  const [logPanel, setLogPanel] = useState(false);
+  // The desktop's log button lives on the board's control rail, which is
+  // rendered by MyBoard and cannot reach this state directly - same window-event
+  // handshake the settings and token buttons already use.
+  useEffect(() => {
+    const open = () => setLogPanel(true);
+    window.addEventListener('pc:open-log', open);
+    return () => window.removeEventListener('pc:open-log', open);
+  }, []);
 
   // Keep the log pinned to the newest entry.
   useEffect(() => {
@@ -1912,6 +1968,7 @@ function SidePanel({
   const playersEl = (
     <PlayersCard
       room={room}
+      me={me}
       meId={meId}
       onFocusSeat={onFocusSeat}
       onPingPlayer={onPingPlayer}
@@ -1927,6 +1984,42 @@ function SidePanel({
 
   const logTime = (ts: number) =>
     new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  const logBody = (
+    <>
+      <div ref={scrollRef} className="sideScroll">
+        {log.length === 0 ? (
+          <p className="sideEmpty">{t('tblLogEmpty')}</p>
+        ) : (
+          log.map((line, index) => (
+            <p
+              key={`${line.seq}-${index}`}
+              className={line.coach ? 'sideLine sideLineCoach' : 'sideLine'}
+              data-rule={line.coach}
+              title={logTime(line.ts)}
+            >
+              {line.coach && <GraduationCap size={13} className="sideLineCoachIcon" />}
+              <span className="sideLineTime">{logTime(line.ts)}</span>
+              {maskSpoilers(line.text)}
+            </p>
+          ))
+        )}
+      </div>
+      {room.spectators.length > 0 && (
+        <div className="sideSpectators">
+          <span className="sideHeadTitle">
+            <Eye size={13} />
+            {t('tblSpectators')}
+          </span>
+          {room.spectators.map((spectator) => (
+            <span key={spectator.userId} className="spectatorName">
+              {spectator.username}
+            </span>
+          ))}
+        </div>
+      )}
+    </>
+  );
 
   const logEl = (
     <div className="sideLogCard" data-collapsed={!logOpen || undefined}>
@@ -1958,41 +2051,10 @@ function SidePanel({
           </IconButton>
         </Tooltip>
       </div>
-      {logOpen && (
-        <div ref={scrollRef} className="sideScroll">
-          {log.length === 0 ? (
-            <p className="sideEmpty">{t('tblLogEmpty')}</p>
-          ) : (
-            log.map((line, index) => (
-              <p
-                key={`${line.seq}-${index}`}
-                className={line.coach ? 'sideLine sideLineCoach' : 'sideLine'}
-                data-rule={line.coach}
-                title={logTime(line.ts)}
-              >
-                {line.coach && <GraduationCap size={13} className="sideLineCoachIcon" />}
-                <span className="sideLineTime">{logTime(line.ts)}</span>
-                {maskSpoilers(line.text)}
-              </p>
-            ))
-          )}
-        </div>
-      )}
-      {room.spectators.length > 0 && (
-        <div className="sideSpectators">
-          <span className="sideHeadTitle">
-            <Eye size={13} />
-            {t('tblSpectators')}
-          </span>
-          {room.spectators.map((spectator) => (
-            <span key={spectator.userId} className="spectatorName">
-              {spectator.username}
-            </span>
-          ))}
-        </div>
-      )}
+      {logOpen && logBody}
     </div>
   );
+
   const navEl = (
     <nav className="tableSideNav" aria-label={t('tblTableNav')}>
       {/* The rail's collapse toggle lives in the top strip now (by Concede),
@@ -2020,16 +2082,20 @@ function SidePanel({
       )}
       {/* Pings live on the player rows (each name carries its own bell), and
           sharing lives in the pregame lobby - neither earns nav chrome. */}
-      <Tooltip content={t('setTitle')}>
-        <IconButton
-          size="sm"
-          variant="ghost"
-          aria-label={t('setTitle')}
-          onClick={() => window.dispatchEvent(new CustomEvent('pc:open-settings'))}
-        >
-          <Settings size={16} />
-        </IconButton>
-      </Tooltip>
+      {/* Phone only: the desktop's copy lives in the top strip, which a phone
+          hides mid-match. */}
+      {mobile && (
+        <Tooltip content={t('setTitle')}>
+          <IconButton
+            size="sm"
+            variant="ghost"
+            aria-label={t('setTitle')}
+            onClick={() => window.dispatchEvent(new CustomEvent('pc:open-settings'))}
+          >
+            <Settings size={16} />
+          </IconButton>
+        </Tooltip>
+      )}
       {mobile && onInviteFriend && (inviteTargets?.length ?? 0) > 0 && (
         <Tooltip content={t('tblInviteFriends')}>
           <Menu
@@ -2062,6 +2128,23 @@ function SidePanel({
           ambient chrome rather than beside the card-size steppers.
           `useGame.getState()` because this nav is rendered by SidePanel, not
           by TablePage, so the component's own `act` is out of scope here. */}
+      {/* The log's door. On desktop it lives on the board's control rail with
+          the rest of the verbs (see MyBoard's .boardToolsEnd); the phone keeps
+          its copy here, because that rail is desktop-only. */}
+      {mobile && (
+      <Tooltip content={t('tblLog')}>
+        <IconButton
+          size="sm"
+          variant="ghost"
+          aria-label={t('tblLog')}
+          aria-expanded={logPanel}
+          onClick={() => setLogPanel(true)}
+        >
+          <ScrollText size={16} />
+        </IconButton>
+      </Tooltip>
+      )}
+      {mobile && (
       <Menu
         aria-label={t('gpDice')}
         placement="top-end"
@@ -2086,11 +2169,14 @@ function SidePanel({
           {t('tblCoin')}
         </MenuItem>
       </Menu>
-      <Tooltip content={t('tblLeave')}>
-        <IconButton size="sm" variant="ghost" aria-label={t('tblLeave')} onClick={onLeave}>
-          <LogOut size={16} />
-        </IconButton>
-      </Tooltip>
+      )}
+      {mobile && (
+        <Tooltip content={t('tblLeave')}>
+          <IconButton size="sm" variant="ghost" aria-label={t('tblLeave')} onClick={onLeave}>
+            <LogOut size={16} />
+          </IconButton>
+        </Tooltip>
+      )}
     </nav>
   );
 
@@ -2227,18 +2313,35 @@ function SidePanel({
 
   return (
     <>
-      <aside className="tableSide" data-nav-only={railHidden || undefined}>
-        {!railHidden && (
-          <div className="tableSideScroll">
-            {vitalsEl}
-            {playersEl}
-            {logEl}
-          </div>
-        )}
+      <aside className="tableSide">
+        {!rosterHidden && <div className="tableSideScroll">{playersEl}</div>}
         {navEl}
       </aside>
       {chatEl}
       {chatBallEl}
+      <Drawer
+        open={logPanel}
+        onClose={() => setLogPanel(false)}
+        side="right"
+        size="sm"
+        title={t('tblLog')}
+      >
+        <div className="sideLogCard" data-panel>
+          <div className="sideHead">
+            <Tooltip content={logSpoilers ? t('logHideNames') : t('logShowNames')}>
+              <IconButton
+                size="sm"
+                variant="ghost"
+                aria-label={logSpoilers ? t('logHideNames') : t('logShowNames')}
+                onClick={() => setLogSpoilers((v) => !v)}
+              >
+                {logSpoilers ? <EyeOff size={14} /> : <Eye size={14} />}
+              </IconButton>
+            </Tooltip>
+          </div>
+          {logBody}
+        </div>
+      </Drawer>
     </>
   );
 }
@@ -2267,12 +2370,14 @@ function cmdDamageSummary(player: TablePlayer, room: RoomState) {
 
 function PlayersCard({
   room,
+  me,
   meId,
   onFocusSeat,
   onPingPlayer,
   pingCooling,
 }: {
   room: RoomState;
+  me?: TablePlayer;
   meId?: string;
   onFocusSeat?: (seat: number) => void;
   onPingPlayer?: (player: TablePlayer) => void;
@@ -2293,7 +2398,7 @@ function PlayersCard({
         return (
           <div
             key={player.userId}
-            className="playerRow"
+            className="playerCard"
             data-active={active || undefined}
             data-me={isMe || undefined}
             data-dead={player.conceded || undefined}
@@ -2303,7 +2408,25 @@ function PlayersCard({
             // cursor, its pointing arrows and its table markers all wear.
             style={{ ['--pc-seat-color' as string]: seatColor(player.seat) }}
           >
-            <span className="playerSeatDot" aria-hidden />
+            {/* A real board, zoomed out - the same trick the grid uses: SeatFrame
+                laid out full size and painted small with `zoom`, so what you see
+                is that seat's actual mat and actual cards rather than a mock-up
+                of one. Inert: the rail is for reading, and the card's own click
+                stages the seat. */}
+            <div className="playerCardPreview" aria-hidden>
+              <div className="playerCardBoard">
+                <SeatFrame
+                  room={room}
+                  player={player}
+                  me={me}
+                  canAct={false}
+                  onHover={() => {}}
+                  stage
+                  mirror={false}
+                />
+              </div>
+              <span className="playerSeatDot" aria-hidden />
+            </div>
             <Avatar name={player.username} size="sm" />
             <div className="playerBody">
               <span className="playerNameRow">

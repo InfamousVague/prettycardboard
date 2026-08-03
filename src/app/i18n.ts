@@ -186,18 +186,6 @@ export const messages = {
     fr: "Auto suit la taille de l'écran ; Oui et Non l'imposent.",
     ar: 'تلقائي يتبع حجم الشاشة؛ تشغيل وإيقاف يفرضانه.',
   },
-  tblZonesOpen: {
-    en: 'Open zones',
-    es: 'Abrir zonas',
-    fr: 'Ouvrir les zones',
-    ar: 'فتح المناطق',
-  },
-  tblZonesHide: {
-    en: 'Fold the zones away',
-    es: 'Plegar las zonas',
-    fr: 'Replier les zones',
-    ar: 'اطوِ المناطق',
-  },
   tblZones: { en: 'Zones', es: 'Zonas', fr: 'Zones', ar: 'المناطق' },
   tblGrid: { en: 'Grid', es: 'Cuadrícula', fr: 'Grille', ar: 'شبكة' },
   tblGridOn: {
@@ -1448,6 +1436,13 @@ export const messages = {
     ar: 'كيف تُرتَّب البطاقات في ساحة معركتك.',
   },
   setCardPlacement: { en: 'Card placement', es: 'Colocación de cartas', fr: 'Placement des cartes', ar: 'وضع البطاقات' },
+  setCardNames: { en: 'Card names on the board', es: 'Nombres sobre las cartas', fr: 'Noms sur les cartes', ar: 'أسماء البطاقات على الطاولة' },
+  setCardNamesHint: {
+    en: 'Print each card\u2019s name on a plate above it. Useful once the cards are scaled down far enough that the art stops naming them.',
+    es: 'Muestra el nombre de cada carta encima. Útil cuando las cartas se reducen tanto que la ilustración ya no las identifica.',
+    fr: 'Affiche le nom de chaque carte au-dessus. Utile quand les cartes sont trop réduites pour être reconnues à l\u2019illustration.',
+    ar: 'اعرض اسم كل بطاقة فوقها. مفيد عندما تصغر البطاقات لدرجة لا يكفي فيها الرسم للتعريف بها.',
+  },
   setCardNatural: { en: 'Natural', es: 'Natural', fr: 'Naturel', ar: 'طبيعي' },
   setCardVertical: { en: 'Vertical', es: 'Vertical', fr: 'Vertical', ar: 'عمودي' },
   setAutoTurn: { en: 'Turn automation', es: 'Automatización de turno', fr: 'Automatisation du tour', ar: 'أتمتة الدور' },

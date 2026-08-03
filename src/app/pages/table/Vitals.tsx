@@ -1,8 +1,7 @@
 import { useRef, useState } from 'react';
-import { Button, IconButton, Input, Menu, MenuItem, Pill, Tooltip } from '@glacier/react';
+import { Button, IconButton, Input, Menu, MenuItem, Tooltip } from '@glacier/react';
 import {
   Cpu,
-  Dices,
   Minus,
   Paintbrush,
   Plus,
@@ -18,7 +17,6 @@ import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { getGame } from '../../data/games.ts';
 import { EMPTY_MANA, MANA_ORDER, ManaSymbol } from '../../components/Mana.tsx';
-import { DICE_SIDES, DiceIcon } from '../../components/DiceIcon.tsx';
 import { juicePulse } from './juice.ts';
 import { useTableUi } from './tableUi.ts';
 import { formatFor } from '../../data/formats.ts';
@@ -54,9 +52,15 @@ function lifeMeta(me: TablePlayer, room: RoomState, fallbackLabel: string) {
 }
 
 /**
- * The health controls on their own: the big total with its steppers (and
- * Yu-Gi-Oh's LP-sized quick steps). On desktop this floats top-left of the
- * playmat; on a phone it stays inside Vitals in the bottom sheet.
+ * The player's own resource card: the big total with its steppers (and
+ * Yu-Gi-Oh's LP-sized quick steps), with the floating-mana pad directly under
+ * it. On desktop the pair floats top-left of the playmat; on a phone it stays
+ * inside Vitals in the bottom sheet.
+ *
+ * Mana sits with life because both are pools you spend down over a turn and
+ * read at a glance - they belong to the same question ("what have I got
+ * left?"). The my-turn ACTIONS that used to sit between them are board actions,
+ * so they went to the board's own floating tools instead (see QuickControls).
  */
 export function LifeCard({ me, room }: { me: TablePlayer; room: RoomState }) {
   const t = useT();
@@ -70,35 +74,65 @@ export function LifeCard({ me, room }: { me: TablePlayer; room: RoomState }) {
       {(cyber || yugioh) && <div className="vitalCaption">{primaryLabel}</div>}
       {/* The label rides with the number: on a board full of counters, a bare
           figure with two steppers does not say WHAT it counts. */}
+      {/* Three slanted plates - step down, the total, step up - cut from the same
+          shape as the mana plates below them, so the card reads as one stack of
+          the app's plate vocabulary rather than a kit toolbar sitting on top of
+          one. Plain <button>s rather than kit IconButtons: the plates need the
+          skew and the counter-skewed inner, and the kit's own hashed rules would
+          have to be out-specified property by property to get there. */}
       <div className="lifeBlock" data-state={lifeState}>
-        <IconButton
-          size="sm"
-          variant="ghost"
+        <button
+          type="button"
+          className="lifeStep pcSlant"
           aria-label={`-${lifeStep}`}
           onClick={() => {
             act({ kind: 'life.add', delta: -lifeStep });
             juicePulse(lifeRef.current, 0.8);
           }}
         >
-          <Minus size={14} />
-        </IconButton>
-        <span className="lifeStack">
-          <span className="lifeBig" ref={lifeRef}>
-            {me.life}
+          <span className="lifeStepInner">
+            <Minus size={15} />
           </span>
-          {!cyber && !yugioh && <span className="lifeCaption">{primaryLabel}</span>}
+        </button>
+        <span className="lifeTotal pcSlant">
+          <span className="lifeTotalInner">
+            <span className="lifeBig" ref={lifeRef}>
+              {me.life}
+            </span>
+            {!cyber && !yugioh && <span className="lifeCaption">{primaryLabel}</span>}
+          </span>
         </span>
-        <IconButton
-          size="sm"
-          variant="ghost"
+        <button
+          type="button"
+          className="lifeStep pcSlant"
           aria-label={`+${lifeStep}`}
           onClick={() => {
             act({ kind: 'life.add', delta: lifeStep });
             juicePulse(lifeRef.current, 0.8);
           }}
         >
-          <Plus size={14} />
-        </IconButton>
+          <span className="lifeStepInner">
+            <Plus size={15} />
+          </span>
+        </button>
+        {/* Damage taken hangs off the counter it eats. A fourth plate rather
+            than a fourth row: commander damage and poison are worth a look a
+            few times a game, not permanent height. */}
+        <Menu
+          aria-label={t('tblCmdDamage')}
+          placement="bottom-end"
+          trigger={
+            <button type="button" className="lifeStep pcSlant" aria-label={t('tblCmdDamage')}>
+              <span className="lifeStepInner">
+                <Swords size={15} />
+              </span>
+            </button>
+          }
+        >
+          <div className="lifeDmgMenu">
+            <DamageTracker me={me} room={room} />
+          </div>
+        </Menu>
       </div>
       {yugioh && (
         <div className="lifeQuick" role="group" aria-label={primaryLabel}>
@@ -117,38 +151,33 @@ export function LifeCard({ me, room }: { me: TablePlayer; room: RoomState }) {
           ))}
         </div>
       )}
+
+      {/* Floating-mana pool (MTG only; the component self-gates on the game
+        registry). The authenticated seat owns updates; room state shares it. */}
+      <ManaBar room={room} mana={me.mana} />
     </div>
   );
 }
 
 /**
- * The personal vitals + conveniences cluster in the right rail: life (or the
- * game's primary resource), the draw/untap/shuffle/token/settings row, the
- * token-create form, the floating-mana pad (MTG only), and the damage tracker
- * (commander damage per opponent, then poison). Rendered only for the seated
- * player, so all of its actions target `me`. With `hideLife` the health
- * cluster is left out - the desktop floats it over the mat as LifeCard.
+ * The my-turn conveniences: draw one, untap all, shuffle, make a token, and the
+ * table settings menu.
+ *
+ * It has two homes and they are not a fallback for each other. On desktop it
+ * joins the floating board tools at the top-inline-end of the mat, beside Edit
+ * mat layout and the card-size steppers - board actions belong with board
+ * actions. A phone has no room to float a second toolbar, so there it stays in
+ * the bottom sheet under the life total.
  */
-export function Vitals({ me, room, hideLife }: { me: TablePlayer; room: RoomState; hideLife?: boolean }) {
+export function QuickControls({ me, room }: { me: TablePlayer; room: RoomState }) {
   const t = useT();
   const act = useGame((state) => state.act);
   const [tokenOpen, setTokenOpen] = useState(false);
   const [tokenName, setTokenName] = useState('');
   const [tokenPT, setTokenPT] = useState('1/1');
-  // Commander damage I've taken from each opponent's commander (21 = lethal).
-  // Manual, like all damage now: steppers adjust cmdDamage[fromSeat].
-  const cmdFoes = formatFor(room.format).hasCommander
-    ? room.players.filter((p) => p.seat !== me.seat && !p.conceded)
-    : [];
-
   const { cyber, yugioh } = lifeMeta(me, room, t('tblLife'));
-  const gdef = getGame(room.game);
-  const secondary = gdef.resources.find((r) => !r.primary);
-  const secondaryLabel = secondary?.label ?? t('tblPoison');
-
   return (
-    <div className="myVitals" data-game={room.game || 'mtg'}>
-      {!hideLife && <LifeCard me={me} room={room} />}
+    <>
       <div className="convenience">
         <Tooltip content={`${t('tblDraw')} 1`}>
           <IconButton size="sm" variant="soft" aria-label={t('tblDraw')} onClick={() => act({ kind: 'draw', count: 1 })}>
@@ -188,6 +217,15 @@ export function Vitals({ me, room, hideLife }: { me: TablePlayer; room: RoomStat
             </IconButton>
           }
         >
+          {/* Emptying the pool used to be the little x on the mana total's pill.
+              That pill is gone (it appeared only once you banked mana, which
+              made the card change height mid-turn), so the action lives here
+              rather than being lost with it. MTG-only, like the pad itself. */}
+          {!cyber && !yugioh && (
+            <MenuItem onSelect={() => act({ kind: 'mana.clear' })}>
+              <Sparkles size={14} /> {t('tblClearMana')}
+            </MenuItem>
+          )}
           <MenuItem onSelect={() => window.dispatchEvent(new Event('pc:open-customize'))}>
             <Paintbrush size={14} /> {t('navCustomize')}
           </MenuItem>
@@ -236,44 +274,66 @@ export function Vitals({ me, room, hideLife }: { me: TablePlayer; room: RoomStat
           </Button>
         </form>
       )}
+    </>
+  );
+}
 
-      {/* Floating-mana pool (MTG only; the component self-gates on the game
-        registry). The authenticated seat owns updates; room state shares it. */}
-      <ManaBar room={room} mana={me.mana} />
+/**
+ * What is left in the rail once the player's own console has moved onto the
+ * mat: the dice tray and the damage tracker (commander damage per opponent,
+ * then poison). Rendered only for the seated player, so all of its actions
+ * target `me`.
+ *
+ * With `hideLife` the console is left out entirely - that is the desktop, where
+ * LifeCard floats over the playmat and brings the life total, the quick
+ * controls and the mana pad with it. A phone has no mat to float over, so the
+ * sheet still renders LifeCard inline and gets the same cluster in one place.
+ */
+export function Vitals({ me, room, hideLife }: { me: TablePlayer; room: RoomState; hideLife?: boolean }) {
+  const t = useT();
+  const act = useGame((state) => state.act);
+  // Commander damage I've taken from each opponent's commander (21 = lethal).
+  // Manual, like all damage now: steppers adjust cmdDamage[fromSeat].
+  const cmdFoes = formatFor(room.format).hasCommander
+    ? room.players.filter((p) => p.seat !== me.seat && !p.conceded)
+    : [];
 
-      {/* Dice tray (non-Cyberpunk; Cyberpunk rolls from its Fixer panel). Rolls a
-         real 3D physics die on the mat and logs the result. */}
-      {!cyber && (
-        <div className="diceTray" role="group" aria-label={t('tblRollDice')}>
-          <span className="diceTrayLabel">
-            <Dices size={12} /> {t('tblDice')}
-          </span>
-          <div className="diceTrayDice">
-            {DICE_SIDES.map((sides) => (
-              <Tooltip key={sides} content={`${t('tblRollDice')} d${sides}`}>
-                <button
-                  type="button"
-                  className="diceTrayDie"
-                  aria-label={`${t('tblRollDice')} d${sides}`}
-                  onClick={() => act({ kind: 'dice.roll', sides })}
-                >
-                  <DiceIcon sides={sides} size={24} />
-                </button>
-              </Tooltip>
-            ))}
-            <button
-              type="button"
-              className="diceTrayDie diceTrayCoin"
-              onClick={() => act({ kind: 'dice.roll', sides: 2 })}
-            >
-              {t('tblCoin')}
-            </button>
-          </div>
-        </div>
-      )}
+  const { cyber, yugioh } = lifeMeta(me, room, t('tblLife'));
+  const gdef = getGame(room.game);
+  const secondary = gdef.resources.find((r) => !r.primary);
+  const secondaryLabel = secondary?.label ?? t('tblPoison');
 
-      {/* Damage tracker: one row per commander (21 = lethal), then poison
-         (10 = lethal), so several kinds of damage read the same way. */}
+  return (
+    <div className="myVitals" data-game={room.game || 'mtg'}>
+      {!hideLife && <LifeCard me={me} room={room} />}
+      {/* Phone only, and the same condition as the life card by design: where
+          the sheet IS the player's console, the conveniences belong in it. On
+          desktop (hideLife) they are already floating on the mat beside the
+          board tools, and a second copy here would be two live toolbars. */}
+      {!hideLife && <QuickControls me={me} room={room} />}
+    </div>
+  );
+}
+
+/**
+ * Commander damage (one row per opponent, 21 = lethal) and the secondary
+ * resource (poison, 10 = lethal). It hangs off the life counter as a dropdown
+ * rather than sitting open in the rail: it is damage TAKEN, which belongs with
+ * the life total it is eating, and most turns there is nothing to look at.
+ */
+export function DamageTracker({ me, room }: { me: TablePlayer; room: RoomState }) {
+  const t = useT();
+  const act = useGame((state) => state.act);
+  const cmdFoes = formatFor(room.format).hasCommander
+    ? room.players.filter((p) => p.seat !== me.seat && !p.conceded)
+    : [];
+  const { cyber } = lifeMeta(me, room, t('tblLife'));
+  const gdef = getGame(room.game);
+  const secondary = gdef.resources.find((r) => !r.primary);
+  const secondaryLabel = secondary?.label ?? t('tblPoison');
+  // One row per commander, then the secondary resource, so several kinds of
+  // damage read the same way.
+  return (
       <div className="dmgTrack">
         {cmdFoes.map((foe) => {
           const taken = me.cmdDamage[String(foe.seat)] ?? 0;
@@ -331,9 +391,10 @@ export function Vitals({ me, room, hideLife }: { me: TablePlayer; room: RoomStat
           </div>
         )}
       </div>
-    </div>
   );
 }
+
+
 
 /**
  * Floating-mana pool - a server-authoritative play aid for freeform MTG.
@@ -357,8 +418,8 @@ function ManaBar({ room, mana = EMPTY_MANA }: { room: RoomState; mana?: ManaPool
 
   if (!getGame(room.game).stats.some((s) => s.id === 'mana')) return null;
 
-  const total = MANA_ORDER.reduce((n, c) => n + mana[c], 0);
-  const active = total > 0;
+  // Any mana banked at all - the bar's divider lights, nothing resizes.
+  const active = MANA_ORDER.some((c) => mana[c] > 0);
 
   const bump = (c: ManaColor, d: number, el?: HTMLElement | null) => {
     act({ kind: 'mana.add', color: c, delta: d });
@@ -429,33 +490,23 @@ function ManaBar({ room, mana = EMPTY_MANA }: { room: RoomState; mana?: ManaPool
               }
             }}
           >
-            <ManaSymbol symbol={c} size={active ? 24 : 20} />
-            {mana[c] > 0 && <span className="manaCount">{mana[c]}</span>}
+            {/* Everything the plate contains rides on this ONE wrapper. Two
+                reasons, and both bite without it: a skewed plate needs a single
+                counter-skewed child (counter-skewing each child rotates it
+                about its own centre and the stack comes out stepped), and
+                WebKit is unreliable about honouring grid/flex on a <button>
+                itself - which is what left the counter row painting as an empty
+                capsule on iOS while the desktop looked right.
+                The count is ALWAYS rendered and merely hidden at zero, so the
+                glyphs cannot shift by a pixel as mana comes and goes. */}
+            <span className="manaPipInner">
+              <span className="manaCount" data-zero={mana[c] === 0 || undefined}>
+                {mana[c]}
+              </span>
+              <ManaSymbol symbol={c} size={16} />
+            </span>
           </button>
         ))}
-      </div>
-      {/* The tail row is always present (reserving its height) so banking the
-         first mana only fills it in rather than growing the bar and shoving the
-         poison row below it down. */}
-      <div className="manaTail">
-        {active && (
-          <Tooltip content={t('tblClearMana')}>
-            {/* One native Pill carries both the running total and, via its built-in
-               onRemove affordance, the clear-pool button - the "empties between
-               phases" gesture. Clicking the number does nothing; only the x clears,
-               so the pool is never nuked by accident. */}
-            <Pill
-              className="manaTotalPill"
-              size="sm"
-              tone="accent"
-              variant="soft"
-              onRemove={() => act({ kind: 'mana.clear' })}
-              aria-label={`${t('tblFloatingTotal')}: ${total}`}
-            >
-              {total}
-            </Pill>
-          </Tooltip>
-        )}
       </div>
     </div>
   );

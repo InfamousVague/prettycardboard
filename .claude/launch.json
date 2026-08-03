@@ -4,7 +4,10 @@
     {
       "name": "prettycardboard-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "cwd": "/Users/matt/Development/Apps/PrettyCardboard",
       "port": 5240,
       "autoPort": true

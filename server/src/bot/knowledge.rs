@@ -79,8 +79,20 @@ pub fn deck_meta(code: &str) -> Option<serde_json::Value> {
         }
     }
     let avg_mv = if mv_count > 0 { (mv_sum / mv_count as f64 * 10.0).round() / 10.0 } else { 0.0 };
+    // The deck's face. A human seat's cover is picked client-side (deckMeta.ts
+    // coverOf: the chosen header, else the commander, else the first card) and
+    // synced up; a bot has no client to do that, so the same rule runs here.
+    // Without it every bot showed a blank art panel in the pregame lobby and a
+    // coverless card in the roster - the tile is gated on deckMeta.cover.
+    let cover = deck
+        .cards
+        .iter()
+        .find(|c| c.board == "commander")
+        .or_else(|| deck.cards.iter().find(|c| c.board != "side"))
+        .map(|c| c.sid.clone());
     Some(serde_json::json!({
         "size": size,
+        "cover": cover,
         "creatures": creatures,
         "lands": lands,
         "spells": spells,
@@ -179,8 +191,16 @@ fn ygo_deck_meta(deck: &BotDeck) -> serde_json::Value {
             _ => traps += qty,
         }
     }
+    // Same reasoning as the MTG builder above: without a cover the seat's tile
+    // has no face to show.
+    let cover = deck
+        .cards
+        .iter()
+        .find(|c| c.board != "side")
+        .map(|c| c.sid.clone());
     serde_json::json!({
         "size": size,
+        "cover": cover,
         "monsters": monsters,
         "spells": spells,
         "traps": traps,
