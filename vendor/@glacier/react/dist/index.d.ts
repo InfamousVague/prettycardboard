@@ -1,5 +1,5 @@
 import * as react from 'react';
-import { RefObject, ComponentProps, ReactNode, ReactElement, SVGProps, CSSProperties, MouseEventHandler, ElementType } from 'react';
+import { RefObject, ComponentProps, ReactNode, ReactElement, SVGProps, CSSProperties, MouseEventHandler, ElementType, Ref } from 'react';
 import { motion } from 'motion/react';
 import { DayPickerLocale } from 'react-day-picker';
 
@@ -17,9 +17,17 @@ import { DayPickerLocale } from 'react-day-picker';
 declare const controlSizes: readonly ["sm", "md", "lg"];
 /** The semantic color families shared by pills, badges, dots, callouts, meters. */
 declare const tones: readonly ["neutral", "accent", "success", "warning", "danger", "info"];
+/**
+ * The silhouette vocabulary shared by every component with a `shape` prop.
+ * `rect` is today's rounded default and renders byte-identically to a
+ * component without the prop; the other shapes are the gamified plates. All
+ * geometry rides the `--glacier-shape-*` tokens and mirrors automatically
+ * under [dir='rtl'].
+ */
+declare const shapes: readonly ["rect", "slant", "notch", "edge"];
 
 /**
- * Enum vocabulary — named constants for the loose string props, so components
+ * Enum vocabulary - named constants for the loose string props, so components
  * read `size={Size.Large}` / `tone={Tone.Accent}` / `tone={TextTone.Muted}`
  * instead of `size="lg"` / `tone="accent"` / `tone="muted"`. Mirrors the
  * `@glacier/motion` enum pattern (Motion, Speed, Ease, Spring).
@@ -72,7 +80,9 @@ declare enum Variant {
     Outline = "outline",
     Ghost = "ghost",
     Glass = "glass",
-    Danger = "danger"
+    Danger = "danger",
+    Gradient = "gradient",
+    Wash = "wash"
 }
 /** The Skeleton placeholder's shape variants (its own axis, not a visual style). */
 declare enum SkeletonVariant$1 {
@@ -89,6 +99,8 @@ declare enum ScrollbarAppearance {
 
 /** Tone families, exported so every framework binding derives the same union. */
 declare const announcementTones: readonly ["neutral", "accent", "success", "warning", "danger", "info"];
+/** How the strip moves through its updates. */
+declare const announcementMotions: readonly ["step", "marquee"];
 
 /** Size steps, exported so the React kit derives its union from here. */
 declare const avatarSizes: readonly ["sm", "md", "lg", "xl"];
@@ -99,13 +111,13 @@ declare const avatarShapes: readonly ["circle", "rounded"];
 declare const bannerTones: readonly ["neutral", "accent", "success", "warning", "danger", "info"];
 
 /** Visual style families, exported so the React kit derives its union from here. */
-declare const buttonVariants: readonly ["solid", "soft", "outline", "ghost", "glass", "danger"];
+declare const buttonVariants: readonly ["solid", "soft", "outline", "ghost", "glass", "danger", "gradient"];
 
 /** Tone families, exported so the React kit derives its union from here. */
 declare const calloutTones: readonly ["note", "info", "success", "warning", "danger"];
 
 /** Visual materials, exported so the React kit derives its union from here. */
-declare const cardVariants: readonly ["solid", "glass"];
+declare const cardVariants: readonly ["solid", "glass", "wash"];
 /** The elevation steps, one per shadow token. Exported for a binding's union. */
 declare const cardElevations: readonly [0, 1, 2, 3, 4, 5];
 
@@ -127,6 +139,18 @@ declare const progressBarTones: readonly ["accent", "success", "warning", "dange
 
 /** Tone families the ring arc supports, a subset of the shared tones. */
 declare const progressRingTones: readonly ["accent", "success", "warning", "danger"];
+
+/**
+ * How the bar paints progress, exported so both kits derive their union from
+ * here. The geometry behind each shape lives in `@glacier/logic`.
+ */
+declare const seekBarShapes: readonly ["line", "wave", "waveform", "swell", "zigzag", "spikes", "bars", "mirror"];
+/** Colour family the played run paints from. Every entry resolves to tokens. */
+declare const seekBarTones: readonly ["accent", "success", "warning", "danger", "info", "neutral"];
+/** How the played run is filled: one flat token, or a ramp between two. */
+declare const seekBarFills: readonly ["solid", "tonal", "blend", "fade"];
+/** How visible the run ahead of the playhead is. */
+declare const seekBarRails: readonly ["muted", "contrast"];
 
 /** Bar thickness steps, exported so the React kit derives its union from here. */
 declare const segmentedBarSizes: readonly ["sm", "md"];
@@ -222,18 +246,34 @@ declare function resolveDirection(node: Element | null | undefined): Direction;
  */
 declare function useDirection(ref: RefObject<Element | null>): Direction;
 
+/**
+ * The silhouette vocabulary, derived from the spec so the React kit cannot
+ * drift from the contract. See @glacier/spec vocab.ts.
+ */
+type ShapeName = (typeof shapes)[number];
+
 type ButtonVariant = (typeof buttonVariants)[number];
 type ControlSize = (typeof controlSizes)[number];
 interface ButtonProps extends Omit<ComponentProps<typeof motion.button>, 'children'> {
     variant?: ButtonVariant;
     size?: ControlSize;
+    /**
+     * Plate silhouette. `rect` is the untouched default; the gamified shapes ride
+     * the shape layer, which keeps the focus ring and the hit area on the full
+     * upright box and swaps the elevation shadows for the shape drop/glow pair.
+     */
+    shape?: ShapeName;
+    /** Paints the accent leading-edge stripe, widening on hover and focus. */
+    edgeAccent?: boolean;
+    /** Slides the accent sweep in from the leading edge on hover and focus. */
+    sweep?: boolean;
     loading?: boolean;
     /** Renders a placeholder with the button's exact geometry. */
     skeleton?: boolean;
     fullWidth?: boolean;
     children?: ReactNode;
 }
-declare function Button({ variant, size, loading, skeleton, fullWidth, disabled, className, children, ...rest }: ButtonProps): react.JSX.Element;
+declare function Button({ variant, size, shape, edgeAccent, sweep, loading, skeleton, fullWidth, disabled, className, children, ...rest }: ButtonProps): react.JSX.Element;
 
 interface IconButtonProps extends Omit<ComponentProps<typeof motion.button>, 'children'> {
     /** Required: icon-only controls have no visible text. */
@@ -302,13 +342,19 @@ interface CardProps extends Omit<ComponentProps<typeof motion.div>, 'children'> 
     elevation?: Elevation;
     /** Adds hover lift + shadow bump for clickable cards. */
     interactive?: boolean;
-    /** 'glass' renders a translucent blurred material. */
+    /** 'glass' renders a translucent blurred material, 'wash' a quiet accent gradient. */
     variant?: CardVariant;
+    /**
+     * Plate silhouette. 'rect' is the untouched default; the gamified plates
+     * carry their depth on the shape drop/glow pair instead of the elevation
+     * shadow ladder, and mirror themselves under [dir='rtl'].
+     */
+    shape?: ShapeName;
     /** Renders a placeholder with the component's exact geometry. */
     skeleton?: boolean;
     children?: ReactNode;
 }
-declare function Card({ elevation, interactive, variant, skeleton, className, children, ...rest }: CardProps): react.JSX.Element;
+declare function Card({ elevation, interactive, variant, shape, skeleton, className, children, ...rest }: CardProps): react.JSX.Element;
 
 type SurfaceLevel = 0 | 1 | 2 | 'sunken';
 interface SurfaceProps extends ComponentProps<'div'> {
@@ -388,6 +434,12 @@ interface PillProps extends Omit<ComponentProps<'span'>, 'children'> {
     tone?: PillTone;
     variant?: PillVariant;
     size?: 'sm' | 'md';
+    /**
+     * Plate silhouette. `rect` is the untouched capsule; the gamified shapes hand
+     * the pill's paint to the shape layer and trade the capsule radius for plate
+     * corners.
+     */
+    shape?: ShapeName;
     /** Leading glyph, hidden from assistive tech. */
     icon?: ReactNode;
     /** When set, renders a trailing remove button that calls this on click, turning the pill into a removable tag. */
@@ -398,7 +450,7 @@ interface PillProps extends Omit<ComponentProps<'span'>, 'children'> {
     glass?: boolean;
     children?: ReactNode;
 }
-declare function Pill({ tone, variant, size, icon, onRemove, skeleton, glass, className, children, ...rest }: PillProps): react.JSX.Element;
+declare function Pill({ tone, variant, size, shape, icon, onRemove, skeleton, glass, className, children, ...rest }: PillProps): react.JSX.Element;
 
 type DividerOrientation = (typeof dividerOrientations)[number];
 interface DividerProps extends Omit<ComponentProps<'hr'>, 'children'> {
@@ -491,6 +543,484 @@ interface SliderProps extends Omit<ComponentProps<'input'>, 'type' | 'value' | '
  * orientation="vertical" to stand the rail up for volume-style controls.
  */
 declare function Slider({ value, defaultValue, min, max, step, onValueChange, orientation, hapticStep, skeleton, disabled, className, style, id, ...rest }: SliderProps): react.JSX.Element;
+
+type SeekBarShape = (typeof seekBarShapes)[number];
+type SeekBarTone = (typeof seekBarTones)[number];
+type SeekBarFill = (typeof seekBarFills)[number];
+type SeekBarRail = (typeof seekBarRails)[number];
+interface SeekBarProps extends Omit<ComponentProps<'div'>, 'onChange' | 'defaultValue'> {
+    /** Track length in seconds. */
+    duration: number;
+    /** Controlled playhead position in seconds. */
+    value?: number;
+    /** Initial position when uncontrolled. */
+    defaultValue?: number;
+    /** Called with the position in seconds as the user scrubs or keys. */
+    onValueChange?: (seconds: number) => void;
+    /**
+     * Called once with the final position when a scrub is released, for players
+     * that seek on commit rather than on every pointer move.
+     */
+    onSeekEnd?: (seconds: number) => void;
+    /** How progress is painted. */
+    shape?: SeekBarShape;
+    /** Colour family the played run paints from; the run ahead stays muted in every tone. */
+    tone?: SeekBarTone;
+    /** Flat token, or a ramp along the played run between the tone's two tokens. */
+    fill?: SeekBarFill;
+    /**
+     * How visible the run ahead of the playhead is. Muted suits the page surface;
+     * contrast lifts it for raised surfaces like a card.
+     */
+    rail?: SeekBarRail;
+    /**
+     * Normalized 0-1 loudness samples, read by the waveform, spikes, bars, and
+     * mirror shapes. Omitted, every sample reads as full.
+     */
+    levels?: number[];
+    /** Arrow-key step in seconds; Page keys move by ten steps. */
+    step?: number;
+    /** Formats a position for aria-valuetext. Defaults to m:ss. */
+    formatTime?: (seconds: number) => string;
+    /** Bar height step. */
+    size?: 'sm' | 'md';
+    /** Dims the bar and blocks pointer and keyboard input. */
+    disabled?: boolean;
+    /** Renders a placeholder with the exact geometry. */
+    skeleton?: boolean;
+    /** Accessible name for the scrubber, e.g. "Seek". */
+    'aria-label': string;
+}
+/**
+ * The transport scrubber for audio: press or drag anywhere on the bar to seek.
+ * `shape` decides how it paints - a plain rail, a squiggle behind the playhead,
+ * or a waveform of the track's `levels` - while the interaction, semantics, and
+ * geometry stay identical across all of them.
+ */
+declare function SeekBar({ duration, value, defaultValue, onValueChange, onSeekEnd, shape, tone, fill, rail, levels, step, formatTime, size, disabled, skeleton, className, style, 'aria-label': ariaLabel, ...rest }: SeekBarProps): react.JSX.Element;
+
+/**
+ * How the card arranges what it holds.
+ *
+ * - `stacked` - heading, bar, then controls in a column. The default, and the
+ *   one that survives being squeezed into a narrow column.
+ * - `inline` - artwork top-aligned on the leading edge with the title, artist,
+ *   and album beside it; the bar and controls then break to their own rows and
+ *   span the full width, so the seek bar is never squeezed into a column.
+ * - `square` - artwork as a square hero with the bar and controls beneath it,
+ *   the shape a phone's now-playing screen wants.
+ */
+type PlayerLayout = 'stacked' | 'inline' | 'square';
+/**
+ * How tightly the card is packed. Deliberately a subset of the app-wide density
+ * words rather than a new scale, so the two read as the same vocabulary.
+ */
+type PlayerDensity = 'compact' | 'comfortable' | 'spacious';
+/**
+ * Repeat modes, in the order the button cycles through them.
+ *
+ * - `off` - stop at the end of the track.
+ * - `all` - loop the queue.
+ * - `one` - loop this track.
+ */
+type PlayerRepeat = 'off' | 'all' | 'one';
+
+/**
+ * Calendar view logic - the grid building, event bucketing, and navigation
+ * behind a scheduler surface. All of it is arithmetic rather than pixels, so
+ * both bindings lay out the same month from the same inputs.
+ *
+ * Deliberately dependency-free. Every step here uses the local-date
+ * constructor (`new Date(y, m, d)`) rather than adding milliseconds, because
+ * a day is not always 24 hours: on a DST boundary "+86400000" lands on the
+ * same calendar day or skips one, and a calendar that loses a day twice a year
+ * is worse than no calendar.
+ */
+/** How the calendar is showing its range. */
+type CalendarViewMode = 'month' | 'week' | 'agenda';
+/** Which weekday a week starts on. Sunday in the US, Monday most elsewhere. */
+type WeekStart = 0 | 1;
+/** The colour families an event can carry, matching the kit's tone vocabulary. */
+type CalendarTone = 'accent' | 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+/** One scheduled thing. */
+interface CalendarEvent {
+    /** Stable identity; also what selection handlers report back. */
+    id: string;
+    /** When it starts. */
+    start: Date;
+    /** When it ends. Omitted means it occupies only its start day. */
+    end?: Date;
+    /** The line the user reads. */
+    title: string;
+    /** Colour family; defaults to accent at the binding. */
+    tone?: CalendarTone;
+    /** Shown without a time, and sorted above timed events on its day. */
+    allDay?: boolean;
+}
+
+/**
+ * Rich text editing - the selection-to-markdown transforms behind a formatting
+ * toolbar.
+ *
+ * Markdown over `contenteditable` is a deliberate choice. A contenteditable
+ * surface is a DOM-only construct with no React Native equivalent, so an editor
+ * built on it could never have a native binding. These transforms are pure
+ * string arithmetic over a plain text value and a selection range, which every
+ * platform's text input already provides - so Bold means exactly the same thing
+ * on both, and it is testable without a browser.
+ */
+/** An inline mark, applied by wrapping the selection. */
+type MarkdownMark = 'bold' | 'italic' | 'code' | 'strike';
+/** A block form, applied by prefixing every line the selection touches. */
+type MarkdownBlock = 'heading' | 'quote' | 'bullet' | 'number';
+
+/**
+ * Command palette logic - the matching, grouping, and cursor rules behind a
+ * ⌘K overlay. All of it is decisions rather than pixels, so both bindings share
+ * one answer to "what does this query match, and where does the cursor go".
+ */
+/** A single runnable command. */
+interface CommandDescriptor {
+    /** Stable identity; also what `onRun` reports back. */
+    id: string;
+    /** The line the user reads. */
+    label: string;
+    /** Optional heading this command files under, e.g. "Navigation". */
+    group?: string;
+    /**
+     * Extra words the query should match but the list should not show - aliases,
+     * old names, the thing a user would guess before learning the real label.
+     */
+    keywords?: string;
+    /** Key hint rendered on the trailing edge, e.g. "⌘S". Display only. */
+    shortcut?: string;
+    /** Listed but not runnable; the cursor skips it. */
+    disabled?: boolean;
+}
+
+/**
+ * Chat logic - the rules every chat surface reads from: how a flat message log
+ * collapses into author runs, where the separators land, how a reaction bar
+ * tallies, and what a bubble's corners, timestamp, and status resolve to.
+ *
+ * This is the layer where chat apps actually differ from one another, so it is
+ * the layer most likely to drift. Everything here is a decision rather than a
+ * pixel, which is why it lives once in commons and neither binding re-derives
+ * any of it.
+ *
+ * Time is epoch milliseconds everywhere, never a `Date`. Three reasons, in
+ * order of how much they hurt: messages arrive as JSON, so a number is what the
+ * transport already carries and a `Date` would be a parse step at every
+ * boundary; a number is a primitive, so it compares by value in a memo
+ * dependency list where a freshly-allocated `Date` would re-render a virtualised
+ * transcript on every tick; and equal moments compare equal with `===`, which is
+ * exactly the identity a stable list key needs. Calendar arithmetic still goes
+ * through the local-date constructor - see `calendar-view.ts`, whose `dayKey`
+ * and `startOfDay` are reused here rather than re-implemented, because a day is
+ * not always 86,400,000ms and a transcript that loses a day twice a year is
+ * worse than one with no date rows at all.
+ */
+/** Epoch milliseconds. The one time representation the whole suite speaks. */
+type Millis = number;
+/**
+ * How far along a message is on its way to the other end.
+ *
+ * Exported as a const array so the spec and both bindings derive one enum
+ * instead of each transcribing the same five words.
+ */
+declare const deliveryStatuses: readonly ["sending", "sent", "delivered", "read", "failed"];
+type DeliveryStatus$1 = (typeof deliveryStatuses)[number];
+/** One person's one reaction, as the server stores it. */
+interface Reaction {
+    /** The rendered glyph. Compared as-is: the caller owns any normalisation. */
+    emoji: string;
+    /** Who reacted; also how the viewer's own reaction is recognised. */
+    actorId: string;
+    /** Optional, and deliberately unused for ordering - see `aggregateReactions`. */
+    at?: Millis;
+}
+/** Something sent alongside (or instead of) text. */
+interface ChatAttachment {
+    /** Stable identity, and the render key. */
+    id: string;
+    /** Where the bytes are. Opaque here; each binding loads it its own way. */
+    url?: string;
+    /** As reported by the server or the file picker, e.g. `image/png`. */
+    mimeType?: string;
+    /** As the user sees it. Also the fallback when the mime type is useless. */
+    fileName?: string;
+    byteSize?: number;
+    /** Intrinsic pixel size, so a renderer can reserve the box before the bytes land. */
+    width?: number;
+    height?: number;
+    /** Playable length, for the audio and video renderers. */
+    durationMs?: number;
+}
+/**
+ * One message. Deliberately thin: everything a chat surface *decides* is
+ * derived from these fields, and anything a particular app also needs rides
+ * along on its own subtype - every function here is generic over `M extends
+ * ChatMessage`, so extra fields survive grouping untouched.
+ */
+interface ChatMessage {
+    /** Stable identity. Optimistic sends must keep the same id once acked, or
+     *  the group and the unread anchor both lose their place. */
+    id: string;
+    /** Who sent it. Grouping compares these; it never compares display names,
+     *  which two different people can share. */
+    authorId: string;
+    /** When it was sent, epoch millis. */
+    at: Millis;
+    text?: string;
+    attachments?: ChatAttachment[];
+    reactions?: Reaction[];
+    /** Omitted for anything received - status is about the viewer's own outbox. */
+    status?: DeliveryStatus$1;
+    /** The message this one answers, for a quoted preview. */
+    replyToId?: string;
+    editedAt?: Millis;
+    /**
+     * Refuses to be merged with its neighbours in either direction. This is how a
+     * system notice ("Ana joined"), a call record, or a date-change notice stays
+     * on its own row instead of being swallowed into whichever author happened to
+     * speak on both sides of it.
+     */
+    breaksGroup?: boolean;
+}
+/**
+ * A run of consecutive messages from one author, rendered as one stack with a
+ * single avatar and header.
+ */
+interface MessageGroup$1<M extends ChatMessage = ChatMessage> {
+    /**
+     * The first message's id. Derived rather than generated so the key survives a
+     * re-group: appending a message either extends this run (id unchanged) or
+     * starts a new one, and React never sees the whole transcript remount.
+     */
+    id: string;
+    authorId: string;
+    /** In render order, never empty. */
+    messages: M[];
+    /** The first message's time - what a group header prints. */
+    startedAt: Millis;
+    /** The last message's time - what a trailing stamp prints. */
+    endedAt: Millis;
+    /** `YYYY-MM-DD`, local. Groups never span days, so one key always fits. */
+    dayKey: string;
+    /** The least advanced status among the members; see `leastDelivery`. */
+    status?: DeliveryStatus$1;
+    /** The run is a single message that refused to merge - a system notice. */
+    standalone: boolean;
+    /**
+     * This run picked up where an earlier run from the same author left off,
+     * because a separator was pushed between them. The renderer should suppress
+     * the repeated avatar and name; only `insertSeparators` ever sets it.
+     */
+    continued: boolean;
+}
+/**
+ * Where a message sits in its run. Drives corner radii and the tail: `only` is
+ * a fully rounded bubble with a tail, `first`/`middle`/`last` flatten the edge
+ * facing their neighbour so a stack reads as one block.
+ */
+type BubblePosition = 'only' | 'first' | 'middle' | 'last';
+/**
+ * Which shape a timestamp should take. Not the text - the *shape*; see
+ * `messageTimestamp` for why no English appears in this module.
+ *
+ * - `time` - the clock, e.g. "9:41 AM". What a bubble's own stamp shows.
+ * - `yesterday` - the previous calendar day, spelled by the caller's
+ *   `Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(-1, 'day')`.
+ * - `weekday` - within the last week, e.g. "Tuesday".
+ * - `date` - this year, e.g. "Mar 3".
+ * - `dateWithYear` - any other year, e.g. "Mar 3, 2024".
+ */
+type MessageTimestampKind = 'time' | 'yesterday' | 'weekday' | 'date' | 'dateWithYear';
+/** How much of the moment the caller wants spelled out. */
+type MessageTimestampStyle = 
+/** The full ladder: clock today, "Yesterday", weekday, then a date. */
+'auto'
+/** Always the clock, whatever day it was. */
+ | 'time'
+/** Always the calendar date - what a date separator row prints. */
+ | 'date';
+/**
+ * The subset of `Intl.DateTimeFormatOptions` these kinds need, declared
+ * structurally rather than imported.
+ *
+ * Two reasons: commons must not reach for a platform lib, and Hermes ships
+ * without full ICU on some builds - a binding that has to hand-roll the
+ * formatting should still be handed the same description of what to print,
+ * rather than a type it cannot satisfy. The shape is assignable to
+ * `Intl.DateTimeFormatOptions`, so the common case is a direct spread.
+ */
+interface MessageTimestampFormat {
+    hour?: 'numeric';
+    minute?: '2-digit';
+    weekday?: 'long';
+    month?: 'short';
+    day?: 'numeric';
+    year?: 'numeric';
+}
+/**
+ * A moment plus a description of how to spell it - never a spelled string.
+ *
+ * Formatting a date is locale work, and a design system that returns "Mar 3"
+ * has just hardcoded English into every app that consumes it. So this returns
+ * the decision (which of the five shapes applies) and leaves the words to the
+ * caller's `Intl` or catalog. `formatMessageTimestamp` is the convenience path
+ * for callers who are happy with `Intl`.
+ */
+interface MessageTimestamp {
+    kind: MessageTimestampKind;
+    /** The moment, unchanged, so the caller formats from the source of truth. */
+    at: Millis;
+    /** Whole local days between `at` and `now`; 0 is today, negative is the future. */
+    daysAgo: number;
+    /** The fields `kind` wants rendered. */
+    format: MessageTimestampFormat;
+}
+
+/**
+ * Status and chrome decisions - the small, load-bearing answers the message
+ * atoms and the conversation chrome need before anything is painted: which
+ * SHAPE a delivery state draws, how much of a quoted message survives, and what
+ * a connection does between losing the network and getting it back.
+ *
+ * None of it is pixels, all of it is shared. A tick cluster that means "read" on
+ * the web and "delivered" on the phone, or a reply preview that cuts at 100
+ * characters in one binding and 140 in the other, are the exact drifts this file
+ * exists to make impossible.
+ *
+ * `chat.ts` owns the transcript rules (grouping, separators, timestamps, typing
+ * state, delivery ordering) and is consumed here rather than re-derived -
+ * `deliveryRank` in particular, which is the one authority on how far along a
+ * message is.
+ *
+ * Scoped to delivery: the quoted-message, system-message, typing, thread, and
+ * connection helpers that used to live here went with the components that were
+ * their only callers.
+ */
+
+/** The text alternative for each delivery state; every tick has to say its name. */
+interface DeliveryLabels {
+    sending: string;
+    sent: string;
+    delivered: string;
+    read: string;
+    failed: string;
+}
+
+/**
+ * Message presentation - the measurements and mappings a rendered message needs,
+ * as opposed to the rules about the transcript itself.
+ *
+ * `chat.ts` owns WHAT a transcript is: where runs break, where separators land,
+ * which slot in a run a message occupies, which status a stack advertises. This
+ * module owns HOW WIDE and HOW ROUND - the handful of numbers and names that a
+ * DOM bubble and a React Native bubble must agree on or the two kits quietly
+ * draw different chat apps.
+ *
+ * Delivery is NOT here. Which shape a status draws, which token tints it, and
+ * what it is called all live in `status.ts`, because the same answers are needed
+ * by the standalone delivery mark as by a bubble's meta line - and a second copy
+ * of that table is how "delivered" and "read" end up sharing a silhouette on one
+ * surface and not the other.
+ *
+ * The split matters because these are the values most likely to be re-guessed:
+ * a corner radius or a max-width ratio looks like styling, so it gets typed into
+ * a stylesheet on one side and a style object on the other, and nobody notices
+ * they disagree until a screenshot comparison. Everything here is therefore
+ * either a bare `--glacier-*` token name (each binding wraps it its own way) or
+ * a plain number, and neither binding is allowed a literal of its own.
+ *
+ * Nothing here is added to `chat.ts`: that module is the log's contract and is
+ * consumed by the list, the reactions, and the typing atoms as well. This one is
+ * only about drawing a message.
+ */
+
+/**
+ * The two chat layouts, which are genuinely different products rather than two
+ * skins of one.
+ *
+ * - `bubble` - iMessage, WhatsApp, Signal. A tinted, rounded, edge-aligned
+ *   capsule whose corners encode its place in a run, sized to its content and
+ *   capped well short of the column so authorship is legible from shape and
+ *   position alone.
+ * - `row` - Slack, Discord, IRC. Full-width prose with an avatar gutter and a
+ *   name/time header, no fill at all. Alignment carries no meaning here, so the
+ *   header has to say who is talking.
+ */
+type MessageLayout = 'bubble' | 'row';
+/**
+ * Which edge of the transcript a message hugs, in logical terms.
+ *
+ * Deliberately `start`/`end` rather than `left`/`right`. The physical reading is
+ * a consequence of the writing direction, not a property of the message: an
+ * Arabic transcript mirrors as a whole, exactly the way the platform's own chat
+ * app does, and pinning "mine" to the physical right would leave the viewer's
+ * own messages on the wrong side of their own language.
+ */
+type MessageSide = 'start' | 'end';
+/**
+ * Everything a message says out loud.
+ *
+ * The five delivery words are `DeliveryLabels` verbatim rather than restated,
+ * because a bubble's meta line and a standalone delivery mark are reporting the
+ * same fact: two sets would let a transcript say "Not sent" beside the glyph and
+ * "Not delivered" under it. `edited` is the only word a message owns that a
+ * delivery mark has no use for, so it is the only one added here.
+ */
+interface MessageLabels extends DeliveryLabels {
+    /** Appended to a message whose author has since changed it. */
+    edited: string;
+}
+
+/** Reads the current loudness of whatever is playing, as 0..1. */
+type LoudnessMeter = () => number;
+
+/**
+ * A fan's resting focus: its own middle.
+ *
+ * This is what puts the density at the ENDS rather than spreading everything
+ * evenly - the centre items claim the room and the outer ones tuck in behind
+ * each other, which is both how a fan of cards sits in a hand and the only way a
+ * forty-item fan fits the strip a seven-item one does.
+ */
+declare function restFocus(count: number): number;
+
+/**
+ * Wires a Web Audio analyser onto a playing `<audio>` (or `<video>`) element and
+ * hands back a loudness meter - the sampler `useLiveLevels` reads to build a
+ * SeekBar's waveform while the track plays, instead of measuring the file up
+ * front.
+ *
+ * Web only: the Web Audio API has no React Native equivalent, so a device build
+ * feeds `useLiveLevels` from its own player's metering instead. The shared
+ * bookkeeping lives in @glacier/logic, which is why only this thin adapter is
+ * platform-specific.
+ *
+ * Two constraints the browser imposes, both easy to trip over:
+ *
+ * 1. **Call this inside a user gesture.** An `AudioContext` built before the
+ *    first real interaction is created suspended, and on WebKit it can stay
+ *    silent permanently even after `resume()`. Create the meter in the same
+ *    handler that starts playback.
+ * 2. **The audio must be CORS-clean.** Cross-origin media taints the graph and
+ *    the analyser reads pure silence, with no error to tell you why. Set
+ *    `crossOrigin="anonymous"` on the element and serve the audio with
+ *    `Access-Control-Allow-Origin`.
+ *
+ * An element can only be connected to one source node for its lifetime, so the
+ * returned meter is cached per element and re-calling this is safe.
+ */
+interface AnalyserMeter {
+    /** Current loudness, 0..1. Safe to call at any rate. */
+    meter: LoudnessMeter;
+    /** Releases the audio graph. The element keeps playing. */
+    dispose(): void;
+}
+declare function createAnalyserMeter(element: HTMLMediaElement): AnalyserMeter;
 
 type SkeletonVariant = (typeof skeletonVariants)[number];
 interface SkeletonProps extends ComponentProps<'span'> {
@@ -766,6 +1296,8 @@ interface BannerProps extends ComponentProps<'div'> {
 declare function Banner({ tone, icon, action, onDismiss, skeleton, className, children, ...rest }: BannerProps): react.JSX.Element;
 
 type AnnouncementTone = (typeof announcementTones)[number];
+/** How the strip moves through its updates. */
+type AnnouncementMotion = (typeof announcementMotions)[number];
 interface AnnouncementItem {
     /** Stable identity for the update, used for the slide transition and indicator. */
     id: string;
@@ -779,25 +1311,45 @@ interface AnnouncementsProps extends Omit<ComponentProps<'section'>, 'children'>
     items: readonly AnnouncementItem[];
     /** Semantic color family for the strip. */
     tone?: AnnouncementTone;
-    /** Controlled index of the current update. */
+    /**
+     * `step` shows one update at a time and swaps them on the interval.
+     * `marquee` scrolls the whole list past continuously, so every update is on
+     * its way through rather than waiting its turn.
+     */
+    motion?: AnnouncementMotion;
+    /** Controlled index of the current update. Step motion only. */
     index?: number;
-    /** Initially visible update in uncontrolled use. */
+    /** Initially visible update in uncontrolled use. Step motion only. */
     defaultIndex?: number;
     /** Called whenever a user action or auto-rotation selects a new update. */
     onIndexChange?: (index: number) => void;
-    /** Whether updates should rotate until the user pauses or interacts. */
+    /**
+     * Makes each update activatable - clicked, or reached by keyboard and
+     * entered. Supply it when an update opens something: the fuller note, a
+     * release page, a modal. Without it the strip is read-only text.
+     */
+    onItemSelect?: (item: AnnouncementItem, index: number) => void;
+    /** Whether updates should move until the user pauses or interacts. */
     autoPlay?: boolean;
-    /** Delay in milliseconds between automatic updates. */
+    /** Step motion: delay in milliseconds between automatic updates. */
     interval?: number;
+    /**
+     * Marquee motion: seconds each update takes to cross the strip. Travel time
+     * is this times the number of updates, so adding an update lengthens the
+     * loop rather than speeding every update up.
+     */
+    secondsPerItem?: number;
     /** Accessible name for the announcements region. */
     'aria-label'?: string;
 }
 /**
- * A compact application-chrome ticker for short, rotating updates. Auto-rotation
- * stops while the region is hovered or focused, and a persistent pause control
- * lets people keep the current update in view.
+ * A compact application-chrome ticker for short updates. It either steps
+ * through them one at a time or scrolls the whole list past continuously;
+ * either way movement stops while the region is hovered or focused, and a
+ * persistent pause control lets people hold an update still to read - or to
+ * click, when the updates open something.
  */
-declare function Announcements({ items, tone, index, defaultIndex, onIndexChange, autoPlay, interval, className, 'aria-label': ariaLabel, onMouseEnter, onMouseLeave, onFocusCapture, onBlurCapture, ...rest }: AnnouncementsProps): react.JSX.Element | null;
+declare function Announcements({ items, tone, motion, index, defaultIndex, onIndexChange, onItemSelect, autoPlay, interval, secondsPerItem, className, style, 'aria-label': ariaLabel, onMouseEnter, onMouseLeave, onFocusCapture, onBlurCapture, ...rest }: AnnouncementsProps): react.JSX.Element | null;
 
 interface EmptyStateProps extends Omit<ComponentProps<'div'>, 'title'> {
     /** Glyph rendered inside the leading disc. Decorative. */
@@ -883,6 +1435,13 @@ interface StatTileProps extends ComponentProps<'div'> {
     hint?: ReactNode;
     /** Renders the frosted glass material instead of a solid card. */
     glass?: boolean;
+    /**
+     * Plate silhouette. 'rect' is the untouched default; the gamified plates put
+     * a row of tiles in the forge-plate register and mirror under [dir='rtl'].
+     */
+    shape?: ShapeName;
+    /** Paints the accent leading-edge stripe along the tile's inline-start edge. */
+    edgeAccent?: boolean;
     /** Renders a placeholder with the component's exact geometry. */
     skeleton?: boolean;
 }
@@ -891,7 +1450,7 @@ interface StatTileProps extends ComponentProps<'div'> {
  * muted label, with an optional trailing delta or hint. Built on the card
  * surface tokens so a row or grid of tiles reads as one consistent panel.
  */
-declare function StatTile({ icon, value, label, hint, glass, skeleton, className, ...rest }: StatTileProps): react.JSX.Element;
+declare function StatTile({ icon, value, label, hint, glass, shape, edgeAccent, skeleton, className, ...rest }: StatTileProps): react.JSX.Element;
 
 type DeviceFrameSize = (typeof deviceFrameSizes)[number];
 interface DeviceFrameProps extends Omit<ComponentProps<'div'>, 'children'> {
@@ -1082,6 +1641,84 @@ interface FieldProps extends ComponentProps<'div'> {
     children: ReactNode;
 }
 declare function Field({ label, hint, error, required, skeleton, className, children, ...rest }: FieldProps): react.JSX.Element;
+
+/** Labels every control needs, so the card can be spoken in any language. */
+interface PlayerCardLabels {
+    play: string;
+    pause: string;
+    skipBack: string;
+    skipForward: string;
+    shuffle: string;
+    /** Given the current mode, so the label can name it. */
+    repeat: (mode: PlayerRepeat) => string;
+    seek: string;
+}
+interface PlayerCardProps extends Omit<CardProps, 'children' | 'title' | 'defaultValue' | 'skeleton' | 'layout' | 'shape'> {
+    /** Album art, placed and sized by the layout. */
+    artwork?: ReactNode;
+    /** How the card arranges what it holds. */
+    layout?: PlayerLayout;
+    /** How tightly it is packed. */
+    density?: PlayerDensity;
+    /** What is playing. */
+    title?: ReactNode;
+    /** A second line, usually the artist. */
+    subtitle?: ReactNode;
+    /** A third line naming the album or source. */
+    album?: ReactNode;
+    /** Track length in seconds. */
+    duration: number;
+    /** Controlled playhead position in seconds. */
+    value?: number;
+    defaultValue?: number;
+    onValueChange?: (seconds: number) => void;
+    onSeekEnd?: (seconds: number) => void;
+    /** Controlled play state. */
+    playing?: boolean;
+    defaultPlaying?: boolean;
+    onPlayingChange?: (playing: boolean) => void;
+    /** Omit a skip handler and that control is not rendered. */
+    onSkipBack?: () => void;
+    onSkipForward?: () => void;
+    /** Controlled shuffle. Omit both this and the handler to drop the control. */
+    shuffle?: boolean;
+    defaultShuffle?: boolean;
+    onShuffleChange?: (on: boolean) => void;
+    /** Controlled repeat mode. Omit both this and the handler to drop the control. */
+    repeat?: PlayerRepeat;
+    defaultRepeat?: PlayerRepeat;
+    onRepeatChange?: (mode: PlayerRepeat) => void;
+    /** Forwarded to the seek bar. */
+    shape?: SeekBarProps['shape'];
+    tone?: SeekBarProps['tone'];
+    fill?: SeekBarProps['fill'];
+    /**
+     * How visible the unplayed run is. Defaults to `contrast`, because the card
+     * is a raised surface and the muted rail vanishes against it.
+     */
+    rail?: SeekBarProps['rail'];
+    levels?: number[];
+    /** Formats the elapsed and total readouts. */
+    formatTime?: (seconds: number) => string;
+    /** Dims the card and blocks every control. */
+    disabled?: boolean;
+    /** Loads every part as its own placeholder, keeping the card's exact layout. */
+    skeleton?: boolean;
+    /** Overrides the control labels; merged over the English defaults. */
+    labels?: Partial<PlayerCardLabels>;
+}
+/**
+ * An audio transport in a card: what is playing, a seek bar with its elapsed and
+ * total times, and the play, skip, shuffle, and repeat controls under it.
+ *
+ * Every piece of state is controllable or left to the card, and a control whose
+ * handler is omitted is not rendered at all - so the same component covers a
+ * bare play/pause strip and a full transport without a pile of `show*` flags.
+ *
+ * There is one tree, not a separate skeleton tree: `skeleton` is threaded into
+ * each part, so a loading card holds the exact layout it will settle into.
+ */
+declare function PlayerCard({ artwork, layout, density, title, subtitle, album, duration, value, defaultValue, onValueChange, onSeekEnd, playing, defaultPlaying, onPlayingChange, onSkipBack, onSkipForward, shuffle, defaultShuffle, onShuffleChange, repeat, defaultRepeat, onRepeatChange, shape, tone, fill, rail, levels, formatTime, disabled, skeleton, labels, className, style, ...rest }: PlayerCardProps): react.JSX.Element;
 
 interface FieldsetProps extends ComponentProps<'fieldset'> {
     /** The group label, rendered as a native legend. */
@@ -1397,6 +2034,22 @@ interface SplitButtonProps extends Omit<ComponentProps<'span'>, 'children'> {
  */
 declare function SplitButton({ children, onAction, menu, menuLabel, variant, size, disabled, loading, fullWidth, placement, className, ...rest }: SplitButtonProps): react.JSX.Element;
 
+/** Step numbers: 1 unit = 4px at the min viewport, 5px at the max. */
+declare const SPACE_STEPS: readonly [0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24];
+type SpaceStep = (typeof SPACE_STEPS)[number];
+
+/**
+ * Density modes, switched by data-density on any ancestor (usually <html>).
+ *
+ * Two things move together: control heights, and a density scale that
+ * multiplies the whole space scale. So every padding and gap built on
+ * --glacier-space-* breathes with density while staying on one shared scale.
+ *
+ * Comfortable remains the default for backwards compatibility. The other
+ * modes provide two tighter and two roomier stops around that baseline.
+ */
+type Density = 'extra-compact' | 'compact' | 'comfortable' | 'spacious' | 'more-space';
+
 /**
  * @glacier/motion - the kit's micro-animation vocabulary as enums, backed by
  * framer-motion (the `motion` package) and the @glacier/tokens motion tokens.
@@ -1443,22 +2096,6 @@ interface SegmentedControlProps extends ComponentProps<'div'> {
  * behavior), and the thumb follows.
  */
 declare function SegmentedControl({ options, value, defaultValue, onValueChange, size, fullWidth, skeleton, spring, disabled, className, 'aria-label': ariaLabel, ...rest }: SegmentedControlProps): react.JSX.Element;
-
-/** Step numbers: 1 unit = 4px at the min viewport, 5px at the max. */
-declare const SPACE_STEPS: readonly [0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24];
-type SpaceStep = (typeof SPACE_STEPS)[number];
-
-/**
- * Density modes, switched by data-density on any ancestor (usually <html>).
- *
- * Two things move together: control heights, and a density scale that
- * multiplies the whole space scale. So every padding and gap built on
- * --glacier-space-* breathes with density while staying on one shared scale.
- *
- * Comfortable remains the default for backwards compatibility. The other
- * modes provide two tighter and two roomier stops around that baseline.
- */
-type Density = 'extra-compact' | 'compact' | 'comfortable' | 'spacious' | 'more-space';
 
 declare const densityModes: readonly ["extra-compact", "compact", "comfortable", "spacious", "more-space"];
 type DensityMode = Density;
@@ -2234,6 +2871,16 @@ interface NavBarProps extends ComponentProps<'nav'> {
     showLabels?: boolean;
     /** Spring preset for the active pill as it slides between items. */
     spring?: Spring;
+    /**
+     * Bar-level plate silhouette, applied to every item. 'rect' is the untouched
+     * default; the gamified plates put the bar in the game-menu register, with
+     * the sliding active pill preserved, and mirror under [dir='rtl'].
+     */
+    shape?: ShapeName;
+    /** Paints the accent leading-edge stripe on each item plate. */
+    edgeAccent?: boolean;
+    /** Slides the gradient sweep across an item plate on hover and focus-visible. */
+    sweep?: boolean;
     /** Renders a placeholder with the component's exact geometry. */
     skeleton?: boolean;
     children?: ReactNode;
@@ -2245,7 +2892,7 @@ interface NavBarProps extends ComponentProps<'nav'> {
  * pin a settings item in the end slot. The active pill slides between items
  * with the chosen spring.
  */
-declare function NavBar({ orientation, end, showLabels, spring, skeleton, className, children, 'aria-label': ariaLabel, ...rest }: NavBarProps): react.JSX.Element;
+declare function NavBar({ orientation, end, showLabels, spring, shape, edgeAccent, sweep, skeleton, className, children, 'aria-label': ariaLabel, ...rest }: NavBarProps): react.JSX.Element;
 interface NavBarItemProps extends Omit<ComponentProps<'button'>, 'children'> {
     /** Rendered element. Use 'a' for links. Defaults to a button. */
     as?: ElementType;
@@ -2271,6 +2918,442 @@ interface NavBarItemProps extends Omit<ComponentProps<'button'>, 'children'> {
  * through aria-label and a tooltip.
  */
 declare function NavBarItem({ as, icon, label, active, badge, disabled, className, ...rest }: NavBarItemProps): react.JSX.Element;
+
+interface ColorPickerProps extends Omit<ComponentProps<'div'>, 'onChange' | 'defaultValue' | 'color'> {
+    /** Controlled colour, as a CSS oklch() or hex string. */
+    value?: string;
+    defaultValue?: string;
+    onValueChange?: (value: string) => void;
+    /** Which notation to report. */
+    format?: 'oklch' | 'hex';
+    /** Fixed swatches offered under the sliders. */
+    presets?: string[];
+    /** Offers an opacity slider as a fourth channel. */
+    alpha?: boolean;
+    size?: 'sm' | 'md';
+    disabled?: boolean;
+    skeleton?: boolean;
+}
+/**
+ * An OKLCH colour picker.
+ *
+ * OKLCH rather than HSL because that is the space the kit's own ramps are
+ * authored in: a colour picked here sits on the same perceptual footing as
+ * every token around it, and its lightness means the same thing at every hue
+ * which is exactly what HSL does not give you.
+ *
+ * Three plain range inputs rather than a 2D gradient canvas. A canvas is only
+ * operable by dragging, so it cannot be used without sight or without a mouse;
+ * three labelled sliders plus a hex field can be driven entirely from the
+ * keyboard, and each slider paints the gradient it actually traverses.
+ *
+ * Out-of-gamut colours are named rather than silently clamped, so the swatch
+ * never quietly shows something other than what was asked for.
+ */
+declare function ColorPicker({ value: valueProp, defaultValue, onValueChange, format, presets, alpha, size, disabled, skeleton, className, ...rest }: ColorPickerProps): react.JSX.Element;
+
+interface RichTextEditorProps extends Omit<ComponentProps<'div'>, 'onChange' | 'defaultValue'> {
+    /** Controlled markdown text. */
+    value?: string;
+    defaultValue?: string;
+    onValueChange?: (value: string) => void;
+    placeholder?: string;
+    /** Which inline controls to offer. Defaults to all four. */
+    marks?: MarkdownMark[];
+    /** Which block controls to offer. Defaults to all four. */
+    blocks?: MarkdownBlock[];
+    rows?: number;
+    maxLength?: number;
+    disabled?: boolean;
+    skeleton?: boolean;
+}
+/**
+ * A markdown editor with a formatting toolbar - the writable counterpart to
+ * `CodeBlock`.
+ *
+ * Markdown over `contenteditable`, deliberately. A contenteditable surface is a
+ * DOM-only construct with no React Native equivalent, so an editor built on one
+ * could never have a native binding; and it means reimplementing selection,
+ * undo, spellcheck, and dictation, all of which a plain `<textarea>` already
+ * does properly. The value here is a string, and every transform is pure string
+ * arithmetic living in @glacier/logic - so Bold does exactly the same thing
+ * in the native editor.
+ *
+ * The toolbar reads the document as well as writing to it: a control is pressed
+ * when its mark already surrounds the caret, which is what lets you tell "this
+ * is bold" from "make this bold".
+ */
+declare function RichTextEditor({ value: valueProp, defaultValue, onValueChange, placeholder, marks, blocks, rows, maxLength, disabled, skeleton, className, id, 'aria-label': ariaLabel, 'aria-labelledby': ariaLabelledBy, 'aria-describedby': ariaDescribedBy, ...rest }: RichTextEditorProps): react.JSX.Element;
+
+/** The imperative surface, for scrolling to a row the user has not scrolled to. */
+interface VirtualListHandle {
+    /** Scrolls the row at `index` into view. Does nothing if it already is. */
+    scrollToIndex: (index: number, align?: 'auto' | 'start' | 'center' | 'end') => void;
+}
+interface VirtualListProps extends Omit<ComponentProps<'div'>, 'children' | 'ref'> {
+    /** How many rows there are in total. */
+    count: number;
+    /** Height of one row in pixels. Every row is this tall. */
+    itemSize: number;
+    /** Renders the row at an index. Called only for rows inside the window. */
+    renderItem: (index: number) => ReactNode;
+    /** Viewport height. Defaults to filling its parent. */
+    height?: string | number;
+    /** Extra rows rendered beyond each edge of the viewport. */
+    overscan?: number;
+    /** Called with the first and last rendered index whenever the window moves. */
+    onVisibleChange?: (start: number, end: number) => void;
+    /** A stable key for the row at an index. Defaults to the index. */
+    getKey?: (index: number) => string | number;
+    emptyLabel?: ReactNode;
+    skeleton?: boolean;
+    ref?: Ref<VirtualListHandle>;
+}
+/**
+ * Renders only the rows the scroller can actually show.
+ *
+ * A tall spacer holds the true scroll height so the scrollbar describes the
+ * data, and a small absolutely-positioned window holds the rows that are
+ * currently on screen. The arithmetic - which rows, how tall, how far down -
+ * all comes from @glacier/logic, so the native list renders the same slice
+ * for the same scroll position.
+ *
+ * Fixed row heights only, on purpose. Variable heights need every row measured
+ * and the scroll offset corrected as estimates are replaced; that is a
+ * different component, and pretending otherwise produces a list that jitters
+ * while you scroll it.
+ *
+ * The rows carry `aria-setsize` and `aria-posinset` describing the whole list
+ * rather than the window, because a screen reader announcing "3 of 12" while
+ * the user is at item 40,000 is worse than no announcement.
+ */
+declare function VirtualList({ count, itemSize, renderItem, height, overscan, onVisibleChange, getKey, emptyLabel, skeleton, className, ref, ...rest }: VirtualListProps): react.JSX.Element;
+
+/** The minimum a row must provide: something stable to key and track it by. */
+interface SortableItemLike {
+    id: string;
+}
+interface SortableListProps<T extends SortableItemLike> extends Omit<ComponentProps<'ul'>, 'children' | 'onDrop'> {
+    /** The rows in their current order. Controlled. */
+    items: T[];
+    /** Called with the reordered array once a move is committed. */
+    onReorder: (items: T[]) => void;
+    /** Renders one row's content; the handle and row chrome are the list's. */
+    renderItem: (item: T, index: number) => ReactNode;
+    /** The name announced as a row moves. Defaults to the id. */
+    getLabel?: (item: T) => string;
+    size?: 'sm' | 'md' | 'lg';
+    disabled?: boolean;
+    skeleton?: boolean;
+    /** How many placeholder rows to draw while loading. */
+    skeletonRows?: number;
+}
+/**
+ * A list whose rows can be reordered by dragging a handle - or entirely from
+ * the keyboard, which is the part most drag-and-drop implementations skip.
+ *
+ * Two gestures, one model. A pointer drag tracks the handle and drops on
+ * release; a keyboard reorder *lifts* a row with Space, moves it with the
+ * arrows, and drops it with Space again, with Escape restoring the original
+ * order. Both resolve through the same `moveItem` in @glacier/logic, so a row
+ * dropped in the fourth slot lands in the fourth slot either way.
+ *
+ * Controlled by design: the list never reorders itself. It reports the array it
+ * would like and the caller decides, which is what lets a reorder be rejected,
+ * persisted, or undone.
+ */
+declare function SortableList<T extends SortableItemLike>({ items, onReorder, renderItem, getLabel, size, disabled, skeleton, skeletonRows, className, ...rest }: SortableListProps<T>): react.JSX.Element;
+
+type CardFanSize = 'sm' | 'md' | 'lg';
+/** The minimum a fan needs to identify and render one card. */
+interface CardFanItem {
+    id: string;
+}
+interface CardFanProps<T extends CardFanItem = CardFanItem> extends Omit<ComponentProps<'ul'>, 'onSelect' | 'children'> {
+    /** The cards, in the order they sit along the fan. */
+    items: T[];
+    /** Renders one card's body. The placement and magnification are the fan's. */
+    renderItem: (item: T, index: number) => ReactNode;
+    /** The name announced for a card; its id is rarely what a person wants read. */
+    getLabel?: (item: T) => string;
+    /** Controlled selection, by id. */
+    selected?: string;
+    defaultSelected?: string;
+    onSelect?: (id: string) => void;
+    size?: CardFanSize;
+    /** Multiplies the lean and the bow. 0 lays the fan flat into a row. */
+    spread?: number;
+    /** Grows the card under the pointer and its near neighbours. */
+    magnify?: boolean;
+    disabled?: boolean;
+    skeleton?: boolean;
+}
+/**
+ * A hand of cards spread along a fixed arc.
+ *
+ * The spread is a slinky rather than an even step, which is what lets one
+ * component hold seven cards or forty in the same strip: the track is a fixed
+ * length and the cards are distributed across it by weight, so focusing one
+ * opens the fan around it while the rest compress. The ends stay pinned, so the
+ * silhouette never moves and the fan cannot overflow. All of that arithmetic is
+ * in @glacier/logic, so the native fan lays out identically.
+ *
+ * Placement is a track position, not a transform - the two are kept apart so the
+ * transform stays free for the lean, the lift and any drag the caller adds. It
+ * also means a pointer sweeping a forty-card fan reshapes it by writing one
+ * custom property per card, without re-rendering forty cards a frame.
+ */
+declare function CardFan<T extends CardFanItem = CardFanItem>({ items, renderItem, getLabel, selected: selectedProp, defaultSelected, onSelect, size, spread, magnify, disabled, skeleton, className, ...rest }: CardFanProps<T>): react.JSX.Element;
+
+interface CalendarViewProps extends Omit<ComponentProps<'div'>, 'onSelect'> {
+    /** Everything to lay over the range. Events outside it are ignored. */
+    events: CalendarEvent[];
+    mode?: CalendarViewMode;
+    defaultMode?: CalendarViewMode;
+    onModeChange?: (mode: CalendarViewMode) => void;
+    /** Controlled anchor date; the range shown is the one containing it. */
+    date?: Date;
+    defaultDate?: Date;
+    onDateChange?: (date: Date) => void;
+    /** 0 for Sunday, 1 for Monday. */
+    weekStartsOn?: WeekStart;
+    selected?: Date;
+    /** Omit to leave day cells unpressable. */
+    onSelectDay?: (date: Date) => void;
+    /** Omit to leave event chips unpressable. */
+    onSelectEvent?: (event: CalendarEvent) => void;
+    /** Which day to mark as today; injectable so a test is not clock-dependent. */
+    today?: Date;
+    /** How many days the agenda lists. */
+    agendaDays?: number;
+    formatTime?: (date: Date) => string;
+    emptyLabel?: ReactNode;
+    skeleton?: boolean;
+    /**
+     * Turns on the built-in editor: pressing an event opens it for editing, and
+     * double-pressing empty day space opens a blank one on that day.
+     *
+     * The calendar still does not own the events - it reports what the user did
+     * through the three callbacks below and re-renders from the `events` you pass
+     * back. `upsertEvent` and `removeEvent` in @glacier/logic do that update.
+     */
+    editable?: boolean;
+    onEventCreate?: (event: CalendarEvent) => void;
+    onEventChange?: (event: CalendarEvent) => void;
+    /** Omit to hide the editor's delete control. */
+    onEventDelete?: (id: string) => void;
+    /** Mints the id for a new event. Defaults to one unique to this calendar. */
+    newEventId?: () => string;
+}
+/**
+ * A scheduler surface: events laid over a month grid, a week, or an agenda.
+ *
+ * Distinct from `DatePicker`, which is an input - this one shows what is
+ * *scheduled*, and its day cells are content rather than choices. All the date
+ * arithmetic, bucketing, and paging live in @glacier/logic, so the native
+ * calendar builds the same grid from the same inputs.
+ *
+ * Month and week are one `role="grid"` with roving focus: exactly one cell is
+ * tabbable and the arrows move within, so Tab leaves the calendar rather than
+ * walking forty-two cells. Agenda is a plain list, because it has no second
+ * axis and announcing a grid there would describe a structure that is not
+ * present.
+ */
+declare function CalendarView({ events, mode: modeProp, defaultMode, onModeChange, date: dateProp, defaultDate, onDateChange, weekStartsOn, selected, onSelectDay, onSelectEvent, today: todayProp, agendaDays, formatTime, emptyLabel, skeleton, editable, onEventCreate, onEventChange, onEventDelete, newEventId, className, ...rest }: CalendarViewProps): react.JSX.Element;
+
+interface CommandPaletteProps {
+    open: boolean;
+    /** Called with false when the user dismisses, or runs a command. */
+    onOpenChange: (open: boolean) => void;
+    /**
+     * Every command the palette can run, in the order they should be offered.
+     * Priority is the caller's to decide - the palette filters and groups but
+     * never reorders.
+     */
+    commands: CommandDescriptor[];
+    /** Called with the chosen command's id, after the palette has closed. */
+    onRun: (id: string) => void;
+    /** Controlled query text. */
+    query?: string;
+    /** Initial query when uncontrolled; the palette resets to it on each open. */
+    defaultQuery?: string;
+    onQueryChange?: (query: string) => void;
+    placeholder?: string;
+    /** Shown in place of the list when nothing matches. */
+    emptyLabel?: ReactNode;
+    /** Replaces the default key-hint strip. Pass null to drop it. */
+    footer?: ReactNode;
+    size?: 'sm' | 'md' | 'lg';
+    /** Binds ⌘K / Ctrl+K globally. Turn it off to own the chord yourself. */
+    shortcut?: boolean;
+}
+/**
+ * A ⌘K overlay that searches every action in the app.
+ *
+ * One text field drives the whole surface: typing narrows the list, the arrow
+ * keys move a cursor through it, and Enter runs what the cursor is on. Focus
+ * never leaves the field - the active row is named by `aria-activedescendant`
+ * rather than focused, which is what lets a single input control a list.
+ *
+ * Matching, grouping, and cursor movement all live in @glacier/logic, so this
+ * component is only the surface: the native palette answers the same query with
+ * the same list in the same order.
+ */
+declare function CommandPalette({ open, onOpenChange, commands, onRun, query: queryProp, defaultQuery, onQueryChange, placeholder, emptyLabel, footer, size, shortcut, }: CommandPaletteProps): react.ReactPortal | null;
+
+/**
+ * What a slot renderer is told about the message it is decorating.
+ *
+ * The reactions, attachments, and quoted-reply components are built separately;
+ * this is the contract between them and the run. It carries the message plus the
+ * geometry facts a decoration might need - a reaction bar under the last bubble
+ * of a run sits beside a tail, and one under a middle bubble does not.
+ */
+interface MessageSlotContext<M extends ChatMessage = ChatMessage> {
+    message: M;
+    /** Position within this run, not within the transcript. */
+    index: number;
+    /** Where the message sits in the run; the same value that cut its corners. */
+    position: BubblePosition;
+    /** The viewer wrote it. */
+    own: boolean;
+    layout: MessageLayout;
+    /** This is the message that ends the run - the one wearing the tail. */
+    last: boolean;
+}
+interface MessageGroupProps<M extends ChatMessage = ChatMessage> extends Omit<ComponentProps<'div'>, 'children' | 'content'> {
+    /** The run, exactly as `groupMessages` in @glacier/logic built it. */
+    group: MessageGroup$1<M>;
+    layout?: MessageLayout;
+    /** The viewer wrote this run. Derived from `viewerId` when omitted. */
+    own?: boolean;
+    /** The reading user, compared against the run's authorId. */
+    viewerId?: string;
+    /** Drawn once at the head of the run, never on a continued one. */
+    avatar?: ReactNode;
+    /** Drawn once at the head of the run, never on a continued one. */
+    authorName?: ReactNode;
+    /**
+     * The author's name as a plain string. A continued run hides its visible
+     * header but must still be announced, or a screen reader hears an unlabelled
+     * group of messages from nobody.
+     */
+    authorLabel?: string;
+    /** Draws a tail on the message that ends the run. Ignored in row layout. */
+    tails?: boolean;
+    /** The instant timestamps are read against. */
+    now?: Millis;
+    /** BCP-47 tag for the timestamp formatter. */
+    locale?: string;
+    /** Replaces the default text rendering for one message. */
+    renderBody?: (context: MessageSlotContext<M>) => ReactNode;
+    /** Returns the reaction bar for one message. */
+    renderReactions?: (context: MessageSlotContext<M>) => ReactNode;
+    /** Returns the attachment block for one message. */
+    renderAttachments?: (context: MessageSlotContext<M>) => ReactNode;
+    /** Returns the quoted preview for one message. */
+    renderReplyTo?: (context: MessageSlotContext<M>) => ReactNode;
+    /** Translated delivery and edited words. */
+    labels?: Partial<MessageLabels>;
+    /** Renders the run as placeholders at its real footprint. */
+    skeleton?: boolean;
+}
+/**
+ * One author's run of messages.
+ *
+ * A run exists so a burst of typing reads as one utterance rather than four
+ * interruptions, and that only works if the repeated parts are said once: the
+ * avatar at the head, the name at the head, and a single timestamp and delivery
+ * line at the foot instead of one per message.
+ *
+ * The `continued` flag is the subtle case and the one most easily got wrong.
+ * When the unread divider lands mid-run, `insertSeparators` splits the run and
+ * marks the trailing half continued - it is the same person still talking, with
+ * a line drawn through their sentence. Repeating the avatar and name there would
+ * turn one speaker into two and make the divider look like a change of author,
+ * so a continued run suppresses both while keeping the gutter reserved, and its
+ * text stays on exactly the same line as the half above it.
+ *
+ * The run's delivery status is the least advanced of its members, not the last
+ * one's, so a stack holding a failed send says so even when everything after it
+ * went through.
+ */
+declare function MessageGroup<M extends ChatMessage = ChatMessage>({ group, layout, own, viewerId, avatar, authorName, authorLabel, tails, now, locale, renderBody, renderReactions, renderAttachments, renderReplyTo, labels, skeleton, className, style, ...rest }: MessageGroupProps<M>): react.JSX.Element;
+
+interface ConversationViewProps<M extends ChatMessage = ChatMessage> extends Omit<ComponentProps<'div'>, 'children' | 'onScroll'> {
+    /** The transcript as a flat, chronological log. */
+    messages: M[];
+    /**
+     * The reading user. Authorship is derived from this, so a caller never tags
+     * a message as own or other - the same log renders correctly in two windows
+     * signed in as two different people.
+     */
+    viewerId: string;
+    layout?: MessageLayout;
+    /** The instant timestamps are read against. */
+    now?: Millis;
+    /** BCP-47 tag for the timestamp formatter. */
+    locale?: string;
+    /** Pause after which a new run begins; defaults to the shared window. */
+    groupWindowMs?: number;
+    /** The avatar for one author, drawn once at the head of each run. */
+    avatarFor?: (authorId: string) => ReactNode;
+    /** The display name for one author, drawn once at the head of each run. */
+    authorNameFor?: (authorId: string) => ReactNode;
+    /** Replaces the default text rendering for one message. */
+    renderBody?: (context: MessageSlotContext<M>) => ReactNode;
+    /** Translated delivery and edited words, forwarded to every run. */
+    labels?: Partial<MessageLabels>;
+    /** Replaces the default empty state. */
+    empty?: ReactNode;
+    /** Accessible name for the scroll region, e.g. the other participant. */
+    label?: string;
+    /** Follows the live end while the reader is already at it. */
+    stick?: boolean;
+    /** Fires when the reader arrives at or leaves the live end. */
+    onAtBottomChange?: (atBottom: boolean) => void;
+    /** Renders the placeholder thread at the geometry it will settle into. */
+    skeleton?: boolean;
+}
+/**
+ * A scrolling conversation, built from a flat log and the reader's id.
+ *
+ * It exists to keep two axes apart that are constantly conflated, and almost
+ * everything about the component follows from that:
+ *
+ * **Authorship - local or remote.** Which client produced the message. It
+ * decides the edge, the fill, and which side of the column the run hugs, and it
+ * is derived here from `viewerId` rather than demanded of the caller, because
+ * "mine" is not a property of a message: the same row is mine in one window and
+ * theirs in another.
+ *
+ * **Acknowledgement - optimistic or confirmed.** Whether the server has it.
+ * This is about delivery, not authorship, and it exists on the local side only.
+ *
+ * The interaction is the part worth stating: **a remote run never shows a
+ * tick, and a local run always does.** Not "does not by default" - never.
+ * `conversationRuns` strips a status off a remote message rather than declining
+ * to draw one, because a delivery mark is a claim about our outbox and there is
+ * nothing behind that claim for a message someone else sent; a transport that
+ * stamps every row it syncs is an ordinary thing, and the resulting tick would
+ * be a lie the reader has no way to detect. The mirror of that rule fills a
+ * status in on a local message that arrived without one, because a local
+ * message reporting nothing is indistinguishable from one that never sent.
+ *
+ * An unacknowledged send reads as *in flight*, not as broken: the run keeps its
+ * colour and steps back by a single alpha, and the delivery atom's clock glyph
+ * carries the rest. No spinners. Every message is optimistic for a moment, and
+ * a transcript that spun for each of them would be a loading screen with words
+ * in it. A failed send does the opposite and stays at full strength with the
+ * danger border, because it is the one row asking to be acted on.
+ *
+ * Scrolling is deliberately thin. It follows the live end while the reader is
+ * already there and does nothing at all once they have scrolled up. There is no
+ * anchoring, no offset preservation across prepends, no jump-to-latest button -
+ * the heavy machinery belongs to a virtualised list, and the honest version of
+ * "stick to bottom" is one comparison, in @glacier/logic, shared with native.
+ */
+declare function ConversationView<M extends ChatMessage = ChatMessage>({ messages, viewerId, layout, now, locale, groupWindowMs, avatarFor, authorNameFor, renderBody, labels, empty, label, stick, onAtBottomChange, skeleton, className, style, ...rest }: ConversationViewProps<M>): react.JSX.Element;
 
 interface ModalProps {
     open: boolean;
@@ -3004,6 +4087,636 @@ declare const kitMessages: {
         zh: string;
         ar: string;
     };
+    announcements: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    announcementsUpdates: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    announcementsPrevious: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    announcementsNext: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    announcementsPause: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    announcementsResume: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    announcementsPosition: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarPrevious: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarNext: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarToday: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarViewLabel: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarMonth: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarWeek: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarAgenda: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarMore: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarEmpty: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarAddEvent: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarEditEvent: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarSaveEvent: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarDeleteEvent: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarEventTitle: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarEventDate: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarStartTime: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarEndTime: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarAllDay: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarEventTone: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarFieldRequired: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarFieldInvalid: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarEndBeforeStart: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarToneInfoNote: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarTone_accent: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarTone_success: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarTone_warning: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarTone_danger: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarTone_info: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    calendarTone_neutral: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    cardFan: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    sortableHandle: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    sortableLifted: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    sortableMoved: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    sortableDropped: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    sortableCancelled: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    editorToolbar: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    editorBold: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    editorItalic: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    editorCode: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    editorStrike: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    editorHeading: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    editorQuote: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    editorBullet: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    editorNumber: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    colorPicker: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    colorLightness: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    colorChroma: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    colorHue: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    colorAlpha: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    colorHex: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    colorPresets: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    colorOutOfGamut: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    commandPaletteLabel: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    commandPalettePlaceholder: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    commandPaletteEmpty: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
+    commandPaletteHint: {
+        en: string;
+        es: string;
+        fr: string;
+        de: string;
+        ja: string;
+        pt: string;
+        zh: string;
+        ar: string;
+    };
     clearSearch: {
         en: string;
         es: string;
@@ -3331,5 +5044,198 @@ declare function subscribeFeedback(listener: Listener): () => void;
 /** Notify every subscriber. Cheap no-op when nothing is listening. */
 declare function emitFeedback(event: FeedbackEvent): void;
 
-export { Accordion, AlertDialog, Announcements, AppShell, Avatar, Banner, Box, Breadcrumbs, Button, Calendar, Callout, Card, CardGroup, Carousel, Center, Checkbox, CodeBlock, Combobox, Container, ContextMenu, CounterBadge, DEFAULT_LOCALE, DataGrid, DatePicker, DensitySelector, DeviceFrame, Divider, Drawer, EmptyState, Field, Fieldset, FileUpload, FilterChip, FloatingPanel, FormSection, Grid, HapticsProvider, Heading, Heatmap, IconBackfill, IconButton, Image, Input, Kbd, Label, Link, List, ListItem, LocaleProvider, Menu, MenuItem, MenuLabel, MenuSeparator, MenuSub, Meter, Modal, MultiSelect, NavBar, NavBarItem, NumberInput, OtpField, PageHeader, Pagination, Pill, Popover, ProgressBar, ProgressRing, Radio, RadioCard, Rating, ResizableSplitPane, Row, ScrollArea, ScrollbarAppearance, SearchField, Section, SegmentedBar, SegmentedControl, Select, Sidebar, SidebarItem, SidebarSection, Size, Skeleton, SkeletonVariant$1 as SkeletonVariant, Slider, Spacer, Sparkline, Spinner, SplitButton, Spotlight, Stack, StatTile, StatusDot, Steps, Surface, Switch, TabStrip, TabbedModal, TabbedPanel, Table, Tabs, Text, TextTone, Textarea, TimeSeriesChart, Timeline, TimelineScrubber, TitleBar, Toast, ToastProvider, Toggle, Tone, Toolbar, Tooltip, TreeView, Variant, VisualFeedbackProvider, Wizard, defineMessages, densityModes, direction, emitFeedback, format, haptic, hapticsEnabled, kitMessages, locales, resolveDirection, rtlLocales, setHapticsEnabled, subscribeFeedback, useDirection, useField, useHaptics, useLocale, useT, useToast, useVisualFeedback };
-export type { AccordionItem, AccordionProps, AlertDialogProps, AlertDialogTone, Align, AnnouncementItem, AnnouncementTone, AnnouncementsProps, AppShellProps, AvatarProps, Background, BannerProps, BannerTone, BorderToken, BoxProps, BreadcrumbItem, BreadcrumbsProps, ButtonProps, ButtonVariant, CalendarMode, CalendarProps, CalendarRange, CalloutProps, CalloutTone, CardGroupDensity, CardGroupGap, CardGroupMode, CardGroupProps, CardProps, CardVariant, CarouselProps, CenterProps, ChartSeriesTone, CheckboxProps, CodeBlockProps, ComboboxOption, ComboboxProps, ContainerProps, ContainerSize, ContextMenuProps, ControlSize, CounterBadgeProps, DataGridColumn, DataGridProps, DataGridRow, DataGridRowId, DataGridSort, DatePickerProps, DensityMode, DensitySelectorProps, DeviceFrameProps, DeviceFrameSize, Direction, DividerProps, DrawerProps, DrawerSide, DrawerSize, Elevation, EmptyStateProps, FeedbackEvent, FieldProps, FieldsetProps, FileUploadProps, FileUploadRejection, FileUploadRejectionReason, FilterChipProps, FloatingPanelProps, FormSectionProps, GridProps, HapticFn, HapticKind, HeadingProps, HeatmapData, HeatmapPoint, HeatmapProps, IconBackfillProps, IconButtonProps, ImageFit, ImageProps, ImageRadius, InputProps, Justify, KbdProps, KitMessageKey, LabelProps, LinkProps, ListItemProps, ListProps, ListSize, Locale, LocaleProviderProps, MenuItemProps, MenuProps, MenuSubProps, Message, MessageCatalog, MeterProps, MeterTone, ModalProps, MultiSelectOption, MultiSelectProps, NavBarItemProps, NavBarOrientation, NavBarProps, NumberInputProps, OtpFieldProps, OtpFieldType, PageHeaderAction, PageHeaderProps, PaginationProps, PillProps, PillTone, PillVariant, Placement, PopoverProps, ProgressBarProps, ProgressRingProps, RadioCardProps, RadioProps, RadiusToken, RatingProps, ResizableSplitPaneProps, Responsive, RowProps, ScrollAreaOrientation, ScrollAreaProps, ScrollbarAppearanceName, SearchFieldProps, SectionDensity, SectionGap, SectionHeadingLevel, SectionProps, SegmentedBarProps, SegmentedControlProps, SegmentedOption, SelectOption, SelectProps, SidebarItemProps, SidebarProps, SidebarSectionProps, SkeletonProps, SliderProps, SortDirection, SpacerProps, SparklineProps, SparklineShape, SparklineTone, SpinnerProps, SplitButtonProps, SplitOrientation, SpotlightProps, StackProps, StatTileProps, StatusDotProps, StepsProps, StepsSize, StepsTone, SurfaceLevel, SurfaceProps, SwitchProps, TabItem, TabStripItem, TabStripProps, TabbedModalProps, TabbedModalSection, TabbedPanelProps, TabbedPanelTab, TableColumn, TableProps, TabsProps, TextAlign, TextProps, TextareaProps, TimeSeriesChartProps, TimeSeriesChartSeries, TimeSeriesChartShape, TimelineItem, TimelineProps, TimelineScrubberMarker, TimelineScrubberMarkerTone, TimelineScrubberProps, TimelineTone, TitleBarProps, ToastContextValue, ToastOptions, ToastProps, ToastTone, ToggleProps, ToolbarProps, TooltipProps, Translate, TreeItem, TreeViewProps, VisualFeedbackFn, VisualFeedbackIntensity, VisualFeedbackVariant, WizardProps, WizardStep };
+/**
+ * The kit's light-animation utilities: class names you drop on any element.
+ *
+ * - `riseIn` - the staggerable entrance. Pair with staggerVars(i) on each item.
+ * - `shimmer` - a highlight travelling across the element, looping.
+ * - `glowPulse` - the accent halo breathing, looping.
+ *
+ * Every one of them rests on its FINISHED frame, and the two loops only run
+ * under prefers-reduced-motion: no-preference. See fx.module.css for the full
+ * reduced-motion policy.
+ */
+declare const fx: {
+    readonly riseIn: string | undefined;
+    readonly shimmer: string | undefined;
+    readonly glowPulse: string | undefined;
+};
+type FxName = keyof typeof fx;
+/**
+ * The per-item stagger index, as an inline style. The delay itself is
+ * `index x --glacier-stagger-step`, so the whole cascade retunes from one token
+ * and collapses with it under reduced motion.
+ *
+ * ```tsx
+ * items.map((item, i) => <Card key={item.id} className={fx.riseIn} style={staggerVars(i)} />)
+ * ```
+ */
+declare function staggerVars(index: number): CSSProperties;
+
+type DeliveryStatusSize = 'sm' | 'md';
+interface DeliveryStatusProps extends Omit<ComponentProps<'span'>, 'children'> {
+    /** How far the message got. */
+    status?: DeliveryStatus$1;
+    /**
+     * A run's states, collapsed with `leastDelivery` to the least advanced of
+     * them - so a stack holding one failed send says failed rather than claiming
+     * the "read" of whichever message happened to be last. Ignored when `status`
+     * is set.
+     */
+    statuses?: (DeliveryStatus$1 | undefined)[];
+    size?: DeliveryStatusSize;
+    /** Overrides the text alternative; defaults to the status's own name. */
+    label?: string;
+    /**
+     * Hides the glyph from assistive tech. Only for a bubble whose own accessible
+     * name already reports the state - otherwise the mark is unreadable to anyone
+     * not looking at it.
+     */
+    decorative?: boolean;
+    /** Renders a placeholder with the component's exact geometry. */
+    skeleton?: boolean;
+    /** Overrides the status words; merged over the kit's translations. */
+    labels?: Partial<DeliveryLabels>;
+}
+/**
+ * How far a sent message got, as one small mark beside its timestamp.
+ *
+ * The rule the whole component exists to hold: **no two states share a
+ * silhouette.** A clock, one tick, two ticks, a tick inside a solid disc, a
+ * warning triangle. It would be easier to draw "delivered" and "read" as the
+ * same double tick in two colours - most chat apps do - but this is the
+ * smallest element in a transcript, about the height of a lowercase letter, and
+ * that is precisely the size at which hue stops carrying meaning: a colour-blind
+ * reader, a monochrome display, or a phone in sunlight all reduce it to the same
+ * grey mark. Shape survives all three. Colour is layered on top for the two
+ * states worth spending it on, never underneath as the only signal.
+ *
+ * It is `role="img"` with a label naming the state, not a live region: a
+ * transcript holds hundreds of these, and hundreds of live regions would re-read
+ * the conversation every time a receipt landed.
+ *
+ * Retrying a failed send belongs to the bubble, not here - the mark reports, it
+ * never acts, so it never becomes a tap target the size of a letter.
+ */
+declare function DeliveryStatus({ status, statuses, size, label, decorative, skeleton, labels, className, ...rest }: DeliveryStatusProps): react.JSX.Element | null;
+
+interface MessageBubbleProps extends Omit<ComponentProps<'div'>, 'content'> {
+    /** Bubble draws a tinted, edge-aligned capsule; row draws full-width prose. */
+    layout?: MessageLayout;
+    /** The viewer sent it. */
+    own?: boolean;
+    /** Where it sits in its author's run; drives the corner geometry. */
+    position?: BubblePosition;
+    /** Draws the tail. Only meaningful on the message that ends a run. */
+    tail?: boolean;
+    /** Overrides the edge authorship would choose. Logical, never physical. */
+    side?: MessageSide;
+    /** Rendered in the leading gutter. */
+    avatar?: ReactNode;
+    /**
+     * Reserves the gutter without filling it, so a message whose avatar was
+     * suppressed still lines up with the one above it. Defaults on in row layout,
+     * where every line shares one column.
+     */
+    gutter?: boolean;
+    /** The name and time line above the body, in row layout. */
+    header?: ReactNode;
+    /** When it was sent, epoch milliseconds. Renders a meta line when given. */
+    at?: Millis;
+    /** The instant timestamps are read against. */
+    now?: Millis;
+    /** BCP-47 tag for the timestamp formatter. */
+    locale?: string;
+    /** How far along the send is; omitted for anything received. */
+    status?: DeliveryStatus$1;
+    /** Marks a message its author changed after sending. */
+    edited?: boolean;
+    /** Replaces the default timestamp and status line entirely. */
+    meta?: ReactNode;
+    /** Slot under the body for the reaction bar. */
+    reactions?: ReactNode;
+    /** Slot above the text for images, files, and media. */
+    attachments?: ReactNode;
+    /** Slot above the body for a quoted preview of the message being answered. */
+    replyTo?: ReactNode;
+    /** Translated delivery and edited words. */
+    labels?: Partial<MessageLabels>;
+    /** Renders a placeholder with the bubble's exact geometry. */
+    skeleton?: boolean;
+}
+/**
+ * One message, in either of the two layouts chat apps actually use.
+ *
+ * **Bubble** is iMessage and WhatsApp: a tinted capsule on the edge its author
+ * owns, sized to its content, whose corners are decided by `bubblePosition` in
+ * @glacier/logic rather than by this component. That indirection is the point.
+ * A run of four messages has to read as one utterance, and it only does so if
+ * the corners facing a neighbour tighten while the corners facing open space
+ * stay round - so the stacked edge behaves like a single tall shape that has
+ * been sliced, and the free edge keeps the silhouette that says which side of
+ * the conversation it came from. Both bindings ask the same function, so a run
+ * cannot break differently on a phone than it does in a browser.
+ *
+ * **Row** is Slack and Discord: full width, no fill, avatar in a leading gutter,
+ * name and time as a header line. Alignment means nothing in a single-column
+ * transcript, so the header does the work colour and position do in a bubble.
+ *
+ * Which edge is "mine" is expressed logically - the viewer's messages take the
+ * *trailing* edge, not the right one - so an Arabic transcript mirrors as a
+ * whole and the viewer's own words stay on the side their language puts them.
+ * The one thing that cannot be logical is the tail's path, since SVG has no
+ * writing direction; see the stylesheet for how that is inverted exactly once.
+ */
+declare function MessageBubble({ layout, own, position, tail, side, avatar, gutter, header, at, now, locale, status, edited, meta, reactions, attachments, replyTo, labels, skeleton, className, style, children, ...rest }: MessageBubbleProps): react.JSX.Element;
+
+interface MessageMetaProps extends Omit<ComponentProps<'span'>, 'children'> {
+    /** The moment to print, epoch milliseconds. */
+    at?: Millis;
+    /**
+     * The instant it is read against. Injected rather than defaulted inside the
+     * formatter so a transcript, a test, and a screenshot all render the same.
+     */
+    now?: Millis;
+    /** BCP-47 tag for the formatter; falls back to the active locale. */
+    locale?: string;
+    /** How much of the moment to spell out. */
+    timestampStyle?: MessageTimestampStyle;
+    /** One message's delivery state. */
+    status?: DeliveryStatus$1;
+    /**
+     * A run's delivery states, collapsed with `leastDelivery` to the least
+     * advanced of them - so a stack holding one failed send says failed, not
+     * "read", which is what the last message in it might otherwise claim.
+     */
+    statuses?: (DeliveryStatus$1 | undefined)[];
+    /** Marks a message its author changed after sending. */
+    edited?: boolean;
+    /** Sits inside an accent-filled bubble, so the line takes the contrast colour. */
+    own?: boolean;
+    /**
+     * Whether the timestamp reaches the accessibility tree. False where an
+     * enclosing group already announced the same moment, so it is not read twice.
+     */
+    announceTime?: boolean;
+    /** Spells the timestamp; defaults to the platform's Intl. */
+    formatTimestamp?: (stamp: MessageTimestamp, locale?: string) => string;
+    /** Translated delivery and edited words, merged over the English defaults. */
+    labels?: Partial<MessageLabels>;
+    /** Renders a placeholder at the line's exact height. */
+    skeleton?: boolean;
+}
+/**
+ * The timestamp and delivery line under a message or a run.
+ *
+ * It carries two things that look decorative and are not. The status is the only
+ * signal that a message did not go out, so it is always paired with a written
+ * word - an icon alone is unreadable to anything that is not looking at the
+ * screen. And a run's status is the *least* advanced of its members rather than
+ * the last one's: a stack whose final message was read still holds a failed send
+ * two messages up, and reporting "read" would hide the one thing the user has to
+ * act on.
+ */
+declare function MessageMeta({ at, now, locale, timestampStyle, status, statuses, edited, own, announceTime, formatTimestamp, labels, skeleton, className, ...rest }: MessageMetaProps): react.JSX.Element;
+
+export { Accordion, AlertDialog, Announcements, AppShell, Avatar, Banner, Box, Breadcrumbs, Button, Calendar, CalendarView, Callout, Card, CardFan, CardGroup, Carousel, Center, Checkbox, CodeBlock, ColorPicker, Combobox, CommandPalette, Container, ContextMenu, ConversationView, CounterBadge, DEFAULT_LOCALE, DataGrid, DatePicker, DeliveryStatus, DensitySelector, DeviceFrame, Divider, Drawer, EmptyState, Field, Fieldset, FileUpload, FilterChip, FloatingPanel, FormSection, Grid, HapticsProvider, Heading, Heatmap, IconBackfill, IconButton, Image, Input, Kbd, Label, Link, List, ListItem, LocaleProvider, Menu, MenuItem, MenuLabel, MenuSeparator, MenuSub, MessageBubble, MessageGroup, MessageMeta, Meter, Modal, MultiSelect, NavBar, NavBarItem, NumberInput, OtpField, PageHeader, Pagination, Pill, PlayerCard, Popover, ProgressBar, ProgressRing, Radio, RadioCard, Rating, ResizableSplitPane, RichTextEditor, Row, ScrollArea, ScrollbarAppearance, SearchField, Section, SeekBar, SegmentedBar, SegmentedControl, Select, Sidebar, SidebarItem, SidebarSection, Size, Skeleton, SkeletonVariant$1 as SkeletonVariant, Slider, SortableList, Spacer, Sparkline, Spinner, SplitButton, Spotlight, Stack, StatTile, StatusDot, Steps, Surface, Switch, TabStrip, TabbedModal, TabbedPanel, Table, Tabs, Text, TextTone, Textarea, TimeSeriesChart, Timeline, TimelineScrubber, TitleBar, Toast, ToastProvider, Toggle, Tone, Toolbar, Tooltip, TreeView, Variant, VirtualList, VisualFeedbackProvider, Wizard, restFocus as cardFanRestFocus, createAnalyserMeter, defineMessages, densityModes, direction, emitFeedback, format, fx, haptic, hapticsEnabled, kitMessages, locales, resolveDirection, rtlLocales, setHapticsEnabled, staggerVars, subscribeFeedback, useDirection, useField, useHaptics, useLocale, useT, useToast, useVisualFeedback };
+export type { AccordionItem, AccordionProps, AlertDialogProps, AlertDialogTone, Align, AnalyserMeter, AnnouncementItem, AnnouncementMotion, AnnouncementTone, AnnouncementsProps, AppShellProps, AvatarProps, Background, BannerProps, BannerTone, BorderToken, BoxProps, BreadcrumbItem, BreadcrumbsProps, ButtonProps, ButtonVariant, CalendarEvent, CalendarMode, CalendarProps, CalendarRange, CalendarViewMode, CalendarViewProps, CalloutProps, CalloutTone, CardFanItem, CardFanProps, CardFanSize, CardGroupDensity, CardGroupGap, CardGroupMode, CardGroupProps, CardProps, CardVariant, CarouselProps, CenterProps, ChartSeriesTone, CheckboxProps, CodeBlockProps, ColorPickerProps, ComboboxOption, ComboboxProps, CommandDescriptor, CommandPaletteProps, ContainerProps, ContainerSize, ContextMenuProps, ControlSize, ConversationViewProps, CounterBadgeProps, DataGridColumn, DataGridProps, DataGridRow, DataGridRowId, DataGridSort, DatePickerProps, DeliveryStatusProps, DeliveryStatusSize, DensityMode, DensitySelectorProps, DeviceFrameProps, DeviceFrameSize, Direction, DividerProps, DrawerProps, DrawerSide, DrawerSize, Elevation, EmptyStateProps, FeedbackEvent, FieldProps, FieldsetProps, FileUploadProps, FileUploadRejection, FileUploadRejectionReason, FilterChipProps, FloatingPanelProps, FormSectionProps, FxName, GridProps, HapticFn, HapticKind, HeadingProps, HeatmapData, HeatmapPoint, HeatmapProps, IconBackfillProps, IconButtonProps, ImageFit, ImageProps, ImageRadius, InputProps, Justify, KbdProps, KitMessageKey, LabelProps, LinkProps, ListItemProps, ListProps, ListSize, Locale, LocaleProviderProps, MarkdownBlock, MarkdownMark, MenuItemProps, MenuProps, MenuSubProps, Message, MessageBubbleProps, MessageCatalog, MessageGroupProps, MessageMetaProps, MessageSlotContext, MeterProps, MeterTone, ModalProps, MultiSelectOption, MultiSelectProps, NavBarItemProps, NavBarOrientation, NavBarProps, NumberInputProps, OtpFieldProps, OtpFieldType, PageHeaderAction, PageHeaderProps, PaginationProps, PillProps, PillTone, PillVariant, Placement, PlayerCardLabels, PlayerCardProps, PlayerDensity, PlayerLayout, PlayerRepeat, PopoverProps, ProgressBarProps, ProgressRingProps, RadioCardProps, RadioProps, RadiusToken, RatingProps, ResizableSplitPaneProps, Responsive, RichTextEditorProps, RowProps, ScrollAreaOrientation, ScrollAreaProps, ScrollbarAppearanceName, SearchFieldProps, SectionDensity, SectionGap, SectionHeadingLevel, SectionProps, SeekBarFill, SeekBarProps, SeekBarRail, SeekBarShape, SeekBarTone, SegmentedBarProps, SegmentedControlProps, SegmentedOption, SelectOption, SelectProps, ShapeName, SidebarItemProps, SidebarProps, SidebarSectionProps, SkeletonProps, SliderProps, SortDirection, SortableItemLike, SortableListProps, SpacerProps, SparklineProps, SparklineShape, SparklineTone, SpinnerProps, SplitButtonProps, SplitOrientation, SpotlightProps, StackProps, StatTileProps, StatusDotProps, StepsProps, StepsSize, StepsTone, SurfaceLevel, SurfaceProps, SwitchProps, TabItem, TabStripItem, TabStripProps, TabbedModalProps, TabbedModalSection, TabbedPanelProps, TabbedPanelTab, TableColumn, TableProps, TabsProps, TextAlign, TextProps, TextareaProps, TimeSeriesChartProps, TimeSeriesChartSeries, TimeSeriesChartShape, TimelineItem, TimelineProps, TimelineScrubberMarker, TimelineScrubberMarkerTone, TimelineScrubberProps, TimelineTone, TitleBarProps, ToastContextValue, ToastOptions, ToastProps, ToastTone, ToggleProps, ToolbarProps, TooltipProps, Translate, TreeItem, TreeViewProps, VirtualListHandle, VirtualListProps, VisualFeedbackFn, VisualFeedbackIntensity, VisualFeedbackVariant, WeekStart, WizardProps, WizardStep };

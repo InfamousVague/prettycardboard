@@ -47,46 +47,13 @@
   gap: var(--glacier-space-1);
 }
 
-.lobbyChatMsg {
-  display: grid;
-  grid-template-columns: 1.75rem 1fr;
-  gap: var(--glacier-space-2);
-  align-items: start;
-}
-
-/* My messages hug the trailing edge, messenger style: no avatar column, the
-   bubble and heading right-aligned. */
-.lobbyChatMsg[data-mine] {
-  grid-template-columns: 1fr;
-}
-
-.lobbyChatMsg[data-mine] .lobbyChatAvatar {
-  display: none;
-}
-
-.lobbyChatMsg[data-mine] .lobbyChatBody {
-  grid-column: 1;
-  align-items: flex-end;
-}
-
-/* Grouped lines drop the avatar/heading and snug up under the previous one. */
-.lobbyChatMsg[data-grouped] {
-  margin-block-start: calc(-1 * var(--glacier-space-1));
-}
-
-.lobbyChatAvatar {
-  grid-column: 1;
-  display: flex;
-  justify-content: center;
-}
-
-.lobbyChatBody {
-  grid-column: 2;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.1rem;
+/* Each message is a kit MessageBubble, so the bubble surface, the accent on
+   my own, the avatar gutter, the run-aware corner cutting and the tail all
+   come from the kit. The rules that used to build those by hand are gone; what
+   is left here is the transcript around them and the two things the kit has no
+   opinion about - the heading line and a pulled card. */
+.lobbyChatRow {
+  min-inline-size: 0;
 }
 
 .lobbyChatMeta {
@@ -101,43 +68,15 @@
   color: var(--glacier-text);
 }
 
-.lobbyChatMsg[data-mine] .lobbyChatFrom {
+/* The bubble knows whose it is; the heading above it reads that rather than
+   asking the markup again. */
+.lobbyChatMsg[data-own] .lobbyChatFrom {
   color: var(--glacier-accent-text, var(--glacier-accent-solid));
 }
 
 .lobbyChatTime {
   font-size: var(--glacier-font-size-xs);
   color: var(--glacier-text-subtle);
-}
-
-/* The message bubble: a rounded pill on a raised surface, with the corner
-   toward its author's edge squared off as the tail. Mine wears the accent. */
-.lobbyChatBubble {
-  display: inline-block;
-  max-width: min(85%, 26rem);
-  padding: var(--glacier-space-2) var(--glacier-space-3);
-  border-radius: var(--glacier-radius-lg);
-  border-start-start-radius: var(--glacier-radius-sm);
-  background: var(--glacier-surface-raised);
-  border: var(--glacier-hairline) solid var(--glacier-glass-border);
-  font-size: var(--glacier-font-size-sm);
-  color: var(--glacier-text);
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-.lobbyChatMsg[data-mine] .lobbyChatBubble {
-  border-start-start-radius: var(--glacier-radius-lg);
-  border-start-end-radius: var(--glacier-radius-sm);
-  background: color-mix(in oklch, var(--glacier-accent-solid) 26%, var(--glacier-surface-raised));
-  border-color: color-mix(in oklch, var(--glacier-accent-solid) 40%, var(--glacier-glass-border));
-}
-
-/* Grouped follow-ups round the tail corner back off. */
-.lobbyChatMsg[data-grouped] .lobbyChatBubble {
-  border-start-start-radius: var(--glacier-radius-lg);
-  border-start-end-radius: var(--glacier-radius-lg);
 }
 
 /* ---------- system lines ----------
@@ -172,14 +111,16 @@
    name, and where it came from. The rarity drives the edge colour, which is the
    whole point of announcing it - a mythic should catch the eye across the room
    while a rare stays quiet. */
+/* The pull rides the bubble's attachments slot, so the BUBBLE is the card
+   surface now - its background, border, radius and padding all come from the
+   kit. Repeating them here would be a card inside a card. What is left is the
+   layout and the one thing the bubble cannot know: the rarity, as a bar down
+   the leading edge. */
 .lobbyChatPull {
   display: flex;
   align-items: center;
   gap: var(--glacier-space-3);
-  padding: var(--glacier-space-2);
-  border-radius: var(--glacier-radius-lg);
-  background: var(--glacier-surface-raised);
-  border: var(--glacier-hairline) solid var(--glacier-glass-border);
+  padding-inline-start: var(--glacier-space-2);
   border-inline-start: 3px solid var(--pc-rarity, var(--glacier-glass-border));
   min-width: 0;
 }

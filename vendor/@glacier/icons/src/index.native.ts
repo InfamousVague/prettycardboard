@@ -4,7 +4,7 @@
  * Mirror of `index.ts` for the `react-native` export condition: Metro (device
  * builds) resolves this file, so `import { Search } from '@glacier/icons'` gives
  * the same named glyph, same `size`/`color`/`strokeWidth` API, drawn through
- * react-native-svg instead of the DOM. The web docs never load this file — their
+ * react-native-svg instead of the DOM. The web docs never load this file - their
  * resolver has no `react-native` condition, so they stay on `index.ts`.
  *
  * When the generated original icon pack lands, both bindings swap their internals

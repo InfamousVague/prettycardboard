@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Avatar, IconButton, Input, ScrollArea, Size, Text, TextTone } from '@glacier/react';
+import {
+  Avatar,
+  IconButton,
+  Input,
+  MessageBubble,
+  ScrollArea,
+  Size,
+  Text,
+  TextTone,
+} from '@glacier/react';
 import { Bot, MessageSquare, Send, Sparkles, X } from '@glacier/icons';
 import { useT } from '../../i18n.ts';
 import { useApp } from '../../state/appStore.ts';
@@ -131,64 +140,96 @@ export function LobbyChat({
               const mine = line.from.userId === myId;
               const prevEntry = entries[index - 1];
               const prev = prevEntry?.kind === 'chat' ? prevEntry.line : null;
+              const nextEntry = entries[index + 1];
+              const next = nextEntry?.kind === 'chat' ? nextEntry.line : null;
               // A pull always opens its own block: grouping a card under the
               // heading of a sentence someone typed reads as a reply to it.
-              // An event line between two messages breaks the group too.
-              const grouped =
-                prev != null &&
-                prev.from.userId === line.from.userId &&
-                line.ts - prev.ts < GROUP_WINDOW_MS &&
-                !line.pull &&
-                !prev.pull;
+              // An event line between two messages breaks the group too -
+              // which falls out of `prev`/`next` being null for an event.
+              // Null on either side is a real case, not a guard for tidiness:
+              // `prev` is null on the first row and `next` on the last, and
+              // both are null whenever an event line sits between two
+              // messages - which is exactly how an event breaks a run.
+              const runs = (a: ChatLine | null, b: ChatLine | null) =>
+                a != null &&
+                b != null &&
+                a.from.userId === b.from.userId &&
+                Math.abs(b.ts - a.ts) < GROUP_WINDOW_MS &&
+                !a.pull &&
+                !b.pull;
+              const grouped = runs(prev, line);
+              const continues = runs(line, next);
+              // The kit cuts the corners from where a message sits in its run,
+              // so the run has to be described from both sides rather than
+              // just "is this a continuation".
+              const position = !grouped
+                ? continues
+                  ? 'first'
+                  : 'only'
+                : continues
+                  ? 'middle'
+                  : 'last';
               return (
-                <li
-                  key={entry.key}
-                  className="lobbyChatMsg"
-                  data-mine={mine || undefined}
-                  data-grouped={grouped || undefined}
-                  data-pull={line.pull ? line.pull.rarity : undefined}
-                >
-                  <span className="lobbyChatAvatar">
-                    {!grouped && !mine && <Avatar name={line.from.username} size="sm" />}
-                  </span>
-                  <div className="lobbyChatBody">
-                    {!grouped && (
-                      <span className="lobbyChatMeta">
-                        <span className="lobbyChatFrom">
-                          {mine ? t('tblYou') : line.from.username}
-                          {line.from.userId.startsWith('bot:') && (
-                            <Bot size={11} className="lobbyChatBotMark" aria-hidden />
-                          )}
+                <li key={entry.key} className="lobbyChatRow">
+                  <MessageBubble
+                    className="lobbyChatMsg"
+                    own={mine}
+                    position={position}
+                    // Only the message that ENDS a run wears the tail.
+                    tail={!continues}
+                    // Reserve the avatar column for everyone else's messages
+                    // even mid-run, so a continued line stays under the one
+                    // that introduced it. Mine need no gutter; they are on the
+                    // other edge with nobody to line up under.
+                    gutter={!mine}
+                    avatar={
+                      !mine && !grouped ? <Avatar name={line.from.username} size="sm" /> : undefined
+                    }
+                    header={
+                      !grouped ? (
+                        <span className="lobbyChatMeta">
+                          <span className="lobbyChatFrom">
+                            {mine ? t('tblYou') : line.from.username}
+                            {line.from.userId.startsWith('bot:') && (
+                              <Bot size={11} className="lobbyChatBotMark" aria-hidden />
+                            )}
+                          </span>
+                          <time className="lobbyChatTime" dateTime={new Date(line.ts).toISOString()}>
+                            {chatTime(line.ts)}
+                          </time>
                         </span>
-                        <time className="lobbyChatTime" dateTime={new Date(line.ts).toISOString()}>
-                          {chatTime(line.ts)}
-                        </time>
-                      </span>
-                    )}
-                    {line.pull ? (
-                      <span className="lobbyChatPull">
-                        <img
-                          className="lobbyChatPullArt"
-                          src={artCrop(line.pull.scryfallId)}
-                          alt=""
-                          loading="lazy"
-                          draggable={false}
-                        />
-                        <span className="lobbyChatPullBody">
-                          <span className="lobbyChatPullName">{line.pull.name}</span>
-                          <span className="lobbyChatPullMeta">
-                            <Sparkles size={11} aria-hidden />
-                            {t('chatPulled')}
-                            {' · '}
-                            {line.pull.setCode.toUpperCase()}
-                            {line.pull.foil && ` · ${t('chatPullFoil')}`}
+                      ) : undefined
+                    }
+                    // A pulled card is not a sentence with a picture attached -
+                    // it IS the message. It rides the attachments slot with no
+                    // body under it, which is what that slot is for.
+                    data-pull={line.pull ? line.pull.rarity : undefined}
+                    attachments={
+                      line.pull ? (
+                        <span className="lobbyChatPull">
+                          <img
+                            className="lobbyChatPullArt"
+                            src={artCrop(line.pull.scryfallId)}
+                            alt=""
+                            loading="lazy"
+                            draggable={false}
+                          />
+                          <span className="lobbyChatPullBody">
+                            <span className="lobbyChatPullName">{line.pull.name}</span>
+                            <span className="lobbyChatPullMeta">
+                              <Sparkles size={11} aria-hidden />
+                              {t('chatPulled')}
+                              {' · '}
+                              {line.pull.setCode.toUpperCase()}
+                              {line.pull.foil && ` · ${t('chatPullFoil')}`}
+                            </span>
                           </span>
                         </span>
-                      </span>
-                    ) : (
-                      <span className="lobbyChatBubble">{line.text}</span>
-                    )}
-                  </div>
+                      ) : undefined
+                    }
+                  >
+                    {line.pull ? undefined : line.text}
+                  </MessageBubble>
                 </li>
               );
             })}
