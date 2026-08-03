@@ -9,281 +9,396 @@ nothing else.
 
 ---
 
+## What every one of these does
+
+Two things, and both are what make it read as texture rather than as a gradient
+with a pattern printed on it:
+
+**The elements change size across the frame.** Large and open at the dense end,
+down to pinpricks at the thin end. A pattern whose elements are all one size
+reads as a screen laid over the image; one whose elements grow and shrink reads
+as the image itself having depth.
+
+**They dither away rather than fading away.** The thin end does not ramp
+smoothly to nothing — individual elements start **dropping out at random**, a
+few at first and then most, so the pattern dissolves into scattered specks and
+finally into nothing. The boundary between pattern and empty is ragged and
+noisy, never a clean edge and never a smooth blend.
+
+That second one is the part a generator will quietly ignore unless you insist,
+which is why every prompt below says it twice and in two different ways.
+
 ## Polarity: white shows, black hides
 
-Every texture below is generated **pure white marks on a pure black ground**,
-and that is not arbitrary — it is the direction CSS reads:
+Generated **pure white marks on a pure black ground**, which is the direction
+CSS reads:
 
 ```css
 .panel {
   background: var(--glacier-accent-solid);   /* whatever colour you want */
   mask-image: url('/textures/halftone-tl.webp');
   mask-mode: luminance;      /* white = opaque, black = cut away */
-  mask-size: cover;          /* or a tile size, for the seamless set */
+  mask-size: cover;
 }
 ```
 
-`mask-mode: luminance` is the load-bearing line. The default is `alpha`, and
-these files are fully opaque, so on the default every one of them would mask
-nothing at all and you would see a flat rectangle of colour. If you would
-rather not think about modes, run each file through a one-off alpha conversion
-instead and drop the `mask-mode`.
+`mask-mode: luminance` is load-bearing. The default is `alpha`, and these files
+are fully opaque, so on the default every one of them masks *nothing* and you
+get a flat rectangle of colour.
 
-To invert any texture (hide where it currently shows), don't regenerate it —
-`filter: invert(1)` on the mask source, or swap the two colour words in the
-prompt.
+To invert (hide where it currently shows), don't regenerate — `filter:
+invert(1)` on the mask source, or swap the two colour words in the prompt.
 
-## Two families, and the difference matters
+## These are not tiles
 
-**Seamless** (assets 1–8) repeat forever. Use `mask-size: 24px` or whatever
-tile size suits; the texture has no centre and no direction. Every one of these
-prompts demands the edges wrap.
-
-**Directional** (assets 9–15) are full-frame with a density ramp — they have a
-corner or a centre, and tiling them shows the seam immediately. Use
-`mask-size: cover` and one copy.
-
-Generating a directional texture and then tiling it is the one mistake that
-looks like a broken asset rather than a wrong choice.
+Every texture here has a direction and a density ramp, so it is used as **one
+copy at `mask-size: cover`**. Tiling one repeats the dense corner in a grid and
+looks like a broken asset rather than a wrong choice. If you later want a
+uniform repeating screen as well, that is a different set and I will write it.
 
 ## Output spec
 
 | | |
 |---|---|
 | Generate at | 2048×2048 |
-| Ship at | 1024×1024 (seamless) · 2048×2048 (directional) |
+| Ship at | 2048×2048 |
 | Format | WebP, or PNG if your pipeline prefers lossless |
 | Lives in | `public/textures/<id>.webp` |
 
 ```bash
-sips -s format png -Z 1024 ~/Downloads/raw.png --out /tmp/t.png && cwebp -q 90 /tmp/t.png -o public/textures/<id>.webp
+sips -s format png -Z 2048 ~/Downloads/raw.png --out /tmp/t.png && cwebp -q 90 /tmp/t.png -o public/textures/<id>.webp
 ```
 
 Quality 90, higher than for artwork: a mask's job is its edges, and WebP's
-usual ringing around hard black/white boundaries shows up as grey fringing that
-the mask then paints as a half-visible halo.
+usual ringing around hard black/white boundaries paints as a half-visible halo.
 
 ---
 
-# Seamless — tile forever
-
-## `hatch-diagonal`
-
-> A seamless tileable texture, 2048×2048: fine parallel diagonal lines at 45
-> degrees, pure white on a pure black background, evenly spaced with about
-> three times as much black as white between them, each line crisp and of
-> uniform width. Perfectly tileable - the pattern must continue without a
-> visible seam when the image is repeated edge to edge in every direction, so
-> every line leaving one edge meets its continuation on the opposite edge.
-> Pure white and pure black only, no greys beyond the anti-aliasing on the line
-> edges, no colour, no gradient, no vignette, no lighting, no texture or grain,
-> no border, no frame. No text, no letters, no numerals, no logos, no
-> watermark, no signature.
-
-## `hatch-cross`
-
-> A seamless tileable texture, 2048×2048: a fine crosshatch of two sets of thin
-> parallel lines running at plus and minus 45 degrees and crossing each other,
-> pure white on a pure black background, evenly spaced so the open black
-> diamonds between them are several times the line width. Perfectly tileable -
-> the pattern must continue without a visible seam when the image is repeated
-> edge to edge in every direction, so every line leaving one edge meets its
-> continuation on the opposite edge. Pure white and pure black only, no greys
-> beyond the anti-aliasing on the line edges, no colour, no gradient, no
-> vignette, no lighting, no grain, no border, no frame. No text, no letters, no
-> numerals, no logos, no watermark, no signature.
-
-## `blueprint-grid`
-
-> A seamless tileable texture, 2048×2048: an engineering blueprint grid drawn
-> as thin white lines on a pure black background, with a fine minor grid and a
-> heavier major line every fifth division, the major lines about twice the
-> weight of the minor ones. All lines crisp, straight and of uniform width
-> within their class. Perfectly tileable - the grid must continue without a
-> visible seam when the image is repeated edge to edge in every direction, with
-> the major lines landing so their spacing stays regular across the join. Pure
-> white and pure black only, no greys beyond the anti-aliasing on the line
-> edges, no colour, no gradient, no vignette, no lighting, no paper texture, no
-> grain, no border, no frame. No text, no letters, no numerals, no dimension
-> labels, no logos, no watermark, no signature.
-
-## `blueprint-iso`
-
-> A seamless tileable texture, 2048×2048: an isometric drafting grid of thin
-> white lines on a pure black background - three sets of parallel lines, one
-> vertical and two at thirty degrees either side of horizontal, crossing to
-> form a lattice of equilateral triangles. All lines crisp and of uniform
-> width. Perfectly tileable - the lattice must continue without a visible seam
-> when the image is repeated edge to edge in every direction. Pure white and
-> pure black only, no greys beyond the anti-aliasing on the line edges, no
-> colour, no gradient, no vignette, no lighting, no grain, no border, no frame.
-> No text, no letters, no numerals, no logos, no watermark, no signature.
-
-## `dots-uniform`
-
-> A seamless tileable texture, 2048×2048: a regular grid of small solid white
-> circles of identical size on a pure black background, evenly spaced with
-> clear black gaps between them roughly twice each dot's diameter, arranged on
-> a straight square lattice. Every dot the same size and perfectly round.
-> Perfectly tileable - the lattice must continue without a visible seam when
-> the image is repeated edge to edge in every direction, with dots at the edges
-> completing correctly against the opposite side. Pure white and pure black
-> only, no greys beyond the anti-aliasing on the dot edges, no colour, no
-> gradient, no vignette, no lighting, no grain, no border, no frame. No text,
-> no letters, no numerals, no logos, no watermark, no signature.
-
-## `dots-hex`
-
-> A seamless tileable texture, 2048×2048: small solid white circles of
-> identical size on a pure black background, arranged on a hexagonal
-> close-packed lattice so each dot is ringed by six others at equal distance,
-> with clear black gaps between them. Every dot the same size and perfectly
-> round. Perfectly tileable - the lattice must continue without a visible seam
-> when the image is repeated edge to edge in every direction. Pure white and
-> pure black only, no greys beyond the anti-aliasing on the dot edges, no
-> colour, no gradient, no vignette, no lighting, no grain, no border, no frame.
-> No text, no letters, no numerals, no logos, no watermark, no signature.
-
-## `weave-linen`
-
-> A seamless tileable texture, 2048×2048: a plain over-under woven fabric
-> structure rendered as pure white threads on a pure black background, the warp
-> and weft crossing at right angles in a regular basket interlace, each thread a
-> flat white band of uniform width with black showing in the gaps. Flat and
-> graphic - the over-under is described by which band is unbroken at each
-> crossing, not by shading. Perfectly tileable - the weave must continue without
-> a visible seam when the image is repeated edge to edge in every direction.
-> Pure white and pure black only, no greys beyond the anti-aliasing on the
-> edges, no colour, no gradient, no vignette, no lighting, no fibre detail, no
-> border, no frame. No text, no letters, no numerals, no logos, no watermark,
-> no signature.
-
-## `chevron-micro`
-
-> A seamless tileable texture, 2048×2048: a dense field of small white chevrons
-> on a pure black background, all pointing the same way, arranged in offset rows
-> so each row's chevrons sit between those of the row above, like a carbon-fibre
-> or herringbone weave. Every chevron identical, flat white, with clear black
-> separation between neighbours. Perfectly tileable - the field must continue
-> without a visible seam when the image is repeated edge to edge in every
-> direction. Pure white and pure black only, no greys beyond the anti-aliasing
-> on the edges, no colour, no gradient, no vignette, no lighting, no grain, no
-> border, no frame. No text, no letters, no numerals, no logos, no watermark, no
-> signature.
-
----
-
-# Directional — one copy, `mask-size: cover`
+# Halftone dissolves
 
 ## `halftone-tl`
 
-> A full-frame halftone gradient, 2048×2048, NOT tileable: solid white dots on a
-> pure black background arranged on a regular grid, where the dots are large and
-> nearly touching in the TOP-LEFT corner and shrink smoothly along the diagonal
-> until they vanish entirely in the bottom-right, leaving that corner pure
-> black. The grid spacing stays constant across the whole frame - only the dot
-> SIZE changes, which is what makes it read as a printed halftone rather than as
-> scattered dots. Every dot perfectly round. Pure white and pure black only, no
-> greys beyond the anti-aliasing on the dot edges, no colour, no lighting, no
-> grain, no border, no frame. No text, no letters, no numerals, no logos, no
-> watermark, no signature.
+> A full-frame halftone dissolve, 2048×2048, on a pure black background with
+> pure white dots. In the TOP-LEFT corner the dots are large, fat and almost
+> touching each other; travelling along the diagonal toward the bottom-right
+> they get steadily smaller until they are fine pinpricks. As they shrink they
+> also begin to DISAPPEAR AT RANDOM - a scattering of missing dots at first,
+> then more gone than present, until only sparse isolated specks remain and
+> finally nothing at all, leaving the bottom-right corner pure black. The fade
+> is a dissolve, not a blend: no dot is ever grey or semi-transparent, each one
+> is either fully white or absent, and the boundary between pattern and empty
+> is ragged, speckled and irregular rather than a clean edge or a smooth
+> gradient. The grid the dots sit on stays regular throughout - it is their SIZE
+> and their SURVIVAL that change, not their spacing. Every dot perfectly round.
+> Pure white and pure black only, no greys beyond the anti-aliasing on the dot
+> edges, no colour, no lighting, no glow, no border, no frame. No text, no
+> letters, no numerals, no logos, no watermark, no signature.
 
 ## `halftone-tr`
 
-> A full-frame halftone gradient, 2048×2048, NOT tileable: solid white dots on a
-> pure black background arranged on a regular grid, where the dots are large and
-> nearly touching in the TOP-RIGHT corner and shrink smoothly along the diagonal
-> until they vanish entirely in the bottom-left, leaving that corner pure black.
-> The grid spacing stays constant across the whole frame - only the dot SIZE
-> changes, which is what makes it read as a printed halftone rather than as
-> scattered dots. Every dot perfectly round. Pure white and pure black only, no
-> greys beyond the anti-aliasing on the dot edges, no colour, no lighting, no
-> grain, no border, no frame. No text, no letters, no numerals, no logos, no
-> watermark, no signature.
+> A full-frame halftone dissolve, 2048×2048, on a pure black background with
+> pure white dots. In the TOP-RIGHT corner the dots are large, fat and almost
+> touching each other; travelling along the diagonal toward the bottom-left they
+> get steadily smaller until they are fine pinpricks. As they shrink they also
+> begin to DISAPPEAR AT RANDOM - a scattering of missing dots at first, then
+> more gone than present, until only sparse isolated specks remain and finally
+> nothing at all, leaving the bottom-left corner pure black. The fade is a
+> dissolve, not a blend: no dot is ever grey or semi-transparent, each one is
+> either fully white or absent, and the boundary between pattern and empty is
+> ragged, speckled and irregular rather than a clean edge or a smooth gradient.
+> The grid the dots sit on stays regular throughout - it is their SIZE and their
+> SURVIVAL that change, not their spacing. Every dot perfectly round. Pure white
+> and pure black only, no greys beyond the anti-aliasing on the dot edges, no
+> colour, no lighting, no glow, no border, no frame. No text, no letters, no
+> numerals, no logos, no watermark, no signature.
 
 ## `halftone-bl`
 
-> A full-frame halftone gradient, 2048×2048, NOT tileable: solid white dots on a
-> pure black background arranged on a regular grid, where the dots are large and
-> nearly touching in the BOTTOM-LEFT corner and shrink smoothly along the
-> diagonal until they vanish entirely in the top-right, leaving that corner pure
-> black. The grid spacing stays constant across the whole frame - only the dot
-> SIZE changes, which is what makes it read as a printed halftone rather than as
-> scattered dots. Every dot perfectly round. Pure white and pure black only, no
-> greys beyond the anti-aliasing on the dot edges, no colour, no lighting, no
-> grain, no border, no frame. No text, no letters, no numerals, no logos, no
-> watermark, no signature.
+> A full-frame halftone dissolve, 2048×2048, on a pure black background with
+> pure white dots. In the BOTTOM-LEFT corner the dots are large, fat and almost
+> touching each other; travelling along the diagonal toward the top-right they
+> get steadily smaller until they are fine pinpricks. As they shrink they also
+> begin to DISAPPEAR AT RANDOM - a scattering of missing dots at first, then
+> more gone than present, until only sparse isolated specks remain and finally
+> nothing at all, leaving the top-right corner pure black. The fade is a
+> dissolve, not a blend: no dot is ever grey or semi-transparent, each one is
+> either fully white or absent, and the boundary between pattern and empty is
+> ragged, speckled and irregular rather than a clean edge or a smooth gradient.
+> The grid the dots sit on stays regular throughout - it is their SIZE and their
+> SURVIVAL that change, not their spacing. Every dot perfectly round. Pure white
+> and pure black only, no greys beyond the anti-aliasing on the dot edges, no
+> colour, no lighting, no glow, no border, no frame. No text, no letters, no
+> numerals, no logos, no watermark, no signature.
+
+> **On the corners.** All four are transforms of one another - `tr` is `tl`
+> mirrored horizontally, `bl` is `tl` mirrored vertically, `br` is `tl` turned
+> 180 degrees - so strictly, one file plus a flip would do:
+>
+> ```bash
+> magick halftone-tl.png -flop halftone-tr.png      # top-right
+> magick halftone-tl.png -flip halftone-bl.png      # bottom-left
+> magick halftone-tl.png -rotate 180 halftone-br.png
+> ```
+>
+> Three are written out anyway because a dissolve is RANDOM, and three
+> independent generations give three genuinely different scatters, where three
+> flips of one file give the same scatter reflected - which is visible if two of
+> them ever appear on the same screen. Bottom-right is the one left to the flip,
+> to keep the set at fifteen; derive it, or paste `halftone-tl` and swap
+> TOP-LEFT for BOTTOM-RIGHT and bottom-right for top-left.
 
 ## `halftone-radial`
 
-> A full-frame halftone gradient, 2048×2048, NOT tileable: solid white dots on a
-> pure black background arranged on a regular grid, where the dots are large and
-> nearly touching at the exact CENTRE of the frame and shrink smoothly outward
-> in every direction until they vanish entirely before reaching the edges,
-> leaving the whole border pure black. The grid spacing stays constant across
-> the frame - only the dot SIZE changes with distance from the centre. Every dot
-> perfectly round, the falloff even and radially symmetric. Pure white and pure
-> black only, no greys beyond the anti-aliasing on the dot edges, no colour, no
-> lighting, no grain, no border, no frame. No text, no letters, no numerals, no
+> A full-frame halftone dissolve, 2048×2048, on a pure black background with
+> pure white dots. At the exact CENTRE of the frame the dots are large, fat and
+> almost touching each other; travelling outward in every direction they get
+> steadily smaller until they are fine pinpricks. As they shrink they also begin
+> to DISAPPEAR AT RANDOM - a scattering of missing dots at first, then more gone
+> than present, until only sparse isolated specks remain and finally nothing at
+> all, leaving the whole border of the frame pure black. The fade is a dissolve,
+> not a blend: no dot is ever grey or semi-transparent, each one is either fully
+> white or absent, and the boundary between pattern and empty is ragged,
+> speckled and irregular rather than a clean ring or a smooth gradient. The grid
+> the dots sit on stays regular throughout - it is their SIZE and their SURVIVAL
+> that change, not their spacing. Every dot perfectly round, the falloff evenly
+> radial. Pure white and pure black only, no greys beyond the anti-aliasing on
+> the dot edges, no colour, no lighting, no glow, no border, no frame. No text,
+> no letters, no numerals, no logos, no watermark, no signature.
+
+## `halftone-inset`
+
+> A full-frame halftone dissolve, 2048×2048, on a pure black background with
+> pure white dots, running the opposite way to a vignette. Around all four EDGES
+> of the frame the dots are large, fat and almost touching each other;
+> travelling inward toward the centre they get steadily smaller until they are
+> fine pinpricks. As they shrink they also begin to DISAPPEAR AT RANDOM - a
+> scattering of missing dots at first, then more gone than present, until only
+> sparse isolated specks remain and finally nothing at all, leaving the middle
+> of the frame pure black. The fade is a dissolve, not a blend: no dot is ever
+> grey or semi-transparent, each one is either fully white or absent, and the
+> boundary between pattern and empty is ragged, speckled and irregular rather
+> than a clean edge or a smooth gradient. The grid the dots sit on stays regular
+> throughout - it is their SIZE and their SURVIVAL that change, not their
+> spacing. Every dot perfectly round, the falloff even on all four sides. Pure
+> white and pure black only, no greys beyond the anti-aliasing on the dot edges,
+> no colour, no lighting, no glow, no border, no frame. No text, no letters, no
+> numerals, no logos, no watermark, no signature.
+
+---
+
+# Line dissolves
+
+## `hatch-diagonal`
+
+> A full-frame line dissolve, 2048×2048, on a pure black background with pure
+> white lines. Along the LEFT edge, thick bold white lines run diagonally at 45
+> degrees, close together and heavy; travelling right across the frame they get
+> steadily thinner until they are hairlines. As they thin they also begin to
+> BREAK UP AT RANDOM - first into long dashes with occasional gaps, then into
+> short broken fragments, then into scattered isolated specks, and finally
+> nothing at all, leaving the right edge pure black. The fade is a dissolve, not
+> a blend: no part of a line is ever grey or semi-transparent, every point is
+> either fully white or absent, and the boundary between pattern and empty is
+> ragged and speckled rather than a clean edge or a smooth gradient. The line
+> spacing and the 45-degree angle stay constant throughout - it is their WEIGHT
+> and their SURVIVAL that change. Pure white and pure black only, no greys
+> beyond the anti-aliasing on the line edges, no colour, no lighting, no glow,
+> no border, no frame. No text, no letters, no numerals, no logos, no watermark,
+> no signature.
+
+## `hatch-cross`
+
+> A full-frame crosshatch dissolve, 2048×2048, on a pure black background with
+> pure white lines. In the TOP-LEFT corner a dense crosshatch of thick white
+> lines runs at plus and minus 45 degrees, heavy and close together; travelling
+> toward the bottom-right the lines get steadily thinner until they are
+> hairlines. As they thin they also begin to BREAK UP AT RANDOM - first into
+> dashes, then into short fragments, then into scattered isolated specks, and
+> finally nothing at all, leaving the bottom-right corner pure black. The two
+> sets of lines break up independently, so in the middle ground one direction
+> often survives where the other has already gone. The fade is a dissolve, not a
+> blend: every point is either fully white or absent, never grey, and the
+> boundary between pattern and empty is ragged and speckled rather than a clean
+> edge or a smooth gradient. The line spacing and the angles stay constant
+> throughout - it is their WEIGHT and their SURVIVAL that change. Pure white and
+> pure black only, no greys beyond the anti-aliasing on the line edges, no
+> colour, no lighting, no glow, no border, no frame. No text, no letters, no
+> numerals, no logos, no watermark, no signature.
+
+## `scanlines`
+
+> A full-frame scanline dissolve, 2048×2048, on a pure black background with
+> pure white lines. Along the TOP edge, thick bold white horizontal lines run
+> across the frame like a coarse CRT raster; travelling down the frame they get
+> steadily thinner until they are hairlines. As they thin they also begin to
+> BREAK UP AT RANDOM - first into long dashes, then into short broken segments,
+> then into scattered isolated specks, and finally nothing at all, leaving the
+> bottom edge pure black. The fade is a dissolve, not a blend: every point is
+> either fully white or absent, never grey or semi-transparent, and the boundary
+> between pattern and empty is ragged and speckled rather than a clean edge or a
+> smooth gradient. The line spacing stays constant down the whole frame - it is
+> their WEIGHT and their SURVIVAL that change, so the raster thins and shatters
+> rather than spreading apart. Lines perfectly horizontal. Pure white and pure
+> black only, no greys beyond the anti-aliasing on the line edges, no colour, no
+> bloom, no glow, no border, no frame. No text, no letters, no numerals, no
 > logos, no watermark, no signature.
 
-## `dither-bayer`
+## `contours`
 
-> A full-frame ordered-dither gradient, 2048×2048, NOT tileable: a hard
-> black-and-white Bayer dither ramp of the kind used to fake shading on
-> early computer displays, fully white at the top edge and fully black at the
-> bottom, with the intermediate tones built purely from the characteristic
-> regular checkerboard-like dither cells rather than from any smooth blend.
-> Pixel-crisp with NO anti-aliasing and no blur - every pixel is either fully
-> white or fully black, and the dither pattern must stay visible as discrete
-> square cells at full size. No colour, no lighting, no grain, no border, no
-> frame. No text, no letters, no numerals, no logos, no watermark, no signature.
+> A full-frame topographic dissolve, 2048×2048, on a pure black background with
+> pure white lines. Concentric irregular contour lines, like the height rings on
+> a survey map, are thick and widely spaced near the BOTTOM-LEFT corner and
+> become thinner and more tightly packed travelling toward the top-right. As
+> they thin they also begin to BREAK UP AT RANDOM - first into dashes, then into
+> short fragments, then into scattered isolated specks, and finally nothing at
+> all, leaving the top-right corner pure black. The fade is a dissolve, not a
+> blend: every point is either fully white or absent, never grey, and the
+> boundary between pattern and empty is ragged and speckled rather than a clean
+> edge or a smooth gradient. The rings are smooth, closed and organic in shape,
+> nested inside one another and never crossing. Pure white and pure black only,
+> no greys beyond the anti-aliasing on the line edges, no colour, no lighting,
+> no glow, no border, no frame. No text, no letters, no numerals, no elevation
+> labels, no logos, no watermark, no signature.
 
-## `scanlines-fade`
+---
 
-> A full-frame scanline gradient, 2048×2048, NOT tileable: fine horizontal white
-> lines of uniform width and spacing across a pure black background, like a CRT
-> raster, at full brightness along the top edge and fading smoothly to nothing
-> by the bottom edge, which is left pure black. The line spacing stays constant
-> down the whole frame - only their brightness falls away, so the fade reads as
-> the raster dimming rather than as the lines spreading apart. Lines crisp and
-> perfectly horizontal. White-to-black only, no colour, no bloom, no glow, no
-> grain, no border, no frame. No text, no letters, no numerals, no logos, no
-> watermark, no signature.
+# Grid dissolves
 
-## `grain-vignette`
+## `blueprint`
 
-> A full-frame noise vignette, 2048×2048, NOT tileable: fine random
-> monochrome film grain, dense and bright white at the outer edges and thinning
-> smoothly toward the centre of the frame, which is left almost pure black. The
-> grain is fine and evenly random with no visible clumping, banding, streaks or
-> repeating pattern, and the falloff from edge to centre is smooth and even on
-> all four sides. White grain on a pure black background, no colour, no
-> lighting, no border, no frame. No text, no letters, no numerals, no logos, no
-> watermark, no signature.
+> A full-frame blueprint dissolve, 2048×2048, on a pure black background with
+> pure white lines. In the TOP-LEFT corner a drafting grid is drawn in thick
+> bold white lines with wide squares and a heavier major line every fifth
+> division; travelling toward the bottom-right the whole grid gets finer - the
+> lines thinner and the squares smaller - until it is a hairline mesh. As it
+> thins it also begins to ERODE AT RANDOM - individual grid segments simply
+> missing, a few at first and then most, so the mesh falls apart into
+> disconnected fragments, then into scattered isolated specks, and finally
+> nothing at all, leaving the bottom-right corner pure black. The fade is a
+> dissolve, not a blend: every point is either fully white or absent, never
+> grey, and the boundary between pattern and empty is ragged and speckled rather
+> than a clean edge or a smooth gradient. Lines crisp, straight and axis-aligned
+> throughout. Pure white and pure black only, no greys beyond the anti-aliasing
+> on the line edges, no colour, no lighting, no glow, no paper texture, no
+> border, no frame. No text, no letters, no numerals, no dimension labels, no
+> logos, no watermark, no signature.
+
+## `blueprint-iso`
+
+> A full-frame isometric-grid dissolve, 2048×2048, on a pure black background
+> with pure white lines. In the BOTTOM-LEFT corner an isometric drafting lattice
+> is drawn in thick bold white lines - one set vertical and two at thirty
+> degrees either side of horizontal, crossing into equilateral triangles - with
+> wide spacing; travelling toward the top-right the lattice gets finer, the
+> lines thinner and the triangles smaller, until it is a hairline mesh. As it
+> thins it also begins to ERODE AT RANDOM - individual lattice segments simply
+> missing, a few at first and then most, so the mesh falls apart into
+> disconnected fragments, then into scattered isolated specks, and finally
+> nothing at all, leaving the top-right corner pure black. The fade is a
+> dissolve, not a blend: every point is either fully white or absent, never
+> grey, and the boundary between pattern and empty is ragged and speckled rather
+> than a clean edge or a smooth gradient. Lines crisp and straight throughout.
+> Pure white and pure black only, no greys beyond the anti-aliasing on the line
+> edges, no colour, no lighting, no glow, no border, no frame. No text, no
+> letters, no numerals, no logos, no watermark, no signature.
+
+## `weave`
+
+> A full-frame weave dissolve, 2048×2048, on a pure black background with pure
+> white threads. Along the BOTTOM edge a plain over-under woven basket
+> structure is drawn in thick bold white bands crossing at right angles;
+> travelling up the frame the weave gets finer - the bands narrower and the
+> interlace tighter - until it is a hairline mesh. As it thins it also begins to
+> COME APART AT RANDOM - individual bands simply missing from the interlace, a
+> few at first and then most, so the cloth unravels into disconnected threads,
+> then into scattered isolated specks, and finally nothing at all, leaving the
+> top edge pure black. Flat and graphic - the over-under is described by which
+> band is unbroken at each crossing, never by shading. The fade is a dissolve,
+> not a blend: every point is either fully white or absent, never grey, and the
+> boundary between pattern and empty is ragged and speckled rather than a clean
+> edge or a smooth gradient. Pure white and pure black only, no greys beyond the
+> anti-aliasing on the edges, no colour, no lighting, no glow, no fibre detail,
+> no border, no frame. No text, no letters, no numerals, no logos, no watermark,
+> no signature.
+
+---
+
+# Particle dissolves
+
+## `chevrons`
+
+> A full-frame chevron dissolve, 2048×2048, on a pure black background with pure
+> white chevrons. In the TOP-RIGHT corner the chevrons are large and bold,
+> packed in tight offset rows like a herringbone weave, all pointing the same
+> way; travelling toward the bottom-left they get steadily smaller until they
+> are tiny marks. As they shrink they also begin to DISAPPEAR AT RANDOM - a
+> scattering of missing chevrons at first, then more gone than present, until
+> only sparse isolated marks remain and finally nothing at all, leaving the
+> bottom-left corner pure black. The fade is a dissolve, not a blend: each
+> chevron is either fully white or absent, never grey or semi-transparent, and
+> the boundary between pattern and empty is ragged and speckled rather than a
+> clean edge or a smooth gradient. The rows stay regular throughout - it is the
+> chevrons' SIZE and their SURVIVAL that change, not their spacing. Pure white
+> and pure black only, no greys beyond the anti-aliasing on the edges, no
+> colour, no lighting, no glow, no border, no frame. No text, no letters, no
+> numerals, no logos, no watermark, no signature.
+
+## `speckle`
+
+> A full-frame speckle dissolve, 2048×2048, on a pure black background with pure
+> white specks. Along the LEFT edge the frame is crowded with white specks of
+> widely MIXED sizes - some fat blobs, many medium, a great many tiny - packed
+> densely and scattered irregularly rather than sitting on any grid; travelling
+> right across the frame both the sizes and the count fall away, the fat blobs
+> disappearing first and the fine specks thinning out last, until only a sparse
+> dusting remains and finally nothing at all, leaving the right edge pure black.
+> The thinning is stochastic and uneven - clumps and bare patches, never a
+> smooth ramp - and every speck is either fully white or absent, never grey or
+> semi-transparent, so the boundary between pattern and empty is ragged and
+> noisy rather than a clean edge. Specks irregular and organic in outline. Pure
+> white and pure black only, no greys beyond the anti-aliasing on the edges, no
+> colour, no lighting, no glow, no border, no frame. No text, no letters, no
+> numerals, no logos, no watermark, no signature.
+
+## `dither-ramp`
+
+> A full-frame ordered-dither ramp, 2048×2048, pure white on a pure black
+> background, of the kind used to fake shading on early computer displays.
+> Solid white along the TOP edge, and travelling down the frame it breaks into a
+> Bayer dither of ever-sparser white pixels - first a dense checker, then
+> widening open patterns, then a thin scatter - until it reaches pure black at
+> the bottom edge. This one is an ORDERED dither rather than a random dissolve -
+> the pattern is a strict repeating Bayer matrix, so the thinning is regular and
+> mechanical rather than speckled. That is the point of having it in the set: it
+> is the one texture here that reads as a machine rendering a gradient rather
+> than as a pattern coming apart.
+> The dither cells are coarse and clearly visible at full size,
+> and they get FINER as the pattern thins, so the top of the ramp is built from
+> chunky blocks and the bottom from single scattered pixels. Pixel-crisp with NO
+> anti-aliasing and NO blur whatsoever - every pixel is either fully white or
+> fully black, never an intermediate grey, and there must be no smooth gradient
+> anywhere in the image. No colour, no lighting, no glow, no border, no frame.
+> No text, no letters, no numerals, no logos, no watermark, no signature.
 
 ---
 
 ## Checking one before you generate the other fourteen
 
-Two failures are common and neither is obvious in a thumbnail:
-
-**A "seamless" texture that isn't.** Tile it four-up before shipping. Generators
-routinely produce a plausible-looking pattern with a hard line down the join.
-
-```bash
-magick montage tex.png tex.png tex.png tex.png -tile 2x2 -geometry +0+0 check.png
-```
-
-**Grey where you wanted black.** A mask reads luminance, so a "black"
-background at 4% grey lifts the whole texture and the masked colour bleeds
-through everywhere it should be cut away. Check the histogram is genuinely
-bimodal at the two ends rather than sitting in the middle:
+**The dissolve is the thing that gets ignored.** A generator will happily give
+you the size ramp and then fade it with opacity, which produces a pattern of
+grey dots — useless as a mask, because grey is "half showing" and the whole
+thin end becomes a haze instead of a scatter. Check the histogram is genuinely
+bimodal at the two ends rather than piled in the middle:
 
 ```bash
 magick tex.png -format "min=%[min] max=%[max] mean=%[mean]" info:
 ```
 
-Want the black at 0 and the white at 65535 (or 255 at 8-bit), with the mean
-telling you roughly what fraction is showing. If the minimum is not 0, run
-`-level 5%,95%` before shipping.
+Want the minimum at 0 and the maximum at 65535 (255 at 8-bit). If you see a
+fat middle, the generator faded instead of dissolving — say "no dot is ever
+grey, each is either fully white or absent" again and regenerate.
+
+**Then look at the thin end at 100%.** It should be scattered specks with
+visible gaps and clumps, not an even mist. An even mist means it dithered the
+*brightness* rather than dropping elements, which reads as noise rather than as
+the pattern breaking up.
