@@ -1262,3 +1262,37 @@ Behavior upgrades, all through the same public actions a human would send:
   the bot's own creatures and life total.
 - Attack planning and threat scoring read oracle facts for cards outside
   the embedded precon data (human decks), instead of scoring them 0.
+
+## Quickplay addendum (2026-08-03) — the table deals the decks
+
+Opt-in per room: `settings.quickplay` (host toggle, alongside `enforced`).
+Nobody brings a deck; the server deals every seated human one of its embedded
+precons. Roulette on the Play page is one-click quickplay.
+
+- **Game gate.** Dealing runs for `mtg` and `yugioh` only. At any other table
+  the flag can be set but nothing is dealt, and no error frame is sent.
+- **Pool.** Format `standard` draws from `bot_decks_standard.json`; every other
+  format draws from `bot_data.json`. The same pool the bots use.
+- **`precon:<code>` deckId sentinel.** A dealt seat's `deckId` is
+  `"precon:<code>"`, mirroring the bot seats' sentinel. It deliberately
+  resolves to no row in the decks table: `GET /api/decks/precon:<code>` is a
+  404 and always will be. Clients must not try to resolve it.
+- **When a deal happens.** On join, if the flag is already on, for deckless
+  seats only. On the flag being switched on, for every seated human — including
+  one who already picked a constructed deck, which is replaced — and their
+  `quickplayRolls` resets to 0. Bots are skipped in both forms; they deal
+  themselves in `bot.add`.
+- **What a deal writes.** `deckId`, `deckName`, command and library zones;
+  clears hand/battlefield/graveyard/exile; sets `ready: false`.
+- **`{"type":"room.deck.random"}`** — spend one reroll, take a different deck.
+  Errors: `not_in_room`, `forbidden` (spectator), `room_not_found`,
+  `already_started`, `not_quickplay`, `not_seated`, `no_rolls`, `no_decks`.
+- **`player.quickplayRolls`** counts rolls spent; the cap is server-owned
+  (`MAX_QUICKPLAY_ROLLS = 3`, mirrored for display only in
+  `src/app/data/quickplay.ts`). A roll is charged only after a deal that
+  actually happened, so an empty pool cannot burn one. A reroll never returns
+  the deck just refused unless it is the only deck in the pool.
+- **Known gap.** A dealt seat carries no `deckMeta`, and because the sentinel
+  does not resolve, the owning client cannot compute and re-send one either.
+  Deck metrics are therefore blank for dealt seats in the lobby, the matchup
+  splash and the library hover — the same as bot seats today.

@@ -12,12 +12,16 @@
   background: var(--glacier-surface-sunken);
 }
 
+/* The tag is a kit Pill (soft accent, sm), so its box, height, padding, radius,
+   colour and type size all come from the system. Only the two things a Pill has
+   no opinion about are set here. Doubled class to clear the kit's own 0-1-0
+   rules, which is the house pattern for overriding a hashed dist. */
 .tickerTag {
   flex: none;
-  padding: 0.1rem 0.5rem;
-  border-radius: var(--glacier-radius-full);
-  background: color-mix(in oklch, var(--glacier-accent-solid) 22%, transparent);
-  color: var(--glacier-accent-text);
+}
+
+.tickerTag.tickerTag {
+  font-weight: var(--glacier-font-weight-semibold);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -82,11 +86,45 @@
   }
 }
 
+/* Same width as the run it duplicates, which is what makes -50% exact. */
+.tickerClone {
+  display: flex;
+  flex: none;
+}
+
 .tickerItem {
   display: inline-flex;
   align-items: baseline;
   gap: var(--glacier-space-2);
   white-space: nowrap;
+}
+
+/* A headline opens its release. A bare button - it carries the strip's own
+   type and colour, and only the pointer, the hover lift and the focus ring
+   say it is live. */
+.tickerButton {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--glacier-space-2);
+  border: 0;
+  border-radius: var(--glacier-radius-sm);
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tickerButton:hover .tickerText {
+  color: var(--glacier-text);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.tickerButton:focus-visible {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: 3px;
 }
 
 .tickerVersion {
@@ -100,18 +138,12 @@
   color: var(--glacier-text-subtle);
 }
 
-/* The accessible copy: present to assistive tech, absent to everyone else.
-   Not `display: none`, which would take it out of the accessibility tree too
-   and leave the marquee - which is aria-hidden - as the only account. */
-.tickerSr {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+/* The release notes a headline opens: the What's New body, at the width of a
+   small modal rather than the extra-large one. */
+.tickerNote {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-4);
 }
 
 /* A strip that never stops moving is exactly what this setting is for. It
@@ -127,7 +159,7 @@
   }
   /* One run is the whole content; the duplicate exists only to hide the loop's
      seam, and with no loop it is just the same news printed twice. */
-  .tickerTrack > .tickerRun:nth-child(2) {
+  .tickerClone {
     display: none;
   }
 }

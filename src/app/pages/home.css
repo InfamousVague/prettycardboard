@@ -830,10 +830,21 @@
   white-space: nowrap;
 }
 
+/* The row is the container; the truncation belongs to the name inside it.
+   Left on the container these would clip the flex line rather than the text,
+   and an anonymous flex item cannot be given an ellipsis at all - the same
+   split .gmResumeSub / .gmResumeName makes above. */
 .hmLoadName {
   margin-block-start: var(--glacier-space-2);
-  font-weight: 600;
   max-inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.hmLoadNameText {
+  font-weight: 600;
+  /* Without this the name refuses to shrink below its min-content width and
+     shoulders its way out of the 150px tile. */
+  min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

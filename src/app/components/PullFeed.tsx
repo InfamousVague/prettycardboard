@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Pill, Size, Spinner, Text, TextTone, useLocale } from '@glacier/react';
+import { IconBackfill, Pill, Size, Spinner, Text, TextTone, useLocale } from '@glacier/react';
 import { Sparkles } from '@glacier/icons';
 import { useT } from '../i18n.ts';
 import { cardImage } from '../data/cards.ts';
@@ -73,7 +73,9 @@ export function PullFeed({
   if (rows.length === 0) {
     return (
       <div className="pdEmpty">
-        <Sparkles size={18} aria-hidden />
+        <IconBackfill aria-hidden>
+          <Sparkles size={18} />
+        </IconBackfill>
         <Text size={Size.XSmall} tone={TextTone.Subtle}>
           {t('pdFeedEmpty')}
         </Text>

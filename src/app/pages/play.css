@@ -214,6 +214,122 @@
   min-inline-size: 0;
 }
 
+/* ---- Roulette --------------------------------------------------------------
+   The plates are `.pgMode` too, so everything about how they look, light up
+   and animate is inherited from the strip below; only the track and the two
+   things a roulette says differently live here. */
+
+.pgRoulette {
+  min-inline-size: 0;
+}
+
+/* Two, side by side and wide. There will only ever be a handful of these -
+   one per shape people actually want - and giving them a full half each is
+   what separates "the headline" from the strip of formats underneath. */
+.pgRouletteGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--glacier-space-3);
+}
+
+@media (max-width: 46rem) {
+  .pgRouletteGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Roomier than a mode plate, because it is above them and carries the page's
+   first real invitation. */
+/* Doubled with .pgMode deliberately. This block sits ABOVE the .pgMode rule in
+   the file and both are single-class, so at equal specificity source order
+   would hand the mode plate's tighter padding the win and this would never
+   apply at all. (.pgModeFeat sets the same padding and gets away with a single
+   class only because it happens to come after .pgMode.) */
+.pgMode.pgSpin {
+  padding: var(--glacier-space-5) var(--glacier-space-6);
+}
+
+/* The roulette plate is a container now, not a button: its two actions live at
+   its foot. It keeps the tint, the chamfer and the entrance, and gives up the
+   three things that only made sense when the whole surface was the click. The
+   hover sweep stays, keyed off the plate rather than off :hover:not(:disabled),
+   so the plate still lights up as you reach for it. */
+.pgMode[data-static] {
+  cursor: default;
+}
+
+/* The joined pair. One control with a seam down it - a shared border, one
+   radius across the outside, and a single hairline between - so it reads as
+   "which opponents" rather than as two unrelated buttons that happen to touch. */
+.pgSpinVs {
+  display: flex;
+  align-self: stretch;
+  margin-block-start: var(--glacier-space-3);
+  border: 1px solid color-mix(in oklch, var(--pg-tint) 42%, transparent);
+  border-radius: var(--glacier-radius-md);
+  overflow: hidden;
+}
+
+.pgSpinBtn {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border: 0;
+  background: color-mix(in oklch, var(--pg-tint) 10%, transparent);
+  color: var(--glacier-text);
+  font: inherit;
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-semibold);
+  cursor: pointer;
+  transition:
+    background var(--glacier-duration-fast) var(--glacier-ease-out),
+    color var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+/* The seam. On the inline-start edge of the second button so it belongs to the
+   pair rather than to either half, and logical so RTL puts it on the other
+   side without a second rule. */
+.pgSpinBtn + .pgSpinBtn {
+  border-inline-start: 1px solid color-mix(in oklch, var(--pg-tint) 42%, transparent);
+}
+
+.pgSpinBtn:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--pg-tint) 30%, transparent);
+}
+
+/* Inset, because the button is flush inside a clipped pair - an outset ring
+   would be cropped by the parent's overflow:hidden and show on two sides. */
+.pgSpinBtn:focus-visible {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: -3px;
+}
+
+.pgSpinBtn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.pgSpin .pgModeName {
+  font-size: clamp(1.15rem, 2.4vw, 1.45rem);
+}
+
+/* The dice sit in a slightly larger well than the strip's glyphs, so the two
+   rows read as a hierarchy rather than as one long list of plates. */
+.pgSpin .pgModeIcon {
+  inline-size: 3rem;
+  block-size: 3rem;
+}
+
+/* Its own stagger: the plates are in .pgRouletteGrid, not .pgModeGrid, so the
+   strip's nth-child delays never reach them and both would otherwise land at
+   0ms together. */
+.pgRouletteGrid > :nth-child(1) { animation-delay: 20ms; }
+.pgRouletteGrid > :nth-child(2) { animation-delay: 65ms; }
+
 /* Three across, deliberately, rather than as many as will fit: the plates are
    in a considered order - the everyday formats first, draft next because it is
    the only table you can join owning nothing - and an auto-fit track would
@@ -1203,6 +1319,13 @@
     padding: var(--glacier-space-4) var(--glacier-space-5);
   }
 
+  /* The roulette sheds its extra padding on a phone the same way the featured
+     plate does. Two classes, not one: a media query adds no specificity, so a
+     bare .pgSpin here would still lose to the .pgMode.pgSpin rule above. */
+  .pgMode.pgSpin {
+    padding: var(--glacier-space-4) var(--glacier-space-5);
+  }
+
   .pgModeFeat .pgModeName {
     font-size: clamp(1.3rem, 5vw, 1.7rem);
   }
@@ -1248,6 +1371,7 @@
   .pgCareer,
   .pgMode,
   .pgModeGrid > *,
+  .pgRouletteGrid > *,
   .pgSrvRow,
   .pgSrvList > *,
   .pgHistRow,

@@ -23,6 +23,7 @@ import {
 } from '@glacier/react';
 import {
   Crown,
+  Bot,
   Dices,
   Eye,
   Flag,
@@ -36,6 +37,8 @@ import {
 } from '@glacier/icons';
 import type { IconProps } from '@glacier/icons';
 import { PlayingCard, PlayingCardPack } from '../icons/cards.ts';
+import { launchBotMatch } from '../data/botMatch.ts';
+import { ROULETTES, rouletteShape, type RoulettePreset } from '../data/roulette.ts';
 import { useT, type MessageKey } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
@@ -243,6 +246,52 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
   const [closing, setClosing] = useState(false);
   /** Which mode plate is opening a table, so only that one spins. */
   const [quickBusy, setQuickBusy] = useState<string | null>(null);
+  /** Which roulette is being dealt, same rule: only that plate spins. */
+  const [spinning, setSpinning] = useState<string | null>(null);
+
+  /**
+   * Roulette: create the table, let the TABLE deal every seat a deck, and go -
+   * with nothing brought and nothing chosen. `quickplay` is what makes the deal
+   * server-side, so this works with an empty collection, which is the whole
+   * point of the entry.
+   *
+   * The two modes differ in exactly who fills the other chairs, and everything
+   * that follows from that:
+   *
+   *   ai      - bots take every other seat and the game starts itself. One
+   *             click to playing, which is what the plate has always done.
+   *   friends - the same table with the same dealt decks, but the other seats
+   *             are left OPEN and it stops in the lobby, because a table nobody
+   *             has been invited to yet has nothing to start. `seats` has to be
+   *             passed explicitly here: the launcher otherwise sizes a room to
+   *             the seats this call fills, which with no bots is just mine.
+   */
+  const spin = async (preset: RoulettePreset, vs: 'ai' | 'friends') => {
+    if (spinning || busy || quickBusy) return;
+    setSpinning(`${preset.id}:${vs}`);
+    try {
+      await launchBotMatch({
+        name: t(preset.title),
+        game: 'mtg',
+        format: preset.format,
+        bots: vs === 'ai' ? preset.seats - 1 : 0,
+        seats: preset.seats,
+        seat: true,
+        difficulty: 'normal',
+        style: 'mixed',
+        enforced: false,
+        quickplay: true,
+        autoStart: vs === 'ai',
+      });
+    } catch (error) {
+      toast({
+        tone: 'danger',
+        message: (error as Error).message === 'offline' ? t('botsOffline') : t('rlFailed'),
+      });
+    } finally {
+      setSpinning(null);
+    }
+  };
 
   // Only decks for the chosen game are eligible; if the current pick belongs to
   // another game (or none), fall back to the first deck of this game.
@@ -443,6 +492,89 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
 
       {starting && (
       <>
+      {/* Above even the quick starts, because it asks for less than they do:
+          they still need a deck you built, and this needs nothing at all. One
+          click deals every seat a random deck and starts the game, so it is
+          the only entry that works on a brand-new account. */}
+      <section className="pgRoulette pgEnter" style={{ animationDelay: '20ms' }} aria-label={t('rlTitle')}>
+        <div className="pgHead">
+          <Heading level={2} noMargin className="pgHeadTitle">
+            {t('rlTitle')}
+          </Heading>
+          <Text size={Size.Small} tone={TextTone.Muted}>
+            {t('rlLede')}
+          </Text>
+        </div>
+        <div className="pgRouletteGrid">
+          {ROULETTES.map((preset) => {
+            const dealing = spinning?.startsWith(`${preset.id}:`) ?? false;
+            const locked = busy || spinning !== null || quickBusy !== null;
+            return (
+              // Wears the mode plate wholesale rather than a parallel skin of
+              // its own: same tint machinery, hover sweep, focus ring, entrance
+              // and disabled treatment, so the two strips cannot drift. pgSpin
+              // only carries what genuinely differs.
+              //
+              // A DIV, unlike the mode plates, because it now holds two real
+              // actions. The plate used to be one big button and the whole
+              // surface was the click; a button inside a button is invalid, and
+              // one plate cannot mean two different things anyway. The tint,
+              // the sweep and the entrance are unchanged - only what catches
+              // the pointer moved, from the plate to the pair at its foot.
+              <div
+                key={preset.id}
+                className="pgMode pgSpin"
+                data-static=""
+                style={{ ['--pg-tint' as string]: preset.tint }}
+              >
+                <span className="pgModeTop">
+                  <span className="pgModeIcon" aria-hidden>
+                    {dealing ? <Spinner size="sm" /> : <Dices size={24} />}
+                  </span>
+                  <GameTag game="mtg" className="pgModeGame" />
+                </span>
+                <span className="pgModeName">{t(preset.title)}</span>
+                <span className="pgModeBlurb">{t(preset.blurb)}</span>
+                <span className="pgModeMeta">
+                  <span className="pgModeShape">{rouletteShape(preset.seats)}</span>
+                  <span className="pgModeHint">
+                    {dealing
+                      ? t('rlDealing')
+                      : `${formatFor(preset.format).startingLife} ${t('tblLife').toLowerCase()}`}
+                  </span>
+                </span>
+                {/* Joined, not two loose buttons: one control with a seam down
+                    it, so the choice reads as "which opponents" rather than as
+                    two unrelated ways in. Same rule as the mode strip - one
+                    table per click, and every button on the page locks while
+                    any of them is mid-deal, because a second press would open a
+                    table nobody asked for. */}
+                <div className="pgSpinVs" role="group" aria-label={t(preset.title)}>
+                  <button
+                    type="button"
+                    className="pgSpinBtn"
+                    disabled={locked}
+                    onClick={() => void spin(preset, 'friends')}
+                  >
+                    {spinning === `${preset.id}:friends` ? <Spinner size="sm" /> : <Users size={15} />}
+                    {t('rlVsFriends')}
+                  </button>
+                  <button
+                    type="button"
+                    className="pgSpinBtn"
+                    disabled={locked}
+                    onClick={() => void spin(preset, 'ai')}
+                  >
+                    {spinning === `${preset.id}:ai` ? <Spinner size="sm" /> : <Bot size={15} />}
+                    {t('rlVsAi')}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
       {/* The shortcut past the form: the popular tables across every game as
           big mode plates, each one already knowing its game, its seats and its
           life total. Above the builder rather than beside it, because the
@@ -476,7 +608,7 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
                 // Every plate is one request; a second click anywhere on the
                 // strip while one is in flight would open a table nobody asked
                 // for and leave the player seated at the wrong one.
-                disabled={blocked || busy || quickBusy !== null}
+                disabled={blocked || busy || quickBusy !== null || spinning !== null}
                 title={blocked ? t('plQuickNeedDeck') : undefined}
                 onClick={() => void create(preset)}
               >
@@ -603,7 +735,14 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
           ) : (
             <DeckPicker value={chosenDeck} onChange={setDeckId} game={game} />
           )}
-          <Button onClick={() => void create()} loading={busy} disabled={!drafting && gameDecks.length === 0}>
+          <Button
+            onClick={() => void create()}
+            loading={busy}
+            // A launch already in flight owns the socket: this one would join a
+            // different room mid-sequence and the in-flight sends would land on
+            // whichever table won the race.
+            disabled={(!drafting && gameDecks.length === 0) || quickBusy !== null || spinning !== null}
+          >
             {drafting ? t('playCreateDraft') : t('playCreate')}
           </Button>
         </Card>
@@ -630,7 +769,11 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
             </Text>
           </div>
           <DeckPicker value={chosenDeck} onChange={setDeckId} />
-          <Button onClick={joinByCode} loading={busy} disabled={code.length < 6}>
+          <Button
+            onClick={joinByCode}
+            loading={busy}
+            disabled={code.length < 6 || quickBusy !== null || spinning !== null}
+          >
             {t('playJoinButton')}
           </Button>
         </Card>

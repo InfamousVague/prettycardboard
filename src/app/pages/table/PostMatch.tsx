@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Avatar, Button, Text, Size, TextTone, Tooltip } from '@glacier/react';
+import { Avatar, Button, IconBackfill, Text, Size, TextTone, Tooltip } from '@glacier/react';
 import { Crown, Download, Grid3X3, LogOut, Play, Skull, ThumbsUp, Timer, Trophy } from '@glacier/icons';
 import { PlayingCard } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
@@ -162,8 +162,16 @@ export function PostMatch({
         transition={{ type: 'spring', stiffness: 320, damping: 28 }}
       >
         <div className="pmHero">
+          {/* Backfilled: the kit stacks a filled copy of the glyph behind the
+              outline in the same colour, which at this size reads as a solid
+              gold trophy lit from within rather than a wireframe of one. Worth
+              it here and almost nowhere else - the effect needs a closed
+              silhouette and room to breathe, and every other glyph in the app
+              is 11-16px. */}
           <span className="pmTrophy" aria-hidden>
-            <Trophy size={30} />
+            <IconBackfill>
+              <Trophy size={30} />
+            </IconBackfill>
           </span>
           <Text as="p" size={Size.Large} weight="bold" className="pmTitle">
             {result.winnerUsername} {t('pmWins')}

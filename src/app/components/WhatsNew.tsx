@@ -46,8 +46,10 @@ function formatReleaseDate(date: string | undefined, locale: string): string | n
   }).format(parsed);
 }
 
-/** One release: a rail naming it, and its highlights beside it. */
-function WnRelease({ release }: { release: ChangelogRelease }) {
+/** One release: a rail naming it, and its highlights beside it. Exported
+ *  because the news ticker opens a single release with it, and two renderers
+ *  for one changelog is how the two drift apart. */
+export function WnRelease({ release }: { release: ChangelogRelease }) {
   const t = useT();
   const locale = useLocale();
   const released = formatReleaseDate(release.date, locale);

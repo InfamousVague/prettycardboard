@@ -55,7 +55,7 @@ import { resolveCardImage } from '../../data/games.ts';
 import { aliasCardMeta, getCardMeta, hydrateCardMeta, type ScryCard } from '../../data/scryfall.ts';
 import { bracketKey, estimateBracket } from '../../data/brackets.ts';
 import { FORMATS, formatFor, formatTarget, isBasicLand } from '../../data/formats.ts';
-import { applyDeckTint, clearDeckTint } from '../../state/accent.ts';
+import { applyAccentRamp, applyDeckTint, clearDeckTint } from '../../state/accent.ts';
 import { DEFAULT_PREFERENCES, loadPreferences, savePreferences } from '../../preferences.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { GameTag } from '../../components/GameTag.tsx';
@@ -564,11 +564,23 @@ export function DeckEditor({ deckId }: { deckId: string }) {
   }, [deck, metaVersion]);
 
   // --- deck tint: the app accent leans toward the open deck's identity ---
+  // Only MTG decks have a colour identity to lean on. deckIdentity is built
+  // from Scryfall meta, which Yu-Gi-Oh and Cyberpunk cards never have, so it
+  // is always [] for them - and accentFor([]) answers 'graphite'. That greyed
+  // the whole editor for two of the three games AND said something false: a
+  // graphite editor is how a genuinely colourless MTG deck is meant to look.
+  // Wear the game's own ramp instead, exactly as the table does
+  // (TablePage.tsx:501-505).
   const identityKey = derived ? derived.deckIdentity.join('') : null;
+  const deckGame = deck?.game;
   useEffect(() => {
-    if (identityKey === null) return;
+    if (identityKey === null || !deckGame) return;
+    if (deckGame === 'cyberpunk' || deckGame === 'yugioh') {
+      applyAccentRamp(deckGame);
+      return;
+    }
     applyDeckTint(identityKey.split(''));
-  }, [identityKey]);
+  }, [identityKey, deckGame]);
   useEffect(
     () => () => clearDeckTint(loadPreferences().accent, DEFAULT_PREFERENCES.accent),
     [],

@@ -626,7 +626,7 @@
     /* min-content throughout, for the reason above; the stage row additionally
        grows into a tall window but never shrinks under its portraits (they are
        overflow:hidden and would clip). */
-    grid-template-rows: min-content minmax(min-content, 1fr) min-content min-content;
+    grid-template-rows: min-content minmax(min-content, 1fr) min-content min-content min-content;
     /* The launch controls are the room's FLOOR, not a card parked beside the
        roster: one full-width line under everything, so leaving, closing,
        spectating and starting read as one row of choices instead of a
@@ -9035,8 +9035,18 @@ button.loyaltyBadge:hover {
   border: var(--glacier-hairline) solid var(--glacier-border);
   background: color-mix(in oklch, var(--glacier-surface) 70%, transparent);
   color: var(--glacier-text-muted);
-  font-size: var(--glacier-text-xs);
+  /* --glacier-text-* is the COLOUR namespace; the size token is font-size-xs.
+     The old name resolved to nothing, which made the whole declaration invalid
+     and left the chip inheriting the banner's font size. */
+  font-size: var(--glacier-font-size-xs);
   cursor: pointer;
+}
+
+/* Every other chip on the mat is reachable by keyboard; this one was styled as
+   a button but never given the ring that says where focus is. */
+.combatAimChip:focus-visible {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: 2px;
 }
 
 /* The attacker the aim buttons will act on. */

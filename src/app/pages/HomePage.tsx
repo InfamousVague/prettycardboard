@@ -12,6 +12,7 @@ import {
   OtpField,
   Pill,
   ProgressBar,
+  Row,
   SegmentedControl,
   Select,
   Size,
@@ -773,9 +774,18 @@ function RecentDecks({ deckStats, order }: { deckStats: Map<string, MyDeckStats>
                     </span>
                   )}
                 </DeckStack>
-                <Text size={Size.Small} className="hmLoadName">
-                  <GameTag game={deck.game} showName={false} /> {deck.name}
-                </Text>
+                {/* A Row, not a paragraph with a chip loose in the text. GameTag
+                    is a kit Pill - an inline-flex box whose synthesized baseline
+                    is its bottom edge - so inside a <Text> it hung its bottom on
+                    the deck name's baseline and floated ~8px above it, swelling
+                    the line box from 21px to 30px. Row centres on the cross axis.
+                    Same shape as .gmResumeSub/.gmResumeName below. */}
+                <Row gap={1} className="hmLoadName">
+                  <GameTag game={deck.game} showName={false} />
+                  <Text size={Size.Small} className="hmLoadNameText">
+                    {deck.name}
+                  </Text>
+                </Row>
                 <div className="hmLoadStats">
                   <span className="hmLoadStat">
                     <span className="hmLoadValue">{deck.cardCount}</span>
