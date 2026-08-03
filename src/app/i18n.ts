@@ -32,6 +32,7 @@ export const messages = {
   navBrowse: { en: 'Browse', es: 'Explorar', fr: 'Parcourir', ar: 'تصفح' },
   navBoosters: { en: 'Boosters', es: 'Sobres', fr: 'Boosters', ar: 'العبوات' },
   navFriends: { en: 'Friends', es: 'Amigos', fr: 'Amis', ar: 'الأصدقاء' },
+  navLeaderboard: { en: 'Ladder', es: 'Clasificación', fr: 'Classement', ar: 'التصنيف' },
   navProfile: { en: 'Profile', es: 'Perfil', fr: 'Profil', ar: 'الملف الشخصي' },
   // The phone nav's fifth slot and the sheet it opens (Home / Play / Decks /
   // Packs / You). `sbProfileYou` says the same word as the sidebar section
@@ -3572,6 +3573,29 @@ export const messages = {
   // social pages: the guild roster (Friends) and the career profile
   frRecruit: { en: 'Recruit', es: 'Reclutar', fr: 'Recruter', ar: 'تجنيد' },
   frRoster: { en: 'Roster', es: 'Plantilla', fr: 'Effectif', ar: 'القائمة' },
+  frUnranked: { en: 'Unranked', es: 'Sin rango', fr: 'Non classé', ar: 'غير مصنف' },
+  lbTitle: { en: 'Leaderboard', es: 'Clasificación', fr: 'Classement', ar: 'لوحة الصدارة' },
+  lbSub: {
+    en: 'Ranked play only. Bot practice and games with friends never move it.',
+    es: 'Solo partidas clasificatorias. La práctica con bots no cuenta.',
+    fr: 'Parties classées uniquement. Les parties contre des bots ne comptent pas.',
+    ar: 'المباريات المصنفة فقط. اللعب ضد الروبوتات لا يُحتسب.',
+  },
+  lbScope: { en: 'Scope', es: 'Alcance', fr: 'Portée', ar: 'النطاق' },
+  lbEveryone: { en: 'Everyone', es: 'Todos', fr: 'Tout le monde', ar: 'الجميع' },
+  lbFriends: { en: 'Friends', es: 'Amigos', fr: 'Amis', ar: 'الأصدقاء' },
+  lbYouAre: { en: 'You are', es: 'Estás en el', fr: 'Vous êtes', ar: 'أنت في' },
+  lbUnplaced: { en: 'Unplaced', es: 'Sin clasificar', fr: 'Non classé', ar: 'غير مصنف' },
+  lbUnplacedHint: {
+    en: 'Finish a ranked match to join the ladder.',
+    es: 'Termina una partida clasificatoria para entrar.',
+    fr: 'Terminez une partie classée pour entrer au classement.',
+    ar: 'أكمل مباراة مصنفة للانضمام.',
+  },
+  lbLoading: { en: 'Reading the ladder…', es: 'Leyendo la clasificación…', fr: 'Lecture du classement…', ar: 'جارٍ قراءة التصنيف…' },
+  lbEmpty: { en: 'Nobody has finished a ranked match yet.', es: 'Nadie ha terminado una partida clasificatoria.', fr: 'Personne n\u2019a terminé de partie classée.', ar: 'لم يكمل أحد مباراة مصنفة بعد.' },
+  lbNoFriends: { en: 'None of your friends are on the ladder yet.', es: 'Ninguno de tus amigos está clasificado.', fr: 'Aucun de vos amis n\u2019est classé.', ar: 'لا أحد من أصدقائك مصنف بعد.' },
+  lbFailed: { en: 'Could not load the ladder.', es: 'No se pudo cargar la clasificación.', fr: 'Impossible de charger le classement.', ar: 'تعذر تحميل التصنيف.' },
   pfService: { en: 'Service record', es: 'Hoja de servicio', fr: 'États de service', ar: 'سجل الخدمة' },
   pfLosses: { en: 'Losses', es: 'Derrotas', fr: 'Défaites', ar: 'هزائم' },
 

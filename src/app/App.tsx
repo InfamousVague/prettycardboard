@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import {
-  Avatar,
   Drawer,
   HapticsProvider,
   IconButton,
@@ -16,7 +15,7 @@ import {
   VisualFeedbackProvider,
   direction,
 } from '@glacier/react';
-import {
+import { Crown,
   ArrowLeft,
   ArrowRight,
   Compass,
@@ -57,6 +56,7 @@ import { InvitePopup } from './components/InvitePopup.tsx';
 import { WhatsNewHost } from './components/WhatsNewHost.tsx';
 import UpdateHost from './components/UpdateHost.tsx';
 import { DownloadBanner } from './components/DownloadBanner.tsx';
+import { ProfileChip } from './components/ProfileChip.tsx';
 import { useMobileLayout } from './hooks/useIsPhone.ts';
 import { usePreference } from './hooks/usePreference.ts';
 import { loadAltArtCatalog } from './data/scryfall.ts';
@@ -83,6 +83,7 @@ const CollectionPage = lazy(() => import('./pages/CollectionPage.tsx').then((m) 
 // player who never opens it should not pay for the booster machinery.
 const PackDock = lazy(() => import('./components/PackDock.tsx'));
 const FriendsPage = lazy(() => import('./pages/FriendsPage.tsx').then((m) => ({ default: m.FriendsPage })));
+const LeaderboardPage = lazy(() => import('./pages/LeaderboardPage.tsx').then((m) => ({ default: m.LeaderboardPage })));
 const ProfilePage = lazy(() => import('./pages/ProfilePage.tsx').then((m) => ({ default: m.ProfilePage })));
 const TablePage = lazy(() => import('./pages/TablePage.tsx').then((m) => ({ default: m.TablePage })));
 const JoinTablePage = lazy(() => import('./pages/JoinTablePage.tsx').then((m) => ({ default: m.JoinTablePage })));
@@ -134,7 +135,7 @@ function PageFallback() {
 
 /** The routes that live behind the phone nav's "You" sheet - the item lights
  *  up for all of them, so the shell never shows a page with nothing selected. */
-const YOU_ROUTES: readonly Route[] = ['browse', 'collection', 'friends', 'profile', 'download'];
+const YOU_ROUTES: readonly Route[] = ['browse', 'collection', 'friends', 'leaderboard', 'profile', 'download'];
 
 /**
  * The app's primary navigation, in both of its shapes.
@@ -329,11 +330,15 @@ function AppRail({
         onClick={() => onNavigate('friends')}
       />
       <NavBarItem
-        icon={<User size={20} />}
-        label={t('navProfile')}
-        active={route === 'profile'}
-        onClick={() => onNavigate('profile')}
+        icon={<Crown size={20} />}
+        label={t('navLeaderboard')}
+        active={route === 'leaderboard'}
+        onClick={() => onNavigate('leaderboard')}
       />
+      {/* Profile is not in the rail: the rail lists places you GO, and your
+          profile is a thing you ARE. It hangs off the account chip in the
+          title bar instead, which is where the avatar already was. The phone
+          shell has no title bar, so its You sheet still carries Profile. */}
     </NavBar>
   );
 }
@@ -535,6 +540,8 @@ function Shell({
     <CollectionPage onOpenBoosters={() => navigate('boosters')} />
   ) : route === 'friends' ? (
     <FriendsPage />
+  ) : route === 'leaderboard' ? (
+    <LeaderboardPage />
   ) : route === 'download' ? (
     <DownloadPage />
   ) : (
@@ -607,7 +614,15 @@ function Shell({
               <div id={TITLEBAR_DOCK_END_ID} className="tbDock" />
               <div className="titleBarActions" data-no-drag>
                 {!connected && <Pill size="sm" tone="warning">offline</Pill>}
-                {identity && <Avatar name={identity.username} size="sm" />}
+                {/* The avatar was already here saying whose app this is. It is
+                    now the door to the profile too, which is why the rail no
+                    longer carries a Profile row. */}
+                {identity && (
+                  <ProfileChip
+                    username={identity.username}
+                    onOpenProfile={() => navigate('profile')}
+                  />
+                )}
               </div>
             </>
           }

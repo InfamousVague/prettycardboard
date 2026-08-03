@@ -1156,3 +1156,166 @@
 .pfPortrait {
   position: relative;
 }
+
+/* ---- friends: standing on the roster row ---------------------------------
+   The rank strip sits under the presence line, so a roster row reads
+   "who / how they are / where they stand" top to bottom. */
+/* Its own line across the card: the roster card is a flex ROW of avatar /
+   identity / actions, and squeezing a rank strip into the identity column
+   folded the whole card into a stack. */
+.frCard {
+  flex-wrap: wrap;
+  row-gap: var(--glacier-space-1);
+}
+
+.frCardRank {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-1);
+  font-size: var(--glacier-text-xs);
+  color: var(--glacier-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.frCardRankLabel {
+  color: var(--glacier-text);
+  font-weight: var(--glacier-weight-medium);
+}
+
+.frCardRankPos {
+  color: var(--glacier-text-muted);
+}
+
+.frCardRecord::before {
+  content: '·';
+  margin-inline-end: var(--glacier-space-1);
+  opacity: 0.5;
+}
+
+.frCardRecordMuted {
+  opacity: 0.7;
+}
+
+/* ---- the ladder ---------------------------------------------------------- */
+
+.lbPage {
+  display: grid;
+  gap: var(--glacier-space-4);
+  padding: var(--glacier-space-4);
+  max-width: 60rem;
+  margin-inline: auto;
+}
+
+.lbHead {
+  display: grid;
+  gap: var(--glacier-space-1);
+}
+
+/* Where I sit, above the list: the first thing anyone opening a leaderboard
+   wants, and otherwise a scroll away or nowhere at all. */
+.lbMine {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  padding: var(--glacier-space-3);
+  border-radius: var(--glacier-radius-lg);
+  border: var(--glacier-hairline) solid var(--glacier-border);
+  background: color-mix(in oklch, var(--glacier-surface) 80%, transparent);
+}
+
+.lbMineEmpty {
+  opacity: 0.75;
+}
+
+.lbMineWho {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.lbMineLabel {
+  font-size: var(--glacier-text-lg);
+  font-weight: var(--glacier-weight-semibold);
+  color: var(--glacier-text);
+}
+
+.lbMineSub {
+  font-size: var(--glacier-text-sm);
+  color: var(--glacier-text-muted);
+}
+
+.lbScope {
+  justify-self: start;
+}
+
+.lbList {
+  display: grid;
+  gap: var(--glacier-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lbRow {
+  display: grid;
+  grid-template-columns: 3.2rem auto 1fr auto auto auto auto auto;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  border-radius: var(--glacier-radius-md);
+  border: var(--glacier-hairline) solid transparent;
+  background: color-mix(in oklch, var(--glacier-surface) 55%, transparent);
+  font-size: var(--glacier-text-sm);
+}
+
+/* My own row is the one being looked for; it keeps its place in the order
+   rather than being pulled out, and is marked where it stands. */
+.lbRowMe {
+  border-color: color-mix(in oklch, var(--glacier-accent-solid) 55%, var(--glacier-border));
+  background: color-mix(in oklch, var(--glacier-accent-solid) 12%, var(--glacier-surface));
+}
+
+.lbRow[data-top] .lbPos {
+  color: var(--glacier-accent-text);
+  font-weight: var(--glacier-weight-semibold);
+}
+
+.lbPos {
+  color: var(--glacier-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.lbName {
+  color: var(--glacier-text);
+  font-weight: var(--glacier-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lbDivision,
+.lbRecord {
+  color: var(--glacier-text-muted);
+  white-space: nowrap;
+}
+
+.lbRating {
+  color: var(--glacier-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Narrow: the ladder keeps position, name and rating - the three things that
+   make it a ladder - and sheds the rest rather than wrapping into a mess. */
+@media (max-width: 40rem) {
+  .lbRow {
+    grid-template-columns: 2.6rem auto 1fr auto;
+  }
+
+  .lbDivision,
+  .lbRecord,
+  .lbRow > :nth-child(4) {
+    display: none;
+  }
+}

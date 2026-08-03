@@ -238,16 +238,33 @@ pub async fn friends(State(app): State<Arc<App>>, Extension(user): Extension<db:
             db::outgoing_requests(&conn, &user.id),
         )
     };
-    let friends: Vec<Value> = friends
-        .into_iter()
-        .map(|(id, username)| {
-            let mut f = json!({"userId": id, "username": username, "online": app.is_online(&id)});
-            if let Some(room_id) = app.seated_room(&id) {
-                f["roomId"] = json!(room_id);
-            }
-            f
-        })
-        .collect();
+    // A friend row carries their standing too. The friends page is where
+    // "how is everyone doing" gets asked, and answering it there beats making
+    // the player open eight profiles.
+    let friends: Vec<Value> = {
+        let conn = app.db.lock().unwrap();
+        friends
+            .into_iter()
+            .map(|(id, username)| {
+                let (wins, losses) = db::user_match_counts(&conn, &id);
+                let mut f = json!({
+                    "userId": id,
+                    "username": username,
+                    "online": app.is_online(&id),
+                    "rating": db::user_rating(&conn, &id),
+                    "position": db::ladder_position(&conn, &id),
+                    "wins": wins,
+                    "losses": losses,
+                    "played": wins + losses,
+                    "endorsements": db::user_endorsement_count(&conn, &id),
+                });
+                if let Some(room_id) = app.seated_room(&id) {
+                    f["roomId"] = json!(room_id);
+                }
+                f
+            })
+            .collect()
+    };
     let incoming: Vec<Value> = incoming
         .into_iter()
         .map(|(id, uid, username)| json!({"id": id, "from": {"userId": uid, "username": username}}))
@@ -782,8 +799,10 @@ pub async fn my_stats(
     let avg_turn_ms = db::user_avg_turn_ms(&conn, &user.id);
     let (salt_x100, salt_count) = db::user_deck_salt(&conn, &user.id);
     let rating = db::user_rating(&conn, &user.id);
+    let position = db::ladder_position(&conn, &user.id);
     Json(json!({
         "rating": rating,
+        "position": position,
         "wins": wins,
         "losses": losses,
         "played": wins + losses,
@@ -800,6 +819,51 @@ pub async fn my_stats(
 /// GET /api/users/{id}/stats: any player's all-time aggregates - the matchup
 /// splash shows every seat's record. Same queries as /api/me/stats; unknown
 /// ids just come back all zeros.
+/// GET /api/leaderboard?limit=N: the global ladder, best first.
+///
+/// Signed-in read, like every other player-facing endpoint. It carries only
+/// what a ranking needs (name, rating, record, endorsements); nothing here
+/// exposes decks, salt ratings or anything a player did not put on a
+/// scoreboard by playing ranked matches.
+pub async fn leaderboard(
+    State(app): State<Arc<App>>,
+    Query(q): Query<LeaderboardQuery>,
+) -> Response {
+    let limit = q.limit.unwrap_or(100).clamp(1, 500);
+    let conn = app.db.lock().unwrap();
+    // Competition ranking: equal ratings share a place (1, 2, 2, 4). Row index
+    // would have disagreed with `ladder_position`, which counts how many
+    // players are strictly above you - two screens, two answers, same player.
+    let mut position = 0i64;
+    let mut previous: Option<i64> = None;
+    let rows: Vec<Value> = db::leaderboard(&conn, limit)
+        .into_iter()
+        .enumerate()
+        .map(|(i, r)| {
+            if previous != Some(r.rating) {
+                position = i as i64 + 1;
+                previous = Some(r.rating);
+            }
+            json!({
+                "position": position,
+                "userId": r.user_id,
+                "username": r.username,
+                "rating": r.rating,
+                "wins": r.wins,
+                "losses": r.losses,
+                "played": r.wins + r.losses,
+                "endorsements": r.endorsements,
+            })
+        })
+        .collect();
+    Json(json!({ "entries": rows })).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct LeaderboardQuery {
+    pub limit: Option<i64>,
+}
+
 pub async fn user_stats(State(app): State<Arc<App>>, Path(user_id): Path<String>) -> Response {
     let conn = app.db.lock().unwrap();
     let (wins, losses) = db::user_match_counts(&conn, &user_id);
@@ -807,8 +871,10 @@ pub async fn user_stats(State(app): State<Arc<App>>, Path(user_id): Path<String>
     let avg_turn_ms = db::user_avg_turn_ms(&conn, &user_id);
     let (salt_x100, salt_count) = db::user_deck_salt(&conn, &user_id);
     let rating = db::user_rating(&conn, &user_id);
+    let position = db::ladder_position(&conn, &user_id);
     Json(json!({
         "rating": rating,
+        "position": position,
         "wins": wins,
         "losses": losses,
         "played": wins + losses,

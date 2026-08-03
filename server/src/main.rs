@@ -274,6 +274,7 @@ async fn main() {
         .route("/api/me/decks/stats", get(api::my_deck_stats))
         .route("/api/users/search", get(api::search_users))
         .route("/api/users/{id}/stats", get(api::user_stats))
+        .route("/api/leaderboard", get(api::leaderboard))
         .route("/api/friends", get(api::friends))
         .route("/api/friends/requests", post(api::friend_request))
         .route("/api/friends/requests/{id}/accept", post(api::friend_accept))

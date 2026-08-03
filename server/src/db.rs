@@ -558,6 +558,81 @@ pub fn salt_upsert(
 }
 
 /// All-time (wins, losses) for a user across recorded results.
+/// One row of the ladder: who, where they sit, and the record behind it.
+pub struct LadderRow {
+    pub user_id: String,
+    pub username: String,
+    pub rating: i64,
+    pub wins: i64,
+    pub losses: i64,
+    pub endorsements: i64,
+}
+
+/// The global ladder, best first.
+///
+/// Only players who have FINISHED a ranked match appear. Every account is
+/// seeded at the same rating, so listing everyone would open the board with a
+/// wall of identical numbers in signup order - which reads as a ranking and is
+/// not one.
+pub fn leaderboard(conn: &Connection, limit: i64) -> Vec<LadderRow> {
+    let mut stmt = match conn.prepare(
+        "SELECT u.id, u.username, COALESCE(u.rating, ?1) AS rating,
+                COALESCE(SUM(mp.won), 0) AS wins,
+                COALESCE(SUM(1 - mp.won), 0) AS losses,
+                (SELECT COUNT(DISTINCT from_id) FROM endorsements WHERE to_id = u.id) AS endorsements
+           FROM users u
+           JOIN match_players mp ON mp.user_id = u.id
+          GROUP BY u.id
+          ORDER BY rating DESC, wins DESC, u.username ASC
+          LIMIT ?2",
+    ) {
+        Ok(stmt) => stmt,
+        Err(e) => {
+            eprintln!("leaderboard query failed to prepare: {e}");
+            return Vec::new();
+        }
+    };
+    let rows = stmt.query_map(params![RATING_SEED, limit], |r| {
+        Ok(LadderRow {
+            user_id: r.get(0)?,
+            username: r.get(1)?,
+            rating: r.get(2)?,
+            wins: r.get(3)?,
+            losses: r.get(4)?,
+            endorsements: r.get(5)?,
+        })
+    });
+    match rows {
+        Ok(rows) => rows.filter_map(Result::ok).collect(),
+        Err(e) => {
+            eprintln!("leaderboard query failed: {e}");
+            Vec::new()
+        }
+    }
+}
+
+/// Where one player sits on that ladder (1-based), or None when they have
+/// never finished a ranked match and so are not ON it.
+pub fn ladder_position(conn: &Connection, user_id: &str) -> Option<i64> {
+    let played: i64 = conn
+        .query_row("SELECT COUNT(*) FROM match_players WHERE user_id = ?", [user_id], |r| r.get(0))
+        .unwrap_or(0);
+    if played == 0 {
+        return None;
+    }
+    let rating = user_rating(conn, user_id);
+    conn.query_row(
+        "SELECT COUNT(*) + 1 FROM (
+             SELECT u.id, COALESCE(u.rating, ?1) AS rating
+               FROM users u JOIN match_players mp ON mp.user_id = u.id
+              GROUP BY u.id
+         ) WHERE rating > ?2",
+        params![RATING_SEED, rating],
+        |r| r.get(0),
+    )
+    .ok()
+}
+
 pub fn user_match_counts(conn: &Connection, user_id: &str) -> (i64, i64) {
     conn.query_row(
         "SELECT COALESCE(SUM(won), 0), COALESCE(SUM(1 - won), 0) FROM match_players WHERE user_id = ?",

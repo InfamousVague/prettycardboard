@@ -1,5 +1,5 @@
 import { isTauri } from '../tauri.ts';
-import type { Deck, DeckCard, DeckStats, DeckSummary, FriendsPayload, Identity, MatchRow, MatchStatsPlayer, MyDeckStats, MyRoom, RoomInfo, UserHit, UserStats } from './types.ts';
+import type { Deck, DeckCard, DeckStats, DeckSummary, FriendsPayload, Identity, MatchRow, LadderEntry, MatchStatsPlayer, MyDeckStats, MyRoom, RoomInfo, UserHit, UserStats } from './types.ts';
 
 /**
  * REST client for the PrettyCardboard server (see PROTOCOL.md). Where it points:
@@ -286,6 +286,14 @@ export async function uploadPlaymat(file: Blob): Promise<{ id: string; url: stri
  * splash shows every seat's. Unknown ids come back all zeros. */
 export function userStats(userId: string): Promise<UserStats> {
   return request('GET', `/api/users/${encodeURIComponent(userId)}/stats`);
+}
+
+/** The global ladder, best first. Public: a leaderboard nobody can read is
+ *  not a leaderboard. Only players who have finished a ranked match appear -
+ *  every account seeds at the same rating, so listing everyone would open the
+ *  board with a wall of identical numbers in signup order. */
+export function leaderboard(limit = 100): Promise<{ entries: LadderEntry[] }> {
+  return request('GET', `/api/leaderboard?limit=${limit}`);
 }
 
 /** My decks, one row each: record, saltiness, endorsements earned with it.

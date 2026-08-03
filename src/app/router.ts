@@ -11,6 +11,7 @@ export const ROUTES = [
   'boosters',
   'collection',
   'friends',
+  'leaderboard',
   'profile',
   'download',
 ] as const;

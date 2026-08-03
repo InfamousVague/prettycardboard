@@ -106,6 +106,27 @@ export interface FriendEntry {
   username: string;
   online: boolean;
   roomId?: string;
+  /** Competitive standing, sent with the roster so the friends page can show
+   *  a rank without opening eight profiles. `position` is null for anyone who
+   *  has never finished a ranked match - they are not on the ladder. */
+  rating?: number;
+  position?: number | null;
+  wins?: number;
+  losses?: number;
+  played?: number;
+  endorsements?: number;
+}
+
+/** One row of the global ladder (GET /api/leaderboard). */
+export interface LadderEntry {
+  position: number;
+  userId: string;
+  username: string;
+  rating: number;
+  wins: number;
+  losses: number;
+  played: number;
+  endorsements: number;
 }
 
 export interface FriendsPayload {
@@ -164,6 +185,9 @@ export interface UserStats {
    *  ranked multiplayer results move it, so bot practice never grades a player.
    *  Absent from a server that predates the column - treat as the seed. */
   rating?: number;
+  /** 1-based place on the global ladder; null when this player has never
+   *  finished a ranked match and so is not on it. */
+  position?: number | null;
   wins: number;
   losses: number;
   played: number;

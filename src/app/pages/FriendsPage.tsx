@@ -19,6 +19,8 @@ import * as api from '../net/api.ts';
 import * as ws from '../net/ws.ts';
 import type { FriendEntry, UserHit } from '../net/types.ts';
 import { EmptyFan } from '../components/Skeletons.tsx';
+import { RankBadge } from '../components/RankBadge.tsx';
+import { divisionFor } from '../data/rankTiers.ts';
 import './social.css';
 
 type Presence = 'online' | 'ingame' | 'offline';
@@ -258,6 +260,35 @@ export function FriendsPage() {
                     <span className="frCardStatus">
                       {presence === 'ingame' ? t('frInGame') : presence === 'online' ? t('frOnline') : t('frOffline')}
                     </span>
+                  </div>
+                  {/* Standing gets its OWN row across the card. Inside the
+                      identity block it fought the name for a narrow column and
+                      folded the whole card into a stack - "how are my friends
+                      doing" is worth a line of its own. A friend who has never
+                      played ranked has no ladder place, and saying so beats
+                      showing a seeded number as if it were one. */}
+                  <div className="frCardRank">
+                    {/* aria-hidden: the label beside it carries the rank, and
+                        the badge would otherwise announce it twice. */}
+                    <span aria-hidden>
+                      <RankBadge division={divisionFor(friend.rating ?? 0)} size={18} />
+                    </span>
+                    <span className="frCardRankLabel">
+                      {divisionFor(friend.rating ?? 0).label}
+                    </span>
+                    {friend.position != null && (
+                      <span className="frCardRankPos">#{friend.position}</span>
+                    )}
+                    {(friend.played ?? 0) > 0 ? (
+                      <span className="frCardRecord">
+                        {friend.wins ?? 0}W · {friend.losses ?? 0}L
+                      </span>
+                    ) : (
+                      <span className="frCardRecord frCardRecordMuted">{t('frUnranked')}</span>
+                    )}
+                    {(friend.endorsements ?? 0) > 0 && (
+                      <span className="frCardRecord">♥ {friend.endorsements}</span>
+                    )}
                   </div>
                   <div className="frCardActions">
                     {room && friend.online && (

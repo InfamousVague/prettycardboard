@@ -909,6 +909,32 @@ stance as the other intents.
   prompts. Freeform rooms and solo tables advance exactly as before. Bots
   pass open windows within a tick and never draw rejections.
 
+### The ladder, and standing on the roster (2026-08-02)
+
+There was a rating column and an Elo update behind it, but nothing that
+RANKED anybody: a player could see their own number and nothing else - no
+board, and no way to check a friend's rank without asking them.
+
+- **`GET /api/leaderboard?limit=N`** (signed in, like every other
+  player-facing route): the ladder, best first. Carries name, rating, record
+  and endorsements - nothing about decks or salt.
+- **Only players who have finished a ranked match appear.** Every account
+  seeds at the same rating, so listing everyone opens the board with a wall of
+  identical numbers in signup order: a ranking that is not one.
+- **Competition ranking.** Equal ratings share a place (1, 2, 2, 4). Row
+  index would have disagreed with `ladder_position`, which counts how many
+  players are strictly above you - two screens, two answers, same player. The
+  scenario asserts the board and `/api/me/stats` agree.
+- **`GET /api/friends` rows now carry `rating`, `position`, `wins`, `losses`,
+  `played` and `endorsements`**, so the friends page answers "how is everyone
+  doing" without opening a profile each. `position` is null for anyone not on
+  the ladder, and the roster says "Unranked" rather than showing a seeded
+  number as though it were a rank.
+
+Client: a `leaderboard` route (crown, next to Friends) with an Everyone /
+Friends toggle and the viewer's own standing pinned above the list, plus a
+rank line on each roster card.
+
 ### "No card X in your zones" (2026-08-02)
 
 `take_card` searches a player's six zones - hand, library, battlefield,
