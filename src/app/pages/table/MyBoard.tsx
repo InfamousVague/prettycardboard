@@ -232,6 +232,31 @@ export function MyBoard({
   const handRef = useRef<HTMLDivElement | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const cardEls = useRef(new Map<string, HTMLElement>());
+  /**
+   * Marquee selection: drag on bare felt to gather cards, then act on all of
+   * them at once. Mouse only - touch already spends a press-and-hold on the
+   * felt to reach the token menu, and a drag there is a pan.
+   *
+   * The rectangle is kept in CLIENT pixels because the hit test compares it
+   * against the cards' own rendered rects: a card carries rotation (tapped),
+   * scale and attachment offsets, and re-deriving all of that from normalized
+   * x/y would be a second, disagreeing layout.
+   */
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(
+    null,
+  );
+  const marqueeFrom = useRef<{ x: number; y: number } | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // A selection only means anything while the cards are still there: a wrath
+  // or a bounce leaves stale iids that would make the action bar lie.
+  useEffect(() => {
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const live = new Set(me.battlefield.map((c) => c.iid));
+      const next = new Set([...prev].filter((iid) => live.has(iid)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [me.battlefield]);
   const prevFaces = useRef(new Map<string, boolean>());
   const [drag, setDrag] = useState<DragState | null>(null);
   // Mat editor: while editing, the working pile layout lives here (the server's
@@ -909,6 +934,24 @@ export function MyBoard({
           act({ kind: 'card.pos', iid, ...pos });
           setDroppedPos((m) => ({ ...m, [iid]: pos }));
           bumpZ(iid);
+          // Dragging a card that is part of a selection moves the whole
+          // selection, each card keeping its offset from the one under the
+          // pointer - the arrangement a player built is the thing they are
+          // moving, not the individual cards.
+          if (selected.has(iid) && selected.size > 1) {
+            const dx = pos.x - card.x;
+            const dy = pos.y - card.y;
+            for (const other of me.battlefield) {
+              if (other.iid === iid || !selected.has(other.iid)) continue;
+              const next = {
+                x: Math.min(1, Math.max(0, other.x + dx)),
+                y: Math.min(1, Math.max(0, other.y + dy)),
+              };
+              act({ kind: 'card.pos', iid: other.iid, ...next });
+              setDroppedPos((m) => ({ ...m, [other.iid]: next }));
+              bumpZ(other.iid);
+            }
+          }
         }
         settle(iid);
         moved = true;
@@ -1153,6 +1196,7 @@ export function MyBoard({
         data-preview-src={fieldPreview}
         data-preview-name={fieldPreview ? displayName : undefined}
         data-dragging={dragging || undefined}
+        data-selected={selected.has(card.iid) || undefined}
         data-pays={payPreview?.has(card.iid) || undefined}
         data-attacker={attacker ? '' : undefined}
         data-attachment={host ? (card.piled ? 'pile' : 'aura') : undefined}
@@ -1616,6 +1660,22 @@ export function MyBoard({
           setBoardMenu({ x: event.clientX, y: event.clientY, bx: pos.x, by: pos.y });
         }}
         onPointerDown={(event) => {
+          // Mouse on bare felt draws a marquee. Nothing used this gesture
+          // before; touch keeps its press-and-hold below, where a drag is a
+          // pan and a box would fight it.
+          if (
+            event.pointerType === 'mouse'
+            && event.button === 0
+            && !hideField
+            && !(event.target as HTMLElement).closest('.fieldCard, .boardTools, .myStrip')
+          ) {
+            marqueeFrom.current = { x: event.clientX, y: event.clientY };
+            // Additive with shift: gathering a scattered board in one sweep is
+            // rare, gathering it in two or three is normal.
+            if (!event.shiftKey) setSelected(new Set());
+            (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+            return;
+          }
           // Touch has no right-click: press and hold the bare felt to reach the
           // same token/counter menu. Cards run their own hold in beginDrag.
           if (!mtg || hideField || event.pointerType === 'mouse') return;
@@ -1633,20 +1693,138 @@ export function MyBoard({
           }, 450);
         }}
         onPointerMove={(event) => {
+          const box = marqueeFrom.current;
+          if (box) {
+            // A few pixels of travel is a click, not a drag: only past that
+            // does the rectangle appear, so a plain click on felt (which
+            // clears the selection) never flashes a box.
+            if (marquee || Math.hypot(event.clientX - box.x, event.clientY - box.y) > 6) {
+              setMarquee({ x0: box.x, y0: box.y, x1: event.clientX, y1: event.clientY });
+            }
+            return;
+          }
           // Any real travel means a pan/drag, not a press.
           const from = fieldHoldFrom.current;
           if (!from || !holdTimer.current) return;
           if (Math.hypot(event.clientX - from.x, event.clientY - from.y) > 10) clearHold();
         }}
-        onPointerUp={() => {
+        onPointerUp={(event) => {
           fieldHoldFrom.current = null;
           clearHold();
+          if (!marqueeFrom.current) return;
+          const box = marquee;
+          marqueeFrom.current = null;
+          setMarquee(null);
+          try {
+            (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+          } catch {
+            // The capture is gone already (pointercancel, or the element was
+            // replaced mid-drag); nothing to release.
+          }
+          // No box means it was a click on bare felt, which clears - handled
+          // by the pointerdown above.
+          if (!box) return;
+          const left = Math.min(box.x0, box.x1);
+          const right = Math.max(box.x0, box.x1);
+          const top = Math.min(box.y0, box.y1);
+          const bottom = Math.max(box.y0, box.y1);
+          const hit = new Set<string>(event.shiftKey ? selected : []);
+          for (const card of me.battlefield) {
+            const el = cardEls.current.get(card.iid);
+            if (!el) continue;
+            const r = el.getBoundingClientRect();
+            // Touching counts, the way every canvas marquee behaves: needing
+            // to enclose a card fully makes a dense board almost unselectable.
+            if (r.right >= left && r.left <= right && r.bottom >= top && r.top <= bottom) {
+              hit.add(card.iid);
+            }
+          }
+          setSelected(hit);
+          if (hit.size > 0) haptics('selection');
         }}
         onPointerCancel={() => {
+          marqueeFrom.current = null;
+          setMarquee(null);
           fieldHoldFrom.current = null;
           clearHold();
         }}
       >
+        {/* What a selection is FOR. A box that only highlights cards is a
+            toy; these are the operations people were doing one card at a
+            time. Each is a plain loop of the same action a single card
+            sends, so nothing new has to be understood server-side. */}
+        {selected.size > 0 && !marquee && (
+          <div className="selBar" role="group" aria-label={t('gpSelected')}>
+            <span className="selCount">
+              {selected.size} {t('gpSelected')}
+            </span>
+            <Button
+              size="sm"
+              variant="soft"
+              onClick={() => {
+                // Whether the group taps or untaps is decided by the group:
+                // if anything is untapped, tap them all, else untap them all.
+                const cards = me.battlefield.filter((c) => selected.has(c.iid));
+                const tapped = cards.every((c) => c.tapped);
+                for (const card of cards) {
+                  if (card.tapped === !tapped) continue;
+                  act({ kind: 'card.tap', iid: card.iid, tapped: !tapped });
+                }
+              }}
+            >
+              {t('gpSelTap')}
+            </Button>
+            <Button
+              size="sm"
+              variant="soft"
+              onClick={() => {
+                for (const iid of selected) act({ kind: 'card.move', iid, to: 'graveyard' });
+                setSelected(new Set());
+              }}
+            >
+              {t('tblGraveyard')}
+            </Button>
+            <Button
+              size="sm"
+              variant="soft"
+              onClick={() => {
+                for (const iid of selected) act({ kind: 'card.move', iid, to: 'exile' });
+                setSelected(new Set());
+              }}
+            >
+              {t('tblExile')}
+            </Button>
+            <Button
+              size="sm"
+              variant="soft"
+              onClick={() => {
+                for (const iid of selected) act({ kind: 'card.move', iid, to: 'hand' });
+                setSelected(new Set());
+              }}
+            >
+              {t('tblHand')}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+              {t('gpSelClear')}
+            </Button>
+          </div>
+        )}
+
+        {/* The rubber band. Drawn in client pixels and pinned to the field's
+            own box, so it tracks the pointer exactly rather than through the
+            normalized coordinate space the cards use. */}
+        {marquee && (
+          <div
+            className="marquee"
+            aria-hidden
+            style={{
+              left: Math.min(marquee.x0, marquee.x1) - (fieldRef.current?.getBoundingClientRect().left ?? 0),
+              top: Math.min(marquee.y0, marquee.y1) - (fieldRef.current?.getBoundingClientRect().top ?? 0),
+              width: Math.abs(marquee.x1 - marquee.x0),
+              height: Math.abs(marquee.y1 - marquee.y0),
+            }}
+          />
+        )}
         {/* The printed zone grid, under the cards. Inside the field, so its
             0..1 box IS the space card positions are stored in. */}
         {ygoField && <YugiohZoneGrid cardWidth={fieldCardWidth} activeId={dropCell} />}

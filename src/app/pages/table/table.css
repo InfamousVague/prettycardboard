@@ -9316,3 +9316,51 @@ button.loyaltyBadge:hover {
 .table[data-mobile] .mobileZones {
   inset-inline-start: calc(var(--glacier-space-1) + env(safe-area-inset-left, 0px));
 }
+
+/* ---- marquee selection ---------------------------------------------------
+   Drag on bare felt to gather cards, then act on all of them at once. */
+.marquee {
+  position: absolute;
+  z-index: 33;
+  /* The band is a gesture, not a target: it must never eat the pointerup that
+     ends the drag it belongs to. */
+  pointer-events: none;
+  border: 1px solid color-mix(in oklch, var(--glacier-accent-solid) 80%, transparent);
+  border-radius: var(--glacier-radius-xs);
+  background: color-mix(in oklch, var(--glacier-accent-solid) 14%, transparent);
+}
+
+/* A selected card wears a ring rather than a fill: the art is the thing being
+   chosen, and tinting it would fight every card's own colour. */
+.fieldCard[data-selected] .fieldCardShell {
+  outline: 2px solid color-mix(in oklch, var(--glacier-accent-solid) 85%, transparent);
+  outline-offset: 2px;
+  border-radius: var(--glacier-radius-sm);
+}
+
+.selBar {
+  position: absolute;
+  /* Top-centre of the mat: the bottom belongs to the hand and the piles, and
+     the right edge is the board toolbar's column. */
+  inset-block-start: var(--glacier-space-3);
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-1) var(--glacier-space-2);
+  border-radius: var(--glacier-radius-full);
+  border: var(--glacier-hairline) solid
+    color-mix(in oklch, var(--glacier-accent-solid) 45%, var(--glacier-border));
+  background: color-mix(in oklch, oklch(0.18 0.02 265) 88%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-md));
+  box-shadow: 0 8px 24px oklch(0.05 0.02 265 / 0.4);
+  white-space: nowrap;
+}
+
+.selCount {
+  font-size: var(--glacier-text-xs);
+  color: var(--glacier-text-muted);
+  font-variant-numeric: tabular-nums;
+}
