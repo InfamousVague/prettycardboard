@@ -557,6 +557,7 @@
     'hero'
     'setup'
     'stage'
+    'rules'
     'roster'
     'launch'
     'watch';
@@ -584,6 +585,20 @@
 
 .pregameStage {
   grid-area: stage;
+}
+
+/* The table rules, always on. They used to be a Popover's contents, which is
+   where the surface came from - out in the open they have to bring their own.
+   Full width and low-key on purpose: this is a reference the table reads at a
+   glance, not the thing it is looking at. */
+.pregameRules {
+  grid-area: rules;
+  display: grid;
+  gap: var(--glacier-space-2);
+  padding: var(--glacier-space-3) var(--glacier-space-4);
+  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
+  border-radius: var(--glacier-radius-lg);
+  background: var(--glacier-surface-sunken);
 }
 
 .pregameStrip {
@@ -615,6 +630,7 @@
     grid-template-areas:
       'hero   hero'
       'stage  setup'
+      'rules  rules'
       'roster roster'
       'launch launch';
     padding-inline: var(--glacier-space-5);
@@ -623,10 +639,11 @@
   /* Spectators are a footnote; with no seat of your own there is no deck
      column to sit beside, so the line keeps the full width under both. */
   .pregameLobby:has(.pregameSpectators) {
-    grid-template-rows: min-content minmax(min-content, 1fr) min-content min-content min-content;
+    grid-template-rows: min-content minmax(min-content, 1fr) min-content min-content min-content min-content;
     grid-template-areas:
       'hero   hero'
       'stage  setup'
+      'rules  rules'
       'roster roster'
       'launch launch'
       'watch  watch';
@@ -1660,14 +1677,9 @@
 
 /* ---- popovers: table rules, and one seat's scouting report ---- */
 
-/* Both panels portal to the body, so they are styled from the root - no
-   .pregameLobby ancestor exists around them at paint time. */
-.pregameRulesPanel {
-  inline-size: min(30rem, 92vw);
-  display: grid;
-  gap: var(--glacier-space-2);
-}
-
+/* The scout panel portals to the body, so it is styled from the root - no
+   .pregameLobby ancestor exists around it at paint time. (The rules panel used
+   to live here too; it is an always-visible row now - see .pregameRules.) */
 .pregameScoutPanel {
   inline-size: min(20rem, 92vw);
 }

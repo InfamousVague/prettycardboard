@@ -393,189 +393,6 @@ export function PregameLobby({
             {canStart ? <Check size={15} /> : <Circle size={12} />}
             {status}
           </span>
-          {/* Rules are a reference, not a step: they sit behind one control so
-              the stage is not half rules form. The host edits in place here;
-              everyone else reads the same panel as pills. */}
-          <Popover
-            placement="bottom"
-            aria-label={t('preSettings')}
-            className="pregameRulesPanel"
-            trigger={
-              <Button size="sm" variant="ghost">
-                <Settings2 size={14} /> {t('preSettings')}
-              </Button>
-            }
-          >
-            <header className="pregameSettingsHead">
-              <Settings2 size={15} />
-              <h2 className="pregameSettingsTitle">{t('preSettings')}</h2>
-              {!canEditSettings && (
-                <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
-                  <Crown size={11} /> {t('preSettingsHostOnly')}
-                </Text>
-              )}
-            </header>
-
-            {canEditSettings ? (
-              <div className="pregameSettingsGrid">
-                {!cyber && (
-                  <label className="pregameSetting">
-                    <span className="pregameSettingLabel">{t('setStartLife')}</span>
-                    <Input
-                      type="number"
-                      inputMode="numeric"
-                      value={lifeDraft ?? (settings.startingLife == null ? '' : String(settings.startingLife))}
-                      placeholder={String(lifeDefault)}
-                      onChange={(event) => setLifeDraft(event.target.value)}
-                      onBlur={() => {
-                        if (lifeDraft == null) return;
-                        patchSettings({ startingLife: lifeDraft === '' ? null : Number(lifeDraft) });
-                        setLifeDraft(null);
-                      }}
-                    />
-                  </label>
-                )}
-                <label className="pregameSetting">
-                  <span className="pregameSettingLabel">{t('setStartHand')}</span>
-                  <Input
-                    type="number"
-                    inputMode="numeric"
-                    value={handDraft ?? (settings.startingHand == null ? '' : String(settings.startingHand))}
-                    placeholder={String(handDefault)}
-                    onChange={(event) => setHandDraft(event.target.value)}
-                    onBlur={() => {
-                      if (handDraft == null) return;
-                      patchSettings({ startingHand: handDraft === '' ? null : Number(handDraft) });
-                      setHandDraft(null);
-                    }}
-                  />
-                </label>
-                {!yugioh && (
-                  <label className="pregameSetting">
-                    <span className="pregameSettingLabel">{t('setMullRule')}</span>
-                    <SegmentedControl
-                      fullWidth
-                      value={settings.mulliganRule}
-                      onValueChange={(value) =>
-                        patchSettings({ mulliganRule: value as GameSettings['mulliganRule'] })
-                      }
-                      options={[
-                        { value: 'london', label: t('setMullLondon') },
-                        { value: 'vancouver', label: t('setMullVancouver') },
-                      ]}
-                    />
-                  </label>
-                )}
-                {!yugioh && (
-                  <label className="pregameSetting">
-                    <span className="pregameSettingLabel">{t('setFreeMulls')}</span>
-                    <Select
-                      fullWidth
-                      value={
-                        settings.unlimitedMulligans
-                          ? 'unlimited'
-                          : settings.freeMulligans == null
-                            ? 'default'
-                            : String(settings.freeMulligans)
-                      }
-                      onValueChange={(value) =>
-                        patchSettings(
-                          value === 'unlimited'
-                            ? { unlimitedMulligans: true, freeMulligans: null }
-                            : {
-                                unlimitedMulligans: false,
-                                freeMulligans: value === 'default' ? null : Number(value),
-                              },
-                        )
-                      }
-                      options={[
-                        { value: 'default', label: t('setDefault') },
-                        { value: '0', label: '0' },
-                        { value: '1', label: '1' },
-                        { value: '2', label: '2' },
-                        { value: '3', label: '3' },
-                        { value: 'unlimited', label: t('setMullUnlimited') },
-                      ]}
-                    />
-                  </label>
-                )}
-                <label className="pregameSetting">
-                  <span className="pregameSettingLabel">{t('setFirstPlayer')}</span>
-                  <Select
-                    fullWidth
-                    value={firstValue}
-                    onValueChange={onFirstChange}
-                    options={[
-                      { value: 'auto', label: t('setFirstAuto') },
-                      { value: 'random', label: t('setFirstRandom') },
-                      ...seatedFirstOptions,
-                    ]}
-                  />
-                </label>
-                <label className="pregameSetting">
-                  <span className="pregameSettingLabel">{t('setSkipDraw')}</span>
-                  <Select
-                    fullWidth
-                    value={settings.skipFirstDraw == null ? 'default' : settings.skipFirstDraw ? 'on' : 'off'}
-                    onValueChange={(value) =>
-                      patchSettings({ skipFirstDraw: value === 'default' ? null : value === 'on' })
-                    }
-                    options={[
-                      { value: 'default', label: t('setDefault') },
-                      { value: 'on', label: t('setOn') },
-                      { value: 'off', label: t('setOff') },
-                    ]}
-                  />
-                </label>
-                {/* Last on purpose: the full-width row would otherwise split the
-                    compact fields into extra rows and grow the panel. */}
-                {game === 'mtg' && (
-                  <label className="pregameSetting pregameSettingWide">
-                    <span className="pregameSettingLabel">{t('setEnforced')}</span>
-                    <div className="pregameEnforcedRow">
-                      <Switch
-                        checked={Boolean(settings.enforced)}
-                        onCheckedChange={(on) => patchSettings({ enforced: on })}
-                        aria-label={t('setEnforced')}
-                      />
-                      <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
-                        {t('setEnforcedHint')}
-                      </Text>
-                    </div>
-                  </label>
-                )}
-                {/* Quickplay sits beside enforcement because it is the other
-                    switch that changes what KIND of table this is rather than
-                    tuning one. Gated to the games that HAVE a deck pool: the
-                    server deals from bot::decks_for, which only knows Magic and
-                    Yu-Gi-Oh, and refuses anything else - so offering the switch
-                    at a Cyberpunk table would be a toggle that does nothing. */}
-                {(game === 'mtg' || game === 'yugioh') && (
-                <label className="pregameSetting pregameSettingWide">
-                  <span className="pregameSettingLabel">{t('setQuickplay')}</span>
-                  <div className="pregameEnforcedRow">
-                    <Switch
-                      checked={Boolean(settings.quickplay)}
-                      onCheckedChange={(on) => patchSettings({ quickplay: on })}
-                      aria-label={t('setQuickplay')}
-                    />
-                    <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
-                      {t('setQuickplayHint')}
-                    </Text>
-                  </div>
-                </label>
-                )}
-              </div>
-            ) : (
-              <div className="pregameSettingsSummary">
-                {summary.map((item) => (
-                  <Pill key={item.label} size="sm" variant="soft">
-                    {item.label}: <strong>{item.value}</strong>
-                  </Pill>
-                ))}
-              </div>
-            )}
-          </Popover>
         </div>
 
         <div className="pregameStageSide" data-them="">
@@ -609,6 +426,183 @@ export function PregameLobby({
           )}
         </div>
       </div>
+      {/* The table rules, in the open. They used to sit behind a Settings
+          popover on the versus stage - one control, one click, and easy to
+          never notice - so a table would start under mulligan and
+          first-player rules nobody at it had read. They are their own row
+          now, under the stage and above the roster: the host edits in
+          place, everyone else reads the same panel. */}
+      <section className="pregameRules" aria-label={t('preSettings')}>
+          <header className="pregameSettingsHead">
+            <Settings2 size={15} />
+            <h2 className="pregameSettingsTitle">{t('preSettings')}</h2>
+            {!canEditSettings && (
+              <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+                <Crown size={11} /> {t('preSettingsHostOnly')}
+              </Text>
+            )}
+          </header>
+
+          {canEditSettings ? (
+            <div className="pregameSettingsGrid">
+              {!cyber && (
+                <label className="pregameSetting">
+                  <span className="pregameSettingLabel">{t('setStartLife')}</span>
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    value={lifeDraft ?? (settings.startingLife == null ? '' : String(settings.startingLife))}
+                    placeholder={String(lifeDefault)}
+                    onChange={(event) => setLifeDraft(event.target.value)}
+                    onBlur={() => {
+                      if (lifeDraft == null) return;
+                      patchSettings({ startingLife: lifeDraft === '' ? null : Number(lifeDraft) });
+                      setLifeDraft(null);
+                    }}
+                  />
+                </label>
+              )}
+              <label className="pregameSetting">
+                <span className="pregameSettingLabel">{t('setStartHand')}</span>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  value={handDraft ?? (settings.startingHand == null ? '' : String(settings.startingHand))}
+                  placeholder={String(handDefault)}
+                  onChange={(event) => setHandDraft(event.target.value)}
+                  onBlur={() => {
+                    if (handDraft == null) return;
+                    patchSettings({ startingHand: handDraft === '' ? null : Number(handDraft) });
+                    setHandDraft(null);
+                  }}
+                />
+              </label>
+              {!yugioh && (
+                <label className="pregameSetting">
+                  <span className="pregameSettingLabel">{t('setMullRule')}</span>
+                  <SegmentedControl
+                    fullWidth
+                    value={settings.mulliganRule}
+                    onValueChange={(value) =>
+                      patchSettings({ mulliganRule: value as GameSettings['mulliganRule'] })
+                    }
+                    options={[
+                      { value: 'london', label: t('setMullLondon') },
+                      { value: 'vancouver', label: t('setMullVancouver') },
+                    ]}
+                  />
+                </label>
+              )}
+              {!yugioh && (
+                <label className="pregameSetting">
+                  <span className="pregameSettingLabel">{t('setFreeMulls')}</span>
+                  <Select
+                    fullWidth
+                    value={
+                      settings.unlimitedMulligans
+                        ? 'unlimited'
+                        : settings.freeMulligans == null
+                          ? 'default'
+                          : String(settings.freeMulligans)
+                    }
+                    onValueChange={(value) =>
+                      patchSettings(
+                        value === 'unlimited'
+                          ? { unlimitedMulligans: true, freeMulligans: null }
+                          : {
+                              unlimitedMulligans: false,
+                              freeMulligans: value === 'default' ? null : Number(value),
+                            },
+                      )
+                    }
+                    options={[
+                      { value: 'default', label: t('setDefault') },
+                      { value: '0', label: '0' },
+                      { value: '1', label: '1' },
+                      { value: '2', label: '2' },
+                      { value: '3', label: '3' },
+                      { value: 'unlimited', label: t('setMullUnlimited') },
+                    ]}
+                  />
+                </label>
+              )}
+              <label className="pregameSetting">
+                <span className="pregameSettingLabel">{t('setFirstPlayer')}</span>
+                <Select
+                  fullWidth
+                  value={firstValue}
+                  onValueChange={onFirstChange}
+                  options={[
+                    { value: 'auto', label: t('setFirstAuto') },
+                    { value: 'random', label: t('setFirstRandom') },
+                    ...seatedFirstOptions,
+                  ]}
+                />
+              </label>
+              <label className="pregameSetting">
+                <span className="pregameSettingLabel">{t('setSkipDraw')}</span>
+                <Select
+                  fullWidth
+                  value={settings.skipFirstDraw == null ? 'default' : settings.skipFirstDraw ? 'on' : 'off'}
+                  onValueChange={(value) =>
+                    patchSettings({ skipFirstDraw: value === 'default' ? null : value === 'on' })
+                  }
+                  options={[
+                    { value: 'default', label: t('setDefault') },
+                    { value: 'on', label: t('setOn') },
+                    { value: 'off', label: t('setOff') },
+                  ]}
+                />
+              </label>
+              {/* Last on purpose: the full-width row would otherwise split the
+                  compact fields into extra rows and grow the panel. */}
+              {game === 'mtg' && (
+                <label className="pregameSetting pregameSettingWide">
+                  <span className="pregameSettingLabel">{t('setEnforced')}</span>
+                  <div className="pregameEnforcedRow">
+                    <Switch
+                      checked={Boolean(settings.enforced)}
+                      onCheckedChange={(on) => patchSettings({ enforced: on })}
+                      aria-label={t('setEnforced')}
+                    />
+                    <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+                      {t('setEnforcedHint')}
+                    </Text>
+                  </div>
+                </label>
+              )}
+              {/* Quickplay sits beside enforcement because it is the other
+                  switch that changes what KIND of table this is rather than
+                  tuning one. Gated to the games that HAVE a deck pool: the
+                  server deals from bot::decks_for, which only knows Magic and
+                  Yu-Gi-Oh, and refuses anything else - so offering the switch
+                  at a Cyberpunk table would be a toggle that does nothing. */}
+              {(game === 'mtg' || game === 'yugioh') && (
+              <label className="pregameSetting pregameSettingWide">
+                <span className="pregameSettingLabel">{t('setQuickplay')}</span>
+                <div className="pregameEnforcedRow">
+                  <Switch
+                    checked={Boolean(settings.quickplay)}
+                    onCheckedChange={(on) => patchSettings({ quickplay: on })}
+                    aria-label={t('setQuickplay')}
+                  />
+                  <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+                    {t('setQuickplayHint')}
+                  </Text>
+                </div>
+              </label>
+              )}
+            </div>
+          ) : (
+            <div className="pregameSettingsSummary">
+              {summary.map((item) => (
+                <Pill key={item.label} size="sm" variant="soft">
+                  {item.label}: <strong>{item.value}</strong>
+                </Pill>
+              ))}
+            </div>
+          )}
+      </section>
 
       {/* ---- the roster strip: one chip per seat, detail on click ---- */}
       <ul className="pregameStrip" aria-label={t('playSeats')}>
