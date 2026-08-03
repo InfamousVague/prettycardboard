@@ -7,6 +7,7 @@ import {
   Download,
   Eye,
   Hand,
+  Heart,
   Image,
   Keyboard,
   LayoutGrid,
@@ -15,6 +16,7 @@ import {
   RotateCw,
   ScrollText,
   Smartphone,
+  Sparkles,
   Swords,
   Users,
   Wrench,
@@ -71,6 +73,46 @@ export interface ChangelogRelease {
 /** Newest release first. `releasesSince` sorts anyway, so a slip here is not
  *  load-bearing, but keep the literal in order for whoever reads it. */
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.10.0',
+    date: '2026-08-02',
+    headline: 'clHeadline0100',
+    entries: [
+      {
+        id: 'plus-counters',
+        icon: Sparkles,
+        title: 'clCounters',
+        desc: 'clCountersDesc',
+        kind: 'new',
+        category: 'clCatTable',
+        featured: true,
+      },
+      {
+        id: 'grid-plates',
+        icon: LayoutGrid,
+        title: 'clGridPlates',
+        desc: 'clGridPlatesDesc',
+        kind: 'improved',
+        category: 'clCatLayout',
+      },
+      {
+        id: 'phone-table',
+        icon: Smartphone,
+        title: 'clPhoneTable',
+        desc: 'clPhoneTableDesc',
+        kind: 'improved',
+        category: 'clCatLayout',
+      },
+      {
+        id: 'life-plates',
+        icon: Heart,
+        title: 'clLifePlates',
+        desc: 'clLifePlatesDesc',
+        kind: 'improved',
+        category: 'clCatTable',
+      },
+    ],
+  },
   {
     version: '0.9.0',
     date: '2026-08-02',

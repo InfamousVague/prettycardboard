@@ -581,6 +581,60 @@ export const messages = {
   },
 
   // --- 0.9.0 ---
+  clHeadline0100: {
+    en: 'Counters that add themselves, and a table that fits the phone.',
+    es: 'Contadores que se ponen solos y una mesa que cabe en el móvil.',
+    fr: 'Des marqueurs qui se posent seuls, et une table qui tient sur le téléphone.',
+    ar: 'عدادات تُضاف من تلقاء نفسها، وطاولة تتّسع للهاتف.',
+  },
+  clCounters: {
+    en: 'It offers to add the +1/+1 counters',
+    es: 'Se ofrece a añadir los contadores +1/+1',
+    fr: 'Il propose d’ajouter les marqueurs +1/+1',
+    ar: 'يعرض إضافة عدادات +1/+1',
+  },
+  clCountersDesc: {
+    en: 'When a card that hands out +1/+1 counters resolves, you are asked whether to add them — one tap instead of a trip through each creature. Whoever controls the creatures gets asked, so a spell aimed across the table still works. Answer Always and it stops asking.',
+    es: 'Cuando se resuelve una carta que reparte contadores +1/+1, se te pregunta si añadirlos: un toque en vez de recorrer criatura por criatura. Se pregunta a quien controla las criaturas, así que un hechizo lanzado al otro lado de la mesa también funciona. Responde Siempre y dejará de preguntar.',
+    fr: 'Quand une carte qui distribue des marqueurs +1/+1 se résout, on vous demande s’il faut les ajouter : une pression au lieu d’un passage par chaque créature. C’est celui qui contrôle les créatures qu’on interroge, donc un sort lancé de l’autre côté de la table fonctionne aussi. Répondez Toujours et la question ne revient plus.',
+    ar: 'عند حسم بطاقة توزّع عدادات +1/+1، يُسأل إن كنت تريد إضافتها: نقرة واحدة بدل المرور على كل مخلوق. السؤال يذهب إلى من يتحكم بالمخلوقات، فتعويذة موجّهة عبر الطاولة تعمل أيضًا. أجب «دائمًا» ولن يُسأل بعدها.',
+  },
+  clGridPlates: {
+    en: 'Every board in the grid is labelled',
+    es: 'Cada tablero de la cuadrícula va etiquetado',
+    fr: 'Chaque plateau de la grille est étiqueté',
+    ar: 'كل لوحة في الشبكة موسومة',
+  },
+  clGridPlatesDesc: {
+    en: 'The grid overview gives every seat a name plate that stays full size however many players there are: avatar, name, whose turn it is, and their life. The history strip has its own band now instead of sitting on the top row of boards.',
+    es: 'La vista en cuadrícula da a cada asiento una placa que mantiene su tamaño haya los jugadores que haya: avatar, nombre, de quién es el turno y sus vidas. La barra de historial tiene ahora su propia franja en vez de posarse sobre la primera fila de tableros.',
+    fr: 'La vue en grille donne à chaque siège une plaque qui garde sa taille quel que soit le nombre de joueurs : avatar, nom, à qui est le tour, et ses points de vie. La barre d’historique a maintenant sa propre bande au lieu de reposer sur la première rangée de plateaux.',
+    ar: 'تمنح نظرة الشبكة كل مقعد لوحة اسم تحافظ على حجمها مهما بلغ عدد اللاعبين: الصورة والاسم وصاحب الدور ونقاط حياته. ولشريط السجل الآن نطاقه الخاص بدل أن يستقر على الصف الأول من اللوحات.',
+  },
+  clPhoneTable: {
+    en: 'A phone table with room to play',
+    es: 'Una mesa de móvil con sitio para jugar',
+    fr: 'Une table mobile où l’on a la place de jouer',
+    ar: 'طاولة هاتف فيها متّسع للعب',
+  },
+  clPhoneTableDesc: {
+    en: 'A bigger attack button. Command, exile and graveyard become tiles framed on the artwork instead of slivers of a card’s title bar. The timeline opens downward from the strip that opened it, off the hand and the end-turn cluster. The dice moved in beside them, and Leave sits at the far end where it belongs.',
+    es: 'Un botón de ataque más grande. Mando, exilio y cementerio pasan a ser fichas centradas en la ilustración en vez de tiras del título de la carta. La línea de tiempo se abre hacia abajo desde la barra que la abrió, lejos de la mano y del grupo de fin de turno. Los dados se han mudado junto a ellos y Salir queda en el extremo, donde corresponde.',
+    fr: 'Un bouton d’attaque plus grand. Commandement, exil et cimetière deviennent des tuiles cadrées sur l’illustration au lieu de bandes du titre de la carte. La chronologie s’ouvre vers le bas depuis la barre qui l’a ouverte, loin de la main et du groupe de fin de tour. Les dés les ont rejoints, et Quitter se place tout au bout, à sa place.',
+    ar: 'زر هجوم أكبر. تتحوّل مناطق القيادة والنفي والمقبرة إلى بلاطات مؤطّرة على الرسم بدل شرائح من شريط عنوان البطاقة. ويُفتح الخط الزمني إلى الأسفل من الشريط الذي فتحه، بعيدًا عن اليد ومجموعة إنهاء الدور. وانتقل النرد إلى جوارها، واستقر زر المغادرة في الطرف حيث ينبغي.',
+  },
+  clLifePlates: {
+    en: 'Life and mana, rebuilt',
+    es: 'Vidas y maná, rehechos',
+    fr: 'Points de vie et mana, refaits',
+    ar: 'الحياة والمانا، من جديد',
+  },
+  clLifePlatesDesc: {
+    en: 'The life card is a row of slanted plates now, with commander damage on its own menu and the mana pad spread evenly underneath instead of bunched in the middle. Card names can be printed above the cards for when you have scaled them down far enough that the art no longer names them.',
+    es: 'La tarjeta de vidas es ahora una fila de placas inclinadas, con el daño de comandante en su propio menú y el panel de maná repartido de forma uniforme debajo en vez de apelotonado en el centro. Los nombres pueden imprimirse sobre las cartas para cuando las hayas reducido tanto que la ilustración ya no las identifique.',
+    fr: 'La carte de vie est désormais une rangée de plaques inclinées, avec les blessures de commandant dans leur propre menu et le pavé de mana réparti régulièrement en dessous au lieu d’être tassé au milieu. Les noms peuvent s’afficher au-dessus des cartes, pour quand vous les avez réduites au point que l’illustration ne suffit plus.',
+    ar: 'صارت بطاقة الحياة صفًّا من ألواح مائلة، مع ضرر القائد في قائمته الخاصة ولوحة المانا موزّعة بانتظام تحتها بدل أن تتكدّس في الوسط. ويمكن طبع أسماء البطاقات فوقها حين تُصغّرها إلى حدٍّ لا يعود الرسم يعرّفها فيه.',
+  },
   clHeadline090: {
     en: 'A ladder to climb, and a phone menu that fits one screen.',
     es: 'Una escalera que subir y un menú que cabe en una pantalla.',
