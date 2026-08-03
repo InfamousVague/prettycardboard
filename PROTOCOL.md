@@ -909,6 +909,26 @@ stance as the other intents.
   prompts. Freeform rooms and solo tables advance exactly as before. Bots
   pass open windows within a tick and never draw rejections.
 
+### "No card X in your zones" (2026-08-02)
+
+`take_card` searches a player's six zones - hand, library, battlefield,
+graveyard, exile, command. **The stack is not one of them.** Under
+enforcement a cast spell lives in `room.stack`, so any gesture that then
+tried to MOVE it reported "No card <iid> in your zones" while the card sat
+plainly visible in the stack tray: an unactionable message about a card that
+was right there.
+
+`card_missing` replaces the bare `not_found` on every move site. It looks the
+card up across the whole room first and answers with where it actually is:
+
+- on the stack -> `on_the_stack`, "Damnation is on the stack - resolve or
+  counter it first"
+- in another of your zones -> names the card and the zone
+- in someone else's zone -> `not_your_card`, names them
+- genuinely gone -> says so, and still prints the iid for a bug report
+
+The underlying restriction is unchanged; only the diagnosis is.
+
 ### Table chrome: history on the mat, tools in a column (2026-08-02)
 
 Three layout fixes, all client-side.

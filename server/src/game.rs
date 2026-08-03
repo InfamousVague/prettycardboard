@@ -547,6 +547,51 @@ fn not_found(iid: &str) -> ActionError {
     ("card_not_found", format!("No card {iid} in your zones"))
 }
 
+/// `not_found`, but it goes and LOOKS for the card first.
+///
+/// The bare version names a raw iid and nothing else, which is unactionable
+/// on the table and nearly as unactionable in a bug report. The commonest
+/// cause is a card that IS somewhere, just not in one of the six zones
+/// `take_card` searches: a spell on the stack belongs to `room.stack`, so any
+/// gesture that tries to move it reports "not in your zones" while the card
+/// is plainly visible in the tray.
+fn card_missing(room: &Room, actor_id: &str, iid: &str) -> ActionError {
+    if let Some(entry) = room.stack.iter().find(|e| e.card.iid == iid) {
+        let name = entry.card.name.clone();
+        return if entry.owner == actor_id {
+            ("on_the_stack", format!("{name} is on the stack - resolve or counter it first"))
+        } else {
+            ("on_the_stack", format!("{name} is on the stack and is not yours to move"))
+        };
+    }
+    for p in room.players.iter() {
+        for (zone, list) in [
+            ("hand", &p.hand),
+            ("library", &p.library),
+            ("battlefield", &p.battlefield),
+            ("graveyard", &p.graveyard),
+            ("exile", &p.exile),
+            ("command", &p.command),
+        ] {
+            if let Some(card) = list.iter().find(|c| c.iid == iid) {
+                if p.user_id == actor_id {
+                    // Genuinely one of ours: the caller was looking in the
+                    // wrong place, which is a bug worth naming precisely.
+                    return (
+                        "card_not_found",
+                        format!("{} is in your {zone}, not where that move expected it", card.name),
+                    );
+                }
+                return (
+                    "not_your_card",
+                    format!("{} is in {}'s {zone}", card.name, p.username),
+                );
+            }
+        }
+    }
+    ("card_not_found", format!("That card is no longer on the table ({iid})"))
+}
+
 /// Clear `attachedTo` on every card glued to `host_iid` (any player).
 fn clear_followers(room: &mut Room, host_iid: &str) {
     for p in room.players.iter_mut() {
@@ -1008,7 +1053,8 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
     match action {
         Action::CardMove { ref iid, to, x, y, index, face_down } => {
             let (from, from_idx, mut card) =
-                take_card(&mut room.players[pi], iid).ok_or_else(|| not_found(iid))?;
+                take_card(&mut room.players[pi], iid)
+                    .ok_or_else(|| card_missing(room, actor_id, iid))?;
             if matches!(from, Zone::Hand | Zone::Library | Zone::Command) && to == Zone::Battlefield {
                 room.players[pi].cards_played += 1;
             }
@@ -1401,7 +1447,8 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                 return Err(("bad_target", "cannot give a card to yourself".to_string()));
             }
             let (from, _from_idx, mut card) =
-                take_card(&mut room.players[pi], iid).ok_or_else(|| not_found(iid))?;
+                take_card(&mut room.players[pi], iid)
+                    .ok_or_else(|| card_missing(room, actor_id, iid))?;
             let was_hidden = from.hidden();
             if from == Zone::Battlefield {
                 // resync is already forced below (both hands changed).
@@ -2096,7 +2143,8 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
 
         Action::StackPush { ref iid } => {
             let (from, _idx, mut card) =
-                take_card(&mut room.players[pi], iid).ok_or_else(|| not_found(iid))?;
+                take_card(&mut room.players[pi], iid)
+                    .ok_or_else(|| card_missing(room, actor_id, iid))?;
             if from == Zone::Library {
                 room.players[pi].peeked.clear();
             }
