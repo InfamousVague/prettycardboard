@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode, type CSSProperties } from 'react';
 import { motion } from 'motion/react';
 import {
   AlertDialog,
@@ -34,6 +34,8 @@ import type { MyDeckStats, MyRoom, UserStats } from '../net/types.ts';
 import { artCrop } from '../data/cards.ts';
 import { bracketKey } from '../data/brackets.ts';
 import { rankFor, winRate } from '../data/ranks.ts';
+import { divisionFor, RANK_META, RATING_SEED } from '../data/rankTiers.ts';
+import { RankBadge } from '../components/RankBadge.tsx';
 import { RankEmblem } from '../components/RankEmblem.tsx';
 import { featuredDecks } from '../data/catalog.ts';
 import { useVisibleGames } from '../hooks/useVisibleGames.ts';
@@ -200,6 +202,14 @@ function GameMenu({
   const join = useGame((state) => state.join);
   const played = stats?.played ?? 0;
   const rank = rankFor(played);
+  // Two ladders, and the chip shows both on purpose (see data/rankTiers.ts):
+  // the RANK line is the competitive one, which only ranked play moves, and
+  // the Lv pill below is the lifetime-games flavour ladder that every table
+  // feeds. The chip used to print the flavour rank in the rank slot, so the
+  // number the player actually competes on never appeared on the home page.
+  // Falls back to the seed exactly like ProfilePage, so a server without the
+  // rating column renders a badge rather than a hole.
+  const division = stats ? divisionFor(stats.rating ?? RATING_SEED) : null;
 
   // The Play plate's bot door: three one-click shapes against the house.
   // Bots always shuffle a random precon of their own (server rule); the
@@ -302,27 +312,59 @@ function GameMenu({
           <StatusDot tone="success" pulse className="gmBadgePresence" />
         </span>
         <div className="gmBadgeId">
-          <span className="gmBadgeRank">
-            <RankEmblem rank={rank} size={16} />
-            {rank.title}
+          <span
+            className="gmBadgeRank"
+            style={division ? ({ ['--rank-accent' as string]: RANK_META[division.rank].accent } as CSSProperties) : undefined}
+          >
+            {division ? (
+              <>
+                <RankBadge division={division} size={18} />
+                {division.label}
+              </>
+            ) : (
+              <>
+                <RankEmblem rank={rank} size={16} />
+                {rank.title}
+              </>
+            )}
           </span>
           {/* The page's h1: the badge owns the player's name, like OW's portrait. */}
           <Heading level={1} noMargin className="gmBadgeName">
             {identity?.username}
           </Heading>
-          {rank.next != null && (
+          {/* The bar tracks the SAME ladder the line above names, or the two
+              disagree: it used to read "9 to next rank" beside a competitive
+              division it knew nothing about. Mythic has no next division, so
+              it shows no bar. */}
+          {division && division.ceiling != null ? (
             <div className="gmBadgeProgress">
               <ProgressBar
-                value={Math.round(rank.progress * 100)}
+                value={Math.round(division.progress * 100)}
                 max={100}
                 size="sm"
                 tone="accent"
                 aria-label={t('hmNextRank')}
               />
               <span className="gmBadgeProgressLabel">
-                {rank.next - played} {t('hmToNextRank')}
+                {Math.max(0, division.ceiling - (stats?.rating ?? RATING_SEED))} {t('hmToNextRank')}
               </span>
             </div>
+          ) : (
+            !division &&
+            rank.next != null && (
+              <div className="gmBadgeProgress">
+                <ProgressBar
+                  value={Math.round(rank.progress * 100)}
+                  max={100}
+                  size="sm"
+                  tone="accent"
+                  aria-label={t('hmNextRank')}
+                />
+                <span className="gmBadgeProgressLabel">
+                  {rank.next - played} {t('hmToNextRank')}
+                </span>
+              </div>
+            )
           )}
         </div>
         <Pill size="sm" tone="accent" variant="soft">

@@ -283,20 +283,23 @@ export function basePT(card: CardInst, mtg = true): { power: string; toughness: 
 
 /**
  * Effective power/toughness for combat declarations: printed base plus every
- * P/T-shaped counter (`+1/+1`, `+1/+6`, `-2/+0`, etc.). Non-numeric bases (`*`)
- * fall back to 0 - the player can fix the outcome by hand, combat math just
- * needs a number.
+ * P/T-shaped counter (`+1/+1`, `+1/+6`, `-2/+0`, etc.).
+ *
+ * A printed `*` is carried through as a `*`, not flattened to 0. It used to
+ * round to zero here "because combat math needs a number" - but the number it
+ * produced was a lie: a Serra Avatar declared as a 0-power attacker, and the
+ * table had no way to see that the engine had guessed. ptPart below already
+ * made exactly this decision for the board chip, with a comment saying a `*`
+ * "must not be quietly rounded to zero"; the two now agree. Callers that need
+ * an integer must decide for themselves what an unknown power means, rather
+ * than being handed a confident zero.
  */
 export function effectivePT(card: CardInst): { power: string; toughness: string } {
   const printed = basePT(card) ?? undefined;
-  const base = (value: string | undefined) => {
-    const parsed = parseInt((value ?? '').trim(), 10);
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
   const modifier = ptCounterModifier(card.counters);
   return {
-    power: String(base(printed?.power) + modifier.power),
-    toughness: String(base(printed?.toughness) + modifier.toughness),
+    power: ptPart(printed?.power ?? '0', modifier.power),
+    toughness: ptPart(printed?.toughness ?? '0', modifier.toughness),
   };
 }
 

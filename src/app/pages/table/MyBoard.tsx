@@ -2045,6 +2045,10 @@ export function MyBoard({
             act({
               kind: 'token.create',
               name: token.name,
+              // The picker knows what the token IS; pass it on. Without it the
+              // server has only the name, and a Treasure token stays invisible
+              // to every artifact-counting `*` on the board.
+              typeLine: token.typeLine,
               imageUrl: token.image,
               power: token.power,
               toughness: token.toughness,

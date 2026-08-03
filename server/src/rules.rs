@@ -98,6 +98,29 @@ fn has_kw(app: &App, card: &Card, kw: &str) -> bool {
 
 /// How many permanents a `*` power counts, from the controller's point of
 /// view. Only the counting CDA shape is modelled (see `oracle::CountCda`).
+/// A last-resort type line for a token nobody typed one for.
+///
+/// The token picker sends a real type line; the hand-typed form in Vitals has
+/// no field for one. These are the tokens a table actually makes by hand, and
+/// getting them wrong is cheap (a `*` counts one fewer) while getting them
+/// right is most of the value - Treasure is far and away the most-made token in
+/// Commander, and artifact-counting is the most common CDA.
+pub fn guess_token_type(name: &str) -> Option<String> {
+    let n = name.trim().to_ascii_lowercase();
+    // The name alone, or the name plus a bare "token" - NOT any prefix. A
+    // `starts_with("treasure ")` test reads "Treasure Hunter" (a creature) as
+    // an artifact, and a wrong type line is worse than none: it makes a `*`
+    // count something that is not on the board.
+    let stem = n.strip_suffix(" token").unwrap_or(&n);
+    let artifact = [
+        "treasure", "clue", "food", "blood", "gold", "map", "powerstone", "shard", "incubator",
+    ];
+    if artifact.contains(&stem) {
+        return Some("Token Artifact".to_string());
+    }
+    None
+}
+
 fn cda_count(app: &App, room: &Room, controller: usize, cda: &crate::oracle::CountCda) -> i64 {
     // Type lines are matched as Scryfall prints them: "artifact" -> "Artifact".
     let mut want = cda.counts.clone();
@@ -110,7 +133,24 @@ fn cda_count(app: &App, room: &Room, controller: usize, cda: &crate::oracle::Cou
             if cda.opponents { p.seat != controller && !p.conceded } else { p.seat == controller }
         })
         .flat_map(|p| p.battlefield.iter())
-        .filter(|c| facts(app, c).map(|f| f.type_line.contains(&want)).unwrap_or(false))
+        // A face-down permanent is a 2/2 colorless creature and nothing else -
+        // counting its real type would both inflate the number and leak what it
+        // is to a table that card_view deliberately masks it from. The Creature
+        // want is the exception: face-down, it genuinely IS one.
+        .filter(|c| !c.face_down || want == "Creature")
+        .filter(|c| {
+            match facts(app, c) {
+                Some(f) => f.type_line.contains(&want),
+                // Tokens have no oracle row (no scryfall_id), so facts() is
+                // None for every hand-made Treasure and Servo. Fall back to the
+                // type line the token was minted with, and treat "has power" as
+                // creature-ness the way is_creature does.
+                None => match c.type_line.as_deref() {
+                    Some(t) => t.contains(&want),
+                    None => want == "Creature" && c.power.is_some(),
+                },
+            }
+        })
         .count() as i64
 }
 
@@ -125,9 +165,15 @@ fn cda_count(app: &App, room: &Room, controller: usize, cda: &crate::oracle::Cou
 ///
 /// Runs on every Magic table, enforced or not: this is the card telling you
 /// what it is, not the engine playing for you.
-pub fn refresh_cda_stats(app: &App, room: &mut Room) -> Vec<String> {
+///
+/// Returns `(narration, mutated)`. The two are NOT the same: the first stamp on
+/// a card deliberately says nothing (see below), so a `*` creature arriving from
+/// the graveyard changed the board while narrating nothing. Callers must resync
+/// on `mutated`, or the client keeps rendering the printed `*` while the server
+/// holds the number.
+pub fn refresh_cda_stats(app: &App, room: &mut Room) -> (Vec<String>, bool) {
     if !reminders(room) {
-        return Vec::new();
+        return (Vec::new(), false);
     }
     // Gather first: counting artifacts reads the whole table while the write
     // needs it mutable.
@@ -153,7 +199,7 @@ pub fn refresh_cda_stats(app: &App, room: &mut Room) -> Vec<String> {
         }
     }
     if updates.is_empty() {
-        return Vec::new();
+        return (Vec::new(), false);
     }
     let mut logs = Vec::new();
     for (iid, name, power, toughness) in updates {
@@ -172,7 +218,7 @@ pub fn refresh_cda_stats(app: &App, room: &mut Room) -> Vec<String> {
             }
         }
     }
-    logs
+    (logs, true)
 }
 
 /// Effective power/toughness: oracle printed stats (a `*` counted from its
@@ -1049,7 +1095,7 @@ pub fn fire_card_triggers(app: &App, room: &mut Room, when: TriggerWhen, iid: &s
     };
     let mut logs = Vec::new();
     for trigger in facts.triggers.iter().filter(|t| t.when == when) {
-        let line = push_trigger(room, &owner, seat, &card.iid, &card.name, trigger, None);
+        let line = push_trigger(room, &owner, seat, &card.iid, &card.name, trigger, None, None);
         if !line.is_empty() {
             logs.push(line);
         }
@@ -1081,6 +1127,9 @@ pub fn fire_witness_triggers(app: &App, room: &mut Room, iid: &str, leaving: boo
         return Vec::new();
     };
     let Some(f) = facts(app, &card) else { return Vec::new() };
+    // The permanent that just arrived or left IS the cause of everything the
+    // rest of the board is about to notice.
+    let cause = Some(card.name.clone());
     let want = if leaving {
         if !f.is_creature() {
             return Vec::new();
@@ -1093,7 +1142,7 @@ pub fn fire_witness_triggers(app: &App, room: &mut Room, iid: &str, leaving: boo
     } else {
         return Vec::new();
     };
-    fire_board_triggers(app, room, seat, want, Some(iid))
+    fire_board_triggers(app, room, seat, want, Some(iid), cause.as_deref())
 }
 
 /// Queue every trigger of `when` on one seat's battlefield, optionally
@@ -1104,6 +1153,8 @@ fn fire_board_triggers(
     seat: usize,
     when: TriggerWhen,
     skip_iid: Option<&str>,
+    // The card whose arrival/departure set these off, for the log line.
+    cause: Option<&str>,
 ) -> Vec<String> {
     let Some(player) = room.players.iter().find(|p| p.seat == seat) else {
         return Vec::new();
@@ -1123,7 +1174,7 @@ fn fire_board_triggers(
     let mut logs = Vec::new();
     for (iid, name, triggers) in sources {
         for trigger in &triggers {
-            let line = push_trigger(room, &owner, seat, &iid, &name, trigger, None);
+            let line = push_trigger(room, &owner, seat, &iid, &name, trigger, None, cause);
             if !line.is_empty() {
                 logs.push(line);
             }
@@ -1138,7 +1189,7 @@ pub fn fire_attack_triggers(app: &App, room: &mut Room, seat: usize) -> Vec<Stri
     if !reminders(room) {
         return Vec::new();
     }
-    fire_board_triggers(app, room, seat, TriggerWhen::YouAttack, None)
+    fire_board_triggers(app, room, seat, TriggerWhen::YouAttack, None, None)
 }
 
 /// Queue "at the beginning of combat on your turn" for the active seat.
@@ -1146,7 +1197,7 @@ pub fn fire_combat_start_triggers(app: &App, room: &mut Room, seat: usize) -> Ve
     if !reminders(room) {
         return Vec::new();
     }
-    fire_board_triggers(app, room, seat, TriggerWhen::CombatStart, None)
+    fire_board_triggers(app, room, seat, TriggerWhen::CombatStart, None, None)
 }
 
 /// Queue "at the beginning of each upkeep" across EVERY battlefield - the
@@ -1158,7 +1209,7 @@ pub fn fire_each_upkeep_triggers(app: &App, room: &mut Room) -> Vec<String> {
     let seats: Vec<usize> = room.players.iter().map(|p| p.seat).collect();
     let mut logs = Vec::new();
     for seat in seats {
-        logs.extend(fire_board_triggers(app, room, seat, TriggerWhen::EachUpkeep, None));
+        logs.extend(fire_board_triggers(app, room, seat, TriggerWhen::EachUpkeep, None, None));
     }
     logs
 }
@@ -1184,7 +1235,7 @@ pub fn fire_cast_triggers(app: &App, room: &mut Room, seat: usize, card: &Card) 
     }
     let mut logs = Vec::new();
     for when in wants {
-        logs.extend(fire_board_triggers(app, room, seat, when, None));
+        logs.extend(fire_board_triggers(app, room, seat, when, None, None));
     }
     logs
 }
@@ -1235,7 +1286,7 @@ pub fn fire_draw_triggers(
     let mut logs = Vec::new();
     for _ in 0..count {
         for (owner, seat, subject, iid, name, trigger) in &queued {
-            let line = push_trigger(room, owner, *seat, iid, name, trigger, subject.as_deref());
+            let line = push_trigger(room, owner, *seat, iid, name, trigger, subject.as_deref(), None);
             if !line.is_empty() {
                 logs.push(line);
             }
@@ -1271,7 +1322,7 @@ pub fn fire_phase_triggers(
     let mut logs = Vec::new();
     for (iid, name, triggers) in sources {
         for trigger in &triggers {
-            let line = push_trigger(room, &owner, seat, &iid, &name, trigger, None);
+            let line = push_trigger(room, &owner, seat, &iid, &name, trigger, None, None);
             if !line.is_empty() {
                 logs.push(line);
             }
@@ -1289,7 +1340,7 @@ pub fn queue_trigger(
     source_name: &str,
     trigger: &crate::oracle::Trigger,
 ) -> String {
-    push_trigger(room, owner, seat, source_iid, source_name, trigger, None)
+    push_trigger(room, owner, seat, source_iid, source_name, trigger, None, None)
 }
 
 fn push_trigger(
@@ -1300,6 +1351,7 @@ fn push_trigger(
     source_name: &str,
     trigger: &crate::oracle::Trigger,
     subject: Option<&str>,
+    cause: Option<&str>,
 ) -> String {
     // A bot does not need reminding, and on a freeform table it has no code
     // path that answers one - the prompt would sit there until it lapsed.
@@ -1312,6 +1364,7 @@ fn push_trigger(
         owner: owner.to_string(),
         seat,
         subject: subject.map(str::to_string),
+        cause: cause.map(str::to_string),
         source_iid: source_iid.to_string(),
         source_name: source_name.to_string(),
         when: trigger.when,
@@ -1322,7 +1375,14 @@ fn push_trigger(
         auto: engine_runs && trigger.auto(),
         deadline: crate::now_ms() + crate::game::TRIGGER_CHOICE_MS,
     });
-    format!("Trigger: {source_name} — {}", trigger.text)
+    // Name the cause when there is one. "Playing Sol Ring triggered Bronze
+    // Guardian" is the sentence the player is actually trying to read; the
+    // bare "Trigger: X" form stays for the turn-structure triggers that have
+    // no single cause to name.
+    match cause {
+        Some(c) => format!("Playing {c} triggered {source_name}: {}", trigger.text),
+        None => format!("Trigger: {source_name} — {}", trigger.text),
+    }
 }
 
 /// A short human phrase for a trigger's effect list ("draw a card and gain 2
@@ -1530,6 +1590,7 @@ fn apply_effects(
                     let token = Card {
                         iid: crate::hex_id(8),
                         scryfall_id: None,
+                        type_line: guess_token_type(name),
                         name: name.clone(),
                         image_url: None,
                         tapped: *tapped,
@@ -2240,6 +2301,10 @@ pub fn check_state_based(app: &App, room: &mut Room) -> Vec<String> {
     // point, bounded defensively.
     for _ in 0..4 {
         let mut doomed: Vec<String> = Vec::new();
+        // Creatures whose printed `*` the parser could not model. Named once per
+        // sweep so the player learns WHY the number looks wrong, instead of the
+        // card silently dying or silently fighting at zero.
+        let mut unreadable_pt: Vec<String> = Vec::new();
         for p in &room.players {
             for c in &p.battlefield {
                 // Face-down cards are morphs/manual mysteries; double-faced
@@ -2252,7 +2317,17 @@ pub fn check_state_based(app: &App, room: &mut Room) -> Vec<String> {
                     continue;
                 }
                 if f.is_creature() {
-                    if effective_pt(app, room, c).1 <= 0 {
+                    // A `*` the parser could not model reads as toughness 0 and
+                    // would be swept into the graveyard the instant it arrived -
+                    // a card the player never touched, killed by a number the
+                    // engine admits it cannot compute. `stat()` returns None
+                    // only for absent or non-numeric text, so a genuine 0/0 has
+                    // f.toughness == Some(0) and is unaffected by this guard.
+                    let unreadable =
+                        f.toughness.is_none() && f.cda.is_none() && c.toughness.is_none();
+                    if unreadable {
+                        unreadable_pt.push(c.name.clone());
+                    } else if effective_pt(app, room, c).1 <= 0 {
                         doomed.push(c.iid.clone());
                     }
                 } else if f.type_line.contains("Planeswalker")
@@ -2262,6 +2337,18 @@ pub fn check_state_based(app: &App, room: &mut Room) -> Vec<String> {
                     // without a loyalty key in an enforced room IS at zero.
                     doomed.push(c.iid.clone());
                 }
+            }
+        }
+        // Say it once per card, not once per sweep: the sweep runs after every
+        // action, and a table does not need "can't read Serra Avatar" forty
+        // times a turn. `unreadable_announced` is the same latch the loss
+        // states below use.
+        for name in unreadable_pt {
+            if !room.unreadable_announced.contains(&name) {
+                room.unreadable_announced.push(name.clone());
+                logs.push(format!(
+                    "{name}'s printed */* is one the engine can't work out - track it by hand"
+                ));
             }
         }
         if doomed.is_empty() {
@@ -2298,4 +2385,41 @@ pub fn check_state_based(app: &App, room: &mut Room) -> Vec<String> {
     }
     room.loss_flagged.retain(|uid| !cleared.contains(uid));
     logs
+}
+
+#[cfg(test)]
+mod token_type_tests {
+    use super::guess_token_type;
+
+    /// The tokens a table actually makes by hand. Getting these right is most
+    /// of the value of the type-line fallback: Treasure is far and away the
+    /// most-created token in Commander, and artifact-counting is the most
+    /// common characteristic-defining ability, so "five Treasures land and
+    /// Bronze Guardian does not move" was the single most visible symptom.
+    #[test]
+    fn common_artifact_tokens_are_recognised() {
+        for name in ["Treasure", "treasure", "Clue", "Food", "Blood", "Gold", "Map", "Powerstone"] {
+            assert_eq!(
+                guess_token_type(name).as_deref(),
+                Some("Token Artifact"),
+                "{name} should read as an artifact"
+            );
+        }
+    }
+
+    /// Scryfall-style full names ("Treasure Token") still resolve.
+    #[test]
+    fn a_trailing_word_does_not_break_the_match() {
+        assert_eq!(guess_token_type("Treasure Token").as_deref(), Some("Token Artifact"));
+    }
+
+    /// Everything else stays unknown rather than guessing. A wrong type line is
+    /// worse than none: it would make a `*` count something that is not there,
+    /// and the number on the card is the thing the player trusts.
+    #[test]
+    fn anything_else_is_left_unknown() {
+        for name in ["Soldier", "Zombie", "Treasure Hunter", "Goblin", "counter"] {
+            assert_eq!(guess_token_type(name), None, "{name} should not be guessed");
+        }
+    }
 }

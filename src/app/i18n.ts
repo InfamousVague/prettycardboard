@@ -1489,6 +1489,12 @@ export const messages = {
     fr: 'Comment les cartes s’organisent sur votre champ de bataille.',
     ar: 'كيف تُرتَّب البطاقات في ساحة معركتك.',
   },
+  gpTriggeredBy: {
+    en: 'Playing {card} triggered',
+    es: 'Jugar {card} activó',
+    fr: 'Jouer {card} a déclenché',
+    ar: 'لعب {card} فعّل',
+  },
   setCardPlacement: { en: 'Card placement', es: 'Colocación de cartas', fr: 'Placement des cartes', ar: 'وضع البطاقات' },
   setCardNames: { en: 'Card names on the board', es: 'Nombres sobre las cartas', fr: 'Noms sur les cartes', ar: 'أسماء البطاقات على الطاولة' },
   setCardNamesHint: {

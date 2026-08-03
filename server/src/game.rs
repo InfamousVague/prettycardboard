@@ -150,6 +150,11 @@ pub enum Action {
     #[serde(rename = "token.create", rename_all = "camelCase")]
     TokenCreate {
         name: String,
+        /// The token's type line, when the client knows it (the token picker
+        /// does; the hand-typed form does not). Optional so older clients keep
+        /// working - the server falls back to guess_token_type.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        type_line: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         image_url: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1587,11 +1592,15 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
             }
         }
 
-        Action::TokenCreate { ref name, ref image_url, ref power, ref toughness, x, y } => {
+        Action::TokenCreate { ref name, ref type_line, ref image_url, ref power, ref toughness, x, y } => {
             let p = &mut room.players[pi];
             let token = Card {
                 iid: crate::hex_id(8),
                 scryfall_id: None,
+                // What the token IS, so type-counting abilities can see it. The
+                // client sends it when it knows (the token picker has a real
+                // type line); guess_token_type covers the hand-typed cases.
+                type_line: type_line.clone().or_else(|| crate::rules::guess_token_type(name)),
                 name: name.clone(),
                 image_url: image_url.clone(),
                 tapped: false,
@@ -3421,8 +3430,11 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
     // A `*` power is a continuously-true fact, so it is refreshed in the same
     // breath as state-based actions - BEFORE the sweep, since a Master of
     // Etherium whose last artifact left is a 0/0 and dies to it.
-    let restated = crate::rules::refresh_cda_stats(app, room);
-    if !restated.is_empty() {
+    // Resync on MUTATION, not on narration: the first stamp is deliberately
+    // silent, so a reanimated Master of Etherium used to leave the client
+    // showing `*` forever.
+    let (restated, cda_changed) = crate::rules::refresh_cda_stats(app, room);
+    if cda_changed {
         resync = true;
     }
     extra_logs.extend(restated);

@@ -26,6 +26,13 @@ pub struct Card {
     pub power: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub toughness: Option<String>,
+    /// A token's type line. Real cards carry no copy of this - they resolve it
+    /// from the oracle cache via `scryfall_id` - but a token has no oracle row,
+    /// which made every hand-made Treasure and Servo invisible to anything that
+    /// classifies permanents by type (`cda_count`, most visibly: a Bronze
+    /// Guardian's `*` never moved when five Treasures landed).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub type_line: Option<String>,
     /// iid of the battlefield card this one is attached to (auras/equipment).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attached_to: Option<String>,
@@ -529,6 +536,13 @@ pub struct BoardRequest {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PendingTrigger {
+    /// What CAUSED this trigger to fire - the card that entered, or the spell
+    /// that was cast. `source_name` is what fired; without this the table sees
+    /// "Trigger: Bronze Guardian" with no hint of which of the six things that
+    /// just happened set it off. Optional: turn-structure triggers have no
+    /// single cause.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cause: Option<String>,
     pub id: String,
     pub owner: String, // user_id of the controller
     pub seat: usize,
@@ -1213,6 +1227,12 @@ pub struct Room {
     #[serde(default)]
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub loss_flagged: Vec<String>,
+    /// Cards whose printed `*` the oracle parser could not model, already named
+    /// to the table. A Vec, not a Set, to match the other latches here and to
+    /// serialise cleanly; the list is at most a handful of names per game.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unreadable_announced: Vec<String>,
     /// Enforced rooms: (turn, walker iid) loyalty activations, one per walker
     /// per turn. Pruned to the current turn on each insert.
     #[serde(default)]
@@ -1774,6 +1794,9 @@ pub fn build_zones(cards: &[DeckCard], flag_commanders: bool, game: &str) -> (Ve
             let is_cmd = dc.board == "commander";
             let card = Card {
                 iid: crate::hex_id(8),
+                // Real cards resolve their type line from the oracle cache via
+                // scryfall_id; only tokens need to carry their own.
+                type_line: None,
                 scryfall_id: Some(dc.scryfall_id.clone()),
                 name: dc.name.clone(),
                 // MTG: no URL - the client resolves Scryfall art from the id

@@ -33,6 +33,14 @@ export const EVENT_CLASSES: EventClass[] = [
   // table noise.
   { match: / draws .+ \(.+\)$/, tone: 'info' },
   { match: / enters with /, tone: 'info' },
+  { match: / enters tapped$/, tone: 'info' },
+  // "Playing Sol Ring triggered Bronze Guardian: ..." - the causal line. Placed
+  // with the other card-event classes rather than at the top: EventToasts
+  // suppresses lines that start with your own username, and these start with
+  // "Playing", so the controller sees both the prompt card and the toast. That
+  // is deliberate for now - the prompt is actionable, the toast is the record.
+  { match: /^Playing .+ triggered /, tone: 'info' },
+  { match: /^Trigger: /, tone: 'info' },
   { match: / creates .+ token/, tone: 'info' },
   // A spell leaving the stack (but combat resolution has its own preview UI).
   { match: / resolves (?!combat$)/, tone: 'neutral' },

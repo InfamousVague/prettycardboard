@@ -583,6 +583,9 @@ export interface PendingTrigger {
   owner: string;
   seat: number;
   sourceIid: string;
+  /** What set this off - the card that entered or the spell that was cast.
+   *  Absent for turn-structure triggers, which have no single cause. */
+  cause?: string;
   sourceName: string;
   when:
     | 'etb'
@@ -650,7 +653,7 @@ export type GameAction =
   | { kind: 'card.face'; iid: string; faceDown: boolean }
   | { kind: 'card.transform'; iid: string; transformed: boolean }
   | { kind: 'card.counter'; iid: string; counter: string; delta: number }
-  | { kind: 'token.create'; name: string; imageUrl?: string; power?: string; toughness?: string; x: number; y: number }
+  | { kind: 'token.create'; name: string; typeLine?: string; imageUrl?: string; power?: string; toughness?: string; x: number; y: number }
   | { kind: 'token.clone'; iid: string; x: number; y: number }
   | { kind: 'draw'; count: number }
   | { kind: 'shuffle' }

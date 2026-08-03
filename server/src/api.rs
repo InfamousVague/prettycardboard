@@ -691,6 +691,7 @@ pub async fn room_create(
         pending_discards: Vec::new(),
         pending_sacrifices: Vec::new(),
         loss_flagged: Vec::new(),
+        unreadable_announced: Vec::new(),
         loyalty_used: Vec::new(),
         end_window: None,
         end_fired: None,

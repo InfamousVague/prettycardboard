@@ -832,6 +832,15 @@ export function TriggerPrompts({ room, me }: { room: RoomState; me: TablePlayer 
             exit={{ opacity: 0, y: 12 }}
           >
             <div className="triggerPromptText">
+              {/* What set it off, above what fired. The prompt used to name only
+                  the source, which is the harder half to guess: with six things
+                  on the board a player knows what Bronze Guardian does, not
+                  which of the three permanents they just played woke it up. */}
+              {p.cause && (
+                <Text size={Size.XSmall} tone={TextTone.Subtle}>
+                  {t('gpTriggeredBy').replace('{card}', p.cause)}
+                </Text>
+              )}
               <Text size={Size.Small} weight="semibold">
                 {p.sourceName}
               </Text>
