@@ -6148,6 +6148,43 @@
   }
 }
 
+/* ---- phones: the scrubber opens DOWNWARD, not up ------------------------
+   The bar had no phone treatment at all, and the bottom edge is the one place
+   it cannot go: that is the hand fan and the end-turn cluster, and a landscape
+   phone is only ~400px tall, so a floating card down there covered both. It
+   now hangs from the history strip that opened it - which is where the eye
+   already is - and runs nearly edge to edge instead of shrink-wrapping.
+
+   Keyed on :root[data-phone], NOT .table[data-mobile]: this bar is portalled
+   to document.body (see the note above), so it is not inside .table at all and
+   no descendant selector from there can reach it. */
+:root[data-phone='on'] .timelineBar {
+  inset-block-start: calc(3.25rem + env(safe-area-inset-top, 0px));
+  inset-block-end: auto;
+  inline-size: calc(100vw - var(--glacier-space-4));
+  max-inline-size: none;
+  padding: var(--glacier-space-2) var(--glacier-space-3);
+  gap: var(--glacier-space-1);
+  border-radius: var(--glacier-radius-lg);
+}
+
+/* Opening downward means the entrance should come from above, or the card
+   slides up out of the strip it is supposed to be hanging from. */
+:root[data-phone='on'] .timelineBar {
+  animation-name: timelineBarDown;
+}
+
+@keyframes timelineBarDown {
+  from {
+    transform: translate(-50%, -16px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
 /* Label sits at the top of the floating card. */
 .timelineBarLabel {
   font-size: var(--glacier-font-size-xs);
@@ -7014,14 +7051,17 @@
    carrying the art and the name anyway. The caption rides at the bottom of that
    band (it is positioned against .zonePile, not the crop). */
 .mobileZones .zonePiles > *:not(:first-child) .zonePile > div:first-child {
-  /* 2.5rem was a flat guess that held for the narrowest phone and looked
-     shrunken on every other one - a 40px sliver with a caption plate over it
-     leaves almost no art, so the three piles read as labels rather than as
-     cards. Scaled to the viewport instead: 18vh is ~72px on a 400px-tall
-     landscape phone, which fits the ~155px the column had going spare above it,
-     and the clamp keeps a short screen from collapsing them or a tall one from
-     pushing the library off the bottom. */
-  block-size: clamp(3.25rem, 18vh, 5.25rem);
+  /* TILES, not peeking card edges.
+     These three were a fixed 2.5rem crop of the TOP of the card, which is a
+     card's title bar and border - so the tile showed the least identifiable
+     part of the art and the caption covered most of what was left. Scaling that
+     crop to the viewport (18vh) only made the same wrong band bigger, and three
+     of them plus the deck stopped fitting the column.
+     A fixed tile instead, with the card slid up so its ARTWORK fills the window
+     (see the offset below). 3.5rem is a comfortable touch target, and three of
+     them plus the deck come to roughly 280px - well inside the ~350px the rail
+     has on a landscape phone, with no viewport math that can overflow. */
+  block-size: 3.5rem;
   overflow: hidden;
   border-radius: 6px;
   /* An empty zone is still a slot you can drop onto, so it has to look like
@@ -7037,12 +7077,26 @@
   box-shadow: inset 0 0 0 2px var(--glacier-accent-solid);
 }
 
+/* Slide the card up so the tile frames its ARTWORK rather than its title bar.
+   A card's art window starts about a ninth of the way down, and a percentage
+   margin resolves against the container's INLINE size - so this tracks
+   --pc-zone-peek and stays right at every rail width. */
+.mobileZones .zonePiles > *:not(:first-child) .zonePile > div:first-child > * {
+  margin-block-start: -12%;
+}
+
 /* An empty zone draws its icon at 0.56 of the card width - 47px, taller than
-   the crop it now lives in. Sized off the same viewport measure as the crop so
-   the icon keeps its share of the plate as that grows. */
+   the tile it lives in. Sized to the tile, and centred in it: for an empty
+   graveyard the icon IS the label. */
 .mobileZones .zonePiles > *:not(:first-child) .pileEmptyIcon svg {
-  inline-size: clamp(1.15rem, 7vh, 1.9rem);
-  block-size: clamp(1.15rem, 7vh, 1.9rem);
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+}
+
+/* The empty plate does not get the artwork offset - there is no art to frame,
+   and shifting it up would push the icon under the tile's top edge. */
+.mobileZones .zonePiles > *:not(:first-child) .zonePile > div:first-child > .pileEmpty {
+  margin-block-start: 0;
 }
 
 .mobileZones .zonePiles > *:not(:first-child) .pileEmpty {
@@ -7133,12 +7187,20 @@
   inset-inline-end: 0.35rem;
 }
 
-/* The combat button is a satellite, not a second primary: it matches the
-   give-turn menu and the board tools rather than sitting between them and the
-   play button at its own in-between size. */
+/* The combat button is a satellite, not a second primary - but it was matching
+   the board tools at 2.25rem, and declaring an attack is a far bigger moment
+   than opening a menu. A third larger: still visibly below End turn, still in
+   the satellite family, and now the biggest thing in that family. */
 .table[data-mobile] .turnActionsMain > .turnAttackBtn {
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 3rem;
+  height: 3rem;
+}
+
+/* The glyph grows with the button, or a 33% larger circle just reads as more
+   padding around the same icon. */
+.table[data-mobile] .turnActionsMain > .turnAttackBtn svg {
+  width: 21px;
+  height: 21px;
 }
 
 /* History controls on the mat: undo / timeline / redo, centred on the board's
