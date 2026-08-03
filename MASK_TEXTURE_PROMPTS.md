@@ -76,6 +76,23 @@ usual ringing around hard black/white boundaries paints as a half-visible halo.
 
 # Halftone dissolves
 
+> **The six halftones are now generated, not prompted.** Glacier's
+> `halftoneSvg` / `halftoneDataUri` (`@glacier/logic`, GlacierUI de9b77d)
+> compute the field: dots on a fixed grid, radius riding a positional ramp,
+> dissolving by hashed dropout. An even lattice of smoothly varying dots is a
+> computation, and asking a generator for one gets dots that wander off the
+> lattice - which is what was wrong with the first batch.
+>
+> ```ts
+> import { halftoneDataUri } from '@glacier/logic';
+> element.style.maskImage = halftoneDataUri({ origin: 'top-left', cells: 48 });
+> ```
+>
+> Ten origins are available - four corners, centre, edges, four sides - so the
+> prompts below are kept only as a record of the intent. Generate them if you
+> want raster copies; otherwise use the function, which is exact, tiny, scales
+> without resampling, and needs no files.
+
 ## `halftone-tl`
 
 > A full-frame halftone dissolve, 2048×2048, on a pure black background with
