@@ -14,6 +14,7 @@ export type ClientMessage =
   | { type: 'room.start' }
   | { type: 'room.ready'; ready: boolean }
   | { type: 'room.deck.set'; deckId: string }
+  | { type: 'room.deck.random' }
   | { type: 'room.settings'; settings: GameSettings }
   | { type: 'room.ping'; targetUserId: string }
   | { type: 'room.hand.hover'; position: number | null }

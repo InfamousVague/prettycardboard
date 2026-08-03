@@ -29,6 +29,11 @@ enum ClientMsg {
     RoomReady { ready: bool },
     #[serde(rename = "room.deck.set", rename_all = "camelCase")]
     RoomDeckSet { deck_id: String },
+    /// Quickplay: spend a reroll and take a different dealt precon. Carries no
+    /// payload - which deck you get is the server's call, and how many rolls
+    /// you have left is the server's count.
+    #[serde(rename = "room.deck.random")]
+    RoomDeckRandom,
     /// Host-only pre-game rule changes (mulligans, starting life/hand, first
     /// player). Rejected once the game has started.
     #[serde(rename = "room.settings")]
@@ -261,6 +266,7 @@ fn handle_msg(app: &Arc<App>, user: &db::User, text: &str, tx: &Tx) {
         ClientMsg::RoomStart => start_room(app, user, tx),
         ClientMsg::RoomReady { ready } => room_ready(app, user, ready, tx),
         ClientMsg::RoomDeckSet { deck_id } => room_deck_set(app, user, &deck_id, tx),
+        ClientMsg::RoomDeckRandom => room_deck_random(app, user, tx),
         ClientMsg::RoomSettings { settings } => room_settings(app, user, settings, tx),
         ClientMsg::RoomPing { target_user_id } => room_ping(app, user, &target_user_id, tx),
         ClientMsg::RoomHandHover { position } => room_hand_hover(app, user, position, tx),
@@ -543,6 +549,7 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
         user_id: user.id.clone(),
         username: user.username.clone(),
         seat,
+        quickplay_rolls: 0,
         ready: false,
         life: starting_life,
         poison: 0,
@@ -594,6 +601,17 @@ fn join_room(app: &Arc<App>, user: &db::User, room_id: &str, deck_id: Option<Str
         user.id.clone(),
         RoomRef { room_id: room_id.to_string(), spectating: false },
     );
+    // Quickplay: you sit down and you are holding a deck. Dealt here rather
+    // than asked for by the client, so a player who arrives with an empty
+    // collection - which is the whole point of the mode - still gets one, and
+    // so the deal is not a round trip the lobby has to render an empty seat
+    // through. It costs no reroll: three are for changing your mind.
+    if room.settings.quickplay && !room.started {
+        quickplay_deal_seats(&mut room, false);
+        if room.game == "mtg" {
+            crate::oracle::prefetch_room(app, &room);
+        }
+    }
     room.seq += 1;
     let seq = room.seq;
     rooms::touch(app, &mut room);
@@ -931,6 +949,163 @@ fn room_ready(app: &Arc<App>, user: &db::User, ready: bool, tx: &Tx) {
     }
 }
 
+/// Deal one of the embedded precons to a seat.
+///
+/// The same pool the bots draw from (`bot::decks_for`, so a Standard table gets
+/// Standard decks and a Commander table the Commander precons) built through
+/// the same `build_zones` path a human's own deck takes - so the cards carry
+/// identical scryfall ids and commander flags, and nothing downstream can tell
+/// a dealt deck from a brought one.
+///
+/// `avoid` is the deck code the seat is holding now. A reroll that can hand
+/// back the deck you just refused is not a reroll, so it is filtered out -
+/// unless it is the only deck in the pool, in which case there is nothing else
+/// to give and you keep it.
+///
+/// Returns false when the table's game/format has no pool at all, which is the
+/// caller's cue to leave the seat deckless rather than wedge it.
+fn quickplay_deal(room: &mut rooms::Room, user_id: &str, avoid: Option<&str>) -> bool {
+    // Same guard bot_add carries, and for the same reason: decks_for only
+    // branches on yugioh, so ANY other game falls through to the Magic precons.
+    // At a Cyberpunk table that would deal 100 cards of the wrong card game.
+    // Checked here rather than at each call site so join, the settings flip and
+    // the reroll are all covered by one rule.
+    if room.game != "mtg" && room.game != "yugioh" {
+        return false;
+    }
+    let pool = crate::bot::decks_for(&room.game, &room.format);
+    if pool.is_empty() {
+        return false;
+    }
+    let choices: Vec<&crate::bot::BotDeck> = match avoid {
+        Some(code) if pool.iter().any(|d| d.code != code) => {
+            pool.iter().copied().filter(|d| d.code != code).collect()
+        }
+        _ => pool.clone(),
+    };
+    let deck = choices[rand::random_range(0..choices.len())];
+    let cards: Vec<db::DeckCard> = deck
+        .cards
+        .iter()
+        .map(|c| db::DeckCard {
+            scryfall_id: c.sid.clone(),
+            name: c.name.clone(),
+            quantity: c.qty,
+            board: c.board.clone(),
+        })
+        .collect();
+    let (command, library) =
+        rooms::build_zones(&cards, rooms::format_has_commander(&room.format), &room.game);
+    let Some(player) = room.players.iter_mut().find(|p| p.user_id == user_id) else {
+        return false;
+    };
+    // `precon:<code>` marks a deck the TABLE dealt rather than one the player
+    // owns. It deliberately does not resolve to a row in the decks table - the
+    // same sentinel trick bot seats use - so start_room's "everyone picked a
+    // deck" check passes without quickplay having to write anything to anyone's
+    // collection. It is also what `avoid` reads back on the next reroll.
+    player.deck_id = Some(format!("precon:{}", deck.code));
+    player.deck_name = Some(deck.name.clone());
+    // Metrics describe the previous deck; the owner's client recomputes and
+    // re-sends them (deckmeta.set), exactly as after a manual deck change.
+    player.deck_meta = None;
+    player.command = command;
+    player.library = library;
+    player.hand.clear();
+    player.battlefield.clear();
+    player.graveyard.clear();
+    player.exile.clear();
+    player.ready = false;
+    true
+}
+
+/// The deck code a seat is currently holding, if the table dealt it.
+fn quickplay_code(player: &rooms::Player) -> Option<String> {
+    player.deck_id.as_deref().and_then(|id| id.strip_prefix("precon:")).map(str::to_string)
+}
+
+/// Deal to seated humans. `everyone` redeals seats that already hold a deck;
+/// otherwise only the deckless are dealt to.
+///
+/// Join uses the narrow form - the only seat without a deck is the one that
+/// just sat down. Switching the mode ON uses the wide form, and that is the
+/// whole point of the distinction: quickplay's premise is that nobody brings a
+/// deck, so a host who picks their own constructed deck and then flips the
+/// switch must not keep it while everyone else plays a dealt precon. The table
+/// is level or it is not quickplay.
+///
+/// Bots are skipped in both forms. A bot is dealt its deck by bot_add out of
+/// the same pool, so it is already playing quickplay's terms.
+fn quickplay_deal_seats(room: &mut rooms::Room, everyone: bool) {
+    let need: Vec<String> = room
+        .players
+        .iter()
+        .filter(|p| !p.user_id.starts_with("bot:"))
+        .filter(|p| everyone || p.deck_id.is_none())
+        .map(|p| p.user_id.clone())
+        .collect();
+    for user_id in need {
+        quickplay_deal(room, &user_id, None);
+        if everyone {
+            // The mode just began, so the three rolls begin with it. Reaching
+            // this needs the host to flip the switch, so it is not a way for a
+            // player to mint themselves rerolls.
+            if let Some(p) = room.players.iter_mut().find(|p| p.user_id == user_id) {
+                p.quickplay_rolls = 0;
+            }
+        }
+    }
+}
+
+/// {"type":"room.deck.random"}: spend one reroll and take a different precon.
+/// Quickplay tables only, pre-start only, and capped server-side - a counter
+/// the roller owns is a suggestion, not a cap.
+fn room_deck_random(app: &Arc<App>, user: &db::User, tx: &Tx) {
+    let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
+        send_err(tx, "not_in_room", "you are not in a room");
+        return;
+    };
+    if rref.spectating {
+        send_err(tx, "forbidden", "spectators cannot choose a deck");
+        return;
+    }
+    let Some(mut room) = app.rooms.get_mut(&rref.room_id) else {
+        send_err(tx, "room_not_found", "no such room");
+        return;
+    };
+    if room.started {
+        send_err(tx, "already_started", "the game has already started");
+        return;
+    }
+    if !room.settings.quickplay {
+        send_err(tx, "not_quickplay", "this table is not a quickplay table");
+        return;
+    }
+    let Some(player) = room.players.iter().find(|p| p.user_id == user.id) else {
+        send_err(tx, "not_seated", "you are not seated in this room");
+        return;
+    };
+    if player.quickplay_rolls >= rooms::MAX_QUICKPLAY_ROLLS {
+        send_err(tx, "no_rolls", "you have used all your rerolls");
+        return;
+    }
+    let avoid = quickplay_code(player);
+    if !quickplay_deal(&mut room, &user.id, avoid.as_deref()) {
+        send_err(tx, "no_decks", "no decks available for this table");
+        return;
+    }
+    // Charged only on a deal that actually happened, so a table with an empty
+    // pool cannot burn a player's rolls handing them nothing.
+    if let Some(player) = room.players.iter_mut().find(|p| p.user_id == user.id) {
+        player.quickplay_rolls += 1;
+    }
+    if room.game == "mtg" {
+        crate::oracle::prefetch_room(app, &room);
+    }
+    rooms::touch(app, &mut room);
+    room_send_states(app, &room);
+}
+
 fn room_deck_set(app: &Arc<App>, user: &db::User, deck_id: &str, tx: &Tx) {
     let Some(rref) = app.user_rooms.get(&user.id).map(|r| r.clone()) else {
         send_err(tx, "not_in_room", "you are not in a room");
@@ -1043,10 +1218,22 @@ fn room_settings(app: &Arc<App>, user: &db::User, mut settings: rooms::GameSetti
         }
     }
     let enforce_flipped_on = settings.enforced && !room.settings.enforced;
+    let quickplay_flipped_on = settings.quickplay && !room.settings.quickplay;
     room.settings = settings;
     // Enforcement only means something for Magic tables.
     if room.game != "mtg" {
         room.settings.enforced = false;
+    }
+    // Switching quickplay on deals to everyone already sitting here who has no
+    // deck, so the two arrival orders - mode first, or players first - both end
+    // up with a full table. Seats that already chose something keep it.
+    if quickplay_flipped_on {
+        quickplay_deal_seats(&mut room, true);
+        // Every seat just got a deck it has never seen; warm the oracle so the
+        // table has card data by game start, same as the join and reroll paths.
+        if room.game == "mtg" {
+            crate::oracle::prefetch_room(app, &room);
+        }
     }
     if enforce_flipped_on && crate::rules::enforced(&room) {
         // Warm the oracle cache so the rules have answers by game start.
@@ -1191,6 +1378,8 @@ fn bot_add(
         user_id: bot_id.clone(),
         username: username.clone(),
         seat,
+        // A bot never rerolls: it is dealt a deck once and plays it.
+        quickplay_rolls: 0,
         // Bots are always ready and always online; the deck id is a sentinel
         // so start_room's "everyone picked a deck" check holds for them.
         ready: true,

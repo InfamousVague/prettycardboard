@@ -35,6 +35,7 @@ import {
   Play,
   Settings2,
   Shield,
+  Shuffle,
   Sparkles,
   Swords,
   ThumbsUp,
@@ -46,6 +47,7 @@ import {
   X,
 } from '@glacier/icons';
 import { PlayingCardDeck } from '../../icons/cards.ts';
+import { MAX_QUICKPLAY_ROLLS } from '../../data/quickplay.ts';
 import { useT } from '../../i18n.ts';
 import { useApp } from '../../state/appStore.ts';
 import { useGame } from '../../state/gameStore.ts';
@@ -111,6 +113,11 @@ export function PregameLobby({
   const gameDecks = decks.filter((deck) => (deck.game || 'mtg') === game);
   const selectedDeck = gameDecks.find((deck) => deck.id === me?.deckId);
   const selectedArt = selectedDeck ? deckSummaryArt(selectedDeck) : '';
+  // Quickplay: the table deals the decks, so the picker is replaced by a
+  // reroll. rollsLeft mirrors the server's cap - the server is what enforces
+  // it, this only decides whether the button is worth offering.
+  const quickplay = Boolean(room.settings?.quickplay);
+  const rollsLeft = Math.max(0, MAX_QUICKPLAY_ROLLS - (me?.quickplayRolls ?? 0));
   // This table drafted its decks and the host locked them in: no swapping the
   // limited pool for something built at home.
   const deckLocked = Boolean(
@@ -213,6 +220,7 @@ export function PregameLobby({
     ...(game === 'mtg'
       ? [{ label: t('setEnforced'), value: settings.enforced ? t('setOn') : t('setOff') }]
       : []),
+    ...(settings.quickplay ? [{ label: t('setQuickplay'), value: t('setOn') }] : []),
   ];
 
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -301,14 +309,35 @@ export function PregameLobby({
           data-has-art={Boolean(selectedArt) || undefined}
           style={selectedArt ? { ['--pregame-deck-art' as string]: `url("${selectedArt}")` } : undefined}
         >
-          <label className="pregameDeckLabel" htmlFor="pregame-deck">{t('playPickDeck')}</label>
+          <label className="pregameDeckLabel" htmlFor="pregame-deck">
+            {quickplay ? t('preQuickDeck') : t('playPickDeck')}
+          </label>
           {deckLocked ? (
-            // A locked draft table plays what it drafted. The server refuses
-            // the swap either way; this just stops the picker from offering
-            // a choice that is not one.
+            // A locked draft table plays what it drafted - that beats
+            // quickplay, which is a way of GETTING a deck, not of overriding
+            // one the table already dealt you through the draft.
             <Text className="pregameDeckPicker" size={Size.Small} tone={TextTone.Muted}>
               {me.deckName ?? t('dfLockOn')}
             </Text>
+          ) : quickplay ? (
+            // Quickplay deals the deck; the only control is the reroll. The
+            // name is read-only text rather than a disabled Select, because
+            // there is no list to open - the pool is the server's.
+            <div className="pregameQuickDeck">
+              <Text as="span" size={Size.Small} weight="semibold" className="pregameQuickName">
+                {me.deckName ?? t('preQuickDealing')}
+              </Text>
+              <Button
+                variant="soft"
+                disabled={rollsLeft <= 0 || !me.deckId}
+                onClick={() => send({ type: 'room.deck.random' })}
+              >
+                <Shuffle size={15} />
+                {rollsLeft > 0
+                  ? `${t('preQuickReroll')} · ${rollsLeft}`
+                  : t('preQuickNoRolls')}
+              </Button>
+            </div>
           ) : gameDecks.length > 0 ? (
             // fullWidth, and it matters: the trigger is an inline-flex box that
             // sizes to its longest deck name (measured 333px), so in the
@@ -514,6 +543,27 @@ export function PregameLobby({
                       </Text>
                     </div>
                   </label>
+                )}
+                {/* Quickplay sits beside enforcement because it is the other
+                    switch that changes what KIND of table this is rather than
+                    tuning one. Gated to the games that HAVE a deck pool: the
+                    server deals from bot::decks_for, which only knows Magic and
+                    Yu-Gi-Oh, and refuses anything else - so offering the switch
+                    at a Cyberpunk table would be a toggle that does nothing. */}
+                {(game === 'mtg' || game === 'yugioh') && (
+                <label className="pregameSetting pregameSettingWide">
+                  <span className="pregameSettingLabel">{t('setQuickplay')}</span>
+                  <div className="pregameEnforcedRow">
+                    <Switch
+                      checked={Boolean(settings.quickplay)}
+                      onCheckedChange={(on) => patchSettings({ quickplay: on })}
+                      aria-label={t('setQuickplay')}
+                    />
+                    <Text as="span" size={Size.XSmall} tone={TextTone.Subtle}>
+                      {t('setQuickplayHint')}
+                    </Text>
+                  </div>
+                </label>
                 )}
               </div>
             ) : (

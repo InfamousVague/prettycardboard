@@ -1354,6 +1354,31 @@
   min-inline-size: 0;
 }
 
+/* Quickplay's stand-in for the deck picker: the dealt deck's name plus the
+   reroll. Takes the picker's own flex slot so the bar's three-part rhythm
+   (label / choice / Ready) is unchanged - only what sits in the middle is. */
+.pregameQuickDeck {
+  flex: 1 1 6rem;
+  min-inline-size: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+}
+
+/* The name is the readout, so it gets the room and the truncation; the reroll
+   button keeps its intrinsic width whatever the deck is called. */
+.pregameQuickName {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pregameQuickDeck > button {
+  flex: none;
+}
+
 .pregameReadyButton {
   flex: none;
   margin-inline-start: auto;
@@ -1380,6 +1405,7 @@
      basis forces the line break, so each lands on a line of its own without
      the row needing to know how many items it has. */
   .pregameDeckPicker,
+  .pregameQuickDeck,
   .pregameReadyButton {
     flex: 1 1 100%;
     min-inline-size: 0;

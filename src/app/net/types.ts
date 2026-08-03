@@ -305,8 +305,11 @@ export interface TablePlayer {
   /** Name of the deck this seat was taken with (snapshotted at join). */
   deckName?: string | null;
   /** The deck id this seat plays (own seat only) - used to look up which tokens
-   * the deck can produce. */
+   * the deck can produce. A `precon:<code>` id is one the TABLE dealt in
+   * quickplay rather than one the player owns; it resolves to no stored deck. */
   deckId?: string | null;
+  /** Quickplay rerolls this seat has spent, counted by the server. */
+  quickplayRolls?: number;
   /** A server-driven AI opponent (seated via `bot.add`). */
   isBot?: boolean;
   /** Lands this seat has played in the current turn round (enforced rooms
@@ -401,6 +404,10 @@ export interface GameSettings {
   /** Arena-lite rules enforcement for this table (MTG only): real costs,
    * land drops, summoning sickness, legal combat, previewed damage. */
   enforced?: boolean;
+  /** Quickplay: nobody brings a deck. Every seat is dealt one of the bundled
+   * precons on arrival and may reroll it up to MAX_QUICKPLAY_ROLLS times before
+   * the game starts. A table you can sit down at with an empty collection. */
+  quickplay?: boolean;
   /** Competitive table. Nothing sets this yet - ranked play does not exist -
    * but the affordances that leak public-but-advantageous information (the
    * opponent deck-stats hover) already read it, so switching ranked on later

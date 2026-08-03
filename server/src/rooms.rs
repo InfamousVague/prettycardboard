@@ -95,7 +95,18 @@ pub struct GameSettings {
     /// core keywords, and previewed combat damage. Off = classic freeform.
     /// See rules.rs; the coach stays advisory and independent of this.
     pub enforced: bool,
+    /// Quickplay: nobody brings a deck. Every seat is dealt one of the
+    /// embedded precons on arrival - the same pool the bots draw from - and may
+    /// reroll it up to `MAX_QUICKPLAY_ROLLS` times before the game starts. A
+    /// table you can sit down at with an empty collection.
+    #[serde(default)]
+    pub quickplay: bool,
 }
+
+/// How many times a seat may reroll its quickplay deck. The deck it is DEALT
+/// on arrival is not a reroll - you get three chances to change your mind, not
+/// two and the one you were given.
+pub const MAX_QUICKPLAY_ROLLS: u32 = 3;
 
 impl Default for GameSettings {
     fn default() -> Self {
@@ -109,6 +120,7 @@ impl Default for GameSettings {
             first_seat: None,
             skip_first_draw: None,
             enforced: false,
+            quickplay: false,
         }
     }
 }
@@ -244,6 +256,11 @@ pub struct Player {
     /// Deck name snapshotted at join (survives deck rename/delete).
     #[serde(default)]
     pub deck_name: Option<String>,
+    /// Quickplay rerolls this seat has spent. Lives in room state rather than
+    /// on the client so the cap actually caps: a counter the roller owns is a
+    /// suggestion. Serialized because the button has to say how many are left.
+    #[serde(default)]
+    pub quickplay_rolls: u32,
     /// Out of the game: turns skip them and one remaining player wins.
     #[serde(default)]
     pub conceded: bool,
