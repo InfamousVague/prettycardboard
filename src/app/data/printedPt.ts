@@ -209,6 +209,68 @@ export interface OracleFacts {
   unblockable: boolean;
   /** Colors this card has protection from. */
   protectionFrom: string[];
+  /** The +1/+1 counters this card puts onto creatures when it resolves.
+   * null when it puts none, which is almost every card. */
+  plusCounters: PlusCounters | null;
+}
+
+/** A parsed "put N +1/+1 counters on <someone>" effect. */
+export interface PlusCounters {
+  /** How many counters each affected creature receives. */
+  n: number;
+  /** Who receives them:
+   *  - `self` — "on it" / "on this creature", i.e. the permanent itself, which
+   *    also covers "enters the battlefield with N +1/+1 counters on it";
+   *  - `target` — "on target creature", so the spell's chosen target;
+   *  - `each-yours` — "on each creature you control" (the CASTER's creatures);
+   *  - `each` — "on each creature", everyone's. */
+  scope: 'self' | 'target' | 'each-yours' | 'each';
+}
+
+/** "a"/"an"/"one"/"two"/… or a digit string. Mirrors oracle.rs::word_number,
+ * which is the server's half of the same grammar. */
+const COUNT_WORDS: Record<string, number> = {
+  a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5,
+  six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+};
+
+const PLUS_COUNTER_RE =
+  /(?:put|enters(?: the battlefield)? with)\s+(a|an|one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+\+1\/\+1\s+counters?\s+on\s+([^.;]+)/;
+
+/**
+ * "Put a +1/+1 counter on each creature you control." → { n: 1, scope }.
+ *
+ * Deliberately narrow. The recipient phrase has to be one of four shapes we can
+ * resolve to a concrete set of cards; anything else (an opponent's board, "each
+ * creature that attacked", a divided-among-any-number effect) returns null and
+ * simply never offers, because a prompt that puts counters on the wrong
+ * creatures is worse than no prompt. `text` must already have reminder text
+ * stripped — "(This creature gets +1/+1…)" would otherwise match.
+ */
+function parsePlusCounters(clean: string): PlusCounters | null {
+  const m = clean.match(PLUS_COUNTER_RE);
+  if (!m) return null;
+  const raw = m[1] ?? '';
+  const n = COUNT_WORDS[raw] ?? Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const who = (m[2] ?? '').trim();
+  // The two "each" shapes are anchored at BOTH ends on purpose. Left
+  // unanchored, "on each creature target opponent controls" matched the plain
+  // `each` arm and would have put the counters on the reader's OWN creatures,
+  // and "each creature you control with flying" would have hit every creature
+  // instead of the fliers. A trailing qualifier we have not accounted for means
+  // we do not understand the effect, so we decline to offer.
+  // ("each other creature you control" is fine: the "other" only excludes the
+  // source, and a source that is itself a creature is covered by re-filtering
+  // against the live board at apply time.)
+  if (/^each (?:other )?creature you control$/.test(who)) return { n, scope: 'each-yours' };
+  if (/^each (?:other )?creature(?: on the battlefield)?$/.test(who)) return { n, scope: 'each' };
+  // `target` needs no such anchor: whatever the qualifier, the recipient is the
+  // single permanent the player already aimed at, and the caller checks that it
+  // is on their own board before offering.
+  if (/^target creature\b/.test(who)) return { n, scope: 'target' };
+  if (/^(?:it|this creature|itself)\b/.test(who)) return { n, scope: 'self' };
+  return null;
 }
 
 const factsMap = new Map<string, OracleFacts>();
@@ -291,6 +353,7 @@ function absorb(id: string, card: ScryPT): void {
     costCuts,
     unblockable,
     protectionFrom,
+    plusCounters: parsePlusCounters(clean),
   });
   cache.set(id, power != null && toughness != null ? { power, toughness } : null);
 }

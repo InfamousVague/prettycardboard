@@ -97,6 +97,11 @@ export interface Preferences {
   alwaysStopStack: boolean;
   /** Always stop on opponents' end steps even with nothing castable. */
   alwaysStopEndStep: boolean;
+  /** Skip the "add the +1/+1 counters?" prompt and just add them. Off by
+   * default: the prompt asks every time until you tell it not to, and this is
+   * what its "always apply" answer sets. Only ever touches cards on your own
+   * board, so turning it on cannot move an opponent's counters. */
+  autoCounters: boolean;
   /** Developer / work-in-progress features (off by default). Gates everything
    * that isn't production-ready — currently the whole Cyberpunk TCG game. */
   enableWip: boolean;
@@ -158,6 +163,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   autoPass: true,
   alwaysStopStack: false,
   alwaysStopEndStep: false,
+  autoCounters: false,
   enableWip: false,
   keybinds: {},
 };

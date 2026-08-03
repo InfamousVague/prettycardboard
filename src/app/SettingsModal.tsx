@@ -401,6 +401,14 @@ export function SettingsModal({
             checked={preferences.alwaysStopEndStep ?? false}
             onCheckedChange={(checked) => onChange({ alwaysStopEndStep: checked })}
           />
+          {/* Not enforced-only, unlike its three neighbours: the counter prompt
+              runs at freeform tables too. It lives here because this is where a
+              player looks for "stop asking me things". */}
+          <Switch
+            label={t('setAutoCounters')}
+            checked={preferences.autoCounters ?? false}
+            onCheckedChange={(checked) => onChange({ autoCounters: checked })}
+          />
         </div>
       </Fieldset>
 
