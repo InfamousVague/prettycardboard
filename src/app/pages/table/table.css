@@ -6794,6 +6794,85 @@
   zoom: calc(var(--pc-grid-zoom, 0.5) * var(--pc-grid-user-zoom, 1));
 }
 
+/* ---- the cell's name plate ----------------------------------------------
+   Deliberately OUTSIDE .playerGridPreview, which is the zoomed box: a header
+   inside it paints at 0.5 (four seats) or 0.25 (six), which is what made the
+   grid unreadable - you could see six boards and not tell whose was whose or
+   what anyone was on. Out here it is full size whatever the seat count. */
+.playerGridHead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  min-inline-size: 0;
+  padding: var(--glacier-space-1) var(--glacier-space-2);
+  background: color-mix(in oklch, var(--glacier-bg) 72%, transparent);
+  backdrop-filter: blur(var(--glacier-blur-sm));
+  border-block-end: var(--glacier-hairline) solid var(--glacier-border-subtle);
+}
+
+.playerGridName {
+  min-inline-size: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--glacier-font-size-sm);
+  font-weight: var(--glacier-font-weight-semibold);
+}
+
+/* "You" and the turn flag are the two things worth a chip. Life is pushed to
+   the far end so every plate reads name-on-the-left, life-on-the-right and the
+   numbers line up down the column however long the names are. */
+.playerGridYou,
+.playerGridTurn {
+  flex: none;
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--glacier-radius-full);
+  font-size: var(--glacier-font-size-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.playerGridYou {
+  background: color-mix(in oklch, var(--glacier-accent-solid) 22%, transparent);
+  color: var(--glacier-accent-text);
+}
+
+.playerGridTurn {
+  background: var(--glacier-accent-solid);
+  color: var(--glacier-accent-contrast);
+}
+
+.playerGridLife {
+  flex: none;
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: var(--glacier-font-size-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--glacier-font-weight-semibold);
+}
+
+/* Someone in burn range is the single most important thing on this screen.
+   --glacier-danger-solid is what the rest of the table already uses for it. */
+.playerGridLife[data-low] {
+  color: var(--glacier-danger-solid);
+}
+
+/* My own cell's plate wears the accent so "which one is mine" survives a
+   glance at six boards. */
+.playerGridCell[data-mine] .playerGridHead {
+  background: color-mix(in oklch, var(--glacier-accent-solid) 16%, var(--glacier-bg) 74%);
+}
+
+/* Board tools belong to the mat you play from. Every cell but mine is a board
+   I can read and respond on but never manage, so nothing tool-shaped is drawn
+   over someone else's mat. */
+.playerGridCell:not([data-mine]) .boardTools {
+  display: none;
+}
+
 /* The cell's board stays interactive so cards can be hovered and clicked. */
 .playerGridCell .seatFrame {
   flex: 1;
@@ -7078,6 +7157,36 @@
    Phones (data-mobile) drop the strip once the match starts and keep the
    0.5rem perch above. */
 .table:not([data-mobile]) .mobileHistory {
+  /* One line for all three top-anchored layers. The life card and the control
+     rail sit a gutter inside the mat, and they cannot come up to meet this -
+     .myField is overflow:hidden, so a negative offset would clip the rail - so
+     the timeline comes down to them instead. */
+  top: calc(
+    var(--pc-strip-clear) + var(--pc-mat-edge-block) + var(--pc-mat-gutter) + env(safe-area-inset-top, 0px)
+  );
+}
+
+/* ---- grid overview: the history strip gets a band of its own --------------
+   The offset above puts the strip a mat-gutter inside MY playmat, which is
+   right when one board owns the stage. In the grid there is no such board: the
+   boards start at the top of .tableMain, so the same offset dropped the strip
+   straight onto the first row of cells and sat over two players' battlefields.
+   The grid reserves a band and the history rides it.
+
+   The band is declared HERE rather than reusing --pc-top-h: that one is set on
+   .table[data-mobile] only, so on the desktop-shaped table this grid runs on
+   it resolves to nothing and the padding would have been silently dropped. One
+   custom property feeds both rules so the reserve and the offset cannot
+   drift. */
+.table[data-grid] {
+  --pc-grid-band: 2.75rem;
+}
+
+.table[data-grid] .playerGrid {
+  padding-block-start: var(--pc-grid-band);
+}
+
+.table[data-grid]:not([data-mobile]) .mobileHistory {
   top: calc(var(--pc-strip-clear) + env(safe-area-inset-top, 0px));
 }
 

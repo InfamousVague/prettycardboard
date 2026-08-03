@@ -1713,6 +1713,8 @@ export const messages = {
     fr: '{n} marqueurs +1/+1',
     ar: '{n} عدادات +1/+1',
   },
+  gridYou: { en: 'You', es: 'Tú', fr: 'Vous', ar: 'أنت' },
+  gridTurn: { en: 'Turn', es: 'Turno', fr: 'Tour', ar: 'دور' },
   gpCountersAlways: { en: 'Always', es: 'Siempre', fr: 'Toujours', ar: 'دائمًا' },
   gpCountersAlwaysHint: {
     en: 'Add them from now on without asking',

@@ -715,9 +715,14 @@ export function TablePage() {
 
   return (
     <div
+      ref={tableRef}
       className="table"
       data-replay={replay.active || undefined}
       data-mobile={mobile || undefined}
+      /* Grid overview is on. Chrome that normally rides MY mat (the history
+         strip) has no single mat to ride here, so it moves into a band the
+         grid reserves for it rather than landing on the top row of boards. */
+      data-grid={gridActive || undefined}
       /* Top strip docked into the desktop title bar: everything anchored below
          the strip (rail, dock, cues) rises to the top edge - see
          --pc-strip-clear in table.css. */
@@ -955,6 +960,27 @@ export function TablePage() {
                   data-mine={player.userId === identity?.userId || undefined}
                   data-turn={room.activeSeat === player.seat || undefined}
                 >
+                  {/* The name plate the cell layout has always reserved room
+                      for. Without it the only identity a cell carried was
+                      SeatFrame's own header, which is INSIDE the zoomed
+                      preview - so at four seats it painted at half size and at
+                      six at quarter, and my own cell had none at all because
+                      MyBoard has no such header. This one lives outside
+                      .playerGridPreview, so it stays full size at every seat
+                      count and every board is labelled the same way. */}
+                  <div className="playerGridHead">
+                    <Avatar name={player.username} size="sm" />
+                    <span className="playerGridName">{player.username}</span>
+                    {player.userId === identity?.userId && (
+                      <span className="playerGridYou">{t('gridYou')}</span>
+                    )}
+                    {room.activeSeat === player.seat && (
+                      <span className="playerGridTurn">{t('gridTurn')}</span>
+                    )}
+                    <span className="playerGridLife" data-low={player.life <= 5 || undefined}>
+                      <Heart size={12} aria-hidden /> {player.life}
+                    </span>
+                  </div>
                   {/* My own cell is the live board, not a picture of one: it
                       renders MyBoard so cards can be dragged and played right
                       here. SeatFrame is a read-only mat renderer with no move
