@@ -1309,6 +1309,15 @@ interface AnnouncementItem {
 interface AnnouncementsProps extends Omit<ComponentProps<'section'>, 'children'> {
     /** Updates to rotate through. At least one item is required. */
     items: readonly AnnouncementItem[];
+    /**
+     * Fixed content pinned at the leading edge, before the viewport.
+     *
+     * Unlike an item's own `label`, this belongs to the STRIP rather than to any
+     * one update, so it does not travel with them - it names what the strip is
+     * ("New", "Status", "Live") and stays put while the news moves past it. A
+     * Pill or Badge is the usual thing to put here.
+     */
+    tag?: ReactNode;
     /** Semantic color family for the strip. */
     tone?: AnnouncementTone;
     /**
@@ -1349,7 +1358,7 @@ interface AnnouncementsProps extends Omit<ComponentProps<'section'>, 'children'>
  * persistent pause control lets people hold an update still to read - or to
  * click, when the updates open something.
  */
-declare function Announcements({ items, tone, motion, index, defaultIndex, onIndexChange, onItemSelect, autoPlay, interval, secondsPerItem, className, style, 'aria-label': ariaLabel, onMouseEnter, onMouseLeave, onFocusCapture, onBlurCapture, ...rest }: AnnouncementsProps): react.JSX.Element | null;
+declare function Announcements({ items, tag, tone, motion, index, defaultIndex, onIndexChange, onItemSelect, autoPlay, interval, secondsPerItem, className, style, 'aria-label': ariaLabel, onMouseEnter, onMouseLeave, onFocusCapture, onBlurCapture, ...rest }: AnnouncementsProps): react.JSX.Element | null;
 
 interface EmptyStateProps extends Omit<ComponentProps<'div'>, 'title'> {
     /** Glyph rendered inside the leading disc. Decorative. */

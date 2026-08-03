@@ -1,14 +1,17 @@
-/* The home page's headline strip: a tag, then a seamless marquee of the last
-   few releases' headlines. Sized to read as a status bar, not as content. */
+/* What is left of the home page's headline strip after the marquee moved into
+   the kit (Glacier's Announcements, motion="marquee").
+ *
+ * Everything that used to be here - the two-run track, the travel keyframes,
+ * the RTL variant, the edge mask, the pause-on-hover rule, the inert clone and
+ * the reduced-motion fallback - is the kit's now, and is spec-tested there.
+ * Keeping a copy would have meant maintaining the same marquee twice and
+ * watching one of them fall behind.
+ *
+ * Three rules survive, and each is about THIS strip rather than about tickers. */
 
+/* The strip sits on the page's sunken surface rather than the tone's soft
+   wash: it is app chrome above the game menu, not a notice about something. */
 .newsTicker {
-  display: flex;
-  align-items: center;
-  gap: var(--glacier-space-3);
-  min-inline-size: 0;
-  padding: var(--glacier-space-2) var(--glacier-space-3);
-  border: var(--glacier-hairline) solid var(--glacier-border-subtle);
-  border-radius: var(--glacier-radius-lg);
   background: var(--glacier-surface-sunken);
 }
 
@@ -16,126 +19,10 @@
    colour and type size all come from the system. Only the two things a Pill has
    no opinion about are set here. Doubled class to clear the kit's own 0-1-0
    rules, which is the house pattern for overriding a hashed dist. */
-.tickerTag {
-  flex: none;
-}
-
 .tickerTag.tickerTag {
   font-weight: var(--glacier-font-weight-semibold);
   letter-spacing: 0.06em;
   text-transform: uppercase;
-}
-
-/* The window the marquee travels through. min-inline-size:0 is load-bearing:
-   without it a flex item sizes to its content, and the track is two full runs
-   wide, so the ticker would push the page into a horizontal scrollbar instead
-   of clipping. */
-.tickerViewport {
-  flex: 1 1 auto;
-  min-inline-size: 0;
-  overflow: hidden;
-  /* Fade both ends so headlines enter and leave rather than being chopped. */
-  mask-image: linear-gradient(90deg, transparent, black 3rem, black calc(100% - 3rem), transparent);
-}
-
-.tickerTrack {
-  display: flex;
-  inline-size: max-content;
-  animation: tickerScroll 42s linear infinite;
-}
-
-/* Pausing on hover is the whole reason a headline is readable at all: the
-   strip moves at a browsing pace, not a reading one. */
-.newsTicker:hover .tickerTrack,
-.newsTicker:focus-within .tickerTrack {
-  animation-play-state: paused;
-}
-
-.tickerRun {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--glacier-space-6);
-  padding-inline-end: var(--glacier-space-6);
-}
-
-/* -50% is exactly one run: the track is two identical runs, so at the moment
-   the animation resets, run two is sitting where run one began. Any other
-   number would show a seam. */
-@keyframes tickerScroll {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-/* RTL reads the other way, so the strip has to travel the other way too - the
-   shared keyframe would send headlines off the side they enter from. */
-[dir='rtl'] .tickerTrack {
-  animation-name: tickerScrollRtl;
-}
-
-@keyframes tickerScrollRtl {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(50%);
-  }
-}
-
-/* Same width as the run it duplicates, which is what makes -50% exact. */
-.tickerClone {
-  display: flex;
-  flex: none;
-}
-
-.tickerItem {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--glacier-space-2);
-  white-space: nowrap;
-}
-
-/* A headline opens its release. A bare button - it carries the strip's own
-   type and colour, and only the pointer, the hover lift and the focus ring
-   say it is live. */
-.tickerButton {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--glacier-space-2);
-  border: 0;
-  border-radius: var(--glacier-radius-sm);
-  padding: 0;
-  background: none;
-  font: inherit;
-  color: inherit;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.tickerButton:hover .tickerText {
-  color: var(--glacier-text);
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-}
-
-.tickerButton:focus-visible {
-  outline: 2px solid var(--glacier-focus-ring);
-  outline-offset: 3px;
-}
-
-.tickerVersion {
-  font-size: var(--glacier-font-size-xs);
-  font-variant-numeric: tabular-nums;
-  color: var(--glacier-accent-text);
-}
-
-.tickerText {
-  font-size: var(--glacier-font-size-sm);
-  color: var(--glacier-text-subtle);
 }
 
 /* The release notes a headline opens: the What's New body, at the width of a
@@ -144,22 +31,4 @@
   display: flex;
   flex-direction: column;
   gap: var(--glacier-space-4);
-}
-
-/* A strip that never stops moving is exactly what this setting is for. It
-   still says everything - it just says it all at once, statically, and lets
-   the row scroll if it must. */
-@media (prefers-reduced-motion: reduce) {
-  .tickerTrack {
-    animation: none;
-  }
-  .tickerViewport {
-    overflow-x: auto;
-    mask-image: none;
-  }
-  /* One run is the whole content; the duplicate exists only to hide the loop's
-     seam, and with no loop it is just the same news printed twice. */
-  .tickerClone {
-    display: none;
-  }
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Modal, Pill } from '@glacier/react';
+import { Announcements, Button, Modal, Pill } from '@glacier/react';
 import { CHANGELOG, type ChangelogRelease } from '../data/changelog.ts';
 import { useT } from '../i18n.ts';
 import { WnRelease } from './WhatsNew.tsx';
@@ -22,6 +22,14 @@ import './newsTicker.css';
  *
  * A headline is one line about a release, which is exactly as much as a strip
  * this size can carry - so clicking one opens that release's notes in full.
+ *
+ * THE STRIP ITSELF IS THE KIT'S. This used to be a hand-rolled marquee here:
+ * two runs, an inert clone, a travel keyframe, a pause-on-hover rule and a
+ * reduced-motion fallback. Glacier's Announcements grew the same marquee, so
+ * the local copy was a second implementation of one idea - and the one that
+ * would quietly fall behind, because only the kit's is spec-tested. What is
+ * left in this file is the part that is actually PrettyCardboard's: which
+ * releases count as news, and what a headline opens.
  */
 
 /** How many releases back to carry. Older than this is history, not news. */
@@ -54,53 +62,33 @@ export function NewsTicker() {
 
   if (headlines.length === 0) return null;
 
-  const run = (
-    <div className="tickerRun">
-      {headlines.map((headline) => (
-        <span className="tickerItem" key={headline.version}>
-          <button
-            type="button"
-            className="tickerButton"
-            onClick={() => setOpen(headline.release)}
-            aria-label={`${t('tickerOpen')}: ${headline.version} — ${headline.text}`}
-          >
-            <span className="tickerVersion">{headline.version}</span>
-            <span className="tickerText">{headline.text}</span>
-          </button>
-        </span>
-      ))}
-    </div>
-  );
-
   return (
     <>
-      <div className="newsTicker" role="region" aria-label={t('tickerLabel')}>
-        {/* A kit Pill, not a hand-padded span. The span version put a 12px
-            Text inside a box that inherited the app's 16px font-size, so the
-            label baseline-aligned to the taller strut and sat 2.7px below the
-            chip's centre. Pill is inline-flex, centred, line-height:1, and
-            carries its own font-size, so there is no strut to fight. */}
-        <Pill size="sm" tone="accent" variant="soft" className="tickerTag">
-          {t('tickerTag')}
-        </Pill>
-        {/* The marquee is TWO identical runs side by side, and the animation
-            travels exactly one run's width before resetting. That is what makes
-            the loop seamless: at the moment it snaps back, run two is sitting
-            precisely where run one started, so there is no gap to see and no
-            measurement to keep in sync with the content. */}
-        <div className="tickerViewport">
-          <div className="tickerTrack">
-            {run}
-            {/* Run two is scenery. `inert` keeps its copy of every headline out
-                of the accessibility tree AND out of the tab order, so the news
-                is announced once and Tab visits each headline once - while run
-                one above stays a real, focusable, clickable copy. */}
-            <div className="tickerClone" aria-hidden inert>
-              {run}
-            </div>
-          </div>
-        </div>
-      </div>
+      <Announcements
+        className="newsTicker"
+        motion="marquee"
+        tone="neutral"
+        aria-label={t('tickerLabel')}
+        // The strip's own name, pinned outside the travelling area - it says
+        // what the strip IS rather than anything about one release, so it must
+        // not scroll away with the first headline. That is the `tag` slot.
+        tag={
+          <Pill size="sm" tone="accent" variant="soft" className="tickerTag">
+            {t('tickerTag')}
+          </Pill>
+        }
+        items={headlines.map((headline) => ({
+          id: headline.version,
+          label: headline.version,
+          content: headline.text,
+        }))}
+        // Supplying this is what makes each headline activatable at all: the
+        // kit renders read-only text without it.
+        onItemSelect={(item) => {
+          const found = headlines.find((headline) => headline.version === item.id);
+          if (found) setOpen(found.release);
+        }}
+      />
       {/* Small on purpose: this is one release, opened from one headline. The
           full history is a click further on, through the same modal the app
           already opens after an update. */}
