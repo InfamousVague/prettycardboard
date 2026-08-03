@@ -581,6 +581,48 @@ export const messages = {
   },
 
   // --- 0.9.0 ---
+  clHeadline0110: {
+    en: 'Sit down with nothing and play anyway.',
+    es: 'Siéntate sin nada y juega igual.',
+    fr: 'Asseyez-vous sans rien et jouez quand même.',
+    ar: 'اجلس بلا شيء والعب على أي حال.',
+  },
+  clQuickplay: {
+    en: 'Quickplay: the table deals the decks',
+    es: 'Partida rápida: la mesa reparte los mazos',
+    fr: 'Partie rapide : la table distribue les decks',
+    ar: 'اللعب السريع: الطاولة توزّع المجموعات',
+  },
+  clQuickplayDesc: {
+    en: 'Switch Quickplay on in the lobby and every seat is dealt a bundled precon the moment it is taken, with three rerolls each before the game starts. Nobody needs a collection, and turning it on levels the whole table — including the host.',
+    es: 'Activa Partida rápida en la sala y cada asiento recibe un preconstruido en cuanto se ocupa, con tres tiradas para cambiarlo antes de empezar. Nadie necesita colección, y activarla iguala toda la mesa, anfitrión incluido.',
+    fr: 'Activez Partie rapide dans le salon et chaque siège reçoit un précon dès qu’il est pris, avec trois relances avant le début. Personne n’a besoin d’une collection, et l’activer met toute la table à égalité, hôte compris.',
+    ar: 'فعّل اللعب السريع في الردهة فيحصل كل مقعد على مجموعة جاهزة فور شغله، مع ثلاث إعادات رمي قبل البدء. لا أحد يحتاج إلى مجموعة بطاقات، وتفعيله يساوي الطاولة كلها، بمن فيهم المضيف.',
+  },
+  clHomeNews: {
+    en: 'Updates and headlines on the home page',
+    es: 'Actualizaciones y titulares en la página de inicio',
+    fr: 'Mises à jour et titres sur la page d’accueil',
+    ar: 'التحديثات والعناوين في الصفحة الرئيسية',
+  },
+  clHomeNewsDesc: {
+    en: 'A ready update now says so on the home page instead of only in a corner card you can dismiss forever, and a ticker scrolls what shipped in recent releases — the changelog was always written, but only ever visible in a modal that opens once.',
+    es: 'Una actualización lista ahora se anuncia en la página de inicio, no solo en una tarjeta que puedes descartar para siempre, y un teletipo muestra lo que trajeron las versiones recientes: el registro de cambios siempre estuvo escrito, pero solo se veía en una ventana que se abre una vez.',
+    fr: 'Une mise à jour prête l’annonce désormais sur la page d’accueil, et plus seulement dans une carte de coin que l’on peut écarter définitivement ; un bandeau fait défiler le contenu des dernières versions — le journal des modifications était toujours écrit, mais visible seulement dans une fenêtre qui ne s’ouvre qu’une fois.',
+    ar: 'التحديث الجاهز يُعلن الآن في الصفحة الرئيسية لا في بطاقة ركنية يمكن صرفها إلى الأبد، وشريط متحرّك يعرض ما جاءت به الإصدارات الأخيرة — كان سجل التغييرات مكتوبًا دائمًا لكنه لم يظهر إلا في نافذة تُفتح مرة واحدة.',
+  },
+  clProfileHero: {
+    en: 'A profile plate you can read',
+    es: 'Una placa de perfil legible',
+    fr: 'Une plaque de profil lisible',
+    ar: 'لوحة ملف يمكن قراءتها',
+  },
+  clProfileHeroDesc: {
+    en: 'Your name and rank washed out over a bright showcase deck. The art is dimmed, the tier tint sits under the scrim instead of over it, and the cover holds all the way across the identity side.',
+    es: 'Tu nombre y rango se perdían sobre un mazo destacado luminoso. Ahora la ilustración se atenúa, el tinte de rango va bajo el velo en vez de encima, y la cobertura llega hasta el final del lado de identidad.',
+    fr: 'Votre nom et votre rang se noyaient sur un deck vitrine lumineux. L’illustration est assombrie, la teinte de palier passe sous le voile plutôt que dessus, et la couverture tient sur tout le côté identité.',
+    ar: 'كان اسمك ورتبتك يذوبان فوق مجموعة عرض ساطعة. الآن يُعتَّم الرسم، وتقع صبغة الرتبة تحت الحجاب لا فوقه، ويمتد الغطاء عبر جانب الهوية كله.',
+  },
   clHeadline0100: {
     en: 'Counters that add themselves, and a table that fits the phone.',
     es: 'Contadores que se ponen solos y una mesa que cabe en el móvil.',

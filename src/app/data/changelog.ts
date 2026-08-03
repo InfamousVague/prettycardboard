@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import {
   BarChart2,
   Bell,
+  CircleUserRound,
   Crown,
   Dices,
   Download,
@@ -15,6 +16,7 @@ import {
   PanelRightOpen,
   RotateCw,
   ScrollText,
+  Shuffle,
   Smartphone,
   Sparkles,
   Swords,
@@ -73,6 +75,38 @@ export interface ChangelogRelease {
 /** Newest release first. `releasesSince` sorts anyway, so a slip here is not
  *  load-bearing, but keep the literal in order for whoever reads it. */
 export const CHANGELOG: ChangelogRelease[] = [
+  {
+    version: '0.11.0',
+    date: '2026-08-03',
+    headline: 'clHeadline0110',
+    entries: [
+      {
+        id: 'quickplay',
+        icon: Shuffle,
+        title: 'clQuickplay',
+        desc: 'clQuickplayDesc',
+        kind: 'new',
+        category: 'clCatTable',
+        featured: true,
+      },
+      {
+        id: 'home-news',
+        icon: Bell,
+        title: 'clHomeNews',
+        desc: 'clHomeNewsDesc',
+        kind: 'new',
+        category: 'clCatApp',
+      },
+      {
+        id: 'profile-hero',
+        icon: CircleUserRound,
+        title: 'clProfileHero',
+        desc: 'clProfileHeroDesc',
+        kind: 'fixed',
+        category: 'clCatLayout',
+      },
+    ],
+  },
   {
     version: '0.10.0',
     date: '2026-08-02',
