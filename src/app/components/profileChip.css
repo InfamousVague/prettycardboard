@@ -1,0 +1,95 @@
+/* The account chip in the title bar, and the profile it previews on hover. */
+
+.profileChipBtn {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  border-radius: var(--glacier-radius-full);
+  padding: 0;
+  background: none;
+  /* The title bar is a drag region on desktop; the chip is a control in it. */
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+}
+
+.profileChipBtn:focus-visible {
+  outline: 2px solid var(--glacier-focus-ring);
+  outline-offset: 2px;
+}
+
+.profileChipBtn:hover {
+  opacity: 0.85;
+}
+
+/* The kit's popover panel wraps this; the padding lives here so the card can
+   run its head band to the panel's own edges if it ever needs to. */
+.profileChipPanel {
+  padding: var(--glacier-space-3);
+}
+
+.profileChipCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-3);
+  inline-size: 15rem;
+}
+
+.profileChipHead {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  min-inline-size: 0;
+}
+
+.profileChipWho {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--glacier-space-1);
+  min-inline-size: 0;
+}
+
+/* A long username truncates rather than widening the panel or wrapping into
+   the badge below it. */
+.profileChipWho > :first-child {
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profileChipRank {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  padding-block: var(--glacier-space-2);
+  border-block: var(--glacier-hairline) solid var(--glacier-border-subtle);
+}
+
+.profileChipRankText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-inline-size: 0;
+}
+
+/* Three even columns: the record reads as a row of figures, not a list. */
+.profileChipStats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--glacier-space-2);
+  margin: 0;
+}
+
+.profileChipStats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  align-items: center;
+  text-align: center;
+}
+
+.profileChipStats dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
