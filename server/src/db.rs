@@ -148,6 +148,10 @@ CREATE TABLE IF NOT EXISTS match_players(
 );
 CREATE INDEX IF NOT EXISTS idx_mp_user ON match_players(user_id);
 CREATE INDEX IF NOT EXISTS idx_mp_deck ON match_players(deck_id);
+CREATE TABLE IF NOT EXISTS app_meta(
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS endorsements(
     match_id TEXT NOT NULL,
     from_id TEXT NOT NULL,
@@ -220,6 +224,9 @@ pub fn open(path: &std::path::Path) -> Connection {
     let _ = conn.execute("ALTER TABLE match_players ADD COLUMN cards_played INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE match_players ADD COLUMN cards_drawn INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE match_players ADD COLUMN peak_battlefield INTEGER NOT NULL DEFAULT 0", []);
+    // After the column migrations above, because it reads `rating` and writes
+    // it back for every account.
+    rating_backfill(&conn);
     conn
 }
 
@@ -385,14 +392,32 @@ fn apply_rating(conn: &Connection, result: &crate::rooms::MatchResult) {
     if !result.ranked {
         return;
     }
-    let humans: Vec<&crate::rooms::MatchResultPlayer> =
-        result.players.iter().filter(|p| !p.is_bot).collect();
+    let humans: Vec<String> = result
+        .players
+        .iter()
+        .filter(|p| !p.is_bot)
+        .map(|p| p.user_id.clone())
+        .collect();
+    score_match(conn, &humans, &result.winner_user_id);
+}
+
+/// The Elo itself, over a list of HUMAN user ids and the winner among them.
+///
+/// Split out from `apply_rating` so the historical backfill can replay old
+/// matches through the very same arithmetic. Two implementations of one ladder
+/// is how a backfill ends up disagreeing with live play about what a game is
+/// worth - and the disagreement would only surface as a rating that drifts
+/// after the migration, which is the hardest kind to notice.
+///
+/// Callers own the gates. `apply_rating` checks `result.ranked`; the backfill
+/// has no such flag to check, because the matches it reads predate it.
+fn score_match(conn: &Connection, humans: &[String], winner_user_id: &str) {
     if humans.len() < 2 {
         return;
     }
     let before: Vec<(String, f64)> = humans
         .iter()
-        .map(|p| (p.user_id.clone(), user_rating(conn, &p.user_id) as f64))
+        .map(|id| (id.clone(), user_rating(conn, id) as f64))
         .collect();
     let n = before.len() as f64;
     for (id, mine) in &before {
@@ -402,9 +427,9 @@ fn apply_rating(conn: &Connection, result: &crate::rooms::MatchResult) {
                 continue;
             }
             let expected = 1.0 / (1.0 + 10f64.powf((theirs - mine) / 400.0));
-            let actual = if *id == result.winner_user_id {
+            let actual = if id == winner_user_id {
                 1.0
-            } else if *other_id == result.winner_user_id {
+            } else if other_id == winner_user_id {
                 0.0
             } else {
                 0.5
@@ -417,6 +442,81 @@ fn apply_rating(conn: &Connection, result: &crate::rooms::MatchResult) {
             params![next.max(RATING_FLOOR), id],
         );
     }
+}
+
+/// Rebuild every rating from the match history, once.
+///
+/// The ladder shipped with every existing account seeded at RATING_SEED and
+/// only moving from there on new games, so a server with months of history
+/// opened its leaderboard on a field of identical 1320s - eight players tied
+/// at second place, sorted by nothing. The record to rank them by was sitting
+/// in `matches` the whole time; it had simply never been read.
+///
+/// Replays every recorded match in the order it was played, through
+/// `score_match` - the same arithmetic live results use, so a backfilled rating
+/// and an earned one mean the same thing. Chronological order is the point: Elo
+/// is path-dependent, and scoring a player's first game against their opponent
+/// as they are TODAY would credit or punish them for a strength that opponent
+/// did not have at the time.
+///
+/// Matches with fewer than two human seats are skipped, which is not a policy
+/// choice - a seat with no human opponent has nothing to be rated against.
+///
+/// Runs once. `rating_backfill` in `app_meta` records the revision that ran, so
+/// bumping BACKFILL_REV re-runs it against a reset field if the arithmetic ever
+/// changes; without the marker every restart would replay the whole history on
+/// top of the ratings the last replay produced.
+const BACKFILL_REV: &str = "1";
+
+pub fn rating_backfill(conn: &Connection) {
+    let done: Option<String> = conn
+        .query_row("SELECT value FROM app_meta WHERE key = 'rating_backfill'", [], |r| r.get(0))
+        .optional()
+        .ok()
+        .flatten();
+    if done.as_deref() == Some(BACKFILL_REV) {
+        return;
+    }
+
+    // Back to the start line first. A re-run has to replay onto the seed, not
+    // onto whatever the previous revision left behind, or the second pass reads
+    // the first pass's output as history.
+    let _ = conn.execute("UPDATE users SET rating = ?1", params![RATING_SEED]);
+
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT m.id, m.winner_user_id FROM matches m ORDER BY m.ended_at ASC, m.id ASC",
+    ) else {
+        return;
+    };
+    let Ok(rows) = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))) else {
+        return;
+    };
+    let matches: Vec<(String, String)> = rows.filter_map(Result::ok).collect();
+
+    let mut replayed = 0usize;
+    for (match_id, winner) in &matches {
+        let Ok(mut seats) = conn.prepare(
+            "SELECT user_id FROM match_players WHERE match_id = ? AND is_bot = 0",
+        ) else {
+            continue;
+        };
+        let Ok(rows) = seats.query_map(params![match_id], |r| r.get::<_, String>(0)) else {
+            continue;
+        };
+        let humans: Vec<String> = rows.filter_map(Result::ok).collect();
+        if humans.len() < 2 {
+            continue;
+        }
+        score_match(conn, &humans, winner);
+        replayed += 1;
+    }
+
+    let _ = conn.execute(
+        "INSERT INTO app_meta(key, value) VALUES('rating_backfill', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![BACKFILL_REV],
+    );
+    eprintln!("[rating] backfilled from {replayed} of {} recorded matches", matches.len());
 }
 
 /// Persist a finished match: one matches row plus one match_players row per

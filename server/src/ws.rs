@@ -1932,11 +1932,23 @@ pub fn maybe_finish_match(app: &App, room: &mut Room) {
         .chain(room.players.iter().map(rooms::result_player))
         .collect();
     let duration_ms = if room.started_at_ms > 0 { now - room.started_at_ms } else { 0 };
-    // The substance floor: only real multiplayer games feed all-time stats
-    // and unlock endorse/salt. Instant-concede farms (three turns of nothing,
-    // seconds of play) and bot-only stomps stay decorative.
+    // Every game between people counts. The floor used to also require three
+    // turns and two minutes, which is why so few matches were ever recorded and
+    // why the ladder sat with most of the field on the seed rating: a short
+    // game is still a game, and a table that ends in four minutes is not a
+    // farm, it is Standard.
+    //
+    // The two-human rule is NOT a policy that survived the cut - it is the only
+    // thing the Elo can even be computed over. A seat with no human opponent
+    // has nobody to be rated against, which is also why bot practice cannot
+    // move the ladder and never could.
+    //
+    // A pair of players CAN now farm each other with instant concedes. That is
+    // deliberate and known: the same two accounts trading wins converge back
+    // toward where they started, because Elo pays less for a win you were
+    // expected to get, so the exploit costs more effort than it returns.
     let humans = players.iter().filter(|p| !p.is_bot).count();
-    let ranked = humans >= 2 && room.turn_number >= 3 && (room.started_at_ms == 0 || duration_ms >= 120_000);
+    let ranked = humans >= 2;
     let result = rooms::MatchResult {
         match_id: crate::hex_id(8),
         winner_user_id: winner.user_id.clone(),
