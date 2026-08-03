@@ -909,6 +909,19 @@ stance as the other intents.
   prompts. Freeform rooms and solo tables advance exactly as before. Bots
   pass open windows within a tick and never draw rejections.
 
+### The hand fan in a grid cell (2026-08-02)
+
+The bottom strip lays the zone piles and the hand fan out side by side, which
+fits the wide staged view. A grid cell is roughly half that width and twice
+its height, so the piles took ~360px of ~800 and the fan got what was left -
+a seven-card hand crushed into the bottom-right corner.
+
+`.playerGridCell .myStrip` wraps: piles on one line, fan across the full width
+beneath them. The cell has vertical room to spare, and the fan goes from 389px
+to 762px in a 1600x1000 duel (measured, not estimated). It applies to every
+seat count, since a grid cell is always narrower than the stage - at four
+seats the fan measures 779px of a 799px cell.
+
 ### The ladder, and standing on the roster (2026-08-02)
 
 There was a rating column and an Elo update behind it, but nothing that

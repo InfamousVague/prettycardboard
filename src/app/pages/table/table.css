@@ -6912,6 +6912,24 @@
   --pc-grid-zoom: 0.25;
 }
 
+/* The hand fan gets its own row inside a grid cell.
+   A cell is roughly half the stage's width and twice its height, and the
+   bottom strip lays the zone piles and the fan out side by side. In the wide
+   staged view there is room for both; in a cell the piles take ~360px of ~800
+   and the fan is left with what is over - a seven-card hand crushed into the
+   bottom-right corner, which is exactly what it looked like. The cell has
+   vertical room to spare, so the strip wraps: piles on one line, fan across
+   the full width beneath them. Measured in a 1600x1000 duel, the fan goes
+   from 389px to 762px. */
+.playerGridCell .myStrip {
+  flex-wrap: wrap;
+  row-gap: var(--glacier-space-2);
+}
+
+.playerGridCell .myHand {
+  flex-basis: 100%;
+}
+
 .playerGridCell {
   position: relative;
   min-width: 0;
