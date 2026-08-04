@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { Button, IconButton, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
-import { Trash2, Upload } from '@glacier/icons';
+import { Trash2, Upload } from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import { PLAYMATS, playmatBackground, playmatUrl } from '../data/playmats.ts';
 import { CARD_BACKS, cardBackUrl } from '../data/cardBacks.ts';

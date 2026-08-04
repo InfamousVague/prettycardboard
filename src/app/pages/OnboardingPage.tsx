@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { Button, Heading, Input, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
 import { motion } from 'motion/react';
-import { Ticket } from '@glacier/icons';
+import { Ticket } from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useUi } from '../state/uiStore.ts';

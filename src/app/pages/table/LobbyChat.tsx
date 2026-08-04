@@ -9,7 +9,7 @@ import {
   Text,
   TextTone,
 } from '@glacier/react';
-import { Bot, MessageSquare, Send, Sparkles, X } from '@glacier/icons';
+import { Bot, MessageSquare, Send, Sparkles, X } from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import { useApp } from '../../state/appStore.ts';
 import { useGame, type ChatLine } from '../../state/gameStore.ts';

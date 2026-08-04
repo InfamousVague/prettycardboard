@@ -11,7 +11,7 @@ import {
   Skull,
   Sparkles,
   Swords,
-} from '@glacier/icons';
+} from '../../icons/backfilled.tsx';
 import { PlayingCardHand, PlayingCardPack } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';

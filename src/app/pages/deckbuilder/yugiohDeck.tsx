@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ScrollText, Shapes, Shield, Swords } from '@glacier/icons';
+import { ScrollText, Shapes, Shield, Swords } from '../../icons/backfilled.tsx';
 import { PlayingCardDeck } from '../../icons/cards.ts';
 import type { Deck, DeckCard } from '../../net/types.ts';
 import { isExtraDeckCard, yugiohCard, yugiohKind } from '../../data/yugioh.ts';

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Input, Modal, SearchField, Size, Spinner, Text, TextTone } from '@glacier/react';
-import { Plus } from '@glacier/icons';
+import { Plus } from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import * as api from '../../net/api.ts';
 import { COMMON_TOKENS, deckTokens, searchTokens, type TokenCard } from '../../data/tokens.ts';

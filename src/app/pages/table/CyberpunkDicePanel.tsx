@@ -1,5 +1,5 @@
 import { Button, Pill, Size, Text, TextTone, Tooltip } from '@glacier/react';
-import { Dices, Swords, Trophy } from '@glacier/icons';
+import { Dices, Swords, Trophy } from '../../icons/backfilled.tsx';
 import { useGame } from '../../state/gameStore.ts';
 import { useT } from '../../i18n.ts';
 import type { TablePlayer } from '../../net/types.ts';

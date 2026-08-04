@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Button, IconButton } from '@glacier/react';
-import { Repeat, X } from '@glacier/icons';
+import { Repeat, X } from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import { cardImage } from '../data/cards.ts';
 import { isFoil } from '../data/foil.ts';

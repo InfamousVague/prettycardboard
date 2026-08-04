@@ -34,7 +34,7 @@ import {
   Ticket,
   Users,
   Zap,
-} from '@glacier/icons';
+} from '../icons/backfilled.tsx';
 import type { IconProps } from '@glacier/icons';
 import { PlayingCard, PlayingCardPack } from '../icons/cards.ts';
 import { launchBotMatch } from '../data/botMatch.ts';

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import { Button, Size, Text, TextTone } from '@glacier/react';
-import { X } from '@glacier/icons';
+import { X } from '../../icons/backfilled.tsx';
 import { PlayingCardPack } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import { artCrop, cardImage } from '../../data/cards.ts';

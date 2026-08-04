@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Sparkles, X } from '@glacier/icons';
+import { Sparkles, X } from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import type { RoomState } from '../../net/types.ts';
 

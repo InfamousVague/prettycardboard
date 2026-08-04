@@ -21,7 +21,7 @@ import {
   Swords,
   Tornado,
   Zap,
-} from '@glacier/icons';
+} from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';

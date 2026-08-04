@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { IconButton, SearchField, Size, Spinner, Text, TextTone, Tooltip } from '@glacier/react';
-import { Crown, Plus } from '@glacier/icons';
+import { Crown, Plus } from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import { cardImage } from '../../data/cards.ts';
 import { canBeCommander, getCardMeta, searchCards, type ScryCard } from '../../data/scryfall.ts';

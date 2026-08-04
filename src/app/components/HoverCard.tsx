@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { IconButton } from '@glacier/react';
-import { X } from '@glacier/icons';
+import { X } from '../icons/backfilled.tsx';
 import { GameCard } from './GameCard.tsx';
 import { ManaCost, parseCost } from './Mana.tsx';
 import { useCardDetails } from './cardDetails.tsx';

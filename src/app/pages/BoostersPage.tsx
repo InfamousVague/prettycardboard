@@ -13,7 +13,7 @@ import {
   TextTone,
   useLocale,
 } from '@glacier/react';
-import { ArrowLeft, ChevronRight, Sparkles } from '@glacier/icons';
+import { ArrowLeft, ChevronRight, Sparkles } from '../icons/backfilled.tsx';
 import { PlayingCardPack } from '../icons/cards.ts';
 import { APP_LOCALES, useT, type AppLocale } from '../i18n.ts';
 import { cardImage } from '../data/cards.ts';

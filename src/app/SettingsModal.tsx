@@ -16,7 +16,7 @@ import {
   useToast,
   type TabbedModalSection,
 } from '@glacier/react';
-import { Bot, ChevronLeft, CircleUserRound, Globe, Info, Keyboard, LayoutGrid, Paintbrush, Palette, Wrench } from '@glacier/icons';
+import { Bot, ChevronLeft, CircleUserRound, Globe, Info, Keyboard, LayoutGrid, Paintbrush, Palette, Wrench } from './icons/backfilled.tsx';
 import { useMobileLayout } from './hooks/useIsPhone.ts';
 import { accentSteps } from '@glacier/tokens';
 import { ACCENTS, DEFAULT_PREFERENCES, MONO_FONTS, SANS_FONTS, type Preferences } from './preferences.ts';

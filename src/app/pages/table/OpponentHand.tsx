@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMotionValue } from 'motion/react';
 import { Button } from '@glacier/react';
-import { ChevronDown, ChevronUp } from '@glacier/icons';
+import { ChevronDown, ChevronUp } from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { selectCardScale, useTableUi } from './tableUi.ts';

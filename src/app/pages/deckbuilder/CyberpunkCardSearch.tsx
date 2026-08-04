@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { FilterChip, SearchField } from '@glacier/react';
-import { Crown } from '@glacier/icons';
+import { Crown } from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import {
   CYBERPUNK_CARDS,

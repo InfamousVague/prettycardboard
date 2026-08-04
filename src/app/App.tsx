@@ -26,7 +26,7 @@ import { Crown,
   Settings,
   User,
   Users,
-} from '@glacier/icons';
+} from './icons/backfilled.tsx';
 import { PlayingCardPack, PlayingCardStack, PlayingCardSwap } from './icons/cards.ts';
 import {
   applyPanelDock,

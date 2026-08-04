@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button, Row, Switch, Text, Size, TextTone } from '@glacier/react';
-import { CircleUserRound, HardDrive, LogOut } from '@glacier/icons';
+import { CircleUserRound, HardDrive, LogOut } from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { isDesktopApp, isLocalPlay, localServerStart, localServerStop } from '../tauri.ts';

@@ -1,5 +1,5 @@
 import { Heading, Pill, Size, Text, TextTone } from '@glacier/react';
-import { Apple, Monitor, RefreshCw, Terminal, Wifi } from '@glacier/icons';
+import { Apple, Monitor, RefreshCw, Terminal, Wifi } from '../icons/backfilled.tsx';
 import { motion } from 'motion/react';
 import { useT } from '../i18n.ts';
 import { DownloadButton } from '../components/DownloadButton.tsx';

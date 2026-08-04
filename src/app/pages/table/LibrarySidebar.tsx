@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, IconButton, ScrollArea, SearchField, Select, Text, Size, TextTone, Tooltip } from '@glacier/react';
-import { PanelRight, PictureInPicture2, X } from '@glacier/icons';
+import { PanelRight, PictureInPicture2, X } from '../../icons/backfilled.tsx';
 import { PlayingCardHand } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';

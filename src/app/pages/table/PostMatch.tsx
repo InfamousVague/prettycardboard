@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Avatar, Button, IconBackfill, Text, Size, TextTone, Tooltip } from '@glacier/react';
-import { Crown, Download, Grid3X3, LogOut, Play, Skull, ThumbsUp, Timer, Trophy } from '@glacier/icons';
+import { Crown, Download, Grid3X3, LogOut, Play, Skull, ThumbsUp, Timer, Trophy } from '../../icons/backfilled.tsx';
 import { PlayingCard } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import * as api from '../../net/api.ts';

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { Avatar, Button, Text, Size, TextTone } from '@glacier/react';
-import { Crown, Swords } from '@glacier/icons';
+import { Crown, Swords } from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import { cardImage } from '../../data/cards.ts';
 import { GameCard } from '../../components/GameCard.tsx';

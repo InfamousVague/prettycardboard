@@ -11,7 +11,7 @@ import {
   Tooltip,
   useToast,
 } from '@glacier/react';
-import { Check, UserMinus, UserPlus, X } from '@glacier/icons';
+import { Check, UserMinus, UserPlus, X } from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';

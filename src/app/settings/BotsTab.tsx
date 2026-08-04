@@ -10,7 +10,7 @@ import {
   TextTone,
   useToast,
 } from '@glacier/react';
-import { Bot, Eye, Swords, UserRound } from '@glacier/icons';
+import { Bot, Eye, Swords, UserRound } from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import { launchBotMatch, type BotDifficulty, type BotStyle } from '../data/botMatch.ts';
 import { useApp } from '../state/appStore.ts';

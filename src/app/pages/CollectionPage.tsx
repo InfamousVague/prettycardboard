@@ -13,7 +13,7 @@ import {
   TextTone,
   useLocale,
 } from '@glacier/react';
-import { Gem, Sparkles, Star } from '@glacier/icons';
+import { Gem, Sparkles, Star } from '../icons/backfilled.tsx';
 import { PlayingCardPack, PlayingCardStack } from '../icons/cards.ts';
 import { APP_LOCALES, useT, type AppLocale } from '../i18n.ts';
 import { artCrop, cardImage } from '../data/cards.ts';

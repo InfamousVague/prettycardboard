@@ -15,7 +15,7 @@ import {
   ScrollText,
   Settings,
   Skull,
-} from '@glacier/icons';
+} from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { LobbyChat } from './LobbyChat.tsx';

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@glacier/react';
-import { Check, Hourglass, Play, SkipForward } from '@glacier/icons';
+import { Check, Hourglass, Play, SkipForward } from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { usePreference } from '../../hooks/usePreference.ts';

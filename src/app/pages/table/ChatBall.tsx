@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { MessageSquare, X } from '@glacier/icons';
+import { MessageSquare, X } from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import type { ChatLine } from '../../state/gameStore.ts';
 import './chatBall.css';

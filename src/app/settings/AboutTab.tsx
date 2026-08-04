@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Pill, ProgressBar, Row, Text, Size, TextTone } from '@glacier/react';
-import { Download, ExternalLink, RefreshCw, Sparkles } from '@glacier/icons';
+import { Download, ExternalLink, RefreshCw, Sparkles } from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import { canSelfUpdate, currentVersion } from '../updater.ts';
 import { useUpdate } from '../state/updateStore.ts';

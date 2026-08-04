@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Button, Modal, Size, Text, TextTone } from '@glacier/react';
-import { Check, Plus } from '@glacier/icons';
+import { Check, Plus } from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import { resolveCardImage } from '../data/games.ts';
 import { GameCard } from './GameCard.tsx';

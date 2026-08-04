@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { AlertDialog, Button, IconButton, Input, Menu, MenuItem, MenuSub, NumberInput, Popover } from '@glacier/react';
-import { Ban, Crown, Plus, Skull, SlidersHorizontal, Swords, Trash2, Star, Flame, CircleHelp, Eye as EyeIcon, Shield as ShieldIcon } from '@glacier/icons';
+import { Ban, Crown, Plus, Skull, SlidersHorizontal, Swords, Trash2, Star, Flame, CircleHelp, Eye as EyeIcon, Shield as ShieldIcon } from '../../icons/backfilled.tsx';
 import { PlayingCardBlank } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';

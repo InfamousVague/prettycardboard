@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Avatar, Button, Menu, MenuItem, Pill, Text, Size, TextTone, Tooltip } from '@glacier/react';
-import { Bot as BotIcon, Check, Cpu, Crown, Shield, Skull, Zap } from '@glacier/icons';
+import { Bot as BotIcon, Check, Cpu, Crown, Shield, Skull, Zap } from '../../icons/backfilled.tsx';
 import { PlayingCardHand, PlayingCardStack } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Fieldset, IconButton, Kbd, SegmentedControl, Size, Text, TextTone, Tooltip } from '@glacier/react';
-import { RotateCcw, X } from '@glacier/icons';
+import { RotateCcw, X } from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import type { Preferences } from '../preferences.ts';
 import { GAME_LIST, getGame, type GameId } from '../data/games.ts';

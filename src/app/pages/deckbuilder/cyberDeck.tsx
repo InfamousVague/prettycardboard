@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Boxes, Cog, Cpu, Crown, ScrollText, Shapes, Swords, Zap } from '@glacier/icons';
+import { Boxes, Cog, Cpu, Crown, ScrollText, Shapes, Swords, Zap } from '../../icons/backfilled.tsx';
 import type { Deck, DeckCard } from '../../net/types.ts';
 import { cyberpunkCard, CYBERPUNK_COLOR_HEX } from '../../data/cyberpunk.ts';
 

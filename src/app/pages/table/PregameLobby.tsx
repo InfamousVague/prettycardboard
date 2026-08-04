@@ -45,7 +45,7 @@ import {
   Users,
   WifiOff,
   X,
-} from '@glacier/icons';
+} from '../../icons/backfilled.tsx';
 import { PlayingCardDeck } from '../../icons/cards.ts';
 import { MAX_QUICKPLAY_ROLLS } from '../../data/quickplay.ts';
 import { useT } from '../../i18n.ts';

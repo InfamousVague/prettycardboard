@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Pill } from '@glacier/react';
-import { Sparkles } from '@glacier/icons';
+import { Sparkles } from '../icons/backfilled.tsx';
 import { cardImage } from '../data/cards.ts';
 import { GameCard } from './GameCard.tsx';
 import { boosterArtUrl } from '../data/boosterSets.ts';

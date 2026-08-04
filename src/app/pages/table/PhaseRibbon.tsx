@@ -16,7 +16,7 @@ import {
   Tornado,
   Wand2,
   Zap,
-} from '@glacier/icons';
+} from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import { DICE_SIDES, DiceIcon } from '../../components/DiceIcon.tsx';
 import { isCreature } from './boardModes.ts';

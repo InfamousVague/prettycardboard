@@ -12,7 +12,7 @@ import {
   TextTone,
   useLocale,
 } from '@glacier/react';
-import { Crown, ThumbsUp } from '@glacier/icons';
+import { Crown, ThumbsUp } from '../icons/backfilled.tsx';
 import { PlayingCard } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';

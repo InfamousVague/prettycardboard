@@ -43,7 +43,7 @@ import {
   TriangleAlert,
   X,
   Zap,
-} from '@glacier/icons';
+} from '../../icons/backfilled.tsx';
 import { PlayingCardBlank, PlayingCardDeck } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import * as api from '../../net/api.ts';

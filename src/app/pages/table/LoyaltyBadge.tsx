@@ -1,5 +1,5 @@
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from '@glacier/react';
-import { Minus, Plus } from '@glacier/icons';
+import { Minus, Plus } from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import { oracleFacts } from '../../data/printedPt.ts';
 import type { CardInst, RoomState, TablePlayer } from '../../net/types.ts';

@@ -53,7 +53,7 @@ import {
   Minus,
   Trash2,
   Smile,
-} from '@glacier/icons';
+} from '../icons/backfilled.tsx';
 import { PlayingCardBlank, PlayingCardHand, PlayingCardStack } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';

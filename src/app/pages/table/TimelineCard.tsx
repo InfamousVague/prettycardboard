@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, IconButton, Tooltip } from '@glacier/react';
-import { Activity, Pause, Play, Redo2, RotateCcw, SkipBack, Undo2, X } from '@glacier/icons';
+import { Activity, Pause, Play, Redo2, RotateCcw, SkipBack, Undo2, X } from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import { useApp } from '../../state/appStore.ts';
 import { useGame } from '../../state/gameStore.ts';

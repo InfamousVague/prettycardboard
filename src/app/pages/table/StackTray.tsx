@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { Button, MenuItem, SplitButton, Text, Size, TextTone } from '@glacier/react';
-import { Check, Crosshair, X } from '@glacier/icons';
+import { Check, Crosshair, X } from '../../icons/backfilled.tsx';
 import { PlayingCardStack } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import { useApp } from '../../state/appStore.ts';

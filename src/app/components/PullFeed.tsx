@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { IconBackfill, Pill, Size, Spinner, Text, TextTone, useLocale } from '@glacier/react';
-import { Sparkles } from '@glacier/icons';
+import { Sparkles } from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import { cardImage } from '../data/cards.ts';
 import type { FeedPull } from '../net/api.ts';

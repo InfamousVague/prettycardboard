@@ -12,7 +12,7 @@ import {
   TextTone,
   useToast,
 } from '@glacier/react';
-import { Eye, Hash, LogIn, Play, Sparkles, Users } from '@glacier/icons';
+import { Eye, Hash, LogIn, Play, Sparkles, Users } from '../icons/backfilled.tsx';
 import { PlayingCardPack } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';

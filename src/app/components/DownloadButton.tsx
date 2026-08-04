@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, MenuItem, SplitButton } from '@glacier/react';
-import { Apple, Download, Monitor, Terminal } from '@glacier/icons';
+import { Apple, Download, Monitor, Terminal } from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 
 /**

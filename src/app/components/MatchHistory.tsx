@@ -1,5 +1,5 @@
 import { IconButton, Size, Text, TextTone, Tooltip, useLocale } from '@glacier/react';
-import { Crown, Play } from '@glacier/icons';
+import { Crown, Play } from '../icons/backfilled.tsx';
 import { PlayingCard } from '../icons/cards.ts';
 import { useT } from '../i18n.ts';
 import type { MatchRow } from '../net/types.ts';

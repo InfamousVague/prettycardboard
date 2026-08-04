@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Heading, IconButton, Size, Text, TextTone } from '@glacier/react';
-import { X } from '@glacier/icons';
+import { X } from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import { cardImage } from '../data/cards.ts';
 import { resolveCardImage } from '../data/games.ts';

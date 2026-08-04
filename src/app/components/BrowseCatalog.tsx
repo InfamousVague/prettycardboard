@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { motion } from 'motion/react';
 import { Button, FilterChip, Heading, Pill, SearchField, SegmentedControl, Size, Text, TextTone, useToast } from '@glacier/react';
-import { Check, Eye, Plus, Sparkles } from '@glacier/icons';
+import { Check, Eye, Plus, Sparkles } from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import * as api from '../net/api.ts';
 import { useApp } from '../state/appStore.ts';

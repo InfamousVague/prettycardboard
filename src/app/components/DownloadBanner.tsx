@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { IconButton, Text } from '@glacier/react';
-import { Sparkles, X } from '@glacier/icons';
+import { Sparkles, X } from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import { isTauri } from '../tauri.ts';
 import { DownloadButton } from './DownloadButton.tsx';

@@ -1,5 +1,5 @@
 import { Button, Pill, ProgressBar, Size, Text, TextTone } from '@glacier/react';
-import { Download, RefreshCw } from '@glacier/icons';
+import { Download, RefreshCw } from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import { useGame } from '../state/gameStore.ts';
 import { updateHighlights, useUpdate } from '../state/updateStore.ts';

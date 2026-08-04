@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Modal, Text, Size, TextTone } from '@glacier/react';
-import { ArrowLeft, Plus } from '@glacier/icons';
+import { ArrowLeft, Plus } from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import * as api from '../../net/api.ts';
 import { useApp } from '../../state/appStore.ts';

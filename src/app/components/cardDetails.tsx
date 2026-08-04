@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Heading, Size, Spinner, Text, TextTone } from '@glacier/react';
-import { CircleDollarSign, Coins, Cpu, Layers, Link2, Palette, Shield, Star, Swords } from '@glacier/icons';
+import { CircleDollarSign, Coins, Cpu, Layers, Link2, Palette, Shield, Star, Swords } from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import { keywordsFromText, knownKeywords } from '../data/keywords.ts';
 import { cyberpunkCard, type CyberpunkCard } from '../data/cyberpunk.ts';
