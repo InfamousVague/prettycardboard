@@ -1284,3 +1284,40 @@
     font-size: clamp(1.4rem, 4vw, 1.9rem);
   }
 }
+
+/* ---- Play now: the quick-start plates ------------------------------------
+   The class was in the markup with no rule anywhere behind it, so the
+   container stayed a plain block - and a <button>'s `width: auto` is
+   shrink-to-fit even when the button is `display: flex`. A block parent
+   therefore does not stretch these, and each plate came out exactly as wide as
+   its own title: a staircase from STANDARD down to COMMANDER ROULETTE.
+
+   A grid track sizes its items, which is what fixes it. auto-fit rather than
+   the fixed three columns .pgModeGrid uses: that grid has a considered order
+   worth protecting across a row break, while this strip is five equal presets
+   sitting in a page whose width varies with the rail, so letting it reflow is
+   the better trade. */
+.hmQuickGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr));
+  gap: var(--glacier-space-3);
+  align-items: stretch;
+}
+
+/* The plates carry .pgMode from play.css for the tint, wash and hover sweep;
+   this only says how they sit in the grid. Stretching both ways so a longer
+   blurb makes the whole ROW taller rather than one plate taller than its
+   neighbours - a ragged row of different heights is the other half of the
+   staircase this section had. */
+.hmQuick {
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+/* One column on a phone: at 12.5rem the auto-fit would still try for two on a
+   wide phone, and a 170px-wide plate cannot carry "COMMANDER ROULETTE". */
+@media (max-width: 30rem) {
+  .hmQuickGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
