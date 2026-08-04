@@ -1,7 +1,12 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { Button, EmptyState, Heading, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
-import { Download, Plus, Swords, Trophy } from '../icons/backfilled.tsx';
-import { PlayingCardDeck } from '../icons/cards.ts';
+import {
+  Download,
+  PlayingCardDeck,
+  Plus,
+  Swords,
+  Trophy,
+} from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useUi } from '../state/uiStore.ts';

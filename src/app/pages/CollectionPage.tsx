@@ -13,8 +13,13 @@ import {
   TextTone,
   useLocale,
 } from '@glacier/react';
-import { Gem, Sparkles, Star } from '../icons/backfilled.tsx';
-import { PlayingCardPack, PlayingCardStack } from '../icons/cards.ts';
+import {
+  Gem,
+  PlayingCardPack,
+  PlayingCardStack,
+  Sparkles,
+  Star,
+} from '../icons/backfilled.tsx';
 import { APP_LOCALES, useT, type AppLocale } from '../i18n.ts';
 import { artCrop, cardImage } from '../data/cards.ts';
 import { useCardPopup } from '../components/CardPopup.tsx';

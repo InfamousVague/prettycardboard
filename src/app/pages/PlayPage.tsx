@@ -22,13 +22,15 @@ import {
   useToast,
 } from '@glacier/react';
 import {
-  Crown,
   Bot,
+  Crown,
   Dices,
   Eye,
   Flag,
   Landmark,
   Play,
+  PlayingCard,
+  PlayingCardPack,
   Shield,
   Swords,
   Ticket,
@@ -36,7 +38,6 @@ import {
   Zap,
 } from '../icons/backfilled.tsx';
 import type { IconProps } from '@glacier/icons';
-import { PlayingCard, PlayingCardPack } from '../icons/cards.ts';
 import { launchBotMatch } from '../data/botMatch.ts';
 import { ROULETTES, rouletteShape, type RoulettePreset } from '../data/roulette.ts';
 import { useT, type MessageKey } from '../i18n.ts';

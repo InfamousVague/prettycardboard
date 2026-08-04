@@ -14,8 +14,12 @@ import {
   Text,
   TextTone,
 } from '@glacier/react';
-import { Percent, Sparkles, X } from '../icons/backfilled.tsx';
-import { PlayingCardPack } from '../icons/cards.ts';
+import {
+  Percent,
+  PlayingCardPack,
+  Sparkles,
+  X,
+} from '../icons/backfilled.tsx';
 import { useT, type MessageKey } from '../i18n.ts';
 import { cardImage } from '../data/cards.ts';
 import { GameCard } from './GameCard.tsx';

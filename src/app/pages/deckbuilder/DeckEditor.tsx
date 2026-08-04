@@ -33,6 +33,8 @@ import {
   Image,
   Minus,
   Mountain,
+  PlayingCardBlank,
+  PlayingCardDeck,
   Plus,
   ScrollText,
   Shapes,
@@ -44,7 +46,6 @@ import {
   X,
   Zap,
 } from '../../icons/backfilled.tsx';
-import { PlayingCardBlank, PlayingCardDeck } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import * as api from '../../net/api.ts';
 import type { Deck, DeckCard } from '../../net/types.ts';

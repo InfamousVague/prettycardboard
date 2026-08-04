@@ -33,6 +33,7 @@ import {
   LogOut,
   Mountain,
   Play,
+  PlayingCardDeck,
   Settings2,
   Shield,
   Shuffle,
@@ -46,7 +47,6 @@ import {
   WifiOff,
   X,
 } from '../../icons/backfilled.tsx';
-import { PlayingCardDeck } from '../../icons/cards.ts';
 import { MAX_QUICKPLAY_ROLLS } from '../../data/quickplay.ts';
 import { useT } from '../../i18n.ts';
 import { useApp } from '../../state/appStore.ts';

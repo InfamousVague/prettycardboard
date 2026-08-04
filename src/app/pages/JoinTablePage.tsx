@@ -12,8 +12,15 @@ import {
   TextTone,
   useToast,
 } from '@glacier/react';
-import { Eye, Hash, LogIn, Play, Sparkles, Users } from '../icons/backfilled.tsx';
-import { PlayingCardPack } from '../icons/cards.ts';
+import {
+  Eye,
+  Hash,
+  LogIn,
+  Play,
+  PlayingCardPack,
+  Sparkles,
+  Users,
+} from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';

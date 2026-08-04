@@ -4,6 +4,8 @@ import {
   Cpu,
   Minus,
   Paintbrush,
+  PlayingCardHand,
+  PlayingCardPack,
   Plus,
   RefreshCw,
   Settings,
@@ -12,7 +14,6 @@ import {
   Sparkles,
   Swords,
 } from '../../icons/backfilled.tsx';
-import { PlayingCardHand, PlayingCardPack } from '../../icons/cards.ts';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { getGame } from '../../data/games.ts';

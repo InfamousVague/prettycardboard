@@ -14,8 +14,15 @@ import {
   TextTone,
   useToast,
 } from '@glacier/react';
-import { ArrowLeft, ArrowRight, Check, Hourglass, Share2, Sparkles } from '../../icons/backfilled.tsx';
-import { PlayingCardPack } from '../../icons/cards.ts';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Hourglass,
+  PlayingCardPack,
+  Share2,
+  Sparkles,
+} from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import { cardImage, COLOR_ORDER } from '../../data/cards.ts';
 import { GameCard } from '../../components/GameCard.tsx';

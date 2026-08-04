@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Avatar, Kbd, SearchField, Size, StatusDot, Text, TextTone, useToast } from '@glacier/react';
-import { Package, Swords, User } from '../icons/backfilled.tsx';
-import { PlayingCardStack } from '../icons/cards.ts';
+import {
+  Package,
+  PlayingCardStack,
+  Swords,
+  User,
+} from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import * as api from '../net/api.ts';
 import { useApp } from '../state/appStore.ts';

@@ -10,8 +10,15 @@ import {
   Size,
   TextTone,
 } from '@glacier/react';
-import { ArrowDownToLine, ArrowUpToLine, Crosshair, Dices, Shuffle, Sparkles } from '../../icons/backfilled.tsx';
-import { PlayingCardHand } from '../../icons/cards.ts';
+import {
+  ArrowDownToLine,
+  ArrowUpToLine,
+  Crosshair,
+  Dices,
+  PlayingCardHand,
+  Shuffle,
+  Sparkles,
+} from '../../icons/backfilled.tsx';
 import { send } from '../../net/ws.ts';
 import { matchesTargetKind, stackTargetKinds, targetsPlayers } from './enforce.ts';
 import { useT } from '../../i18n.ts';

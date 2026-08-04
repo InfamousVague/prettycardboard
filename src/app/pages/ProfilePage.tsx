@@ -12,8 +12,11 @@ import {
   TextTone,
   useLocale,
 } from '@glacier/react';
-import { Crown, ThumbsUp } from '../icons/backfilled.tsx';
-import { PlayingCard } from '../icons/cards.ts';
+import {
+  Crown,
+  PlayingCard,
+  ThumbsUp,
+} from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useUi } from '../state/uiStore.ts';

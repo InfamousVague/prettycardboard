@@ -1,6 +1,9 @@
 import { IconButton, Size, Text, TextTone, Tooltip, useLocale } from '@glacier/react';
-import { Crown, Play } from '../icons/backfilled.tsx';
-import { PlayingCard } from '../icons/cards.ts';
+import {
+  Crown,
+  Play,
+  PlayingCard,
+} from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import type { MatchRow } from '../net/types.ts';
 import { GameTag } from './GameTag.tsx';

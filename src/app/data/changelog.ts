@@ -23,7 +23,7 @@ import {
   Users,
   Wrench,
 } from '@glacier/icons';
-import { PlayingCardStack } from '../icons/cards.ts';
+import { PlayingCardStack } from '../icons/backfilled.tsx';
 import type { MessageKey } from '../i18n.ts';
 
 /**

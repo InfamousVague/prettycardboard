@@ -47,6 +47,7 @@ import {
   Globe as GlobeOutline,
   GraduationCap as GraduationCapOutline,
   Grid3X3 as Grid3X3Outline,
+  Grid3x3 as Grid3x3Outline,
   Hand as HandOutline,
   HardDrive as HardDriveOutline,
   Hash as HashOutline,
@@ -68,6 +69,7 @@ import {
   Monitor as MonitorOutline,
   Moon as MoonOutline,
   Mountain as MountainOutline,
+  Move as MoveOutline,
   Package as PackageOutline,
   Paintbrush as PaintbrushOutline,
   Palette as PaletteOutline,
@@ -85,6 +87,7 @@ import {
   Repeat as RepeatOutline,
   RotateCcw as RotateCcwOutline,
   RotateCw as RotateCwOutline,
+  Rows3 as Rows3Outline,
   ScrollText as ScrollTextOutline,
   Send as SendOutline,
   Settings as SettingsOutline,
@@ -130,6 +133,15 @@ import {
   ZoomIn as ZoomInOutline,
   ZoomOut as ZoomOutOutline,
 } from '@glacier/icons';
+import {
+  PlayingCard as PlayingCardOutline,
+  PlayingCardBlank as PlayingCardBlankOutline,
+  PlayingCardDeck as PlayingCardDeckOutline,
+  PlayingCardHand as PlayingCardHandOutline,
+  PlayingCardPack as PlayingCardPackOutline,
+  PlayingCardStack as PlayingCardStackOutline,
+  PlayingCardSwap as PlayingCardSwapOutline,
+} from './cards.ts';
 
 /**
  * Every icon the app uses, pre-wrapped in IconBackfill.
@@ -217,6 +229,7 @@ export const Gem = backfilled(GemOutline, 'Gem');
 export const Globe = backfilled(GlobeOutline, 'Globe');
 export const GraduationCap = backfilled(GraduationCapOutline, 'GraduationCap');
 export const Grid3X3 = backfilled(Grid3X3Outline, 'Grid3X3');
+export const Grid3x3 = backfilled(Grid3x3Outline, 'Grid3x3');
 export const Hand = backfilled(HandOutline, 'Hand');
 export const HardDrive = backfilled(HardDriveOutline, 'HardDrive');
 export const Hash = backfilled(HashOutline, 'Hash');
@@ -238,6 +251,7 @@ export const Minus = backfilled(MinusOutline, 'Minus');
 export const Monitor = backfilled(MonitorOutline, 'Monitor');
 export const Moon = backfilled(MoonOutline, 'Moon');
 export const Mountain = backfilled(MountainOutline, 'Mountain');
+export const Move = backfilled(MoveOutline, 'Move');
 export const Package = backfilled(PackageOutline, 'Package');
 export const Paintbrush = backfilled(PaintbrushOutline, 'Paintbrush');
 export const Palette = backfilled(PaletteOutline, 'Palette');
@@ -255,6 +269,7 @@ export const RefreshCw = backfilled(RefreshCwOutline, 'RefreshCw');
 export const Repeat = backfilled(RepeatOutline, 'Repeat');
 export const RotateCcw = backfilled(RotateCcwOutline, 'RotateCcw');
 export const RotateCw = backfilled(RotateCwOutline, 'RotateCw');
+export const Rows3 = backfilled(Rows3Outline, 'Rows3');
 export const ScrollText = backfilled(ScrollTextOutline, 'ScrollText');
 export const Send = backfilled(SendOutline, 'Send');
 export const Settings = backfilled(SettingsOutline, 'Settings');
@@ -299,3 +314,12 @@ export const X = backfilled(XOutline, 'X');
 export const Zap = backfilled(ZapOutline, 'Zap');
 export const ZoomIn = backfilled(ZoomInOutline, 'ZoomIn');
 export const ZoomOut = backfilled(ZoomOutOutline, 'ZoomOut');
+
+/* The app's own card glyphs, wrapped exactly the same way. */
+export const PlayingCard = backfilled(PlayingCardOutline, 'PlayingCard');
+export const PlayingCardBlank = backfilled(PlayingCardBlankOutline, 'PlayingCardBlank');
+export const PlayingCardDeck = backfilled(PlayingCardDeckOutline, 'PlayingCardDeck');
+export const PlayingCardHand = backfilled(PlayingCardHandOutline, 'PlayingCardHand');
+export const PlayingCardPack = backfilled(PlayingCardPackOutline, 'PlayingCardPack');
+export const PlayingCardStack = backfilled(PlayingCardStackOutline, 'PlayingCardStack');
+export const PlayingCardSwap = backfilled(PlayingCardSwapOutline, 'PlayingCardSwap');

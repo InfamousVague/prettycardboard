@@ -1,6 +1,11 @@
 import type { ReactNode } from 'react';
-import { ScrollText, Shapes, Shield, Swords } from '../../icons/backfilled.tsx';
-import { PlayingCardDeck } from '../../icons/cards.ts';
+import {
+  PlayingCardDeck,
+  ScrollText,
+  Shapes,
+  Shield,
+  Swords,
+} from '../../icons/backfilled.tsx';
 import type { Deck, DeckCard } from '../../net/types.ts';
 import { isExtraDeckCard, yugiohCard, yugiohKind } from '../../data/yugioh.ts';
 
