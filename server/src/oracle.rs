@@ -20,7 +20,7 @@ use std::sync::Arc;
 /// Bumped whenever the parse below learns something new: cached rows stamped
 /// with an older version are treated as missing and refetched, so a deploy
 /// never leaves half the oracle table without the new fields.
-pub const ORACLE_VERSION: u32 = 13;
+pub const ORACLE_VERSION: u32 = 14;
 
 /// A characteristic-defining ability that sets power (and sometimes toughness)
 /// to a count of permanents - "...is equal to the number of artifacts you
@@ -376,10 +376,20 @@ fn is_self_target(target: &str, name_lower: &str, short_lower: &str) -> bool {
 /// Parse one effect part ("draw a card", "you gain 2 life", "create a 2/2
 /// black Zombie creature token"). None = not in the closed set.
 fn parse_effect_part(part: &str, name_lower: &str, short_lower: &str) -> Option<TriggerEffect> {
-    // "you" is the controller and "they" the trigger's subject (the opponent
-    // who drew): which player an effect lands on is carried by the trigger,
-    // not by this clause, so both pronouns strip the same way.
-    let p = part.trim().trim_start_matches("you ").trim_start_matches("they ").trim();
+    // "you" is the controller and "they"/"that player" the trigger's subject
+    // (the opponent who drew): which player an effect lands on is carried by
+    // the trigger, not by this clause, so every form strips the same way.
+    //
+    // "that player" is not a synonym nobody writes - it is how the printed
+    // text names a singular subject. Sheoldred says "they lose 2 life" and
+    // parsed; Scrawling Crawler says "that player loses 1 life" and did not,
+    // so its trigger was detected, prompted, and then did nothing at all.
+    let p = part
+        .trim()
+        .trim_start_matches("you ")
+        .trim_start_matches("they ")
+        .trim_start_matches("that player ")
+        .trim();
 
     // "draw a card" / "draw two cards"
     if let Some(rest) = p.strip_prefix("draw ") {
@@ -391,8 +401,11 @@ fn parse_effect_part(part: &str, name_lower: &str, short_lower: &str) -> Option<
         }
         return None;
     }
-    // "gain 2 life" / "lose 1 life"
-    for (verb, gain) in [("gain ", true), ("lose ", false)] {
+    // "gain 2 life" / "lose 1 life", and the third-person forms a singular
+    // subject takes ("that player LOSES 1 life"). The -s forms come first:
+    // "loses 2 life" also starts with "lose ", and matching that leaves "s 2
+    // life", which fails the number check and bails out of the whole parse.
+    for (verb, gain) in [("gains ", true), ("loses ", false), ("gain ", true), ("lose ", false)] {
         if let Some(rest) = p.strip_prefix(verb) {
             let mut words = rest.split_whitespace();
             let n = word_number(words.next()?)?;
@@ -2255,6 +2268,38 @@ mod draw_trigger_tests {
         assert_eq!(t[1].when, TriggerWhen::OpponentDraws);
         assert_eq!(t[1].effects, vec![TriggerEffect::LoseLife { n: 2 }]);
         assert!(t[1].auto());
+    }
+
+    #[test]
+    fn that_player_loses_parses_like_they_lose() {
+        // Confirmed Scryfall oracle text (2026-08-04):
+        //   Scrawling Crawler {4}
+        //     "At the beginning of your upkeep, each player draws a card.
+        //      Whenever an opponent draws a card, that player loses 1 life."
+        //
+        // The trigger half always parsed, so the prompt appeared and the card
+        // LOOKED wired up - but "that player loses 1 life" matched no effect
+        // rule ("they " was stripped, "that player " was not, and the verb is
+        // "loses" not "lose"), so the effect fell to Manual and neither the
+        // engine nor the bot's own draw-tax shortcut would perform it. The
+        // opponent drew and took nothing.
+        let text = "At the beginning of your upkeep, each player draws a card.\nWhenever an opponent draws a card, that player loses 1 life.";
+        let t = parse_triggers("Scrawling Crawler", text);
+        let opp = t
+            .iter()
+            .find(|x| x.when == TriggerWhen::OpponentDraws)
+            .expect("the opponent-draws trigger parses");
+        assert_eq!(opp.effects, vec![TriggerEffect::LoseLife { n: 1 }], "{opp:?}");
+        assert!(opp.auto(), "and the engine can perform it");
+    }
+
+    #[test]
+    fn that_player_gains_parses_too() {
+        // The same subject in its other verb form, so the -s handling is not
+        // a one-off patched in for a single card.
+        let t = parse_triggers("Test", "Whenever an opponent draws a card, that player gains 3 life.");
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].effects, vec![TriggerEffect::GainLife { n: 3 }]);
     }
 
     #[test]
