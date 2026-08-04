@@ -57,6 +57,7 @@ import { bracketKey } from '../data/brackets.ts';
 import { rankFor, winRate } from '../data/ranks.ts';
 import { divisionFor, RANK_META, RATING_SEED } from '../data/rankTiers.ts';
 import { RankBadge } from '../components/RankBadge.tsx';
+import { HeroStatsPanel } from '../components/HeroStatsPanel.tsx';
 import { RankEmblem } from '../components/RankEmblem.tsx';
 import { featuredDecks } from '../data/catalog.ts';
 import { useVisibleGames } from '../hooks/useVisibleGames.ts';
@@ -225,7 +226,7 @@ export function HomePage() {
           that case wherever the player is. */}
       <HomeUpdateBanner />
       <NewsTicker />
-      <GameMenu identity={identity} stats={stats} resume={resume} />
+      <GameMenu identity={identity} stats={stats} deckStats={deckStats} resume={resume} />
       <StatStrip stats={stats} order={1} />
       <TableSetup order={2} />
       <RecentDecks deckStats={deckStats} order={3} />
@@ -245,10 +246,12 @@ export function HomePage() {
 function GameMenu({
   identity,
   stats,
+  deckStats,
   resume,
 }: {
   identity: { username: string } | null;
   stats: UserStats | null;
+  deckStats: Map<string, MyDeckStats> | null;
   resume: MyRoom | null;
 }) {
   const t = useT();
@@ -361,6 +364,12 @@ function GameMenu({
       <div className="gmArt" style={{ backgroundImage: art }} aria-hidden />
       <div className="gmScrim" aria-hidden />
 
+      {/* Resting on the badge drops the record out from under it: the badge
+          says WHERE the player stands, the panel says how they got there. */}
+      <HeroStatsPanel
+        stats={stats}
+        deckStats={deckStats}
+        trigger={
       <div className="gmBadge">
         <span className="gmBadgeAvatar">
           <Avatar name={identity?.username} size="lg" />
@@ -426,6 +435,8 @@ function GameMenu({
           {t('hmLevel')} {rank.level}
         </Pill>
       </div>
+        }
+      />
 
       {/* One nav landmark, two columns: display:contents lets the primary
           stack and the side stack lay out as band children while staying a

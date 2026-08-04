@@ -1,0 +1,108 @@
+/* The record panel that hangs under the hero badge on hover. */
+
+/* The kit's popover panel wraps this; padding lives here so the card can run
+   a band to the panel's own edges if it ever needs to. */
+.heroStatsPanel {
+  padding: var(--glacier-space-3);
+}
+
+.hsCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-3);
+  /* Wide enough that a deck row fits name, record, bar and rate without the
+     name truncating to two words. */
+  inline-size: 19rem;
+}
+
+/* Rating and ladder place: the two numbers the badge rounds off to a label. */
+.hsTop {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--glacier-space-2);
+}
+
+.hsFigure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  text-align: center;
+}
+
+.hsFigureValue {
+  font-size: var(--glacier-font-size-lg);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Three even columns: the record reads as a row of figures, not a list. */
+.hsRecord {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--glacier-space-2);
+  margin: 0;
+  padding-block: var(--glacier-space-2);
+  border-block: var(--glacier-hairline) solid var(--glacier-border-subtle);
+}
+
+.hsRecord > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  align-items: center;
+  text-align: center;
+}
+
+.hsRecord dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.hsDecks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+}
+
+.hsDecksHead {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.hsEmpty {
+  margin: 0;
+}
+
+.hsDeckList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Name takes the slack; the three figures beside it hold their own width so
+   the bars line up into a column down the panel. */
+.hsDeckRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 4rem 2.25rem;
+  align-items: center;
+  gap: var(--glacier-space-2);
+}
+
+.hsDeckName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hsDeckRec,
+.hsDeckRate {
+  font-variant-numeric: tabular-nums;
+}
+
+.hsDeckRate {
+  text-align: end;
+}

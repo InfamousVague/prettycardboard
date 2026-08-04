@@ -2537,6 +2537,15 @@ export const messages = {
   hmLevel: { en: 'Lv', es: 'Nv', fr: 'Niv', ar: 'مس' },
   hmWinRate: { en: 'Win rate', es: 'Victorias', fr: 'Victoires', ar: 'نسبة الفوز' },
   hmNextRank: { en: 'Next rank', es: 'Siguiente rango', fr: 'Rang suivant', ar: 'الرتبة التالية' },
+  // hero-badge hover panel (the rest of its labels are shared with the Career
+  // strip and the ladder, so it only needs the two nothing else says)
+  hsRating: { en: 'Rating', es: 'Puntuación', fr: 'Classement', ar: 'التقييم' },
+  hsNoDecks: {
+    en: 'No deck of yours has hit a table yet.',
+    es: 'Ninguno de tus mazos ha llegado a una mesa todavía.',
+    fr: 'Aucun de vos decks n’a encore rejoint une table.',
+    ar: 'لم يصل أي من مجموعاتك إلى طاولة بعد.',
+  },
   hmToNextRank: { en: 'to next rank', es: 'para el siguiente rango', fr: 'avant le prochain rang', ar: 'حتى الرتبة التالية' },
   hmContinue: { en: 'Continue', es: 'Continuar', fr: 'Continuer', ar: 'متابعة' },
   hmStartTableSub: { en: 'Host or join a game', es: 'Crea o únete a una partida', fr: 'Héberger ou rejoindre', ar: 'استضف أو انضم' },
