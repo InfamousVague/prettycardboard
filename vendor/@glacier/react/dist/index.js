@@ -6720,7 +6720,7 @@ const cf = {
     },
     {
       name: "backfill",
-      description: "Optional IconBackfill wrapper: a 33%-opacity silhouette of the glyph itself, painted from the resolved icon color."
+      description: "Optional IconBackfill wrapper: a 33%-opacity silhouette of the glyph itself, painted from the resolved icon color, with 2px of outer space so the silhouette does not bleed into whatever sits beside it."
     }
   ],
   props: [
@@ -6742,7 +6742,7 @@ const cf = {
     { name: "lg", diameter: "24px" }
   ],
   defaults: { size: 24, color: "currentColor", strokeWidth: 2, backfill: !1, absoluteStrokeWidth: !1 },
-  dimensions: { strokeWidth: "2px", backfillOpacity: "33%" },
+  dimensions: { strokeWidth: "2px", backfillOpacity: "33%", backfillInset: "2px" },
   // strokes currentColor, so it carries no paint of its own
   paint: {},
   tokens: [],
@@ -10217,7 +10217,7 @@ function $c({
 }) {
   return n ? e === "vertical" ? /* @__PURE__ */ l(U, { width: "var(--glacier-hairline)", height: "1.5rem", className: a }) : /* @__PURE__ */ l(U, { width: "100%", height: "var(--glacier-hairline)", className: a }) : t ? /* @__PURE__ */ l("div", { role: "separator", className: L(dl.labeled, a), children: t }) : e === "vertical" ? /* @__PURE__ */ l("div", { role: "separator", "aria-orientation": "vertical", className: L(dl.vertical, a) }) : /* @__PURE__ */ l("hr", { className: L(dl.horizontal, a), ...s });
 }
-const hk = "_root_141da_1", pk = "_backfill_141da_14", Cc = {
+const hk = "_root_1nor6_11", pk = "_backfill_1nor6_25", Cc = {
   root: hk,
   backfill: pk
 };
