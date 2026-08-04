@@ -20,7 +20,6 @@ import {
 import { useT } from '../../i18n.ts';
 import { DICE_SIDES, DiceIcon } from '../../components/DiceIcon.tsx';
 import { isCreature } from './boardModes.ts';
-import { seatColor } from './seatColors.ts';
 import { enforcedRoom } from './enforce.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { getGame } from '../../data/games.ts';
@@ -87,20 +86,9 @@ export function PhaseRibbon({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myTurn]);
 
-  // Turn timer: seconds since this turn (seat) began; ticks once a second.
-  const turnStartRef = useRef(Date.now());
-  const [, tick] = useState(0);
-  useEffect(() => {
-    turnStartRef.current = Date.now();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room.activeSeat, room.turnNumber]);
-  useEffect(() => {
-    if (!room.started) return;
-    const id = window.setInterval(() => tick((n) => n + 1), 1000);
-    return () => window.clearInterval(id);
-  }, [room.started]);
-  const turnSecs = Math.max(0, Math.floor((Date.now() - turnStartRef.current) / 1000));
-  const turnClock = `${Math.floor(turnSecs / 60)}:${String(turnSecs % 60).padStart(2, '0')}`;
+  // The turn clock moved out with the sigil (see TurnSigil): a once-a-second
+  // setState here re-rendered the phase strip, the marker chips and the whole
+  // combat cluster to move two digits.
 
   // Hide the phase strip for games with no turn phases (e.g. Cyberpunk plays
   // freeform - the turn still passes, but there is no upkeep/main/combat ribbon).
@@ -334,47 +322,6 @@ export function PhaseRibbon({
 
       {/* turn counter + end turn cluster */}
       <div className="turnCluster">
-        {/* The turn readout is the one thing everyone at the table looks at
-            constantly, so it reads as a HUD plate rather than a line of mono
-            text: the active seat's own colour on the leading edge, the turn
-            number at a glance, and whose turn it is in the same tracked caps
-            the rest of the app uses for a headline. */}
-        <div
-          className="turnPlate"
-          data-mine={myTurn || undefined}
-          style={{ ['--pc-seat-color' as string]: seatColor(room.activeSeat ?? 0) }}
-        >
-          {/* The stack, back to front. Siblings rather than pseudo-elements
-              because there are more layers than the two ::before/::after one
-              element can carry, and because the sweep has to sit ABOVE the
-              halftone and BELOW the type, which pseudo-element order cannot
-              express.
-
-              The slab is OUTSIDE the face on purpose. clip-path clips every
-              descendant, so a depth plate nested inside the notched face would
-              have its whole offset clipped away and the plate would look flat.
-              The face carries the notch; the slab carries the thickness. */}
-          <span className="turnPlateSlab" aria-hidden />
-          <span className="turnPlateFace">
-            <span className="turnPlateDots" aria-hidden />
-            <span className="turnPlateSweep" aria-hidden />
-            <span className="turnPlateBevel" aria-hidden />
-
-            {/* The turn number gets its own notched cell, so the count reads as
-                a stamped chit rather than as the first word of a sentence. */}
-            <span className="turnPlateChit">
-              <span className="turnPlateWord">{t('gpTurnOf')}</span>
-              <b className="turnPlateNum">{room.turnNumber ?? 1}</b>
-            </span>
-            <span className="turnPlateBody">
-              {activePlayer && (
-                <span className="turnPlateWho">{myTurn ? t('tblYourTurn') : activePlayer.username}</span>
-              )}
-              <span className="turnPlateClock">{turnClock}</span>
-            </span>
-          </span>
-        </div>
-
         {canAct && me && (
           <>
             {combatGame && room.combat == null && myTurn && (

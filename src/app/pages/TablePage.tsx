@@ -104,6 +104,7 @@ import { CombatPreviewCard, PhaseRibbon } from './table/PhaseRibbon.tsx';
 import { StackTray } from './table/StackTray.tsx';
 import { CmdChoiceDialog, DiscardPrompts, LibraryViewer, MulliganOverlay, PileViewer, RevealTray, RollBanner, SacrificePrompts, TargetPicker, TriggerPrompts } from './table/overlays.tsx';
 import { CounterPrompt } from './table/CounterPrompt.tsx';
+import { TurnSigil } from './table/TurnSigil.tsx';
 import { EventToasts } from './table/EventToasts.tsx';
 import { PriorityPrompt } from './table/PriorityPrompt.tsx';
 import { TablePresence } from './table/TablePresence.tsx';
@@ -804,6 +805,11 @@ export function TablePage() {
           // the widest thing in the bar.
           const metaEl = (
             <div className="tableMeta">
+              {/* The sigil LEADS the strip. It is the thing everyone at the
+                  table looks at constantly, so it takes the corner and the
+                  code chip and the spectating pill follow it rather than the
+                  other way round. */}
+              {!mobile && <TurnSigil room={room} me={me} />}
               <Tooltip content={`${t('tblCode')}: ${room.code}`}>
                 <button
                   type="button"
