@@ -253,6 +253,8 @@
   background: color-mix(in oklch, var(--glacier-surface) 78%, transparent);
   backdrop-filter: blur(var(--glacier-blur-sm));
   border-radius: var(--glacier-radius-sm);
+  /* Keeps the square leading edge below inside the plate's rounded corners. */
+  overflow: hidden;
 }
 
 /* Counter-skewed content column; the numeral and its label stay upright. */

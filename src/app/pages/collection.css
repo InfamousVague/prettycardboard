@@ -306,9 +306,11 @@
   background: color-mix(in oklch, var(--glacier-surface) 78%, transparent);
   backdrop-filter: blur(var(--glacier-blur-sm));
   border-radius: var(--glacier-radius-md);
+  /* Keeps the square leading edge below inside the plate's rounded corners. */
+  overflow: hidden;
 }
 
-/* accent leading edge (logical start; the chamfer clips its top on purpose) */
+/* accent leading edge (logical start; the plate's clip rounds its ends) */
 .covPlate::before {
   content: '';
   position: absolute;

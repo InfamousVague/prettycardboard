@@ -398,6 +398,8 @@
   border: var(--glacier-hairline) solid color-mix(in oklch, var(--glacier-border) 60%, transparent);
   border-radius: var(--glacier-radius-md);
   background: color-mix(in oklch, var(--glacier-surface) 55%, transparent);
+  /* Keeps the square leading edge below inside the plate's rounded corners. */
+  overflow: hidden;
 }
 
 /* The seat's colour, as a leading edge - the accent language the plates on
@@ -408,8 +410,6 @@
   inset-block: 0;
   inset-inline-start: 0;
   inline-size: 3px;
-  border-start-start-radius: inherit;
-  border-end-start-radius: inherit;
   background: var(--pc-seat-color, var(--glacier-accent-solid));
 }
 

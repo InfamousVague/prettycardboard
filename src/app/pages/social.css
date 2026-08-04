@@ -428,6 +428,7 @@
   background: color-mix(in oklch, var(--glacier-surface) 82%, transparent);
   animation: soRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
   border-radius: var(--glacier-radius-md);
+  overflow: hidden;
 }
 
 .pfPlateRow > :nth-child(1) { animation-delay: 40ms; }
@@ -447,8 +448,6 @@
   inset-block: 0;
   inset-inline-start: 0;
   inline-size: 3px;
-  border-start-start-radius: inherit;
-  border-end-start-radius: inherit;
   background: var(--glacier-accent-solid);
   opacity: 0.9;
 }
@@ -849,6 +848,9 @@
     ),
     color-mix(in oklch, var(--glacier-surface) 88%, transparent);
   border-radius: var(--glacier-radius-lg);
+  /* The leading edge below is a square strip; without this it keeps its own
+     corners and juts out past the plate's rounded ones. */
+  overflow: hidden;
 }
 
 [dir='rtl'] .frRecruitPlate {
@@ -939,9 +941,20 @@
     border-color var(--glacier-duration-fast) var(--glacier-ease-out),
     background-color var(--glacier-duration-fast) var(--glacier-ease-out);
   border-radius: var(--glacier-radius-lg);
+  /* Clips the status edge to the card's corners - a 4px strip is far too
+     narrow to carry the radius itself (CSS scales a radius down to fit the
+     box, so asking the strip to round its own corners barely moves them). */
+  overflow: hidden;
+  /* The halo the edge used to throw outward, now that the clip eats it.
+     It hangs off the leading side rather than ringing the whole card. */
+  box-shadow: var(--fr-glow-x, -4px) 0 16px -6px var(--fr-glow);
 }
 
-/* The status edge: glows inward past the clip. */
+[dir='rtl'] .frCard {
+  --fr-glow-x: 4px;
+}
+
+/* The status edge: glows inward across the card face. */
 .frCard::before {
   content: '';
   position: absolute;
