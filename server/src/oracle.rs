@@ -1363,6 +1363,28 @@ fn parse_card(raw: &ScryCard) -> Option<OracleCard> {
     })
 }
 
+
+/// Cache an oracle row, and teach the bot's card reader about it on the way in.
+///
+/// The bot reads cards through a compact attribute table that only covers the
+/// decks bundled with the server (bot/knowledge.rs). A card outside it is not
+/// "unknown but playable" - it is invisible: `is_land()` answers false, so the
+/// bot makes no land drop, casts nothing and sees no creatures. A generated
+/// deck pool that shipped without attributes put bots in exactly that state.
+///
+/// Everything at a table passes through here, so this is the one place that can
+/// make the bot's table-reading fallback real rather than assumed.
+fn cache_card(app: &App, id: String, card: OracleCard) {
+    crate::bot::learn(
+        &id,
+        &card.type_line,
+        card.mv as f64,
+        card.power.map(|v| v.to_string()).as_deref(),
+        card.toughness.map(|v| v.to_string()).as_deref(),
+    );
+    app.oracle.insert(id, Arc::new(card));
+}
+
 /// Synchronous cache read. None = not (yet) known.
 pub fn get(app: &App, scryfall_id: &str) -> Option<Arc<OracleCard>> {
     app.oracle.get(scryfall_id).map(|e| e.value().clone())
@@ -1459,7 +1481,7 @@ async fn fetch_by_oracle_id(app: &Arc<App>, art_id: &str, oracle_id: &str) {
             crate::db::oracle_store(&conn, art_id, &json);
         }
     }
-    app.oracle.insert(art_id.to_string(), Arc::new(card));
+    cache_card(app, art_id.to_string(), card);
 }
 
 pub async fn ensure(app: &Arc<App>, ids: Vec<String>) {
@@ -1482,7 +1504,7 @@ pub async fn ensure(app: &Arc<App>, ids: Vec<String>) {
                     if let Some(json) = crate::db::oracle_load(&conn, &id) {
                         if let Ok(card) = serde_json::from_str::<OracleCard>(&json) {
                             if card.v == ORACLE_VERSION {
-                                app.oracle.insert(id, Arc::new(card));
+                                cache_card(app, id, card);
                                 continue;
                             }
                         }
@@ -1494,7 +1516,7 @@ pub async fn ensure(app: &Arc<App>, ids: Vec<String>) {
             if let Some(json) = crate::db::oracle_load(&conn, &id) {
                 if let Ok(mut card) = serde_json::from_str::<OracleCard>(&json) {
                     if card.v == ORACLE_VERSION {
-                        app.oracle.insert(id, Arc::new(card));
+                        cache_card(app, id, card);
                         continue;
                     }
                     // A v4+ row carries everything reparsing needs (text +
@@ -1542,7 +1564,7 @@ pub async fn ensure(app: &Arc<App>, ids: Vec<String>) {
                         if let Ok(fresh) = serde_json::to_string(&card) {
                             crate::db::oracle_store(&conn, &id, &fresh);
                         }
-                        app.oracle.insert(id, Arc::new(card));
+                        cache_card(app, id, card);
                         continue;
                     }
                 }
@@ -1637,7 +1659,7 @@ pub async fn ensure(app: &Arc<App>, ids: Vec<String>) {
                 if let Ok(json) = serde_json::to_string(&card) {
                     crate::db::oracle_store(&conn, &id, &json);
                 }
-                app.oracle.insert(id, Arc::new(card));
+                cache_card(app, id, card);
             }
         }
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;

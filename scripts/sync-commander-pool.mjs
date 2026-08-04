@@ -28,7 +28,6 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUTPUT = join(ROOT, 'server', 'src', 'data', 'bot_decks_commander.json');
-const ATTR_SOURCE = join(ROOT, 'server', 'src', 'data', 'bot_data.json');
 const USER_AGENT = 'PrettyCardboard/0.1 (precon pool sync)';
 
 const args = process.argv.slice(2);
@@ -42,6 +41,78 @@ async function fetchJson(url) {
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** The letters bot/knowledge.rs reads a type line as. */
+const TYPE_LETTERS = [
+  ['Land', 'L'], ['Creature', 'C'], ['Instant', 'I'], ['Sorcery', 'S'],
+  ['Artifact', 'A'], ['Enchantment', 'E'], ['Planeswalker', 'P'], ['Battle', 'B'],
+];
+
+/**
+ * Attributes for every card in the pool, from Scryfall's /cards/collection
+ * endpoint (75 ids a request, their documented batch size).
+ *
+ * A card the batch does not return is left out rather than guessed at: the bot
+ * treats an absent entry as "unknown" and stays silent, which is the right
+ * failure. A WRONG entry would have it playing a land it cannot play.
+ */
+async function fetchAttrs(decks) {
+  const ids = [...new Set(decks.flatMap((deck) => deck.cards.map((card) => card.sid)).filter(Boolean))];
+  const attrs = {};
+  let missing = 0;
+  for (let i = 0; i < ids.length; i += 75) {
+    const batch = ids.slice(i, i + 75);
+    process.stderr.write(`\r  attrs ${i + batch.length}/${ids.length}`);
+    // A dropped batch would silently cost 75 cards their attributes, which is
+    // the exact failure this function exists to fix - so every batch is
+    // retried with a widening wait, and giving up throws rather than writing a
+    // map with holes in it. 180 batches back to back is enough sustained
+    // traffic that Scryfall starts answering 429, and their Retry-After is
+    // more accurate than any interval guessed here.
+    let body;
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const response = await fetch('https://api.scryfall.com/cards/collection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': USER_AGENT },
+          body: JSON.stringify({ identifiers: batch.map((id) => ({ id })) }),
+        });
+        if (response.status === 429) {
+          const after = Number(response.headers.get('retry-after')) || 0;
+          throw Object.assign(new Error('429 Too Many Requests'), { wait: after * 1000 });
+        }
+        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+        body = await response.json();
+        break;
+      } catch (err) {
+        if (attempt >= 5) throw new Error(`attrs batch failed after 6 tries (${err.message})`);
+        const wait = err.wait || 1000 * 2 ** attempt;
+        process.stderr.write(`\n  ${err.message}; waiting ${Math.round(wait / 1000)}s\n`);
+        await sleep(wait);
+      }
+    }
+    for (const card of body.data ?? []) {
+      const letters = TYPE_LETTERS.filter(([w]) => (card.type_line ?? '').includes(w))
+        .map(([, l]) => l)
+        .join('');
+      const entry = { mv: card.cmc ?? 0, t: letters || 'O' };
+      if (card.power != null) entry.p = String(card.power);
+      if (card.toughness != null) entry.tg = String(card.toughness);
+      attrs[card.id] = entry;
+    }
+    missing += (body.not_found ?? []).length;
+    // Scryfall ask for 50-100ms between requests; 180 batches back to back sits
+    // right on that line and draws 429s, so this errs slower.
+    await sleep(200);
+  }
+  process.stderr.write(`\r  attrs ${Object.keys(attrs).length}/${ids.length} resolved`);
+  if (missing) process.stderr.write(` (${missing} not on Scryfall)`);
+  process.stderr.write('\n');
+  // A pool the bot can only half read is the bug, not a partial success.
+  const coverage = Object.keys(attrs).length / Math.max(ids.length, 1);
+  if (coverage < 0.95) throw new Error(`only ${Math.round(coverage * 100)}% of cards resolved; refusing to write`);
+  return attrs;
+}
 
 /**
  * A stable, unique, readable deck code.
@@ -150,13 +221,21 @@ async function main() {
     await sleep(120);
   }
 
-  // Card attributes are shared across every deck and keyed by Scryfall id, so
-  // they grow with UNIQUE cards rather than with decks. The four bundled precons
-  // already contribute theirs; anything new is simply absent, and the bot falls
-  // back to reading the card at the table the same way it does for a human's
-  // deck. Carried forward rather than regenerated so this script never has to
-  // fetch card data at all.
-  const attrs = JSON.parse(readFileSync(ATTR_SOURCE, 'utf8')).attrs ?? {};
+  // Card attributes, keyed by Scryfall id. These are how the bot reads its own
+  // deck: bot/knowledge.rs `attr()` looks a card up here, and is_land(),
+  // mana_value() and is_creature() all answer from it.
+  //
+  // This used to carry bot_data.json's attrs forward verbatim, on the reasoning
+  // that anything missing would fall back to reading the card at the table.
+  // There is no such fallback - a card outside this map is simply unreadable:
+  // is_land() answers false, so the bot makes no land drop, casts nothing, and
+  // sees no creatures. Copying the four bundled precons' 339 entries onto a
+  // 174-deck pool meant 2% coverage, and a Commander bot sat at turn 34 with a
+  // 37-card hand and nothing but its commander on the battlefield.
+  //
+  // So they are generated, the same way gen-standard-decks.mjs does it. That
+  // costs this script a Scryfall pass it did not use to need.
+  const attrs = await fetchAttrs(decks);
 
   const payload = { decks, attrs };
   mkdirSync(dirname(OUTPUT), { recursive: true });

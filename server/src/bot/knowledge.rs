@@ -114,6 +114,54 @@ pub struct CardAttr {
     pub tg: Option<String>,
 }
 
+/// Cards the bundled table does not carry, learned from the oracle as it
+/// resolves them.
+///
+/// The embedded table only ever covers the decks that ship with the server, and
+/// a pool generated without attributes is INVISIBLE to the bot: `attr()` misses,
+/// so `is_land()` is false for every card, the bot never makes a land drop,
+/// never casts, and sits there drawing. A 174-deck Commander pool shipped that
+/// way and did exactly that.
+///
+/// So the oracle - which fetches and caches the real card for anything at the
+/// table - fills this in as it goes, and `attr()` falls through to it. That
+/// keeps `attr()` a plain function of a card (56 call sites take no `App`), and
+/// it is why the fallback the pool generator's comment always claimed now
+/// actually exists.
+/// The entries are leaked deliberately, so `attr()` can keep handing out
+/// `&'static` and its 56 call sites stay untouched. It is bounded by the number
+/// of DISTINCT cards the server ever sees - a few tens of thousands of ~64-byte
+/// structs at the absolute ceiling of every card ever printed - and each one is
+/// written once and read for the life of the process.
+static LEARNED: OnceLock<dashmap::DashMap<String, &'static CardAttr>> = OnceLock::new();
+
+fn learned() -> &'static dashmap::DashMap<String, &'static CardAttr> {
+    LEARNED.get_or_init(dashmap::DashMap::new)
+}
+
+/// Derive the bot's compact view of a card from an oracle row. Called by the
+/// oracle whenever it caches one, so the bot learns every card the table sees.
+pub fn learn(scryfall_id: &str, type_line: &str, cmc: f64, power: Option<&str>, toughness: Option<&str>) {
+    if data().attrs.contains_key(scryfall_id) || learned().contains_key(scryfall_id) {
+        return;
+    }
+    let letters: String = [
+        ("Land", 'L'), ("Creature", 'C'), ("Instant", 'I'), ("Sorcery", 'S'),
+        ("Artifact", 'A'), ("Enchantment", 'E'), ("Planeswalker", 'P'), ("Battle", 'B'),
+    ]
+    .iter()
+    .filter(|(word, _)| type_line.contains(word))
+    .map(|(_, letter)| *letter)
+    .collect();
+    let entry: &'static CardAttr = Box::leak(Box::new(CardAttr {
+        mv: cmc,
+        t: if letters.is_empty() { "O".to_string() } else { letters },
+        p: power.map(str::to_string),
+        tg: toughness.map(str::to_string),
+    }));
+    learned().insert(scryfall_id.to_string(), entry);
+}
+
 static DATA: OnceLock<BotData> = OnceLock::new();
 
 pub fn data() -> &'static BotData {
@@ -288,7 +336,13 @@ pub fn decks_for(game: &str, format: &str) -> Vec<&'static BotDeck> {
 // ------------------------------------------------------------ card reading
 
 pub fn attr(card: &Card) -> Option<&'static CardAttr> {
-    card.scryfall_id.as_deref().and_then(|sid| data().attrs.get(sid))
+    let sid = card.scryfall_id.as_deref()?;
+    // Bundled table first (it ships with the server and needs no lookup), then
+    // whatever the oracle has taught us about cards outside it.
+    data()
+        .attrs
+        .get(sid)
+        .or_else(|| learned().get(sid).map(|e| *e.value()))
 }
 
 /// Known to be a land. Cards outside the embedded attribute table (anything
@@ -416,6 +470,53 @@ pub(crate) fn tier_of(p: &Player) -> i32 {
 #[cfg(test)]
 mod pool_tests {
     use super::*;
+
+    /// A bot has to be able to READ the deck it is dealt.
+    ///
+    /// Everything the brain decides runs through `attr()`: `is_land()` picks
+    /// the land drop, `mana_value()` decides what is castable, `is_creature()`
+    /// finds attackers. A card missing from the attribute table is not "unknown
+    /// but playable" - it is invisible, and a bot holding a deck of invisible
+    /// cards does nothing at all. It draws, and passes, and draws.
+    ///
+    /// That is not hypothetical: the Commander pool shipped with the four
+    /// bundled precons' 339 attributes copied onto its own 174 decks - 2%
+    /// coverage - and a Commander bot sat at turn 34 with a 37-card hand and
+    /// nothing on the battlefield but its commander. Every other bot test
+    /// passed throughout, because they assert that turns advance and the loop
+    /// does not stall, which a bot doing nothing satisfies perfectly.
+    #[test]
+    fn every_pooled_deck_is_readable_by_the_bot() {
+        let attrs = &data().attrs;
+        for (game, format) in [("mtg", "commander"), ("mtg", "standard")] {
+            for deck in decks_for(game, format) {
+                let unknown = deck.cards.iter().filter(|c| !attrs.contains_key(&c.sid)).count();
+                assert_eq!(
+                    unknown, 0,
+                    "{format} deck {:?} has {unknown}/{} cards the bot cannot read",
+                    deck.name,
+                    deck.cards.len(),
+                );
+            }
+        }
+    }
+
+    /// The land drop specifically, since it is the first thing a bot does and
+    /// the first thing anyone notices it not doing.
+    #[test]
+    fn every_pooled_deck_has_lands_the_bot_can_find() {
+        let attrs = &data().attrs;
+        for (game, format) in [("mtg", "commander"), ("mtg", "standard")] {
+            for deck in decks_for(game, format) {
+                let lands = deck
+                    .cards
+                    .iter()
+                    .filter(|c| attrs.get(&c.sid).map(|a| a.t.contains('L')).unwrap_or(false))
+                    .count();
+                assert!(lands > 0, "{format} deck {:?} has no land the bot can identify", deck.name);
+            }
+        }
+    }
 
     /// The pool the Commander roulette actually deals from.
     #[test]
