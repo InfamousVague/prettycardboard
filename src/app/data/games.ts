@@ -72,6 +72,14 @@ export interface GameDef {
   phases: { id: string; label: string }[];
   /** Card stats surfaced on badges/popups. */
   stats: GameStatDef[];
+  /**
+   * How you WIN, in a few words, for surfaces that would otherwise quote the
+   * starting vital. "8000 LP" tells a Yu-Gi-Oh player what they need to know
+   * because the number is what you defend; Mood Swings starts every counter at
+   * zero, so the same treatment prints "0 Rounds" and says nothing. Games whose
+   * starting vital speaks for itself leave this unset.
+   */
+  goal?: string;
   deck: GameDeckRules;
   formats: { id: string; label: string }[];
   /** Whether cards tap/exhaust (all three games do). */
@@ -262,6 +270,7 @@ const MOOD_SWINGS: GameDef = {
   // No phases: a turn is "play one mood or pass", and a round is one turn each.
   phases: [],
   stats: [{ id: 'cost', label: 'Value' }],
+  goal: 'First to 3 rounds',
   deck: {
     // A box is 45 cards drawn from the 133-card set, and the 45 are distinct,
     // so the pool is singleton. Everyone draws five to start.

@@ -32,6 +32,7 @@ import {
   PlayingCard,
   PlayingCardPack,
   Shield,
+  Smile,
   Swords,
   Ticket,
   Users,
@@ -184,6 +185,30 @@ const QUICK_STARTS: QuickStart[] = [
     tint: 'oklch(0.68 0.15 45)',
   },
   {
+    // Mood Swings is the shortest table on the strip - five minutes, no deck to
+    // bring, nothing to know. It sits above the sandbox for the same reason
+    // draft does: it is a place someone with no collection can still sit down.
+    // No `format`, like the Yu-Gi-Oh plates: the server picks its own.
+    id: 'moodDuel',
+    Icon: Smile,
+    game: 'moodswings',
+    label: 'plQuickMoodDuel',
+    seats: 2,
+    blurb: 'plQuickBlurbMoodDuel',
+    tint: 'oklch(0.75 0.13 355)',
+  },
+  {
+    // Four is the game's own ceiling, and the table Hurt Feelings exists for -
+    // the catch-up marker only appears at three players or more.
+    id: 'moodTable',
+    Icon: Users,
+    game: 'moodswings',
+    label: 'plQuickMoodTable',
+    seats: 4,
+    blurb: 'plQuickBlurbMoodTable',
+    tint: 'oklch(0.72 0.12 20)',
+  },
+  {
     id: 'freeform',
     Icon: Dices,
     game: 'mtg',
@@ -199,7 +224,11 @@ const QUICK_STARTS: QuickStart[] = [
  * the game registry, so the plate and the table it opens can never disagree.
  */
 function vitalHint(gameId: GameId): string {
-  const vital = getGame(gameId).resources.find((resource) => resource.primary);
+  const game = getGame(gameId);
+  // A game that starts every counter at zero has nothing to quote, so it names
+  // the finish line instead (see GameDef.goal).
+  if (game.goal) return game.goal;
+  const vital = game.resources.find((resource) => resource.primary);
   return vital && typeof vital.start === 'number' ? `${vital.start} ${vital.label}` : '';
 }
 
@@ -223,6 +252,7 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
   const locale = useLocale();
   const { toast } = useToast();
   const decks = useApp((state) => state.decks);
+  const refreshDecks = useApp((state) => state.refreshDecks);
   const identity = useApp((state) => state.identity);
   const invites = useApp((state) => state.invites);
   const dismissInvite = useApp((state) => state.dismissInvite);
@@ -367,13 +397,31 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
     // A deck built for this exact format if there is one - otherwise any deck
     // for the plate's game, which is what the form's own picker would default to.
     const presetDecks = preset ? decksFor(preset.game) : [];
-    const useDeck = preset
+    let useDeck = preset
       ? ((presetDecks.find((deck) => deck.format === preset.format) ?? presetDecks[0])?.id ?? '')
       : chosenDeck;
 
     if (preset) setQuickBusy(preset.id);
     else setBusy(true);
     try {
+      // Mood Swings has no deckbuilding - you open a box and play - so arriving
+      // with nothing is the normal case rather than a mistake to block on. Roll
+      // one and bring it. The account-level seed does this at sign-in; this is
+      // what catches a session that was already signed in when the game landed,
+      // and anyone who has deleted theirs.
+      if (useGame === 'moodswings' && !useDeck) {
+        const { moodBox } = await import('../data/moodswings.ts');
+        const box = await api.createDeck(
+          'Mood Swings Box',
+          'standard',
+          moodBox(),
+          null,
+          'moodswings',
+          'graph-paper',
+        );
+        useDeck = box.id;
+        await refreshDecks();
+      }
       const room = await api.createRoom(
         preset
           ? `${presetName(preset)} · ${seatLabel(preset.seats)}`
@@ -593,9 +641,12 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
         <div className="pgModeGrid">
           {QUICK_STARTS.map((preset, index) => {
             const isDraft = preset.game === 'mtg' && preset.format === 'draft';
-            // Draft is the one table you can sit down at with nothing; every
-            // other plate needs a deck built for its own game.
-            const blocked = !isDraft && decksFor(preset.game).length === 0;
+            // Two tables you can sit down at owning nothing: draft, where the
+            // packs are the deck, and Mood Swings, which has no deckbuilding at
+            // all - clicking it opens a box (see create). Every other plate
+            // needs a deck built for its own game.
+            const selfDealing = isDraft || preset.game === 'moodswings';
+            const blocked = !selfDealing && decksFor(preset.game).length === 0;
             const opening = quickBusy === preset.id;
             // The first plate is the strip's headline — the order already puts
             // the likeliest evening first, so it gets the big treatment.

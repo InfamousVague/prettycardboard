@@ -679,6 +679,13 @@ fn default_format() -> String {
     "commander".to_string()
 }
 
+/// Every card game a room can be created with. One list so adding a game is a
+/// single edit here rather than a chain of `!=` comparisons that each have to
+/// be found: the previous shape rejected a new game with a message naming the
+/// three that existed, and read as a typo rather than a missing registration.
+/// Mirrors the client's GameId union in src/app/data/games.ts.
+pub const GAMES: &[&str] = &["mtg", "cyberpunk", "yugioh", "moodswings"];
+
 /// Every MTG format a room can be created with (the client's preset picker).
 /// "draft" is Limited: the table opens packs and builds a pool at the table
 /// before the game starts, by drafting or by sealed (see `Draft`).
@@ -1078,7 +1085,9 @@ pub fn format_default_life(format: &str) -> i64 {
 /// path - human join, bot seat, match start - must land on the same number.
 pub fn starting_life(game: &str, format: &str, settings: &GameSettings) -> i64 {
     match game {
-        "cyberpunk" => 0,
+        // Neither game has a life total at all: Cyberpunk counts Net upward
+        // from zero, and Mood Swings counts rounds won.
+        "cyberpunk" | "moodswings" => 0,
         "yugioh" => settings.starting_life.unwrap_or(8000),
         _ => settings.starting_life.unwrap_or_else(|| format_default_life(format)),
     }

@@ -56,11 +56,11 @@ impl Zone {
 const PHASES: [&str; 7] = ["upkeep", "main1", "attack", "block", "damage", "main2", "end"];
 
 /// Opening-hand size per game: Cyberpunk deals 6 (cyberpunktcg.com), Yu-Gi-Oh
-/// deals 5, Magic 7.
+/// and Mood Swings deal 5, Magic 7.
 pub fn opening_hand(game: &str) -> usize {
     match game {
         "cyberpunk" => 6,
-        "yugioh" => 5,
+        "yugioh" | "moodswings" => 5,
         _ => 7,
     }
 }

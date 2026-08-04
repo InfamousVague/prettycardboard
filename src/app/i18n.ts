@@ -3501,6 +3501,32 @@ export const messages = {
     fr: 'Créer une table de draft',
     ar: 'أنشئ طاولة درافت',
   },
+  // Mood Swings plates. The game's own name is untranslated everywhere it
+  // appears, so the plates are named for the shape of the table instead.
+  plQuickMoodDuel: {
+    en: 'Head to Head',
+    es: 'Mano a mano',
+    fr: 'Tête-à-tête',
+    ar: 'وجهًا لوجه',
+  },
+  plQuickMoodTable: {
+    en: 'Full Table',
+    es: 'Mesa completa',
+    fr: 'Table complète',
+    ar: 'طاولة كاملة',
+  },
+  plQuickBlurbMoodDuel: {
+    en: 'Five minutes, no deck to bring. Play a mood, add up the table, win three rounds.',
+    es: 'Cinco minutos, sin mazo. Juega un estado de ánimo, suma la mesa, gana tres rondas.',
+    fr: 'Cinq minutes, aucun deck à apporter. Jouez une humeur, additionnez, gagnez trois manches.',
+    ar: 'خمس دقائق، دون مجموعة. العب مزاجًا، اجمع النقاط، واربح ثلاث جولات.',
+  },
+  plQuickBlurbMoodTable: {
+    en: 'Four players out of one shared deck — and the loser of each round gets Hurt Feelings.',
+    es: 'Cuatro jugadores con un mazo compartido: quien pierda la ronda recibe Hurt Feelings.',
+    fr: 'Quatre joueurs, un deck partagé — et le perdant de chaque manche récolte Hurt Feelings.',
+    ar: 'أربعة لاعبون من مجموعة واحدة مشتركة، وخاسر كل جولة ينال Hurt Feelings.',
+  },
   dfBuildClockHint: {
     en: 'When it runs out, anyone still building gets a deck assembled from their pool.',
     es: 'Al agotarse, quien siga construyendo recibirá un mazo armado con su reserva.',

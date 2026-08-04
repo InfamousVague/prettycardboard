@@ -747,12 +747,16 @@ pub async fn room_create(
         return err(StatusCode::BAD_REQUEST, "invalid_seats", "seats must be 2-6");
     }
     let game = body.game.unwrap_or_else(|| "mtg".to_string());
-    if game != "mtg" && game != "cyberpunk" && game != "yugioh" {
-        return err(StatusCode::BAD_REQUEST, "invalid_game", "game must be mtg, cyberpunk, or yugioh");
+    if !crate::rooms::GAMES.contains(&game.as_str()) {
+        return err(
+            StatusCode::BAD_REQUEST,
+            "invalid_game",
+            "game must be one of: mtg, cyberpunk, yugioh, moodswings",
+        );
     }
     // Only MTG has a commander/standard split; the other games force a plain
     // "standard" table, which also keeps the commander machinery off.
-    let format = if game == "cyberpunk" || game == "yugioh" {
+    let format = if game != "mtg" {
         "standard".to_string()
     } else {
         body.format.unwrap_or_else(|| "commander".to_string())
