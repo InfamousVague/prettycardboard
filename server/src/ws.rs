@@ -949,6 +949,56 @@ fn room_ready(app: &Arc<App>, user: &db::User, ready: bool, tx: &Tx) {
     }
 }
 
+/// The deck codes already in play at this table.
+///
+/// Both seat kinds record which precon they hold, under different prefixes -
+/// `precon:` for a quickplay deal, `bot:` for a bot seat - so a dealer that
+/// only understood one of them would happily hand a human the deck the bot
+/// beside them is already playing.
+fn taken_deck_codes(room: &rooms::Room) -> std::collections::HashSet<String> {
+    room.players
+        .iter()
+        .filter_map(|p| p.deck_id.as_deref())
+        .filter_map(|id| id.strip_prefix("precon:").or_else(|| id.strip_prefix("bot:")))
+        .map(str::to_string)
+        .collect()
+}
+
+/// Pick from `pool`, preferring a deck nobody at the table is holding.
+///
+/// WITHOUT REPLACEMENT, which matters more than it sounds. The Commander pool
+/// is four decks and a roulette pod is five seats, so independent draws gave a
+/// mean of 3.05 distinct decks across the table: 59% of pods showed only three,
+/// 18% only two, and 0.4% dealt every single seat the same deck. Preferring an
+/// untaken deck makes that four distinct and one unavoidable repeat, every
+/// time.
+///
+/// Falls back to the whole pool once every deck is spoken for - with more seats
+/// than decks a repeat has to happen, and refusing to deal would be worse than
+/// dealing a duplicate.
+fn pick_unused<'a>(
+    pool: &[&'a crate::bot::BotDeck],
+    taken: &std::collections::HashSet<String>,
+    avoid: Option<&str>,
+) -> Option<&'a crate::bot::BotDeck> {
+    if pool.is_empty() {
+        return None;
+    }
+    let fresh: Vec<&&crate::bot::BotDeck> = pool
+        .iter()
+        .filter(|d| !taken.contains(&d.code) && Some(d.code.as_str()) != avoid)
+        .collect();
+    if !fresh.is_empty() {
+        return Some(fresh[rand::random_range(0..fresh.len())]);
+    }
+    // Nothing fresh: at least honour `avoid`, so a REROLL never hands back the
+    // deck it was asked to replace even at a table that has run out of decks.
+    let not_avoided: Vec<&&crate::bot::BotDeck> =
+        pool.iter().filter(|d| Some(d.code.as_str()) != avoid).collect();
+    let from = if not_avoided.is_empty() { pool.iter().collect::<Vec<_>>() } else { not_avoided };
+    Some(from[rand::random_range(0..from.len())])
+}
+
 /// Deal one of the embedded precons to a seat.
 ///
 /// The same pool the bots draw from (`bot::decks_for`, so a Standard table gets
@@ -977,13 +1027,10 @@ fn quickplay_deal(room: &mut rooms::Room, user_id: &str, avoid: Option<&str>) ->
     if pool.is_empty() {
         return false;
     }
-    let choices: Vec<&crate::bot::BotDeck> = match avoid {
-        Some(code) if pool.iter().any(|d| d.code != code) => {
-            pool.iter().copied().filter(|d| d.code != code).collect()
-        }
-        _ => pool.clone(),
+    let taken = taken_deck_codes(room);
+    let Some(deck) = pick_unused(&pool, &taken, avoid) else {
+        return false;
     };
-    let deck = choices[rand::random_range(0..choices.len())];
     let cards: Vec<db::DeckCard> = deck
         .cards
         .iter()
@@ -1337,8 +1384,19 @@ fn bot_add(
     let pool = crate::bot::decks_for(&room.game, &room.format);
     let all: Vec<&crate::bot::BotDeck> =
         crate::bot::data().decks.iter().chain(crate::bot::ygo_data().decks.iter()).collect();
+    let taken = taken_deck_codes(&room);
     let deck: &crate::bot::BotDeck = match deck_code.as_deref() {
-        None | Some("random") => pool[rand::random_range(0..pool.len())],
+        // Prefer a deck nobody at this table already has. Bots are seated one
+        // at a time, so without this four bots drawing independently from four
+        // decks collide constantly - which is most of what made a roulette pod
+        // look like everyone had been dealt the same thing.
+        None | Some("random") => match pick_unused(&pool, &taken, None) {
+            Some(d) => d,
+            None => {
+                send_err(tx, "no_decks", "no decks available for this table");
+                return;
+            }
+        },
         Some(code) => match all.iter().copied().find(|d| d.code == code) {
             // A named deck still has to be for this game - a Commander precon
             // at a duel table would be 100 cards of the wrong card game.
