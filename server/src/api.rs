@@ -597,8 +597,11 @@ pub async fn search_archidekt(Query(q): Query<DeckSearchQuery>) -> Response {
         return err(StatusCode::BAD_REQUEST, "bad_query", "search term is too long");
     }
     let page = q.page.unwrap_or(1).clamp(1, 50);
+    // No page-size request: Archidekt answers 60 rows whatever is asked for, so
+    // a number here would only be a claim the response does not honour. The
+    // size that actually came back is reported below instead.
     let url = format!(
-        "https://archidekt.com/api/decks/v3/?name={}&pageSize=24&page={page}&orderBy=-viewCount",
+        "https://archidekt.com/api/decks/v3/?name={}&page={page}&orderBy=-viewCount",
         urlencode(term)
     );
     let Some(body) = curl_out(&url).await else {
@@ -633,8 +636,15 @@ pub async fn search_archidekt(Query(q): Query<DeckSearchQuery>) -> Response {
                 .collect()
         })
         .unwrap_or_default();
-    Json(json!({ "results": results, "total": parsed.get("count").and_then(|v| v.as_i64()) }))
-        .into_response()
+    // pageSize is what this page actually held, so the client can work out how
+    // many pages there are without hardcoding a number Archidekt never agreed
+    // to. `count` is Archidekt's total for the query.
+    Json(json!({
+        "results": results,
+        "total": parsed.get("count").and_then(|v| v.as_i64()),
+        "pageSize": results.len(),
+    }))
+    .into_response()
 }
 
 #[derive(Deserialize)]

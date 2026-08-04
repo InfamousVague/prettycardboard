@@ -24,6 +24,7 @@ import { yugiohDeckCatalog } from '../data/yugiohDecks.ts';
 import { artCrop, cardImage } from '../data/cards.ts';
 import { ColorIdentity, ManaSymbol } from '../components/Mana.tsx';
 import { BrowseCatalog, type BrowseDeck, type BrowseFacet } from '../components/BrowseCatalog.tsx';
+import { CommunityCatalog } from '../components/CommunityCatalog.tsx';
 import './browse.css';
 
 /**
@@ -70,6 +71,16 @@ export function BrowsePage() {
   useEffect(() => {
     if (!gameVisible) setGame('mtg');
   }, [game, gameVisible]);
+
+  // Where the decks come from: the precons that ship with the app, or what
+  // people have published on Archidekt. Archidekt is a Magic site, so the
+  // switch only exists on Magic - and switching games drops back to precons
+  // rather than leaving a Yu-Gi-Oh player on a Magic deck search.
+  const [source, setSource] = useState<'precon' | 'community'>('precon');
+  const community = game === 'mtg' && source === 'community';
+  useEffect(() => {
+    if (game !== 'mtg') setSource('precon');
+  }, [game]);
 
   const mtg: BrowseDeck[] = useMemo(
     () =>
@@ -249,10 +260,22 @@ export function BrowsePage() {
     <div className="page browsePage">
       <div className="browseHead">
         <Heading level={1}>
-          {game === 'cyberpunk' ? t('brTitleCyber') : game === 'yugioh' ? t('brTitleYugioh') : t('brTitle')}
+          {community
+            ? t('brTitleCommunity')
+            : game === 'cyberpunk'
+              ? t('brTitleCyber')
+              : game === 'yugioh'
+                ? t('brTitleYugioh')
+                : t('brTitle')}
         </Heading>
         <Text size={Size.Large} tone={TextTone.Muted} className="lede">
-          {game === 'cyberpunk' ? t('brLedeCyber') : game === 'yugioh' ? t('brLedeYugioh') : t('brLede')}
+          {community
+            ? t('brLedeCommunity')
+            : game === 'cyberpunk'
+              ? t('brLedeCyber')
+              : game === 'yugioh'
+                ? t('brLedeYugioh')
+                : t('brLede')}
         </Text>
         <div className="browseGameSwitch">
           <SegmentedControl
@@ -261,10 +284,23 @@ export function BrowsePage() {
             onValueChange={setGame}
             options={games.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') }))}
           />
+          {game === 'mtg' && (
+            <SegmentedControl
+              aria-label={t('brSource')}
+              value={source}
+              onValueChange={(value) => setSource(value as 'precon' | 'community')}
+              options={[
+                { value: 'precon', label: t('brSourcePrecon') },
+                { value: 'community', label: t('brSourceCommunity') },
+              ]}
+            />
+          )}
         </div>
       </div>
 
-      {game === 'cyberpunk' ? (
+      {community ? (
+        <CommunityCatalog />
+      ) : game === 'cyberpunk' ? (
         <BrowseCatalog
           decks={cyber}
           featuredIds={cyberpunkStarters().map((starter) => starter.id)}

@@ -45,10 +45,28 @@ export interface ArchidektDeck {
   cards: DeckCard[];
 }
 
-export async function searchArchidekt(term: string): Promise<ArchidektHit[]> {
+export async function searchArchidekt(term: string, page = 1): Promise<ArchidektHit[]> {
+  return (await searchArchidektPage(term, page)).results;
+}
+
+/**
+ * The same search, plus what the Discover browser needs to page it: the total
+ * Archidekt reports for the query, and how many rows this page actually held.
+ * The size is reported rather than assumed because Archidekt answers 60 rows
+ * regardless of what page size is requested.
+ */
+export async function searchArchidektPage(
+  term: string,
+  page = 1,
+): Promise<{ results: ArchidektHit[]; total: number | null; pageSize: number | null }> {
   try {
-    const body = await api.searchArchidektDecks(term);
-    return Array.isArray(body?.results) ? body.results : [];
+    const body = await api.searchArchidektDecks(term, page);
+    const results = Array.isArray(body?.results) ? body.results : [];
+    return {
+      results,
+      total: typeof body?.total === 'number' ? body.total : null,
+      pageSize: typeof body?.pageSize === 'number' && body.pageSize > 0 ? body.pageSize : null,
+    };
   } catch {
     throw new ArchidektError('archidekt-unreachable');
   }

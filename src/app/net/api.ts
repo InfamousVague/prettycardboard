@@ -262,8 +262,11 @@ export function moxfieldDeck(deckId: string): Promise<unknown> {
  * intended for public use" and answers its search endpoints with a Cloudflare
  * challenge. Moxfield import by URL is unaffected.
  */
-export function searchArchidektDecks(term: string): Promise<{ results: ArchidektHit[]; total?: number }> {
-  return request('GET', `/api/decks/search/archidekt?q=${encodeURIComponent(term)}`);
+export function searchArchidektDecks(
+  term: string,
+  page = 1,
+): Promise<{ results: ArchidektHit[]; total?: number; pageSize?: number }> {
+  return request('GET', `/api/decks/search/archidekt?q=${encodeURIComponent(term)}&page=${page}`);
 }
 
 /** Fetch one Archidekt deck through the server. Returns their raw JSON. */

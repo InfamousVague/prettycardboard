@@ -8,8 +8,16 @@
   gap: var(--glacier-space-2);
 }
 
-/* One aligned toolbar: search grows, chip group and controls wrap as units. */
+/* Two lines: the search field, then everything that narrows what it returns.
+   They used to share one wrapping row, which left search whatever width the
+   chip groups did not want - about 22rem, too narrow for its own placeholder. */
 .browseToolbar {
+  display: grid;
+  gap: var(--glacier-space-3);
+}
+
+/* Chips, sort and grouping wrap as units under the field. */
+.browseToolbarRow {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -17,8 +25,8 @@
 }
 
 .browseSearch {
-  flex: 1 1 auto;
-  min-width: 14rem;
+  /* Wide enough to read a long query back, not so wide it becomes the page. */
+  max-inline-size: 42rem;
 }
 
 /* The WUBRG filter row. It is one flex ITEM of the wrapping toolbar, so the
@@ -62,8 +70,10 @@
 .browseGrid {
   display: grid;
   /* min(100%, …) keeps the track from under-flowing viewports narrower than
-     the ideal tile - without it phones pan the whole page sideways. */
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 25rem), 1fr));
+     the ideal tile - without it phones pan the whole page sideways. 21rem
+     rather than 25rem: at 25rem a 1600px window fitted three decks across
+     while browsing a catalogue of seventeen hundred. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr));
   gap: var(--glacier-space-4);
 }
 
@@ -76,6 +86,16 @@
   align-items: stretch;
   gap: var(--glacier-space-4);
   padding: var(--glacier-space-4);
+  /* Offscreen tiles skip layout, style and paint entirely. Each one carries a
+     blurred art layer, which is expensive enough that a screen's worth is
+     fine and a page's worth is not. contain-intrinsic-size keeps the
+     scrollbar honest by reserving the height of a tile that has not rendered
+     yet - without it the page height jumps as you scroll. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 12.5rem;
+  /* The tile sizes its own controls: the grid decides how wide a tile is, and
+     the buttons inside answer to that rather than to the viewport. */
+  container-type: inline-size;
   border-radius: var(--glacier-radius-xl);
   border: var(--glacier-hairline) solid var(--glacier-border-subtle);
   background: var(--glacier-surface);
@@ -189,14 +209,59 @@
   display: flex;
   gap: var(--glacier-space-2);
   align-items: center;
+  min-inline-size: 0;
 }
 .browseTileActions > button:last-child {
   flex: 1;
   justify-content: center;
 }
 
+/* Two labelled buttons want ~224px and the body of a tile has never had that
+   much, so Add has been running off the edge at every width. Below the width
+   where both labels fit, Preview keeps its eye and drops its word; its
+   aria-label still names it. */
+.browseTileBtnLabel {
+  display: none;
+}
+
+/* With no label there is no reason to keep a label's padding or the gap the
+   icon leaves for one. The second button's word changes with state - "Add"
+   becomes the longer "Added" once the deck is in the library - so the room
+   this frees is what keeps that case on one line too. */
+.browseTileActions > button:first-child {
+  padding-inline: var(--glacier-space-2);
+}
+
+.browseTileActions > button:first-child svg {
+  margin-inline-end: 0;
+}
+
+@container (min-width: 25rem) {
+  .browseTileBtnLabel {
+    display: inline;
+  }
+
+  .browseTileActions > button:first-child {
+    padding-inline: var(--glacier-space-3);
+  }
+
+  .browseTileActions > button:first-child svg {
+    margin-inline-end: var(--glacier-space-1);
+  }
+}
+
 .browseTileBody button svg {
   margin-inline-end: var(--glacier-space-1);
+}
+
+/* Archidekt pages server-side, so its results walk pages instead of growing
+   one list the way the bundled catalog does. */
+.browsePager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--glacier-space-3);
+  margin-block-start: var(--glacier-space-5);
 }
 
 /* Game switcher (MTG | Cyberpunk) under the Browse header. */
@@ -256,7 +321,28 @@
   vertical-align: middle;
 }
 
-/* A group opens at a readable size; this asks for the rest of it. */
+/* The catalog pages rather than rendering whole; this asks for the next one. */
 .browseShowAll {
-  margin-block-start: var(--glacier-space-3);
+  margin-block-start: var(--glacier-space-4);
+  align-self: center;
+}
+
+/* How many decks matched, and how much of that is on screen. */
+.browseCount {
+  display: flex;
+  align-items: center;
+  gap: var(--glacier-space-2);
+  min-block-size: 1.75rem;
+}
+
+/* While a typed query is still settling the results behind it dim rather than
+   blanking, so the page does not flash empty between keystrokes. */
+.browseResults {
+  display: grid;
+  gap: var(--glacier-space-5);
+  transition: opacity var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.browseResults[data-settling] {
+  opacity: 0.55;
 }

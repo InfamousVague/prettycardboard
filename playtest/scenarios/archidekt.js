@@ -45,6 +45,31 @@ async function main() {
     JSON.stringify(Object.keys(results[0] ?? {})),
   );
 
+  // ---- 1b) Paging. Discover browses these results a page at a time, and it
+  //          works out how many pages there are from what the response says.
+  //          Archidekt ignores any page size asked of it and answers 60 rows,
+  //          so the server reports the size it ACTUALLY got - assuming a number
+  //          here put the page count out by a factor of two and a half.
+  t.ok(
+    typeof search.json?.pageSize === 'number' && search.json.pageSize > 0,
+    'the response says how big a page was',
+    String(search.json?.pageSize),
+  );
+  t.eq(search.json.pageSize, results.length, '...and that is the row count it returned');
+  t.ok(typeof search.json?.total === 'number', 'and how many decks matched in total', String(search.json?.total));
+
+  const two = await me.api('GET', '/api/decks/search/archidekt?q=liliana&page=2');
+  t.eq(two.status, 200, 'page 2 answers');
+  const secondPage = two.json?.results ?? [];
+  t.ok(secondPage.length > 0, 'page 2 has decks', `${secondPage.length}`);
+  // The guard that matters: paging must actually move. A site that ignores the
+  // page parameter would hand back page 1 forever and the pager would lie.
+  const firstIds = new Set(results.map((r) => r.id));
+  t.ok(
+    secondPage.some((r) => !firstIds.has(r.id)),
+    'page 2 is different decks, so paging moves',
+  );
+
   // ---- 2) A term nobody wrote a deck about is empty, not broken.
   const junk = await me.api(
     'GET',
