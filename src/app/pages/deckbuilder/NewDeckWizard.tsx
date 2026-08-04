@@ -10,6 +10,7 @@ import { GAME_LIST, getGame } from '../../data/games.ts';
 import { usePreference } from '../../hooks/usePreference.ts';
 import { cyberpunkCatalog, cyberpunkImage } from '../../data/cyberpunk.ts';
 import { yugiohImage, yugiohStarters } from '../../data/yugioh.ts';
+import { moodBox, moodImage, moodSlug } from '../../data/moodswings.ts';
 import { GameBadge } from '../../components/GameTag.tsx';
 import type { DeckCard } from '../../net/types.ts';
 import './newDeckWizard.css';
@@ -128,8 +129,41 @@ export function NewDeckWizard({ open, onClose }: { open: boolean; onClose: () =>
                     </button>
                   )),
                 ]
-              : activeGame === 'yugioh'
-                ? [
+              : activeGame === 'moodswings'
+                ? // Mood Swings has no deckbuilding, so there is nothing to
+                  // start from scratch WITH - a blank one would be a deck you
+                  // could never fill. The only real starting point is the
+                  // product: a box of 45 off the 133, rolled fresh, which is
+                  // why this is one button rather than a menu.
+                  [
+                    <button
+                      key="box"
+                      type="button"
+                      className="ndwKind"
+                      style={{ ['--game-accent' as string]: chosen.accent }}
+                      disabled={busy}
+                      onClick={() =>
+                        create({
+                          game: 'moodswings',
+                          format: 'standard',
+                          name: t('ndwMoodBox'),
+                          cards: moodBox(),
+                        })
+                      }
+                    >
+                      <span
+                        className="ndwKindArt"
+                        style={{ backgroundImage: `url("${moodImage(moodSlug('Love'))}")` }}
+                        aria-hidden
+                      />
+                      <span className="ndwKindBody">
+                        <span className="ndwKindName">{t('ndwMoodBox')}</span>
+                        <span className="ndwKindDesc">{t('ndwMoodBoxHint')}</span>
+                      </span>
+                    </button>,
+                  ]
+                : activeGame === 'yugioh'
+                  ? [
                     <button
                       key="blank"
                       type="button"

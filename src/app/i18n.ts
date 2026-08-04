@@ -2626,6 +2626,13 @@ export const messages = {
   ygoSummon: { en: 'Summon', es: 'Invocar', fr: 'Invoquer', ar: 'استدعاء' },
   ygoSetMonster: { en: 'Set monster (defense)', es: 'Colocar monstruo (defensa)', fr: 'Poser un monstre (défense)', ar: 'ضع وحشًا (دفاع)' },
   ygoSetBackrow: { en: 'Set Spell/Trap', es: 'Colocar mágica/trampa', fr: 'Poser une magie/un piège', ar: 'ضع سحرًا/فخًا' },
+  ndwMoodBox: { en: 'Open a box', es: 'Abrir una caja', fr: 'Ouvrir une boîte', ar: 'افتح علبة' },
+  ndwMoodBoxHint: {
+    en: '45 cards drawn at random from all 133 — no two boxes alike, and nothing to build',
+    es: '45 cartas al azar de las 133: no hay dos cajas iguales, y no hay nada que construir',
+    fr: '45 cartes tirées au hasard parmi 133 — deux boîtes ne se ressemblent jamais, et rien à construire',
+    ar: '٤٥ بطاقة تُسحب عشوائيًا من ١٣٣ — لا تتشابه علبتان، ولا شيء لبنائه',
+  },
   ndwBlankHintYugioh: { en: 'Start from scratch: 40–60 Main, up to 15 Extra', es: 'Desde cero: 40–60 principal, hasta 15 extra', fr: 'De zéro : 40–60 principal, 15 extra max', ar: 'من الصفر: ٤٠–٦٠ رئيسية وحتى ١٥ إضافية' },
   hmYugiohStarters: { en: 'Yu-Gi-Oh! starter decks', es: 'Mazos iniciales de Yu-Gi-Oh!', fr: 'Decks de démarrage Yu-Gi-Oh!', ar: 'مجموعات يوغي أوه! للمبتدئين' },
   brTitleYugioh: { en: 'Browse Yu-Gi-Oh! decks', es: 'Explorar mazos de Yu-Gi-Oh!', fr: 'Parcourir les decks Yu-Gi-Oh!', ar: 'تصفح مجموعات يوغي أوه!' },
