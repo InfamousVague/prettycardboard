@@ -344,14 +344,35 @@ export function PhaseRibbon({
           data-mine={myTurn || undefined}
           style={{ ['--pc-seat-color' as string]: seatColor(room.activeSeat ?? 0) }}
         >
-          <span className="turnPlateCount">
-            <span className="turnPlateWord">{t('gpTurnOf')}</span>
-            <b className="turnPlateNum">{room.turnNumber ?? 1}</b>
+          {/* The stack, back to front. Siblings rather than pseudo-elements
+              because there are more layers than the two ::before/::after one
+              element can carry, and because the sweep has to sit ABOVE the
+              halftone and BELOW the type, which pseudo-element order cannot
+              express.
+
+              The slab is OUTSIDE the face on purpose. clip-path clips every
+              descendant, so a depth plate nested inside the notched face would
+              have its whole offset clipped away and the plate would look flat.
+              The face carries the notch; the slab carries the thickness. */}
+          <span className="turnPlateSlab" aria-hidden />
+          <span className="turnPlateFace">
+            <span className="turnPlateDots" aria-hidden />
+            <span className="turnPlateSweep" aria-hidden />
+            <span className="turnPlateBevel" aria-hidden />
+
+            {/* The turn number gets its own notched cell, so the count reads as
+                a stamped chit rather than as the first word of a sentence. */}
+            <span className="turnPlateChit">
+              <span className="turnPlateWord">{t('gpTurnOf')}</span>
+              <b className="turnPlateNum">{room.turnNumber ?? 1}</b>
+            </span>
+            <span className="turnPlateBody">
+              {activePlayer && (
+                <span className="turnPlateWho">{myTurn ? t('tblYourTurn') : activePlayer.username}</span>
+              )}
+              <span className="turnPlateClock">{turnClock}</span>
+            </span>
           </span>
-          {activePlayer && (
-            <span className="turnPlateWho">{myTurn ? t('tblYourTurn') : activePlayer.username}</span>
-          )}
-          <span className="turnPlateClock">{turnClock}</span>
         </div>
 
         {canAct && me && (
