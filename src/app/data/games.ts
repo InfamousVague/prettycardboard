@@ -2,6 +2,7 @@ import type { Board, Zone } from '../net/types.ts';
 import { cardImage } from './cards.ts';
 import { cyberpunkImage } from './cyberpunk.ts';
 import { yugiohImage } from './yugioh.ts';
+import { moodImage } from './moodswings.ts';
 import { FORMATS, formatFor } from './formats.ts';
 
 /**
@@ -18,7 +19,7 @@ import { FORMATS, formatFor } from './formats.ts';
  * and hides the slots it does not use.
  */
 
-export type GameId = 'mtg' | 'cyberpunk' | 'yugioh';
+export type GameId = 'mtg' | 'cyberpunk' | 'yugioh' | 'moodswings';
 
 export interface GameZoneDef {
   /** The physical server zone slot this maps to. */
@@ -217,9 +218,70 @@ const YUGIOH: GameDef = {
   resolveImage: (id) => yugiohImage(id),
 };
 
-export const GAMES: Record<GameId, GameDef> = { mtg: MTG, cyberpunk: CYBERPUNK, yugioh: YUGIOH };
+/**
+ * Mood Swings is the odd one out in this registry, and the shape of the entry
+ * is mostly a record of that. It is not a TCG: no mana, no life, no combat, no
+ * deckbuilding, and a game lasts five minutes. Everyone plays out of ONE shared
+ * deck into a personal row of moods that accumulates across rounds; highest
+ * total takes the round, three rounds takes the game.
+ *
+ * Two mappings onto the freeform engine are worth naming:
+ *
+ * - `library`/`graveyard` are per-player slots and the real game's deck and
+ *   discard are SHARED. The table works because the engine is freeform: the
+ *   host holds the pile everyone draws from and moves cards on request, the
+ *   same way a physical table has one person nearest the box. Anything better
+ *   needs a shared-zone concept the server does not have.
+ * - `tapping` is on, but sideways here means SUPPRESSED - value counts as [0]
+ *   while the card stays in play (it still has a colour other cards can see).
+ */
+const MOOD_SWINGS: GameDef = {
+  id: 'moodswings',
+  name: 'Mood Swings',
+  tagline: 'Mark Rosewater’s emotion game — 2–4 players, five minutes, no deckbuilding',
+  // Rose. The cards are graphite-grey art in five coloured frames, so the game
+  // has no single brand colour of its own to borrow; this reads apart from
+  // Magic's violet, Cyberpunk's lemon and Yu-Gi-Oh's gold at tag size.
+  accent: '#e2678f',
+  zones: [
+    { slot: 'library', label: 'Deck', hidden: true },
+    { slot: 'graveyard', label: 'Discard' },
+    // Where the Hurt Feelings marker sits for whoever is holding it. Nothing is
+    // dealt here at setup (no `anchor`), and in a two-player game it stays
+    // empty - Hurt Feelings only exists at three or more.
+    { slot: 'command', label: 'Hurt Feelings' },
+    { slot: 'exile', label: 'Exile', unused: true },
+  ],
+  resources: [
+    // First to three rounds wins, so rounds - not score - is the headline
+    // number. Score is per-round and resets; the playmat also shows the printed
+    // sum of your moods as an aid, which is why this stays a manual counter.
+    { id: 'rounds', label: 'Rounds', start: 0, primary: true, min: 0 },
+    { id: 'score', label: 'Score', start: 0, min: 0 },
+  ],
+  // No phases: a turn is "play one mood or pass", and a round is one turn each.
+  phases: [],
+  stats: [{ id: 'cost', label: 'Value' }],
+  deck: {
+    // A box is 45 cards drawn from the 133-card set, and the 45 are distinct,
+    // so the pool is singleton. Everyone draws five to start.
+    size: 45,
+    singleton: true,
+    startingHand: 5,
+  },
+  formats: [{ id: 'standard', label: 'Standard' }],
+  tapping: true,
+  resolveImage: (id) => moodImage(id),
+};
 
-export const GAME_LIST: GameDef[] = [MTG, CYBERPUNK, YUGIOH];
+export const GAMES: Record<GameId, GameDef> = {
+  mtg: MTG,
+  cyberpunk: CYBERPUNK,
+  yugioh: YUGIOH,
+  moodswings: MOOD_SWINGS,
+};
+
+export const GAME_LIST: GameDef[] = [MTG, CYBERPUNK, YUGIOH, MOOD_SWINGS];
 
 /** The default game for existing rooms and any snapshot without a `game` field. */
 export const DEFAULT_GAME: GameId = 'mtg';

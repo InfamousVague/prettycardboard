@@ -76,6 +76,7 @@ export const messages = {
   custThemeMagic: { en: 'Magic', es: 'Magic', fr: 'Magic', ar: 'ماجيك' },
   custThemeCyberpunk: { en: 'Cyberpunk', es: 'Cyberpunk', fr: 'Cyberpunk', ar: 'سايبربانك' },
   custThemeYugioh: { en: 'Yu-Gi-Oh!', es: 'Yu-Gi-Oh!', fr: 'Yu-Gi-Oh!', ar: 'يوغي أوه!' },
+  custThemeMoodSwings: { en: 'Mood Swings', es: 'Mood Swings', fr: 'Mood Swings', ar: 'Mood Swings' },
   custThemeGeneric: { en: 'Generic', es: 'Genéricos', fr: 'Génériques', ar: 'عام' },
   custThemeSolid: { en: 'Solid', es: 'Sólidos', fr: 'Unis', ar: 'صلبة' },
   custDice: { en: 'Dice skin', es: 'Estilo de dados', fr: 'Style de dés', ar: 'مظهر النرد' },

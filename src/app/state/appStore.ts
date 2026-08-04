@@ -23,6 +23,7 @@ const SEEDED_KEY = 'pc.seeded';
 /** Marks that this account's Yu-Gi-Oh starters have been dealt out, so a player
  *  who deletes one does not find it back at the next sign-in. */
 const YGO_SEEDED_KEY = 'pc.seeded.yugioh';
+const MSW_SEEDED_KEY = 'pc.seeded.moodswings';
 
 export interface InviteToast {
   from: { userId: string; username: string };
@@ -191,6 +192,23 @@ export const useApp = create<AppState>((set, get) => {
       }
     } catch {
       // Offline or a server hiccup: no marker, so the next sign-in retries.
+    }
+    // A Mood Swings "deck" is a BOX: 45 of the 133 cards, randomised, which is
+    // what the physical product is rather than a simplification of it. So the
+    // seed rolls one instead of shipping a fixed list, and two accounts opening
+    // the app get different boxes the same way two buyers would. It carries the
+    // graph-paper mat because that is the surface those cards are drawn on.
+    try {
+      if (localStorage.getItem(MSW_SEEDED_KEY) !== identity.userId) {
+        if (!get().decks.some((deck) => deck.game === 'moodswings')) {
+          const { moodBox } = await import('../data/moodswings.ts');
+          await api.createDeck('Mood Swings Box', 'standard', moodBox(), null, 'moodswings', 'graph-paper');
+          await get().refreshDecks();
+        }
+        localStorage.setItem(MSW_SEEDED_KEY, identity.userId);
+      }
+    } catch {
+      // Same best-effort contract as the Yu-Gi-Oh seed above.
     }
   };
 

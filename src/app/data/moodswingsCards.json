@@ -1,0 +1,1509 @@
+{
+ "set": "MSW",
+ "cards": [
+  {
+   "name": "Altruism",
+   "color": "white",
+   "rarity": "rare",
+   "values": [
+    3,
+    61
+   ],
+   "valueText": "[3]/[6][1]",
+   "text": "After playing this mood — If the discard pile has at least one card in it, this mood's value becomes [6][1]. Then starting with the next player in turn order, each player takes a random card from the discard pile and puts it into their hand. Put the rest of the discard pile onto the bottom of the deck in a random order.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_1bc40321f2.webp"
+  },
+  {
+   "name": "Ambition",
+   "color": "black",
+   "rarity": "common",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — You may discard a card from your hand. If you do, you may play an additional mood this turn.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_5f8ab4747e.webp"
+  },
+  {
+   "name": "Ambivalence",
+   "color": "blue",
+   "rarity": "common",
+   "values": [
+    6,
+    3
+   ],
+   "valueText": "[6]/[3]",
+   "text": "While in play — This mood's value is [3] if there are two or more red and/or green moods.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_9f66939e52.webp"
+  },
+  {
+   "name": "Anger",
+   "color": "red",
+   "rarity": "uncommon",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "After playing this mood — You may put any number of moods with total value [5] or less into the discard pile.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_2bc0509610.webp"
+  },
+  {
+   "name": "Angst",
+   "color": "black",
+   "rarity": "uncommon",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — You may put one of your blue or red moods into the discard pile. If you do, you may play an additional mood this turn from the discard pile. (You can play the card you just put into the discard pile if you want.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_f8d9de643e.webp"
+  },
+  {
+   "name": "Animosity",
+   "color": "red",
+   "rarity": "uncommon",
+   "values": [
+    3,
+    5
+   ],
+   "valueText": "[3]/[5]",
+   "text": "While in play — This mood's value is [5] if any opponent has three or more cards in hand.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_87967089d9.webp"
+  },
+  {
+   "name": "Anxiety",
+   "color": "blue",
+   "rarity": "common",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — Choose up to two players. For each chosen player, put one of their moods with an odd value into their hand.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_00bf0769bc.webp"
+  },
+  {
+   "name": "Apathy",
+   "color": "black",
+   "rarity": "common",
+   "values": [
+    4
+   ],
+   "valueText": "[4]",
+   "text": "",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_214a4fbfb6.webp"
+  },
+  {
+   "name": "Arrogance",
+   "color": "red",
+   "rarity": "uncommon",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — You may choose an opponent. If you do, they choose one of their white or blue moods and it becomes yours. After this mood is no longer in play, give the mood you took back to them (if you still have it).",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_2c0da1316e.webp"
+  },
+  {
+   "name": "Avoidance",
+   "color": "blue",
+   "rarity": "rare",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — Choose left or right. Each player chooses one of their moods and gives it to the next player in the chosen direction. (Moods are cards in play.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_6dd47f31dd.webp"
+  },
+  {
+   "name": "Awe",
+   "color": "green",
+   "rarity": "rare",
+   "values": [
+    4
+   ],
+   "valueText": "[4]",
+   "text": "After playing this mood — There is no scoring this round. No one wins or loses this round. You choose which player goes first next round. (This round, no one will draw a card or get Hurt Feelings, and \"after scoring\" effects won't happen.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_6922ed810f.webp"
+  },
+  {
+   "name": "Bashfulness",
+   "color": "blue",
+   "rarity": "common",
+   "values": [
+    6
+   ],
+   "valueText": "[6]",
+   "text": "After playing this mood — After scoring this round, if you won the round, put this mood on the bottom of the deck and draw a card.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_2a40ab595f.webp"
+  },
+  {
+   "name": "Benevolence",
+   "color": "white",
+   "rarity": "uncommon",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — You may play an additional mood this turn if it doesn't share a color with any of your moods.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_39aeab52de.webp"
+  },
+  {
+   "name": "Betrayal",
+   "color": "black",
+   "rarity": "uncommon",
+   "values": [
+    6
+   ],
+   "valueText": "[6]",
+   "text": "After playing this mood — Give one of your moods to another player. After scoring, that mood becomes yours again (if it's still in play).",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_2cf642f7d2.webp"
+  },
+  {
+   "name": "Bitterness",
+   "color": "black",
+   "rarity": "uncommon",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "After playing this mood — Calculate the most common color or colors among all moods. Put all other moods that share one of those colors into the discard pile.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_fedf3406e2.webp"
+  },
+  {
+   "name": "Bliss",
+   "color": "green",
+   "rarity": "mythic rare",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "To play this card — Discard a card from your hand. (If you can't do that, you can't play this card.) While in play — Score each of your moods that share a color with the discarded card two extra times.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_f11ac0d4cd.webp"
+  },
+  {
+   "name": "Boredom",
+   "color": "red",
+   "rarity": "common",
+   "values": [
+    4
+   ],
+   "valueText": "[4]",
+   "text": "",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_a5c5a5f851.webp"
+  },
+  {
+   "name": "Bravado",
+   "color": "red",
+   "rarity": "common",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — You may put one of your other moods into the discard pile (moods are cards in play). If you do, you may play an additional mood this turn.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_10a2381e9e.webp"
+  },
+  {
+   "name": "Celebration",
+   "color": "green",
+   "rarity": "common",
+   "values": [
+    3,
+    61
+   ],
+   "valueText": "[3]/[6][1]",
+   "text": "While in play — This mood's value is [6][1] if there are more colors among your moods than among each other player's moods.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_a73f42f958.webp"
+  },
+  {
+   "name": "Chaos",
+   "color": "red",
+   "rarity": "mythic rare",
+   "values": [
+    6
+   ],
+   "valueText": "[6]",
+   "text": "After playing this mood — Shuffle all moods together. Starting with you and going in turn order, deal those moods out one at a time to each player. (Moods may change players but \"After playing this mood\" effects won't happen again.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_33c8513101.webp"
+  },
+  {
+   "name": "Charity",
+   "color": "white",
+   "rarity": "common",
+   "values": [
+    1
+   ],
+   "valueText": "[1]",
+   "text": "After playing this mood — You may play an additional mood this turn.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_056ea8dd92.webp"
+  },
+  {
+   "name": "Cheer",
+   "color": "green",
+   "rarity": "common",
+   "values": [
+    3,
+    5
+   ],
+   "valueText": "[3]/[5]",
+   "text": "After playing this mood — You may discard a card from your hand with a [0], [2], [4], or [6] in its top right corner. If you do, this mood's value becomes [5].",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_a84ef2f73e.webp"
+  },
+  {
+   "name": "Chivalry",
+   "color": "white",
+   "rarity": "common",
+   "values": [
+    3,
+    5
+   ],
+   "valueText": "[3]/[5]",
+   "text": "While in play — This mood's value is [5] if you didn't go first this round.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_17ad03c3fd.webp"
+  },
+  {
+   "name": "Complacency",
+   "color": "white",
+   "rarity": "common",
+   "values": [
+    4
+   ],
+   "valueText": "[4]",
+   "text": "",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_28fdace6de.webp"
+  },
+  {
+   "name": "Compulsion",
+   "color": "red",
+   "rarity": "common",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — Choose another player. That player chooses a card from their hand and gives it to you.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_f709a579c6.webp"
+  },
+  {
+   "name": "Condescension",
+   "color": "black",
+   "rarity": "common",
+   "values": [
+    3,
+    6
+   ],
+   "valueText": "[3]/[6]",
+   "text": "After playing this mood — You may give a card from your hand to another player. If you do, this mood's value becomes [6].",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_0c52b2ac0d.webp"
+  },
+  {
+   "name": "Confusion",
+   "color": "blue",
+   "rarity": "uncommon",
+   "values": [
+    4
+   ],
+   "valueText": "[4]",
+   "text": "After playing this mood — Choose left or right. Each player chooses a card from their hand and gives it to the next player in the chosen direction.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_2e5a6b38f7.webp"
+  },
+  {
+   "name": "Contempt",
+   "color": "black",
+   "rarity": "uncommon",
+   "values": [
+    1
+   ],
+   "valueText": "[1]",
+   "text": "After playing this mood — You may choose one: • Put a green or white mood into the discard pile. • Put all green and white moods into the discard pile.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_6465486329.webp"
+  },
+  {
+   "name": "Conviction",
+   "color": "white",
+   "rarity": "uncommon",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — Choose a mood. Its player puts it on the bottom of the deck and draws a card.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_e2d644bb36.webp"
+  },
+  {
+   "name": "Corruption",
+   "color": "black",
+   "rarity": "rare",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — You may choose one: • Put up to two cards from the discard pile on the bottom of the deck, then draw that many cards. • The winner of the current round wins two rounds instead of one. (Each losing player still draws only one card.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_493c0b60a1.webp"
+  },
+  {
+   "name": "Courage",
+   "color": "white",
+   "rarity": "common",
+   "values": [
+    1
+   ],
+   "valueText": "[1]",
+   "text": "After playing this mood — Choose up to two players. For each chosen player, put one of their moods with a value of [5] or more into the discard pile.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_8d8ff36909.webp"
+  },
+  {
+   "name": "Creativity",
+   "color": "blue",
+   "rarity": "rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "You may play this card as a copy of any mood. (Treat this mood as if it were an exact copy of that printed card, including dice, color, and abilities. The copied traits last for as long as this mood is in play.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_96bb086d3d.webp"
+  },
+  {
+   "name": "Cruelty",
+   "color": "black",
+   "rarity": "uncommon",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — Choose any number of opponents who each have two or more moods. Each chosen opponent puts a random one of their moods into the discard pile. (Moods are cards in play.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_72e6fb2349.webp"
+  },
+  {
+   "name": "Curiosity",
+   "color": "blue",
+   "rarity": "common",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — You may choose a player. If you do, that player reveals a random card from their hand. If the revealed card shares a color with any mood, this mood's value becomes [6].",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_4189ffd6b0.webp"
+  },
+  {
+   "name": "Cynicism",
+   "color": "black",
+   "rarity": "uncommon",
+   "values": [
+    3,
+    6
+   ],
+   "valueText": "[3]/[6]",
+   "text": "After playing this mood — You may put a card from the discard pile into an opponent's hand. If you do, this mood's value becomes [6].",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_3e5cc80185.webp"
+  },
+  {
+   "name": "Delight",
+   "color": "green",
+   "rarity": "common",
+   "values": [
+    3,
+    5
+   ],
+   "valueText": "[3]/[5]",
+   "text": "After playing this mood — You may discard a card from your hand with a [1], [3], or [5] in its top right corner. If you do, this mood's value becomes [5].",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_8a3502598f.webp"
+  },
+  {
+   "name": "Denial",
+   "color": "blue",
+   "rarity": "rare",
+   "values": [
+    1
+   ],
+   "valueText": "[1]",
+   "text": "After playing this mood — You may choose two other moods. If the two chosen moods share a color or have the same value, put them into their players' hands.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_8a9c5980f4.webp"
+  },
+  {
+   "name": "Determination",
+   "color": "green",
+   "rarity": "common",
+   "values": [
+    3,
+    6
+   ],
+   "valueText": "[3]/[6]",
+   "text": "While in play — This mood's value is [6] if there are three or more moods that share a color. (Moods are cards in play.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_f6a797b668.webp"
+  },
+  {
+   "name": "Dignity",
+   "color": "white",
+   "rarity": "common",
+   "values": [
+    3,
+    5
+   ],
+   "valueText": "[3]/[5]",
+   "text": "After playing this mood — You may discard a card from your hand with a [0], [1], [2], or [3] in its top right corner. If you do, this mood's value becomes [5].",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_c71c6fe5a6.webp"
+  },
+  {
+   "name": "Discipline",
+   "color": "white",
+   "rarity": "common",
+   "values": [
+    6,
+    3
+   ],
+   "valueText": "[6]/[3]",
+   "text": "While in play — This mood's value is [3] if there are two or more black and/or red moods.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_599c19a67e.webp"
+  },
+  {
+   "name": "Disgust",
+   "color": "black",
+   "rarity": "common",
+   "values": [
+    6,
+    3
+   ],
+   "valueText": "[6]/[3]",
+   "text": "While in play — This mood's value is [3] if there are two or more green and/or white moods.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_449e96eaa5.webp"
+  },
+  {
+   "name": "Disillusionment",
+   "color": "white",
+   "rarity": "rare",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — Starting with the next player in turn order, each player may choose a color. Put each other mood that shares one of those colors into the discard pile.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_88d0a39121.webp"
+  },
+  {
+   "name": "Disorientation",
+   "color": "blue",
+   "rarity": "rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "After playing this mood — You may choose a number. If you do, put all other moods with the chosen value into their players' hands.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_5accb283ed.webp"
+  },
+  {
+   "name": "Disregard",
+   "color": "green",
+   "rarity": "common",
+   "values": [
+    6,
+    3
+   ],
+   "valueText": "[6]/[3]",
+   "text": "While in play — This mood's value is [3] if there are two or more blue and/or black moods.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_6147c110a1.webp"
+  },
+  {
+   "name": "Doubt",
+   "color": "blue",
+   "rarity": "uncommon",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — You may reveal any number of cards from your hand and put them on the bottom of the deck, then draw that many cards. During the next round, players can't play moods that share a color with any of the revealed cards.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_dd66017000.webp"
+  },
+  {
+   "name": "Duplicity",
+   "color": "blue",
+   "rarity": "mythic rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "After playing this mood — You may play an additional mood this turn. While in play — Each time you play another mood, you may have that mood's \"After playing this mood\" effect happen an additional time. (If that effect involves a choice, different choices can be made each time.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_1364393674.webp"
+  },
+  {
+   "name": "Eagerness",
+   "color": "green",
+   "rarity": "uncommon",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — You may play an additional mood this turn if it shares a color with one of your moods.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_638fd1b331.webp"
+  },
+  {
+   "name": "Embarrassment",
+   "color": "red",
+   "rarity": "common",
+   "values": [
+    3,
+    5
+   ],
+   "valueText": "[3]/[5]",
+   "text": "After playing this mood — You may discard a card from your hand with a [4], [5], or [6] in its top right corner. If you do, this mood's value becomes [5].",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_f96a43ef62.webp"
+  },
+  {
+   "name": "Encouragement",
+   "color": "white",
+   "rarity": "uncommon",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — You may choose a mood with dice in its lower left corner. While in play — The chosen mood uses the dice total in its top right corner or lower left corner, whichever is higher, to determine its value.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_a5c2c92dce.webp"
+  },
+  {
+   "name": "Enjoyment",
+   "color": "green",
+   "rarity": "common",
+   "values": [
+    3,
+    6
+   ],
+   "valueText": "[3]/[6]",
+   "text": "While in play — This mood's value is [6] if there are two or more red and/or white moods.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_3f91566414.webp"
+  },
+  {
+   "name": "Enthusiasm",
+   "color": "green",
+   "rarity": "uncommon",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "While in play — While scoring, you may score one of your moods an extra time.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_37c8ff6ac3.webp"
+  },
+  {
+   "name": "Envy",
+   "color": "black",
+   "rarity": "rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "To play this card — Put one of your moods into the discard pile. (If you can't do that, you can't play this card. Moods are cards in play.) While in play — This mood's value increases by [2] for each mood your moodiest opponent has.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_41c30f829d.webp"
+  },
+  {
+   "name": "Euphoria",
+   "color": "green",
+   "rarity": "rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "While in play — This mood's value increases by [1] for each mood (including itself and other players' moods).",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_944642a216.webp"
+  },
+  {
+   "name": "Excitement",
+   "color": "red",
+   "rarity": "common",
+   "values": [
+    3,
+    6
+   ],
+   "valueText": "[3]/[6]",
+   "text": "While in play — This mood's value is [6] if there are two or more black and/or green moods.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_091025d24d.webp"
+  },
+  {
+   "name": "Exhilaration",
+   "color": "red",
+   "rarity": "mythic rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "To play this card — Put one of your moods into the discard pile. (If you can't do that, you can't play this card. Moods are cards in play.) While in play — Score your moods an extra time.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_32e19d377b.webp"
+  },
+  {
+   "name": "Faith",
+   "color": "white",
+   "rarity": "uncommon",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — You may discard a green or blue card from your hand. If you do, suppress any mood. It remains suppressed for as long as you have this mood. (While suppressed, that mood has a value of [0]. Turn it sideways to keep track.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_51ab7c95dd.webp"
+  },
+  {
+   "name": "Fascination",
+   "color": "green",
+   "rarity": "uncommon",
+   "values": [
+    3,
+    61
+   ],
+   "valueText": "[3]/[6][1]",
+   "text": "After playing this mood — You may reveal a blue or black card from your hand and give it to another player. If you do, this mood's value becomes [6][1].",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_cf54facc33.webp"
+  },
+  {
+   "name": "Fear",
+   "color": "blue",
+   "rarity": "common",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "After playing this mood — You may put another one of your moods into your hand. You may play an additional mood this turn.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_906b1bb1d6.webp"
+  },
+  {
+   "name": "Fickleness",
+   "color": "blue",
+   "rarity": "uncommon",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "After playing this mood — Calculate the most common color or colors among all moods. Put all moods other than this one that share one of those colors into their players' hands.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_7b2399c941.webp"
+  },
+  {
+   "name": "Fondness",
+   "color": "green",
+   "rarity": "uncommon",
+   "values": [
+    0,
+    61
+   ],
+   "valueText": "[0]/[6][1]",
+   "text": "While in play — This mood's value is [6][1] if each player has three or more moods. (Moods are cards in play.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_d5d19db135.webp"
+  },
+  {
+   "name": "Friendliness",
+   "color": "white",
+   "rarity": "uncommon",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — You may play an additional mood this turn if it has a [0], [2], [4], or [6] in its top right corner.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_8ef71c708a.webp"
+  },
+  {
+   "name": "Frustration",
+   "color": "red",
+   "rarity": "common",
+   "values": [
+    6,
+    3
+   ],
+   "valueText": "[6]/[3]",
+   "text": "While in play — This mood's value is [3] if there are two or more white and/or blue moods.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_78e5406896.webp"
+  },
+  {
+   "name": "Fury",
+   "color": "red",
+   "rarity": "uncommon",
+   "values": [
+    4
+   ],
+   "valueText": "[4]",
+   "text": "After playing this mood — Each player chooses one of their highest value moods and puts it into the discard pile.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_4001d05e4a.webp"
+  },
+  {
+   "name": "Generosity",
+   "color": "green",
+   "rarity": "common",
+   "values": [
+    6
+   ],
+   "valueText": "[6]",
+   "text": "After playing this mood — Choose an opponent. They may play an additional mood on their next turn.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_b5b6235248.webp"
+  },
+  {
+   "name": "Glee",
+   "color": "red",
+   "rarity": "common",
+   "values": [
+    0,
+    6
+   ],
+   "valueText": "[0]/[6]",
+   "text": "While in play — This mood's value is [6] if you played it this round.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_c8db74f963.webp"
+  },
+  {
+   "name": "Gluttony",
+   "color": "red",
+   "rarity": "uncommon",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — You may play an additional mood this turn. If you do, after scoring, put that mood into the discard pile (if it's still in play).",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_4e9904fa65.webp"
+  },
+  {
+   "name": "Grace",
+   "color": "green",
+   "rarity": "rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "While in play — During each of your turns (including the turn you play this mood), you may play an additional mood from the discard pile if it shares a color with one of your moods.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_a4ac5b193b.webp"
+  },
+  {
+   "name": "Grief",
+   "color": "black",
+   "rarity": "rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "After playing this mood — You may play up to two additional moods this turn from the discard pile.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_e4476b11a4.webp"
+  },
+  {
+   "name": "Guile",
+   "color": "blue",
+   "rarity": "mythic rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "To play this card — Discard two cards from your hand. (If you can't do that, you can't play this card.) After playing this mood — Choose one of your opponents' moods. It becomes yours.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_4c31ac573b.webp"
+  },
+  {
+   "name": "Guilt",
+   "color": "white",
+   "rarity": "uncommon",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — You may choose one: • Suppress a black or red mood. It remains suppressed for as long as you have this mood. (While suppressed, that mood has a value of [0]. Turn it sideways to keep track.) • Suppress all black and red moods. Those moods remain suppressed for as long as you have this mood.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_cfb7aab4ca.webp"
+  },
+  {
+   "name": "Happiness",
+   "color": "green",
+   "rarity": "uncommon",
+   "values": [
+    2,
+    62
+   ],
+   "valueText": "[2]/[6][2]",
+   "text": "While in play — This mood's value is [6][2] if a player has both a red mood and a white mood.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_44522f15f3.webp"
+  },
+  {
+   "name": "Harmony",
+   "color": "green",
+   "rarity": "uncommon",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — You may play an additional mood this turn from the discard pile.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_1de68dc34c.webp"
+  },
+  {
+   "name": "Hate",
+   "color": "black",
+   "rarity": "common",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "After playing this mood — You may put any mood on the bottom of the deck. If you do, draw a card. (Moods are cards in play.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_b423a5e0fc.webp"
+  },
+  {
+   "name": "Hesitation",
+   "color": "blue",
+   "rarity": "uncommon",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — You may choose one: • Put a red or green mood into its player's hand. • Put all red and green moods into their players' hands.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_95ca483374.webp"
+  },
+  {
+   "name": "Honor",
+   "color": "white",
+   "rarity": "rare",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — Choose a player. While in play — The chosen player goes first each round regardless of who won the previous round. (This doesn't change who draws a card.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_fcb2539b1b.webp"
+  },
+  {
+   "name": "Hope",
+   "color": "green",
+   "rarity": "rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "While in play — You may play an additional mood during each of your turns (including the turn you play this mood).",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_8569c6868b.webp"
+  },
+  {
+   "name": "Hostility",
+   "color": "red",
+   "rarity": "uncommon",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — You may put one of your black or green moods into the discard pile. If you do, put up to two moods each with a value of [3] or less into the discard pile.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_98adc285ea.webp"
+  },
+  {
+   "name": "Idealism",
+   "color": "white",
+   "rarity": "mythic rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "After playing this mood — You may play an additional mood this turn. While in play — For each of your moods with dice in its lower left corner, use the dice total in its top right corner or lower left corner, whichever is higher, to determine its value.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_65defcbada.webp"
+  },
+  {
+   "name": "Imagination",
+   "color": "blue",
+   "rarity": "uncommon",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — Choose a color. While in play — All moods are the chosen color and no other colors.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_3af00d3391.webp"
+  },
+  {
+   "name": "Indecisiveness",
+   "color": "blue",
+   "rarity": "uncommon",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — Choose any number of opponents who each have two or more moods. Each chosen player puts a random one of their moods into their hand.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_50d6760556.webp"
+  },
+  {
+   "name": "Indifference",
+   "color": "blue",
+   "rarity": "common",
+   "values": [
+    4
+   ],
+   "valueText": "[4]",
+   "text": "",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_0950b77878.webp"
+  },
+  {
+   "name": "Infatuation",
+   "color": "red",
+   "rarity": "rare",
+   "values": [
+    3,
+    63
+   ],
+   "valueText": "[3]/[6][3]",
+   "text": "After playing this mood — You may put two of your other moods into the discard pile (moods are cards in play). If you do, this mood's value becomes [6][3].",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_f2c4eb5919.webp"
+  },
+  {
+   "name": "Insecurity",
+   "color": "blue",
+   "rarity": "uncommon",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — You may play an additional mood this turn. If you do, after scoring, put that mood into your hand (if it's still in play).",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_d74b605c8b.webp"
+  },
+  {
+   "name": "Instability",
+   "color": "red",
+   "rarity": "rare",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — You may choose two moods from the same opponent. If you do, they choose one of those moods and gives it to you, then you give them one of your moods.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_792f6c2f0a.webp"
+  },
+  {
+   "name": "Intimidation",
+   "color": "black",
+   "rarity": "rare",
+   "values": [
+    1
+   ],
+   "valueText": "[1]",
+   "text": "After playing this mood — You may choose another player. If you do, that player reveals a card from their hand and puts it into your hand. You may play it as an additional mood this turn.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_950df3062a.webp"
+  },
+  {
+   "name": "Joy",
+   "color": "green",
+   "rarity": "common",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — You may play an additional mood on your next turn.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_58ef667397.webp"
+  },
+  {
+   "name": "Kindness",
+   "color": "white",
+   "rarity": "uncommon",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — You may play an additional mood this turn if it has a [1], [3], or [5] in its top right corner.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_900364d212.webp"
+  },
+  {
+   "name": "Laziness",
+   "color": "green",
+   "rarity": "common",
+   "values": [
+    4
+   ],
+   "valueText": "[4]",
+   "text": "",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_66b6f7a960.webp"
+  },
+  {
+   "name": "Love",
+   "color": "green",
+   "rarity": "mythic rare",
+   "values": [
+    4,
+    66
+   ],
+   "valueText": "[4]/[6][6]",
+   "text": "While in play — This mood's value is [6][6] if there's a white mood, a blue mood, a black mood, a red mood, and a green mood (including this one).",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_8674b312121.webp",
+   "headliner": true
+  },
+  {
+   "name": "Loyalty",
+   "color": "white",
+   "rarity": "common",
+   "values": [
+    3,
+    6
+   ],
+   "valueText": "[3]/[6]",
+   "text": "While in play — This mood's value is [6] if there are two or more green and/or blue moods.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_8c6dcb6580.webp"
+  },
+  {
+   "name": "Malice",
+   "color": "black",
+   "rarity": "mythic rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "After playing this mood — Choose any player who has two or more moods (moods are cards in play). That player chooses two of their moods. Put those moods and all other moods that share a color with either of them into the discard pile.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_69ca7ade91.webp"
+  },
+  {
+   "name": "Meekness",
+   "color": "white",
+   "rarity": "rare",
+   "values": [
+    1
+   ],
+   "valueText": "[1]",
+   "text": "After playing this mood — Suppress all moods with a value of [5] or more. Those moods remain suppressed for as long as you have this mood. (While suppressed, those moods have a value of [0]. Turn them sideways to keep track.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_53a2b5358c.webp"
+  },
+  {
+   "name": "Melancholy",
+   "color": "black",
+   "rarity": "rare",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "While in play — You may play moods from the discard pile as though they were in your hand.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_b69d84c162.webp"
+  },
+  {
+   "name": "Misery",
+   "color": "black",
+   "rarity": "uncommon",
+   "values": [
+    2,
+    62
+   ],
+   "valueText": "[2]/[6][2]",
+   "text": "While in play — This mood's value is [6][2] if there are two or more cards in the discard pile that share a color.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_9861468165.webp"
+  },
+  {
+   "name": "Neurosis",
+   "color": "blue",
+   "rarity": "common",
+   "values": [
+    5
+   ],
+   "valueText": "[5]",
+   "text": "To play this card — Put one or more of your moods into your hand. (If you can't do that, you can't play this card.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_836f2df163.webp"
+  },
+  {
+   "name": "Nostalgia",
+   "color": "green",
+   "rarity": "common",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "After playing this mood — You may put a card from the discard pile into your hand. You may play an additional mood this turn.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_fa2e8db989.webp"
+  },
+  {
+   "name": "Obsession",
+   "color": "blue",
+   "rarity": "common",
+   "values": [
+    3,
+    6
+   ],
+   "valueText": "[3]/[6]",
+   "text": "While in play — This mood's value is [6] if there are two or more white and/or black moods.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_f9134e6286.webp"
+  },
+  {
+   "name": "Pacifism",
+   "color": "white",
+   "rarity": "common",
+   "values": [
+    1
+   ],
+   "valueText": "[1]",
+   "text": "After playing this mood — Choose up to two players. For each chosen player, suppress one of their moods. It remains suppressed for as long as you have this mood. (While suppressed, that mood has a value of [0]. Turn it sideways to keep track.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_e1d60e419b.webp"
+  },
+  {
+   "name": "Panic",
+   "color": "blue",
+   "rarity": "common",
+   "values": [
+    1
+   ],
+   "valueText": "[1]",
+   "text": "After playing this mood — Choose up to two players. For each chosen player, put one of their moods into their hand. You can't put this mood into your hand this way.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_88c69dd9d3.webp"
+  },
+  {
+   "name": "Paranoia",
+   "color": "black",
+   "rarity": "uncommon",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — You may choose a player with one or more cards in their hand. If you do, that player reveals a random card from their hand and puts it on the bottom of the deck, then you draw a card.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_59818f9df2.webp"
+  },
+  {
+   "name": "Passion",
+   "color": "red",
+   "rarity": "rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "While in play — While scoring, you may score one of your opponents' moods as though it were yours. (They also still score it.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_cae948ae72.webp"
+  },
+  {
+   "name": "Patience",
+   "color": "white",
+   "rarity": "common",
+   "values": [
+    5,
+    1
+   ],
+   "valueText": "[5]/[1]",
+   "text": "While in play — This mood's value is [1] if you played it this round.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_d106975fda.webp"
+  },
+  {
+   "name": "Pity",
+   "color": "black",
+   "rarity": "common",
+   "values": [
+    3,
+    6
+   ],
+   "valueText": "[3]/[6]",
+   "text": "While in play — This mood's value is [6] if there are two or more blue and/or red moods.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_44a3456b6c.webp"
+  },
+  {
+   "name": "Pride",
+   "color": "white",
+   "rarity": "rare",
+   "values": [
+    1
+   ],
+   "valueText": "[1]",
+   "text": "After playing this mood — You may choose a player with more moods than you (moods are cards in play). If you do, you may keep playing additional moods this turn until you have as many moods as the chosen player.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_0a4b823b72.webp"
+  },
+  {
+   "name": "Rage",
+   "color": "red",
+   "rarity": "uncommon",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — You may put all other moods with a value of [3] or less into the discard pile.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_b4f2eea560.webp"
+  },
+  {
+   "name": "Rationalization",
+   "color": "blue",
+   "rarity": "rare",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — You may choose one: • Put your hand on the bottom of the deck, then draw that many cards. • Choose left or right. Simultaneously, each player gives their hand to the next player in the chosen direction.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_d90751636e.webp"
+  },
+  {
+   "name": "Rebellion",
+   "color": "red",
+   "rarity": "uncommon",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — Choose [0], [1], [2], or [3]. Put all other moods with the chosen value into the discard pile.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_4bc31ec6ea.webp"
+  },
+  {
+   "name": "Recklessness",
+   "color": "red",
+   "rarity": "rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "After playing this mood — You may take one of your opponents' moods. If you do, after scoring, give the mood you took back to them (if you still have it). While in play — After scoring, put this mood on the bottom of the deck and draw a card.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_436cf6c9e4.webp"
+  },
+  {
+   "name": "Regret",
+   "color": "blue",
+   "rarity": "rare",
+   "values": [
+    4
+   ],
+   "valueText": "[4]",
+   "text": "To play this card — Put two of your moods into your hand. (If you can't do that, you can't play this card.) After playing this mood — Put an opponent's mood into your hand.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_8d23a36570.webp"
+  },
+  {
+   "name": "Rejection",
+   "color": "black",
+   "rarity": "rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "After playing this mood — You may choose two other moods. If the two chosen moods share a color or have the same value, put them into the discard pile.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_334f16a788.webp"
+  },
+  {
+   "name": "Repentance",
+   "color": "white",
+   "rarity": "uncommon",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — You may choose a number. If you do, suppress all other moods with the chosen value. They remain suppressed until the end of this round. (While suppressed, those moods have a value of [0]. Turn them sideways to keep track.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_a1a9edc565.webp"
+  },
+  {
+   "name": "Sadness",
+   "color": "black",
+   "rarity": "mythic rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "While in play — This mood's value increases by [2] for each card in the discard pile.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_0cf6ff4201.webp"
+  },
+  {
+   "name": "Scorn",
+   "color": "white",
+   "rarity": "mythic rare",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — Suppress any mood. It remains suppressed until the end of this round. (While suppressed, that mood has a value of [0]. Turn it sideways to keep track.) While in play — Each time you play another mood, you may suppress a mood that shares a color with the mood you played. It remains suppressed until the end of this round.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_a9daebaf83.webp"
+  },
+  {
+   "name": "Self-Loathing",
+   "color": "black",
+   "rarity": "common",
+   "values": [
+    6
+   ],
+   "valueText": "[6]",
+   "text": "To play this card — Put one or more of your moods into the discard pile. (If you can't do that, you can't play this card. Moods are cards in play.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_0236a11a6e.webp"
+  },
+  {
+   "name": "Serenity",
+   "color": "green",
+   "rarity": "uncommon",
+   "values": [
+    3,
+    6
+   ],
+   "valueText": "[3]/[6]",
+   "text": "While in play — This mood's value is [6] if you have an even number of moods (including this one).",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_26d579f073.webp"
+  },
+  {
+   "name": "Shame",
+   "color": "white",
+   "rarity": "rare",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — You may discard a card from your hand. If you do, suppress all other moods that share a color with the discarded card. Those moods remain suppressed for as long as you have this mood. (While suppressed, those moods have a value of [0]. Turn them sideways to keep track.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_18a5fa19a1.webp"
+  },
+  {
+   "name": "Shock",
+   "color": "red",
+   "rarity": "common",
+   "values": [
+    2
+   ],
+   "valueText": "[2]",
+   "text": "After playing this mood — Choose up to two players. For each chosen player, put one of their moods with a value of [3] or less into the discard pile.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_fa95cdf5a9.webp"
+  },
+  {
+   "name": "Sloth",
+   "color": "green",
+   "rarity": "rare",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "While in play — This mood's value increases by [1] for each card in your hand.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_355c27037e.webp"
+  },
+  {
+   "name": "Sneakiness",
+   "color": "blue",
+   "rarity": "mythic rare",
+   "values": [
+    5
+   ],
+   "valueText": "[5]",
+   "text": "After playing this mood — Choose an opponent. This round, after scoring, swap your score with that player before determining who wins the round.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_c7ddf50edd.webp"
+  },
+  {
+   "name": "Spite",
+   "color": "black",
+   "rarity": "common",
+   "values": [
+    1
+   ],
+   "valueText": "[1]",
+   "text": "After playing this mood — Choose up to two players. For each chosen player, put one of their moods with an even value into the discard pile. ([0] is even.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_b795c10ecc.webp"
+  },
+  {
+   "name": "Stubbornness",
+   "color": "red",
+   "rarity": "rare",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "While in play — At the start of each of your turns, if another player has more moods than you, you may play an additional mood this turn. (Moods are cards in play.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_f2efdc8008.webp"
+  },
+  {
+   "name": "Superiority",
+   "color": "black",
+   "rarity": "common",
+   "values": [
+    3,
+    61
+   ],
+   "valueText": "[3]/[6][1]",
+   "text": "While in play — This mood's value is [6][1] if you have more moods than each other player. (Moods are cards in play.)",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_9e3954cd2f.webp"
+  },
+  {
+   "name": "Suspicion",
+   "color": "black",
+   "rarity": "common",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — Choose any number of players. Each chosen player discards a card from their hand.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_a927be2da9.webp"
+  },
+  {
+   "name": "Thrill",
+   "color": "red",
+   "rarity": "mythic rare",
+   "values": [
+    1
+   ],
+   "valueText": "[1]",
+   "text": "After playing this mood — You may put any number of your other moods into your hand. If you do, you may play that many additional moods this turn.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_595de70539.webp"
+  },
+  {
+   "name": "Tranquility",
+   "color": "green",
+   "rarity": "uncommon",
+   "values": [
+    3,
+    6
+   ],
+   "valueText": "[3]/[6]",
+   "text": "While in play — This mood's value is [6] if you have an odd number of moods (including this one).",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_85da101a78.webp"
+  },
+  {
+   "name": "Triumph",
+   "color": "red",
+   "rarity": "common",
+   "values": [
+    3,
+    5
+   ],
+   "valueText": "[3]/[5]",
+   "text": "While in play — This mood's value is [5] if you went first this round.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_2e6fc27df8.webp"
+  },
+  {
+   "name": "Validation",
+   "color": "white",
+   "rarity": "mythic rare",
+   "values": [
+    1
+   ],
+   "valueText": "[1]",
+   "text": "After playing this mood — You may play an additional mood this turn. While in play — Each time you play another mood with a [0] or [1] in its top right corner, you may play an additional mood this turn.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_dd16eaf38e.webp"
+  },
+  {
+   "name": "Vanity",
+   "color": "black",
+   "rarity": "mythic rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "While in play — This mood's value increases by [1] for each of your moods (including itself). If there are no cards in your hand, this mood's value instead increases by [3] for each of your moods (including itself).",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_e75bca82b9.webp"
+  },
+  {
+   "name": "Vulnerability",
+   "color": "green",
+   "rarity": "rare",
+   "values": [
+    1,
+    61
+   ],
+   "valueText": "[1]/[6][1]",
+   "text": "While in play — This mood's value is [6][1] if a card was put into the discard pile this round.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_2dbb36bbfd.webp"
+  },
+  {
+   "name": "Wonder",
+   "color": "green",
+   "rarity": "mythic rare",
+   "values": [
+    0
+   ],
+   "valueText": "[0]",
+   "text": "After playing this mood — Choose a color. While in play — This mood's value increases by [2] for each mood of the chosen color and each card in the discard pile of the chosen color.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_e844a24ace.webp"
+  },
+  {
+   "name": "Worry",
+   "color": "blue",
+   "rarity": "uncommon",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — You may put one of your white or black moods into your hand. If you do, put up to two moods other than this one each with a value of [3] or less into their players' hands.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_d0c87e3659.webp"
+  },
+  {
+   "name": "Wrath",
+   "color": "red",
+   "rarity": "rare",
+   "values": [],
+   "valueText": "[O]",
+   "text": "After playing this mood — You may put all other moods into the discard pile.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_3d371a224c.webp"
+  },
+  {
+   "name": "Zeal",
+   "color": "red",
+   "rarity": "common",
+   "values": [
+    3
+   ],
+   "valueText": "[3]",
+   "text": "After playing this mood — You may put a card from your hand on the bottom of the deck. If you do, draw a card.",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_8d29fbaa74.webp"
+  }
+ ],
+ "markers": [
+  {
+   "name": "Hurt Feelings",
+   "art": "https://media.wizards.com/2026/msw/xABg1Js9Np/en_SDbCBoXR0F.webp",
+   "reminder": "In a 3+ player game, at the end of each round, the player with the lowest score this round gets Hurt Feelings for the next round. If there’s a tie, whoever took a turn latest this round wins the tie.",
+   "text": "This round, you may play an additional mood during your turn."
+  }
+ ]
+}

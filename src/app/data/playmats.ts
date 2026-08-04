@@ -18,6 +18,10 @@ export interface Playmat {
    * name). They render as that live token color under a faint grid instead of
    * bundled artwork, so they follow the active theme. */
   token?: string;
+  /** Graph-paper mats: the ruling ink. Drawn, not bundled (see PAPER_PLAYMATS). */
+  paper?: string;
+  /** Optional paper tone under the ruling; defaults to a warm off-white. */
+  tint?: string;
 }
 
 /** Image playmats: wide backgrounds bundled at public/mats/. */
@@ -72,7 +76,26 @@ export const COLOR_PLAYMATS: Playmat[] = [
   { id: 'solid-surface', name: 'Surface', theme: 'solid', token: '--glacier-surface' },
 ];
 
-export const PLAYMATS: Playmat[] = [...COLOR_PLAYMATS, ...IMAGE_PLAYMATS];
+/**
+ * Mood Swings mats. Every card in that game is graphite art sitting on pale
+ * engineering graph paper - it is the one thing all 133 of them share - so the
+ * table it is played on should be the same sheet, continued. These are drawn
+ * rather than bundled for the same reason the solid mats are: it is a grid and
+ * a paper tone, and an SVG of that is smaller than the webp of it would be and
+ * scales to any table size without resampling.
+ *
+ * Five ruled tints, one per frame colour, so a table can sit in the mood it is
+ * playing. `paper` is the ink; `tint` washes the sheet.
+ */
+export const PAPER_PLAYMATS: Playmat[] = [
+  { id: 'graph-paper', name: 'Graph Paper', theme: 'moodswings', paper: '#3f5c8a' },
+  { id: 'graph-rose', name: 'Ruled Rose', theme: 'moodswings', paper: '#a34168', tint: '#f6e7ee' },
+  { id: 'graph-sage', name: 'Ruled Sage', theme: 'moodswings', paper: '#3f7a5c', tint: '#e6f1ea' },
+  { id: 'graph-ember', name: 'Ruled Ember', theme: 'moodswings', paper: '#9c4a2f', tint: '#f7ebe4' },
+  { id: 'graph-graphite', name: 'Ruled Graphite', theme: 'moodswings', paper: '#4a4a52', tint: '#ecebe8' },
+];
+
+export const PLAYMATS: Playmat[] = [...COLOR_PLAYMATS, ...PAPER_PLAYMATS, ...IMAGE_PLAYMATS];
 
 export const DEFAULT_PLAYMAT = 'arcane-study';
 
@@ -106,6 +129,44 @@ const GRID_OVERLAY = (() => {
 })();
 
 /**
+ * Engineering graph paper: a fine grid with every fifth line inked heavier.
+ *
+ * Drawn at 1600x1000 like GRID_OVERLAY above rather than as a small repeating
+ * tile, because the mats are painted with `background-size: cover` - a 160px
+ * tile would be scaled to the viewport and print squares the size of a fist.
+ * At sheet size, cover lands near 1:1 on a normal window and the cells stay
+ * cell-sized.
+ *
+ * The ink is a literal rgb() rather than a Glacier token on purpose: the solid
+ * mats follow the app theme deliberately, but this one is meant to read as a
+ * printed sheet, and paper does not invert when you turn the lights off.
+ */
+function graphSheet(ink: string): string {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(ink.slice(i, i + 2), 16));
+  const line = (alpha: number, width: number) =>
+    `stroke='rgb(${r} ${g} ${b} / ${alpha})' stroke-width='${width}'`;
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='1000'>` +
+    `<defs>` +
+    `<pattern id='fine' width='20' height='20' patternUnits='userSpaceOnUse'>` +
+    `<path d='M20 0V20M0 20H20' fill='none' ${line(0.2, 0.8)}/>` +
+    `</pattern>` +
+    `<pattern id='major' width='100' height='100' patternUnits='userSpaceOnUse'>` +
+    `<path d='M100 0V100M0 100H100' fill='none' ${line(0.38, 1.3)}/>` +
+    `</pattern>` +
+    `</defs>` +
+    `<rect width='1600' height='1000' fill='url(#fine)'/>` +
+    `<rect width='1600' height='1000' fill='url(#major)'/>` +
+    `</svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+/** Whether a mat is drawn graph paper rather than bundled art or a token. */
+export function isPaperPlaymat(id: string): boolean {
+  return PAPER_PLAYMATS.some((mat) => mat.id === id);
+}
+
+/**
  * The full CSS background value for a playmat, ready to assign to the
  * `--pc-playmat` / `--pc-board-mat` custom properties. Image mats resolve to a
  * single `url()`; solid-color mats resolve to the faint grid layered over the
@@ -115,6 +176,10 @@ export function playmatBackground(id: string): string {
   const mat = PLAYMATS.find((m) => m.id === id);
   if (mat?.token) {
     return `${GRID_OVERLAY}, linear-gradient(var(${mat.token}), var(${mat.token}))`;
+  }
+  if (mat?.paper) {
+    const tint = mat.tint ?? '#f2efe6';
+    return `${graphSheet(mat.paper)}, linear-gradient(${tint}, ${tint})`;
   }
   // An account keeps ONE custom mat, so a re-upload (or a server that has since
   // forgotten the file) leaves old ids pointing at nothing. A second layer

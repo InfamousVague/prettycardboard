@@ -8,10 +8,10 @@
  */
 import type { MessageKey } from '../i18n.ts';
 
-export type AssetTheme = 'magic' | 'cyberpunk' | 'yugioh' | 'generic' | 'solid';
+export type AssetTheme = 'magic' | 'cyberpunk' | 'yugioh' | 'moodswings' | 'generic' | 'solid';
 
 /** Canonical display order for theme filters. */
-export const THEME_ORDER: AssetTheme[] = ['solid', 'magic', 'cyberpunk', 'yugioh', 'generic'];
+export const THEME_ORDER: AssetTheme[] = ['solid', 'magic', 'cyberpunk', 'yugioh', 'moodswings', 'generic'];
 
 /** i18n key for each theme's chip label. */
 export const THEME_LABEL_KEY: Record<AssetTheme, MessageKey> = {
@@ -19,6 +19,7 @@ export const THEME_LABEL_KEY: Record<AssetTheme, MessageKey> = {
   magic: 'custThemeMagic',
   cyberpunk: 'custThemeCyberpunk',
   yugioh: 'custThemeYugioh',
+  moodswings: 'custThemeMoodSwings',
   generic: 'custThemeGeneric',
 };
 
