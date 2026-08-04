@@ -60,7 +60,7 @@ import {
   tidyPositions,
   typeLineOf,
 } from './boardModes.ts';
-import { canDeclareAttacker, discountedGeneric, enforcedRoom, handPlayability, matchesTargetKind, paymentPlan, stackTargetKinds } from './enforce.ts';
+import { canDeclareAttacker, discountedGeneric, enforcedRoom, handPlayability, handVerdict, matchesTargetKind, paymentPlan, stackTargetKinds } from './enforce.ts';
 import { LoyaltyBadge } from './LoyaltyBadge.tsx';
 import { oracleFacts } from '../../data/printedPt.ts';
 import { SETTLE_EASE, dragTilt, flightAnchor, juicePulse, prefersReducedMotion, restTilt, setFlightAnchor, ambientDelay } from './juice.ts';
@@ -1049,7 +1049,7 @@ export function MyBoard({
     }
     // Enforced rooms: a glowing card plays on click, Arena style. The server
     // re-validates; anything else still opens the preview.
-    const play = handPlayability(room, me, card);
+    const { play, block } = handVerdict(room, me, card);
     if (play === 'cast') {
       const k = me.battlefield.filter((c) => !c.tapped || c.tapped).length;
       act({ kind: 'cast', iid: card.iid, x: Math.min(0.15 + 0.11 * (k % 7), 0.9), y: 0.5 });
@@ -1069,6 +1069,11 @@ export function MyBoard({
       playSound('cardPlace');
       return;
     }
+    // A guided table that just opens the preview reads as the click doing
+    // nothing, and the player blames the thing they can see - "I have three
+    // lands and it won't cast my one-drop", when the reason is the phase or a
+    // trigger still on the stack. Name it, then show the card anyway.
+    if (block) toast({ tone: 'neutral', message: `${card.name} — ${t(block)}` });
     popup.open({ scryfallId: card.scryfallId, name: card.name, imageUrl: card.imageUrl });
   };
 

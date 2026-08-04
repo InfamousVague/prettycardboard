@@ -119,33 +119,63 @@ export function discountedGeneric(me: TablePlayer, facts: OracleFacts): number {
   return Math.max(0, facts.generic - cut);
 }
 
+/** Why a hand card cannot be played right now. These mirror the messages
+ *  rules.rs rejects with, because a player who is told nothing assumes the
+ *  reason is the one they can see - "I have three lands, why can't I cast a
+ *  one-drop" is almost always a phase or a stack, not the mana. */
+export type PlayBlock =
+  | 'efNotYourTurn'
+  | 'efNotMain'
+  | 'efInCombat'
+  | 'efStackBusy'
+  | 'efOneLand'
+  | 'efNoMana';
+
+/** How a hand card may enter play right now, and if it may not, why.
+ *
+ * One function answers both so the glow and the explanation can never
+ * disagree: `play` non-null and `block` non-null are mutually exclusive by
+ * construction. Unknown cards return both null - the freeform drag still works
+ * for them, the glow stays off, and there is nothing truthful to say about a
+ * card whose rules we have not loaded. */
+export function handVerdict(
+  room: RoomState,
+  me: TablePlayer,
+  card: CardInst,
+): { play: 'land' | 'cast' | null; block: PlayBlock | null } {
+  const no = (block: PlayBlock | null) => ({ play: null, block });
+  if (!enforcedRoom(room) || !room.started) return no(null);
+  primePrintedPT(card);
+  const facts = oracleFacts(card.scryfallId);
+  if (!facts) return no(null);
+  const afford = () => canAfford(room, me, discountedGeneric(me, facts), facts.pips);
+  // Instants (and flash) go at instant speed: any turn, any phase, mid-combat,
+  // in response to the stack - whenever the cost is payable.
+  const instantSpeed = facts.typeLine.includes('Instant') || facts.keywords.includes('flash');
+  if (instantSpeed) {
+    return afford() ? { play: 'cast', block: null } : no('efNoMana');
+  }
+  // Everything else is sorcery speed: your turn, a main phase, empty stack.
+  // Checked in the server's order, so the reason we name is the one it would
+  // have rejected on.
+  if (room.activeSeat !== me.seat) return no('efNotYourTurn');
+  if (room.phase !== 'main1' && room.phase !== 'main2') return no('efNotMain');
+  if (room.combat) return no('efInCombat');
+  if ((room.stack ?? []).length > 0) return no('efStackBusy');
+  if (facts.typeLine.includes('Land')) {
+    return (me.landsThisTurn ?? 0) === 0 ? { play: 'land', block: null } : no('efOneLand');
+  }
+  return afford() ? { play: 'cast', block: null } : no('efNoMana');
+}
+
 /** How a hand card may enter play right now: play it as the land drop, cast
- * it for mana, or not at all (null). Unknown cards return null - the freeform
- * drag still works for them, the glow just stays off. */
+ * it for mana, or not at all (null). */
 export function handPlayability(
   room: RoomState,
   me: TablePlayer,
   card: CardInst,
 ): 'land' | 'cast' | null {
-  if (!enforcedRoom(room) || !room.started) return null;
-  primePrintedPT(card);
-  const facts = oracleFacts(card.scryfallId);
-  if (!facts) return null;
-  // Instants (and flash) go at instant speed: any turn, any phase, mid-combat,
-  // in response to the stack - whenever the cost is payable.
-  const instantSpeed = facts.typeLine.includes('Instant') || facts.keywords.includes('flash');
-  if (instantSpeed) {
-    return canAfford(room, me, discountedGeneric(me, facts), facts.pips) ? 'cast' : null;
-  }
-  // Everything else is sorcery speed: your turn, a main phase, empty stack.
-  if (room.activeSeat !== me.seat) return null;
-  if (room.phase !== 'main1' && room.phase !== 'main2') return null;
-  if (room.combat) return null;
-  if ((room.stack ?? []).length > 0) return null;
-  if (facts.typeLine.includes('Land')) {
-    return (me.landsThisTurn ?? 0) === 0 ? 'land' : null;
-  }
-  return canAfford(room, me, discountedGeneric(me, facts), facts.pips) ? 'cast' : null;
+  return handVerdict(room, me, card).play;
 }
 
 /** May this creature be declared as an attacker right now? */

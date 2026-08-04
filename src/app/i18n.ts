@@ -2852,6 +2852,38 @@ export const messages = {
   gpResolveCombat: { en: 'Resolve combat', es: 'Resolver combate', fr: 'Résoudre le combat', ar: 'حسم القتال' },
   cbPreviewTitle: { en: 'Combat result', es: 'Resultado del combate', fr: 'Résultat du combat', ar: 'نتيجة القتال' },
   efOneLand: { en: 'One land per turn - you already played yours.', es: 'Una tierra por turno: ya jugaste la tuya.', fr: 'Un terrain par tour - le vôtre est déjà posé.', ar: 'أرض واحدة في الدور، وقد لعبت أرضك.' },
+  // Why a guided table refused a card. Mirrors the server's own wording so the
+  // toast and a rejected action say the same thing.
+  efNotYourTurn: {
+    en: 'Sorcery-speed spells wait for your own turn.',
+    es: 'Los hechizos a velocidad de conjuro esperan a tu turno.',
+    fr: 'Les sorts à vitesse de rituel attendent votre tour.',
+    ar: 'تنتظر التعاويذ بسرعة الاستحضار دورك.',
+  },
+  efNotMain: {
+    en: 'Sorcery-speed spells are cast in your main phases.',
+    es: 'Los hechizos a velocidad de conjuro se lanzan en tus fases principales.',
+    fr: 'Les sorts à vitesse de rituel se lancent en phase principale.',
+    ar: 'تُلعب التعاويذ بسرعة الاستحضار في مراحلك الرئيسية.',
+  },
+  efInCombat: {
+    en: 'Finish combat first - or respond with an instant.',
+    es: 'Termina el combate primero, o responde con un instantáneo.',
+    fr: 'Terminez le combat d’abord - ou répondez avec un éphémère.',
+    ar: 'أنهِ القتال أولاً، أو ردّ بتعويذة فورية.',
+  },
+  efStackBusy: {
+    en: 'Wait for the stack to empty - or respond with an instant.',
+    es: 'Espera a que se vacíe la pila, o responde con un instantáneo.',
+    fr: 'Attendez que la pile se vide - ou répondez avec un éphémère.',
+    ar: 'انتظر حتى تفرغ الكومة، أو ردّ بتعويذة فورية.',
+  },
+  efNoMana: {
+    en: 'Not enough untapped mana for that.',
+    es: 'No tienes suficiente maná desenderezado para eso.',
+    fr: 'Pas assez de mana non engagé pour cela.',
+    ar: 'لا يوجد مانا غير مستنفد كافٍ لذلك.',
+  },
   stChooseTarget: { en: 'Choose a target for', es: 'Elige un objetivo para', fr: 'Choisissez une cible pour', ar: 'اختر هدفًا لـ' },
   stAimHint: { en: 'Click any card to show your target', es: 'Haz clic en una carta para señalar tu objetivo', fr: 'Cliquez sur une carte pour montrer votre cible', ar: 'انقر على أي بطاقة لإظهار هدفك' },
   logExpand: { en: 'Show the log', es: 'Mostrar el registro', fr: 'Afficher le journal', ar: 'إظهار السجل' },
