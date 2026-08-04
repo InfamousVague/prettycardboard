@@ -127,6 +127,33 @@ pub fn data() -> &'static BotData {
             .expect("bot_decks_standard.json parses");
         data.decks.extend(standard.decks);
         data.attrs.extend(standard.attrs);
+        // Every Commander precon ever printed (scripts/sync-commander-pool.mjs,
+        // from MTGJSON). bot_data.json's own four are the bundled Final Fantasy
+        // decks that src/data/precons.json also carries for the deck browser;
+        // this is the wider pool the dealer draws from, and it is kept separate
+        // because precons.json holds the full card record the browser renders
+        // and would be ~37MB at this many decks.
+        let commander: BotData = serde_json::from_str(include_str!("../data/bot_decks_commander.json"))
+            .expect("bot_decks_commander.json parses");
+        // Deduped by DECKLIST, not by code. The four bundled Final Fantasy
+        // precons are in the synced pool too, under their MTGJSON product names
+        // and therefore different codes - so a code comparison keeps both and
+        // the pool holds four pairs that play identically, which is exactly the
+        // sameness this pool exists to cure. The synced entry wins: it carries
+        // a format and a release date the bundled one predates.
+        let signature = |deck: &BotDeck| {
+            let mut cards: Vec<String> =
+                deck.cards.iter().map(|c| format!("{}x{}", c.sid, c.qty)).collect();
+            cards.sort();
+            cards.join("|")
+        };
+        let incoming: std::collections::HashSet<String> =
+            commander.decks.iter().map(&signature).collect();
+        data.decks.retain(|d| !incoming.contains(&signature(d)));
+        data.decks.extend(commander.decks);
+        for (id, attr) in commander.attrs {
+            data.attrs.entry(id).or_insert(attr);
+        }
         data
     })
 }
@@ -245,6 +272,9 @@ pub fn decks_for(game: &str, format: &str) -> Vec<&'static BotDeck> {
     }
     let all = &data().decks;
     let want_standard = format.eq_ignore_ascii_case("standard");
+    // A deck with no `format` predates the field and is one of the four bundled
+    // Commander precons, so absent reads as commander - which is what keeps
+    // them in the Commander pool now that the synced decks all declare it.
     let picked: Vec<&BotDeck> = all
         .iter()
         .filter(|d| {
@@ -382,3 +412,75 @@ pub(crate) fn tier_of(p: &Player) -> i32 {
     }
 }
 
+
+#[cfg(test)]
+mod pool_tests {
+    use super::*;
+
+    /// The pool the Commander roulette actually deals from.
+    #[test]
+    fn commander_pool_is_the_whole_precon_history() {
+        let pool = decks_for("mtg", "commander");
+        // Every Commander precon MTGJSON knows about, minus Collector's
+        // Editions and minus the reprints that duplicate an earlier decklist.
+        assert!(pool.len() > 150, "commander pool is only {}", pool.len());
+        // A five-seat pod deals without replacement, so it needs at least five.
+        assert!(pool.len() >= 5);
+    }
+
+    #[test]
+    fn standard_and_commander_pools_do_not_overlap() {
+        let commander = decks_for("mtg", "commander");
+        let standard = decks_for("mtg", "standard");
+        assert!(!standard.is_empty());
+        for deck in &commander {
+            assert_ne!(deck.format.as_deref(), Some("standard"), "{} leaked", deck.code);
+        }
+        for deck in &standard {
+            assert_eq!(deck.format.as_deref(), Some("standard"), "{} leaked", deck.code);
+        }
+    }
+
+    /// The dealer keys a dealt deck as `precon:<code>` and avoids duplicates by
+    /// comparing codes, so two decks under one code are one deck to it.
+    #[test]
+    fn every_deck_code_is_unique() {
+        let mut codes: Vec<&str> = data().decks.iter().map(|d| d.code.as_str()).collect();
+        codes.sort_unstable();
+        let before = codes.len();
+        codes.dedup();
+        assert_eq!(before, codes.len(), "duplicate deck codes in the merged pool");
+    }
+
+    /// Two entries with the same decklist are two decks that play identically -
+    /// which is the exact complaint this pool was widened to fix.
+    #[test]
+    fn no_two_decks_share_a_decklist() {
+        let mut lists: Vec<String> = data()
+            .decks
+            .iter()
+            .map(|d| {
+                let mut cards: Vec<String> =
+                    d.cards.iter().map(|c| format!("{}x{}", c.sid, c.qty)).collect();
+                cards.sort();
+                cards.join("|")
+            })
+            .collect();
+        lists.sort();
+        let before = lists.len();
+        lists.dedup();
+        assert_eq!(before, lists.len(), "two decks in the pool have identical decklists");
+    }
+
+    /// A Commander deck with no commander seats a player with no general.
+    #[test]
+    fn every_commander_deck_has_a_commander() {
+        for deck in decks_for("mtg", "commander") {
+            assert!(
+                deck.cards.iter().any(|c| c.board == "commander"),
+                "{} has no commander",
+                deck.code
+            );
+        }
+    }
+}

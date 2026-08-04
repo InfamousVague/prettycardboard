@@ -24,6 +24,10 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUTPUT = join(ROOT, 'server', 'src', 'data', 'bot_decks_standard.json');
+
+/** A ceiling rather than a target: every candidate that builds cleanly is
+ *  kept, and this only stops a future recipe list from running away. */
+const MAX_DECKS = 200;
 const UA = 'PrettyCardboard/1.0 (bot deck builder; +https://prettycardboard.com)';
 
 /** Scryfall asks for ~100ms between calls; be a good citizen and exceed it. */
@@ -115,6 +119,14 @@ const RECIPES = [
 /** The colour identities each recipe is offered, mono first then the guilds. */
 const MONO = ['W', 'U', 'B', 'R', 'G'];
 const PAIRS = ['WU', 'UB', 'BR', 'RG', 'GW', 'WB', 'UR', 'BG', 'RW', 'GU'];
+/** The ten three-colour identities: five shards, then five wedges. Standard
+ *  plays them, and they are what takes the pool past the fifteen one- and
+ *  two-colour identities it had - which was the ceiling on how many genuinely
+ *  different decks the archetypes could be crossed with. */
+const TRIOS = [
+  'GWU', 'WUB', 'UBR', 'BRG', 'RGW',
+  'WBG', 'URW', 'BGU', 'RWB', 'GUR',
+];
 
 /** Responses are cached on disk so a rerun (or a crash halfway through)
  *  costs Scryfall nothing. Delete the file to force a refresh - which is what
@@ -285,10 +297,12 @@ async function main() {
 
   const decks = [];
   const attrs = {};
-  const identities = [...MONO, ...PAIRS];
-  // Five recipes over five monos and ten guilds = 75 candidates; we keep the
-  // first 50 that build cleanly, interleaved so the pool is not five of one
-  // archetype before any of the next.
+  const identities = [...MONO, ...PAIRS, ...TRIOS];
+  // Five recipes over five monos, ten guilds and ten three-colour identities =
+  // 125 candidates, and we keep every one that builds cleanly rather than the
+  // first 50. The cap was there when the ceiling was 75; with a roulette
+  // dealing without replacement, more decks in the pool is directly more
+  // variety at the table, and a Standard deck is ~4KB.
   const combos = [];
   for (const ident of identities) {
     for (const recipe of RECIPES) combos.push({ recipe, colors: ident });
@@ -296,7 +310,7 @@ async function main() {
   combos.sort((a, b) => RECIPES.indexOf(a.recipe) - RECIPES.indexOf(b.recipe));
 
   for (const { recipe, colors } of combos) {
-    if (decks.length >= 50) break;
+    if (decks.length >= MAX_DECKS) break;
     process.stderr.write(`building ${colors} ${recipe.key}... `);
     let built;
     try {
