@@ -1186,7 +1186,7 @@
   display: flex;
   align-items: center;
   gap: var(--glacier-space-1);
-  font-size: var(--glacier-text-xs);
+  font-size: var(--glacier-font-size-xs);
   color: var(--glacier-text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -1248,13 +1248,13 @@
 }
 
 .lbMineLabel {
-  font-size: var(--glacier-text-lg);
+  font-size: var(--glacier-font-size-lg);
   font-weight: var(--glacier-weight-semibold);
   color: var(--glacier-text);
 }
 
 .lbMineSub {
-  font-size: var(--glacier-text-sm);
+  font-size: var(--glacier-font-size-sm);
   color: var(--glacier-text-muted);
 }
 
@@ -1279,7 +1279,7 @@
   border-radius: var(--glacier-radius-md);
   border: var(--glacier-hairline) solid transparent;
   background: color-mix(in oklch, var(--glacier-surface) 55%, transparent);
-  font-size: var(--glacier-text-sm);
+  font-size: var(--glacier-font-size-sm);
 }
 
 /* My own row is the one being looked for; it keeps its place in the order
@@ -1331,4 +1331,25 @@
   .lbRow > :nth-child(4) {
     display: none;
   }
+}
+
+/* Where the progression is and where it has to reach. The bar alone only says
+   "somewhere in this division"; the note under it names the rating that leaves
+   it and what is on the other side, which is the part a player can aim at. */
+.lbProgress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-block-start: var(--glacier-space-2);
+  max-inline-size: 22rem;
+}
+
+.lbProgressNote {
+  font-size: var(--glacier-font-size-xs);
+  color: var(--glacier-text-subtle);
+}
+
+.lbProgressNote strong {
+  color: var(--glacier-accent-text);
+  font-weight: var(--glacier-font-weight-semibold);
 }

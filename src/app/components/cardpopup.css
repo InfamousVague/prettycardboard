@@ -88,7 +88,8 @@
   font-weight: var(--glacier-font-weight-bold);
   color: var(--glacier-text);
 }
-.cpPT > svg {
+.cpPT > svg,
+.cpPT > .pcIcon {
   opacity: 0.7;
 }
 
@@ -135,7 +136,8 @@
   font-size: var(--glacier-font-size-xs);
   color: var(--glacier-text-muted);
 }
-.cpMeta > svg {
+.cpMeta > svg,
+.cpMeta > .pcIcon {
   flex: none;
   opacity: 0.65;
 }

@@ -100,7 +100,11 @@ export function LifeCard({ me, room }: { me: TablePlayer; room: RoomState }) {
             <span className="lifeBig" ref={lifeRef}>
               {me.life}
             </span>
-            {!cyber && !yugioh && <span className="lifeCaption">{primaryLabel}</span>}
+            {/* No "LIFE" caption on the Magic dial: the number IS the life
+                total, sitting in a circle between a minus and a plus, and the
+                word only crowded the disc. Cyberpunk and Yu-Gi-Oh keep their
+                caption - there the primary resource is not life and needs
+                naming (they render it above, via .vitalCaption). */}
           </span>
         </span>
         <button

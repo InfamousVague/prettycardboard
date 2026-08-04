@@ -14,6 +14,7 @@ import {
   LayoutGrid,
   Palette,
   PanelRightOpen,
+  PlayingCardStack,
   RotateCw,
   ScrollText,
   Shuffle,
@@ -22,8 +23,7 @@ import {
   Swords,
   Users,
   Wrench,
-} from '@glacier/icons';
-import { PlayingCardStack } from '../icons/backfilled.tsx';
+} from '../icons/backfilled.tsx';
 import type { MessageKey } from '../i18n.ts';
 
 /**

@@ -1,28 +1,33 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentType, type PointerEvent as ReactPointerEvent } from 'react';
 import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from 'motion/react';
-import { Button, IconButton, Input, Menu, MenuItem, MenuSub, Pill, Size, Text, TextTone, Tooltip, useHaptics, useToast } from '@glacier/react';
 import {
   AlignStartVertical,
+  Check,
   ChevronDown,
-  Coins,
-  Dices,
-  ScrollText,
   ChevronUp,
   CircleDot,
+  Coins,
   Crown,
+  Dices,
+  Grid3x3,
   LayoutGrid,
   LogOut,
   Minus,
   Moon,
+  Move,
   Plus,
+  Rows3,
+  ScrollText,
   Settings,
   Shapes,
   Sun,
   Swords,
   Tornado,
+  Wand2,
   Zap,
 } from '../../icons/backfilled.tsx';
-import { useT } from '../../i18n.ts';
+import { Button, IconButton, Input, Menu, MenuItem, MenuSub, Pill, Size, Text, TextTone, Tooltip, useHaptics, useToast } from '@glacier/react';
+import { useT, type MessageKey } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
 import { isFoilInst } from '../../data/foil.ts';
@@ -50,6 +55,8 @@ import {
   isCreature,
   resolveDropTarget,
   snapDrop,
+  BOARD_MODES,
+  type BoardMode,
   tidyPositions,
   typeLineOf,
 } from './boardModes.ts';
@@ -130,6 +137,23 @@ const PILE_DWELL_MS = 1100;
 const RESERVED_BOTTOM_PX = 96;
 const HAND_HOVER_SEND_MS = 50;
 
+
+/** The snap modes as they appear in the mat's own right-click menu: a glyph
+ *  that shows the shape each one imposes, and the label Settings already uses
+ *  so the two surfaces say the same words. */
+const MODE_ICON: Record<BoardMode, ComponentType<{ size?: number; className?: string }>> = {
+  free: Move,
+  assist: Wand2,
+  rows: Rows3,
+  grid: Grid3x3,
+};
+
+const MODE_LABEL: Record<BoardMode, MessageKey> = {
+  free: 'gpModeFree',
+  assist: 'gpModeAssist',
+  rows: 'gpModeRows',
+  grid: 'gpModeGrid',
+};
 
 export function MyBoard({
   me,
@@ -2188,6 +2212,34 @@ export function MyBoard({
           onPointerDown={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
+          {/* Snapping, where the layout it governs actually is. It lived only
+              in Settings, which is a long way from the mat you are looking at
+              when you decide the cards are landing wrong. Same store setter as
+              the Settings control, so the two can never disagree. */}
+          <div className="menuSectionLabel"><Grid3x3 size={13} /> {t('gpBoardMode')}</div>
+          {BOARD_MODES.map((mode) => {
+            const ModeIcon = MODE_ICON[mode];
+            const current = boardMode === mode;
+            return (
+              <button
+                key={mode}
+                type="button"
+                className="menuItem"
+                role="menuitemradio"
+                aria-checked={current}
+                data-on={current || undefined}
+                onClick={() => {
+                  useTableUi.getState().setBoardMode(mode, me.userId);
+                  setBoardMenu(null);
+                }}
+              >
+                <span className="menuItemIcon" aria-hidden><ModeIcon size={15} /></span>
+                <span>{t(MODE_LABEL[mode])}</span>
+                {current && <Check size={13} className="menuItemTick" aria-hidden />}
+              </button>
+            );
+          })}
+          <div className="menuSep" role="separator" />
           <div className="menuSectionLabel"><Plus size={13} /> Create</div>
           <button
             type="button"

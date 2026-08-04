@@ -1,7 +1,20 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { AlertDialog, Button, IconButton, Input, Menu, MenuItem, MenuSub, NumberInput, Popover } from '@glacier/react';
-import { Ban, Crown, Plus, Skull, SlidersHorizontal, Swords, Trash2, Star, Flame, CircleHelp, Eye as EyeIcon, Shield as ShieldIcon } from '../../icons/backfilled.tsx';
-import { PlayingCardBlank } from '../../icons/cards.ts';
+import {
+  Ban,
+  CircleHelp,
+  Crown,
+  Eye as EyeIcon,
+  Flame,
+  PlayingCardBlank,
+  Plus,
+  Shield as ShieldIcon,
+  Skull,
+  SlidersHorizontal,
+  Star,
+  Swords,
+  Trash2,
+} from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';

@@ -11,6 +11,19 @@
 
 /* The strip sits on the page's sunken surface rather than the tone's soft
    wash: it is app chrome above the game menu, not a notice about something. */
+/* Two classes, and deliberately so. The kit's Announcements renders a
+   <section>, and app.css carries a blanket `.page section { display: flex;
+   flex-direction: column }` for page sections - which is (0,1,1) and therefore
+   beats the kit's own single-class `.root` (0,1,0) no matter what order the
+   sheets load in. That is what stacked the tag, the marquee and the pause
+   control into three centred rows. `.page .newsTicker` is (0,2,0) and takes it
+   back; the row direction has to be restated because the blanket rule set it. */
+.page .newsTicker {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
 .newsTicker {
   background: var(--glacier-surface-sunken);
 }

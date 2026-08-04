@@ -15,19 +15,22 @@ import {
   VisualFeedbackProvider,
   direction,
 } from '@glacier/react';
-import { Crown,
+import {
   ArrowLeft,
   ArrowRight,
   Compass,
+  Crown,
   House,
   Library,
   Paintbrush,
   Play,
+  PlayingCardPack,
+  PlayingCardStack,
+  PlayingCardSwap,
   Settings,
   User,
   Users,
 } from './icons/backfilled.tsx';
-import { PlayingCardPack, PlayingCardStack, PlayingCardSwap } from './icons/cards.ts';
 import {
   applyPanelDock,
   applyPreferences,

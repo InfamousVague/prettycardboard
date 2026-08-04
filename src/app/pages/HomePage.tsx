@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ComponentType, type ReactNode, type CSSProperties } from 'react';
 import { motion } from 'motion/react';
 import {
   AlertDialog,
@@ -16,16 +16,36 @@ import {
   SegmentedControl,
   Select,
   Size,
+  Spinner,
   StatusDot,
   Text,
   TextTone,
   useToast,
 } from '@glacier/react';
-import { Bot, ChevronRight, Compass, Dices, Eye, Heart, Play, Plus, Swords, Target, Ticket, Timer, Trophy } from '@glacier/icons';
-import { PlayingCardDeck, PlayingCardPack, PlayingCardStack, PlayingCardSwap } from '../icons/cards.ts';
+import {
+  Bot,
+  ChevronRight,
+  Compass,
+  Crown,
+  Dices,
+  Eye,
+  Heart,
+  Play,
+  PlayingCardDeck,
+  PlayingCardPack,
+  PlayingCardStack,
+  PlayingCardSwap,
+  Plus,
+  Shield,
+  Swords,
+  Target,
+  Ticket,
+  Timer,
+  Trophy,
+} from '../icons/backfilled.tsx';
 import { HomeUpdateBanner } from '../components/HomeUpdateBanner.tsx';
 import { NewsTicker } from '../components/NewsTicker.tsx';
-import { useT } from '../i18n.ts';
+import { useT, type MessageKey } from '../i18n.ts';
 import { useApp } from '../state/appStore.ts';
 import { useGame } from '../state/gameStore.ts';
 import { useUi } from '../state/uiStore.ts';
@@ -50,6 +70,11 @@ import { usePreference } from '../hooks/usePreference.ts';
 import { DeckStack } from '../components/DeckStack.tsx';
 import { GameTag } from '../components/GameTag.tsx';
 import { CardRowSkeleton, EmptyFan } from '../components/Skeletons.tsx';
+// The Play-now cards wear the Play page's mode plate (.pgMode), and those
+// rules live in play.css - which only PlayPage imported, so on Home the class
+// resolved to nothing and the cards rendered as bare inline text. Importing it
+// here is safe: every other rule in that file is scoped under .playPage.
+import './play.css';
 import './home.css';
 
 /**
@@ -57,6 +82,35 @@ import './home.css';
  * actions), the KPI strip, the table-setup machinery, and the shelves. Every
  * shelf links out to its full page; sections stagger in on entrance.
  */
+
+/**
+ * Play now: the ways into a game that ask nothing first.
+ *
+ * Two formats, two roulettes, and the builder. The formats are what most
+ * tables actually are; the roulettes are the ones that work with an empty
+ * collection, because the TABLE deals the decks rather than the player
+ * bringing one. Every entry here is one click through to a started game -
+ * anything that needs a decision belongs behind the custom card.
+ */
+interface HomeQuick {
+  id: string;
+  format: 'standard' | 'commander';
+  /** Total seats, mine included. */
+  seats: number;
+  title: MessageKey;
+  sub: MessageKey;
+  /** The table deals every seat instead of using my own deck. */
+  roulette?: boolean;
+  Icon: ComponentType<{ size?: number }>;
+  tint: string;
+}
+
+const HOME_QUICK: HomeQuick[] = [
+  { id: 'hqStandard', format: 'standard', seats: 2, title: 'hqStandard', sub: 'hqStandardSub', Icon: Shield, tint: 'oklch(0.72 0.14 250)' },
+  { id: 'hqCommander', format: 'commander', seats: 4, title: 'hqCommander', sub: 'hqCommanderSub', Icon: Crown, tint: 'oklch(0.8 0.14 85)' },
+  { id: 'hqStdRoulette', format: 'standard', seats: 2, title: 'rlStandardTitle', sub: 'hqRouletteSub', roulette: true, Icon: Dices, tint: 'oklch(0.74 0.14 160)' },
+  { id: 'hqCmdRoulette', format: 'commander', seats: 5, title: 'rlCommanderTitle', sub: 'hqCmdRouletteSub', roulette: true, Icon: Dices, tint: 'oklch(0.75 0.15 30)' },
+];
 
 /** A dashboard section that springs in, staggered by its position. */
 function Section({
@@ -607,6 +661,52 @@ function TableSetup({ order }: { order: number }) {
   const [game, setGame] = useState('mtg');
   const [deckId, setDeckId] = useState('');
   const [busy, setBusy] = useState(false);
+  /** Which Play-now card is opening a table, so only that one spins. */
+  const [homeQuick, setHomeQuick] = useState<string | null>(null);
+  /**
+   * Straight into a game. The roulettes let the TABLE deal every seat, which
+   * is why they work on a brand-new account; the format cards shuffle up one
+   * of my own decks in that format and seat bots for the rest.
+   */
+  const launchQuick = async (quick: HomeQuick) => {
+    if (homeQuick || busy) return;
+    setHomeQuick(quick.id);
+    try {
+      const base = {
+        name: t(quick.title),
+        game: 'mtg' as const,
+        format: quick.format,
+        bots: quick.seats - 1,
+        seats: quick.seats,
+        seat: true,
+        difficulty: 'normal' as const,
+        style: 'mixed' as const,
+        enforced: false,
+        autoStart: true,
+      };
+      if (quick.roulette) {
+        await launchBotMatch({ ...base, quickplay: true });
+        return;
+      }
+      const pool = decks.filter(
+        (deck) => (deck.game || 'mtg') === 'mtg' && deck.format.toLowerCase() === quick.format,
+      );
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      if (!pick) {
+        toast({ tone: 'warning', message: t('plQuickNeedDeck') });
+        return;
+      }
+      await launchBotMatch({ ...base, deckId: pick.id });
+    } catch (error) {
+      toast({
+        tone: 'danger',
+        message: (error as Error).message === 'offline' ? t('botsOffline') : t('rlFailed'),
+      });
+    } finally {
+      setHomeQuick(null);
+    }
+  };
+
 
   // Only the chosen game's decks are eligible; fall back to its first deck.
   const gameDecks = decks.filter((deck) => (deck.game || 'mtg') === game);
@@ -633,7 +733,49 @@ function TableSetup({ order }: { order: number }) {
 
   return (
     <Section order={order}>
-      <SectionHead title={t('hmSetupTable')} />
+      <SectionHead title={t('hmPlayNow')} />
+      {/* The same plate the Play page's Roulette band uses, so the two
+          surfaces read as one idea: pgMode carries the tint edge, the wash and
+          the hover sweep, and hmQuickGrid only says how they lay out here. */}
+      <div className="hmQuickGrid">
+        {HOME_QUICK.map((quick) => {
+          const opening = homeQuick === quick.id;
+          return (
+            <button
+              key={quick.id}
+              type="button"
+              className="pgMode hmQuick"
+              style={{ ['--pg-tint' as string]: quick.tint }}
+              disabled={homeQuick !== null || busy}
+              onClick={() => void launchQuick(quick)}
+            >
+              <span className="pgModeTop">
+                <span className="pgModeIcon" aria-hidden>
+                  {opening ? <Spinner size="sm" /> : <quick.Icon size={20} />}
+                </span>
+              </span>
+              <span className="pgModeName">{t(quick.title)}</span>
+              <span className="pgModeBlurb">{t(quick.sub)}</span>
+            </button>
+          );
+        })}
+        {/* The fifth: no preset, just the builder. */}
+        <button
+          type="button"
+          className="pgMode hmQuick"
+          style={{ ['--pg-tint' as string]: 'oklch(0.7 0.02 260)' }}
+          disabled={homeQuick !== null || busy}
+          onClick={() => (window.location.hash = '/new')}
+        >
+          <span className="pgModeTop">
+            <span className="pgModeIcon" aria-hidden>
+              <Plus size={20} />
+            </span>
+          </span>
+          <span className="pgModeName">{t('hqCustom')}</span>
+          <span className="pgModeBlurb">{t('hqCustomSub')}</span>
+        </button>
+      </div>
       <div className="qpGrid qpGridSolo">
         {/* HOST: game, deck, seats, name — the working half of the band above */}
         <div className="qpTile qpHost">

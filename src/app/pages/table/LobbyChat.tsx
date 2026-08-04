@@ -79,7 +79,14 @@ export function LobbyChat({
     }));
     for (const l of log) {
       const cls = classifyEventLine(l.text);
-      if (cls) merged.push({ kind: 'event', ts: l.ts, key: `e-${l.seq}`, text: l.text, tone: cls.tone });
+      // Keyed on the store's per-line arrival uid, NOT the server seq: one
+      // action's main and extra log lines SHARE a seq (a trigger's "applies"
+      // line and the "draws a card (Source)" it caused; two permanents both
+      // witnessing one creature enter), and triggers are exactly the lines
+      // that arrive as extras. Duplicate keys survive plain appends, but the
+      // moment appendLog's 300-line cap starts dropping the head React stops
+      // reconciling this list correctly and stale rows stick to the top.
+      if (cls) merged.push({ kind: 'event', ts: l.ts, key: `e-${l.uid}`, text: l.text, tone: cls.tone });
     }
     merged.sort((a, b) => a.ts - b.ts);
     return merged;

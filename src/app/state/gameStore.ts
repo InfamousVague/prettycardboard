@@ -22,8 +22,11 @@ export interface LogLine {
   /** Client-side monotonic arrival id, stamped by appendLog. Server seqs are
    * NOT unique per line (one action's main + extra log lines share a seq, and
    * coach notes use negative ids), so consumers that need a "new since"
-   * cursor (EventToasts) key on this instead. */
-  uid?: number;
+   * cursor (EventToasts) or a stable list key (LobbyChat) use this instead.
+   * Required, because a line that reached the store without one would collide
+   * with every other such line - appendLog is the only way in and it always
+   * stamps it, so the type just says what is already true. */
+  uid: number;
   /** Set on rules-coach advice: the Comprehensive Rules id the note is about.
    * Only ever present on lines the local player alone can see. */
   coach?: string;
@@ -82,7 +85,7 @@ function lifeSigned(match: RegExpMatchArray): number {
  * server seqs are not. */
 let logUid = 0;
 
-function appendLog(log: LogLine[], next: LogLine): LogLine[] {
+function appendLog(log: LogLine[], next: Omit<LogLine, 'uid'>): LogLine[] {
   const prev = log[log.length - 1];
   const nextMatch = next.text.match(LIFE_LOG);
   if (prev && nextMatch) {

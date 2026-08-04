@@ -833,6 +833,15 @@ export function TablePage() {
             room.started && !mobile ? <PhaseRibbon room={room} me={me} canAct={canAct} /> : null;
           const actionsEl = (
             <div className="tableTopActions">
+              {/* In the grid the history rides the top row rather than a band
+                  of its own. Perched over the mat it is reading the board it
+                  belongs to; in the grid there is no such board, so it was
+                  hovering in 2.75rem of reserved emptiness above four of them
+                  and pushing every mat down to make room. Here it sits with
+                  the other match actions and the band goes away. */}
+              {room.started && !mobile && gridView && !spectating && (
+                <TimelineCard floating />
+              )}
               {!spectating && onlineFriends.length > 0 && (
                 <Menu
                   aria-label={t('tblInviteFriends')}
@@ -1233,7 +1242,9 @@ export function TablePage() {
           behind a collapse and off the surface the player is looking at - the
           history of the mat belongs on the mat. The strip ducks under the top
           bar on desktop-shaped tables (see table.css). */}
-      {room.started && !spectating && (
+      {/* Not in the desktop grid: it is docked in the top row there instead,
+          so this would be the same three controls twice. */}
+      {room.started && !spectating && !(gridView && !mobile) && (
         <div className="mobileHistory" inert={companion || undefined}>
           <TimelineCard floating />
         </div>

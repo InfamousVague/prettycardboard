@@ -1,8 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Avatar, Button, IconBackfill, Text, Size, TextTone, Tooltip } from '@glacier/react';
-import { Crown, Download, Grid3X3, LogOut, Play, Skull, ThumbsUp, Timer, Trophy } from '../../icons/backfilled.tsx';
-import { PlayingCard } from '../../icons/cards.ts';
+import { Avatar, Button, Text, Size, TextTone, Tooltip } from '@glacier/react';
+import {
+  Crown,
+  Download,
+  Grid3X3,
+  LogOut,
+  Play,
+  PlayingCard,
+  Skull,
+  ThumbsUp,
+  Timer,
+  Trophy,
+} from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
 import * as api from '../../net/api.ts';
 import { SaltPile } from '../../components/SaltPile.tsx';
@@ -162,16 +172,12 @@ export function PostMatch({
         transition={{ type: 'spring', stiffness: 320, damping: 28 }}
       >
         <div className="pmHero">
-          {/* Backfilled: the kit stacks a filled copy of the glyph behind the
-              outline in the same colour, which at this size reads as a solid
-              gold trophy lit from within rather than a wireframe of one. Worth
-              it here and almost nowhere else - the effect needs a closed
-              silhouette and room to breathe, and every other glyph in the app
-              is 11-16px. */}
+          {/* No IconBackfill wrapper here: ../icons/backfilled.tsx already
+              pre-wraps every icon the app imports, so wrapping again stacked
+              TWO silhouettes - a fattened ghost sitting behind and above the
+              real trophy. The barrel is the one place that decides. */}
           <span className="pmTrophy" aria-hidden>
-            <IconBackfill>
-              <Trophy size={30} />
-            </IconBackfill>
+            <Trophy size={30} />
           </span>
           <Text as="p" size={Size.Large} weight="bold" className="pmTitle">
             {result.winnerUsername} {t('pmWins')}

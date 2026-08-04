@@ -47,12 +47,16 @@ export function EventToasts() {
 
   useEffect(() => {
     for (const line of log) {
-      const uid = line.uid ?? 0;
-      if (uid <= lastSeen.current) continue;
-      lastSeen.current = uid;
+      if (line.uid <= lastSeen.current) continue;
+      lastSeen.current = line.uid;
       if (username && line.text.startsWith(`${username} `)) continue;
       const cls = classifyEventLine(line.text);
       if (!cls) continue;
+      // Triggers are the transcript's job. They already thread into chat as
+      // system rows for everyone (LobbyChat merges the same classifier), so
+      // toasting them too said it twice and buried the mat under the record of
+      // what just happened on it.
+      if (cls.chatOnly) continue;
       const now = Date.now();
       recent.current = recent.current.filter((ts) => now - ts < WINDOW_MS);
       if (recent.current.length >= (cls.important ? HARD_CAP : SOFT_CAP)) continue;

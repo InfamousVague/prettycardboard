@@ -441,7 +441,7 @@
      sweep  a specular that travels across, on your turn only
 
    The halftone is not a hand-drawn asset: it is the exact output of Glacier's
-   halftoneSvg (origin 'right', 26 cells, seed 9), inlined here because
+   halftoneSvg (origin 'right', 33x6 cells in a 220x40 box, seed 9), inlined here because
    @glacier/logic is not vendored into this app. Regenerate with the same
    options and it comes out byte-identical - the dissolve is a hash of each
    cell, not a random number. */
@@ -3325,7 +3325,8 @@
   color: var(--glacier-text-muted);
 }
 
-.dmgLabel > svg {
+.dmgLabel > svg,
+.dmgLabel > .pcIcon {
   flex: none;
   opacity: 0.8;
 }
@@ -3516,6 +3517,152 @@
   cursor: default;
 }
 
+/* ---- the dial: life as a circle, the steppers bitten around it ------------
+   One shared radius drives all three pieces - the circle's size, the bite the
+   steppers take, and the gap that keeps the ring clear of them - so the cut
+   can never drift out of register with the thing it is cutting around. */
+.lifeBlock {
+  --pc-dial-r: 1.55rem;
+  /* How much clear space the ring gets outside the disc. Tight: the ring reads
+     as an edge on the disc, not a second circle around it. */
+  --pc-dial-halo: 0.09rem;
+  /* How DEEP the bite cuts, NOT the radius of the cutting circle. That
+     distinction is the whole fix: centring a circle of radius r on the plate's
+     edge removes a half-disc ~26px into a ~34px plate, which is what ate the
+     minus and plus outright. The circle is pushed OUT past the edge instead,
+     far enough that only this much of its near arc reaches in - so the curve
+     still matches the disc, but it takes a sliver. */
+  --pc-dial-bite: 0.62rem;
+  /* Radius of the cutting circle: the disc plus its halo, so the arc is
+     concentric with the ring it curves around. */
+  --pc-dial-cut: calc(var(--pc-dial-r) + var(--pc-dial-halo));
+  /* How far the circle's centre sits beyond the plate edge. R - depth. */
+  --pc-dial-push: calc(var(--pc-dial-cut) - var(--pc-dial-bite));
+}
+
+/* The disc itself: a fixed circle rather than a stretched plate, riding above
+   its neighbours so the bite reads as the circle overlapping them. */
+.lifeBlock .lifeTotal {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  inline-size: calc(var(--pc-dial-r) * 2);
+  min-inline-size: 0;
+  block-size: calc(var(--pc-dial-r) * 2);
+  align-self: center;
+  border-radius: 50%;
+  /* The plate skin's slant would shear a circle into an ellipse. */
+  transform: none;
+  clip-path: none;
+}
+
+/* The ring around it, drawn outside the disc so it does not eat the number. */
+.lifeBlock .lifeTotal::after {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--pc-dial-halo));
+  border-radius: 50%;
+  border: 2px solid color-mix(in oklch, var(--glacier-accent-solid) 55%, transparent);
+  pointer-events: none;
+}
+
+.lifeBlock .lifeTotalInner {
+  transform: none;
+  justify-content: center;
+}
+
+/* The bite. A radial mask centred on the disc's centre punches a transparent
+   circle out of each stepper - background, border and all - which is why this
+   is a mask rather than a border-radius: the cut has to remove the plate's own
+   edge along the arc, not round it. The centre sits on the plate's inner edge
+   (100% for the leading stepper, 0% for the trailing one) so the two bites
+   meet the same circle from opposite sides. */
+.lifeBlock .lifeStep {
+  /* Pulled under the disc so the bite has something to remove; the negative
+     margin is the halo plus the overlap the arc needs. */
+  margin-inline: 0;
+  z-index: 1;
+}
+
+.lifeBlock .lifeStep:first-child {
+  /* No negative margin: sliding the plate under the disc stacked another
+     crescent's worth of loss on top of the mask. */
+  margin-inline-end: 0;
+  --pc-dial-at: calc(100% + var(--pc-dial-push));
+  /* Keeps the glyph outboard of the arc rather than under it. */
+  padding-inline-end: var(--pc-dial-bite);
+}
+
+.lifeBlock .lifeTotal + .lifeStep {
+  margin-inline-start: 0;
+  --pc-dial-at: calc(-1 * var(--pc-dial-push));
+  padding-inline-start: var(--pc-dial-bite);
+}
+
+/* Square, not slanted, and wide enough to carry the glyph beside the arc.
+   The slant is what stopped the bite reading as a full-height cut: a skewed
+   plate presents a DIAGONAL inner edge, so a circle centred on the vertical
+   middle could only ever graze part of it and the curve died out top and
+   bottom. With the edge vertical the arc meets it along its whole height.
+   Both halves of the skew have to go - the plate skin skews the outer box and
+   counter-skews .lifeStepInner to keep the glyph upright - or the glyph ends
+   up leaning inside a square plate. */
+.lifeBlock .lifeStep {
+  inline-size: 3rem;
+  transform: none;
+  clip-path: none;
+}
+
+.lifeBlock .lifeStepInner {
+  transform: none;
+}
+
+/* ---- a rim that follows the bite ----------------------------------------
+   `mask-image` REMOVES pixels; it never strokes the edge it creates. That is
+   why the earlier version left three blue sides and a bare cut: the border was
+   being erased along with everything else inside the circle.
+
+   So the plate is drawn as two masked layers instead of one bordered box. The
+   element itself is filled ENTIRELY with the rim colour and masked to the
+   bitten silhouette; ::before is the same silhouette inset by the rim width -
+   a slightly smaller rounded rect with a slightly LARGER bite - filled with
+   the plate face. What is left showing of the bottom layer is a uniform rim
+   that follows every edge, the arc included. */
+.lifeBlock .lifeStep {
+  position: relative;
+  border: 0;
+  background: var(--pc-gacha-border);
+  overflow: visible;
+  mask-image: radial-gradient(
+    circle at var(--pc-dial-at) 50%,
+    transparent var(--pc-dial-cut),
+    #000 calc(var(--pc-dial-cut) + 0.5px)
+  );
+}
+
+.lifeBlock .lifeStep::before {
+  content: '';
+  position: absolute;
+  /* The rim width. */
+  inset: 1px;
+  border-radius: inherit;
+  background: var(--pc-gacha-face);
+  /* Grown by the same 1px so the rim is even along the arc too. The centre
+     shifts by the inset, which is why it is not simply var(--pc-dial-at). */
+  mask-image: radial-gradient(
+    circle at calc(var(--pc-dial-at) - 1px) 50%,
+    transparent calc(var(--pc-dial-cut) + 1px),
+    #000 calc(var(--pc-dial-cut) + 1px + 0.5px)
+  );
+  pointer-events: none;
+}
+
+/* The glyph has to clear the fill layer. */
+.lifeBlock .lifeStepInner {
+  position: relative;
+  z-index: 1;
+}
+
 .lifeStepInner,
 .lifeTotalInner {
   transform: skewX(var(--pc-slant-back));
@@ -3543,6 +3690,21 @@
 /* The skew has to be restated in any later transform, or the press un-skews. */
 .lifeStep:active {
   transform: skewX(var(--pc-slant)) translateY(1px);
+}
+
+/* On the dial the plates are square, so there is no skew to restate - and the
+   skewed press read as a ROTATION rather than a push. A button that presses in
+   should get smaller and sink, nothing else. Scoped to .lifeBlock so the
+   skewed plates everywhere else keep their own press. */
+.lifeBlock .lifeStep {
+  transition:
+    transform var(--glacier-duration-fast) var(--glacier-ease-out),
+    filter var(--glacier-duration-fast) var(--glacier-ease-out);
+}
+
+.lifeBlock .lifeStep:active {
+  transform: scale(0.93);
+  filter: brightness(0.88);
 }
 
 /* The ONE counter-skewed child (see the note in Vitals.tsx). All layout lives
@@ -6435,8 +6597,17 @@
   border: 0;
   background: none;
   box-shadow: none;
-  max-height: 60vh;
+  /* Fills the rail rather than capping itself at 60vh. .tableSide already
+     bounds this on both ends (top/bottom above), so the vh cap was a second,
+     shorter limit measured against the WINDOW instead of the rail - which is
+     what cut the last card off once a pod had four of them. flex + min-height:0
+     lets it take exactly the room the rail has and scroll only past that. */
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  /* So the last card ends clear of the scroll edge instead of flush against
+     the cut. */
+  padding-block-end: var(--glacier-space-2);
 }
 
 /* In the rail the life card stretches to the rail width. */
@@ -7668,16 +7839,20 @@
    it resolves to nothing and the padding would have been silently dropped. One
    custom property feeds both rules so the reserve and the offset cannot
    drift. */
-.table[data-grid] {
+/* Desktop grid reserves NOTHING: the history docks into the top row beside the
+   other match actions (TablePage, `gridView` branch), so there is no floating
+   strip to clear and the boards start straight under the bar. The band this
+   used to reserve was 2.75rem of empty width-of-the-window space holding one
+   small centred pill, and every mat sat that much lower for it.
+
+   A phone still floats the strip - it has no top row to dock into - so the
+   band survives there. */
+.table[data-grid][data-mobile] {
   --pc-grid-band: 2.75rem;
 }
 
-.table[data-grid] .playerGrid {
+.table[data-grid][data-mobile] .playerGrid {
   padding-block-start: var(--pc-grid-band);
-}
-
-.table[data-grid]:not([data-mobile]) .mobileHistory {
-  top: calc(var(--pc-strip-clear) + env(safe-area-inset-top, 0px));
 }
 
 /* No card chrome: the row itself is the surface, and it matches the height of
@@ -9390,6 +9565,14 @@ button.loyaltyBadge:hover {
   flex-basis: 100%;
   /* The playmat art is 2731x1536 - exactly 16:9 - so the thumbnail is too. */
   aspect-ratio: 16 / 9;
+  /* This box is the ONE authority on how big the miniature may paint:
+     .playerCardBoard reads it back as 100cqw instead of re-deriving a width
+     from --pc-rail-w, which was always a guess and was wrong everywhere (see
+     the note there). Inline-size containment is enough - the slot pins its own
+     16:9 above, and the board is 16:9 too, so fitting the width fits the
+     height. Unnamed on purpose: every @container query in this app is named
+     (tabletop, pcSetup, pcLaunch, whatsnew), so nothing else can bind to it. */
+  container-type: inline-size;
   border-radius: var(--glacier-radius-md);
   overflow: hidden;
   /* Read-only: the card's own click stages the seat, and nothing inside the
@@ -9407,14 +9590,39 @@ button.loyaltyBadge:hover {
 .playerCardBoard {
   /* Laid out at a full desktop board's size, then painted at thumbnail scale.
      --pc-seat-thumb-src is the width the board THINKS it has; the zoom is the
-     ratio between the real thumbnail and that. Both sides are derived from
-     --pc-rail-w, so widening the rail rescales the miniature on its own rather
-     than leaving the board stranded in a corner of the slot. */
-  --pc-seat-thumb-src: 1400;
-  --pc-seat-thumb-w: calc(var(--pc-rail-w) - 2 * var(--glacier-space-2));
+     ratio between the real slot and that. It cancels out of the painted size
+     (src * (slot / src) == slot), so it is purely a framing knob: raise it and
+     the miniature shows MORE table at the same size, never a bigger box.
+     The width the miniature PRETENDS to be has to be at least as wide as the
+     real board, or the miniature lays out a narrower table and everything on
+     it - mat framing, zone piles, cards - sits proportionally larger, which
+     reads as a zoomed-IN thumbnail. 1400 was narrower than the board on any
+     full-width desktop, so the previews were cropped in exactly that way. A
+     wide-desktop figure frames the whole mat at the sizes people actually
+     play at.
+
+     The other half of the ratio is the slot itself, measured (100cqw off
+     .playerCardPreview) rather than re-derived from --pc-rail-w. The old
+     `--pc-rail-w - 2 * space-2` form was a GUESS at the slot and was wrong
+     everywhere: it never counted .playerCard's two 1px borders (2px clipped in
+     the rail always), it was 25px over under :root[data-layout='full'], and
+     wherever --pc-rail-w is 0px - the phone sheet (.table[data-mobile]) and
+     .table[data-rail='hidden'] - it went NEGATIVE, so `zoom` fell back to 1
+     and the board painted 1920x1080 into a ~304px slot: one giant corner of
+     the mat, no battlefield, no zone piles. Measuring cannot go negative.
+
+     The max() is the floor under that same cliff: a slot measuring 0 would
+     divide to a zoom of 0, which is out of range and falls back to 1 - the
+     1920px balloon again. It can happen: .table[data-rail='hidden'] zeroes
+     --pc-rail-w AND gives .tableSide `width: auto`, so the slot collapses.
+     Nothing renders the roster in that state today (TablePage passes
+     rosterHidden while the grid is open), so this is a guard, not a fix for a
+     live bug - it costs nothing at any real width and degrades a broken rail
+     into an invisible speck instead of a 1920px column. */
+  --pc-seat-thumb-src: 1920;
   inline-size: calc(var(--pc-seat-thumb-src) * 1px);
   aspect-ratio: 16 / 9;
-  zoom: calc(var(--pc-seat-thumb-w) / (var(--pc-seat-thumb-src) * 1px));
+  zoom: calc(max(100cqw, 1px) / (var(--pc-seat-thumb-src) * 1px));
   /* SeatFrame sizes to its content, so in a fixed 16:9 box it drew its board at
      natural height and left the bottom of the thumbnail empty. Flex + stretch
      makes it fill the slot, the same way .stageArea does it on the real table
@@ -9431,7 +9639,19 @@ button.loyaltyBadge:hover {
    unreadable at this size, so it goes. */
 .playerCardBoard .boardTools,
 .playerCardBoard .mobileZones,
-.playerCardBoard .myHand {
+.playerCardBoard .myHand,
+/* SeatFrame carries its own name/life header, and the card already prints the
+   name and the vitals underneath the preview - so the miniature was saying who
+   this is twice. The card's own row is the one that stays: it is legible, and
+   the header inside the zoom is a few painted pixels tall. */
+.playerCardBoard .oppHead,
+/* Counter chips are floating labels sized for a full board. Painted at
+   thumbnail scale they are unreadable, and they stack over the art they are
+   attached to - so the preview shows the cards and leaves the arithmetic to
+   the board itself. */
+.playerCardBoard .counterPill,
+.playerCardBoard .counterBadge,
+.playerCardBoard .counterEmptyPlus {
   display: none;
 }
 
@@ -9565,4 +9785,50 @@ button.loyaltyBadge:hover {
   font-size: var(--glacier-text-xs);
   color: var(--glacier-text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+
+/* ---- life reads red, the ping reads gold ---------------------------------
+   The heart carried the row's text colour, so life sat in the same grey (or
+   the same success-green) as everything beside it and the glyph did no work.
+   Only the ICON is tinted: the number keeps its own state colour, including
+   the low-life warning, so nothing that already meant something is lost. */
+.playerGridLife svg,
+.seatChipLife svg,
+.oppLife svg,
+.mobileDockHandle svg:first-of-type,
+.lifeFloat .lifeTotal svg {
+  color: var(--glacier-danger-solid, oklch(0.62 0.21 22));
+  fill: color-mix(in oklch, var(--glacier-danger-solid, oklch(0.62 0.21 22)) 30%, transparent);
+}
+
+/* The ping is an attention-getter, so it looks like one rather than another
+   grey ghost button in the row. Gold on rest, brighter and lifted on hover;
+   it dims to the ordinary muted colour while cooling down so the disabled
+   state still reads as disabled. */
+.playerPing {
+  color: oklch(0.82 0.15 85);
+}
+
+.playerPing:hover:not(:disabled) {
+  color: oklch(0.9 0.16 88);
+  filter: drop-shadow(0 0 6px oklch(0.82 0.15 85 / 0.55));
+}
+
+.playerPing:disabled {
+  color: var(--glacier-text-subtle);
+  filter: none;
+}
+
+
+/* The checked snap mode in the mat's right-click menu. A radio group, not a
+   list of commands: exactly one is always on, so the row says which. */
+.menuItem[data-on] {
+  color: var(--glacier-accent-text);
+}
+
+.menuItemTick {
+  margin-inline-start: auto;
+  flex: none;
+  color: var(--glacier-accent-text);
 }

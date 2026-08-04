@@ -12,6 +12,14 @@ export interface EventClass {
   tone: EventTone;
   /** Things done TO players: these always get through the toast rate limiter. */
   important?: boolean;
+  /**
+   * Transcript-only. The line still threads into chat as a system row that
+   * everyone sees, but it never becomes a toast: trigger narration is a
+   * RECORD, and a stack of them over the mat buries the board it is describing.
+   * The controller is not left guessing either - they still get the actionable
+   * prompt card (TriggerPrompts), which is the thing you can answer.
+   */
+  chatOnly?: boolean;
 }
 
 export const EVENT_CLASSES: EventClass[] = [
@@ -21,8 +29,8 @@ export const EVENT_CLASSES: EventClass[] = [
   { match: / targets .+ with /, tone: 'info', important: true },
   // Trigger applications go before the counter class: their summaries can
   // read "...counters on it", which the lookahead below also guards.
-  { match: / applies .+ trigger: /, tone: 'info' },
-  { match: / resolves .+ trigger by hand/, tone: 'info' },
+  { match: / applies .+ trigger: /, tone: 'info', chatOnly: true },
+  { match: / resolves .+ trigger by hand/, tone: 'info', chatOnly: true },
   // The countering VERB, with or without the "with {counterspell}" tail
   // (freeform's bare "counters X" included) - never the +1/+1 NOUN, which
   // always continues "counters on/from ..." or ends the sentence.
@@ -39,8 +47,8 @@ export const EVENT_CLASSES: EventClass[] = [
   // suppresses lines that start with your own username, and these start with
   // "Playing", so the controller sees both the prompt card and the toast. That
   // is deliberate for now - the prompt is actionable, the toast is the record.
-  { match: /^Playing .+ triggered /, tone: 'info' },
-  { match: /^Trigger: /, tone: 'info' },
+  { match: /^Playing .+ triggered /, tone: 'info', chatOnly: true },
+  { match: /^Trigger: /, tone: 'info', chatOnly: true },
   { match: / creates .+ token/, tone: 'info' },
   // A spell leaving the stack (but combat resolution has its own preview UI).
   { match: / resolves (?!combat$)/, tone: 'neutral' },
