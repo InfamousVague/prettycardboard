@@ -76,6 +76,20 @@ export interface ChangelogRelease {
  *  load-bearing, but keep the literal in order for whoever reads it. */
 export const CHANGELOG: ChangelogRelease[] = [
   {
+    version: '0.12.2',
+    date: '2026-08-05',
+    entries: [
+      {
+        id: 'routine-0-12-2',
+        icon: Wrench,
+        title: 'clRoutine',
+        desc: 'clRoutineDesc',
+        kind: 'fixed',
+        category: 'clCatApp',
+      },
+    ],
+  },
+  {
     version: '0.12.1',
     date: '2026-08-04',
     entries: [
