@@ -136,6 +136,13 @@ pub(crate) struct BotMind {
     /// Monsters that have already declared an attack this turn - Yu-Gi-Oh
     /// gives each monster one attack per Battle Phase.
     ygo_attacked: Vec<String>,
+
+    // --- Mood Swings (the mood brain; unused at any other table) ---
+    /// This turn's one mood is already in front of me.
+    mood_played: bool,
+    /// Last round's moods have started going to the discard, so only the
+    /// first one of them is announced.
+    mood_swept: bool,
 }
 
 /// A bot never chews on one turn longer than this before passing. Its own
@@ -272,6 +279,7 @@ mod combat;
 mod decide;
 mod knowledge;
 mod lines;
+mod moodswings;
 mod upkeep;
 mod yugioh;
 
@@ -282,5 +290,6 @@ pub(crate) use combat::*;
 pub(crate) use decide::*;
 pub(crate) use knowledge::*;
 pub(crate) use lines::*;
+pub(crate) use moodswings::*;
 pub(crate) use upkeep::*;
 pub(crate) use yugioh::*;

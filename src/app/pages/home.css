@@ -641,6 +641,15 @@
   min-block-size: 2rem;
 }
 
+/* The release-stage stamp belongs to the TITLE, not to the row. With
+   space-between it would otherwise float to the middle, reading as a third
+   column; the auto end-margin keeps it beside the heading and hands the free
+   space back to the view-all button. */
+.homeSectionHead .gameStageTag {
+  margin-inline-start: calc(var(--glacier-space-3) * -1 + 0.4rem);
+  margin-inline-end: auto;
+}
+
 /* ========================================================================
    Career banner — Apex-style: six angled stat plates in one band. Big
    numeral, uppercase micro-label, thin accent underline (the win-rate

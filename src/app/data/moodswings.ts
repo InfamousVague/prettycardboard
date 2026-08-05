@@ -76,6 +76,13 @@ export function moodCard(id: string | undefined): MoodCard | undefined {
   return id ? BY_ID.get(id) : undefined;
 }
 
+/** The marker behind a mood id (Hurt Feelings and friends). Markers are real
+ *  cards with text, they are just not ones you draw - so "what does this say?"
+ *  has to answer for them too. */
+export function moodMarker(id: string | undefined): MoodMarker | undefined {
+  return id ? MARKER_BY_ID.get(id) : undefined;
+}
+
 /** The rendered face for a mood id. Markers resolve too - Hurt Feelings is a
  *  real card you put in front of someone, it just is not one you draw. */
 export function moodImage(id: string | undefined): string {

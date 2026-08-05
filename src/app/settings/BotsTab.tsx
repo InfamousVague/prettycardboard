@@ -31,7 +31,7 @@ export function BotsTab({ onClose }: { onClose: () => void }) {
   const [difficulty, setDifficulty] = useState<BotDifficulty>('normal');
   const [style, setStyle] = useState<BotStyle>('mixed');
   const [format, setFormat] = useState<'commander' | 'standard'>('commander');
-  const [game, setGame] = useState<'mtg' | 'yugioh'>('mtg');
+  const [game, setGame] = useState<'mtg' | 'yugioh' | 'moodswings'>('mtg');
   const [enforced, setEnforced] = useState(false);
   const [launching, setLaunching] = useState(false);
   // Launching means leaving the current room. Leaving a STARTED game concedes
@@ -44,7 +44,7 @@ export function BotsTab({ onClose }: { onClose: () => void }) {
     difficulty: BotDifficulty;
     style: BotStyle;
     format: 'commander' | 'standard';
-    game?: 'mtg' | 'yugioh';
+    game?: 'mtg' | 'yugioh' | 'moodswings';
     enforced: boolean;
     seat: boolean;
   }) => {
@@ -190,10 +190,11 @@ export function BotsTab({ onClose }: { onClose: () => void }) {
                 aria-label={t('botsGame')}
                 fullWidth
                 value={game}
-                onValueChange={(value) => setGame(value as 'mtg' | 'yugioh')}
+                onValueChange={(value) => setGame(value as 'mtg' | 'yugioh' | 'moodswings')}
                 options={[
                   { value: 'mtg', label: 'Magic' },
                   { value: 'yugioh', label: 'Yu-Gi-Oh!' },
+                  { value: 'moodswings', label: 'Mood Swings' },
                 ]}
               />
             </div>

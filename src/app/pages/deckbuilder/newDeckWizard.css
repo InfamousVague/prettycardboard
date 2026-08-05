@@ -43,6 +43,11 @@
   font-size: var(--glacier-font-size-xs);
   color: var(--glacier-text-muted);
 }
+/* The stage stamp settles at the foot of the card, so the stamps line up
+   across a row of cards whose taglines run to different lengths. */
+.ndwGameStage {
+  margin-block-start: auto;
+}
 
 /* Step 2: the deck-kind list. */
 .ndwBack {

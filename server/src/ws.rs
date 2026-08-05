@@ -716,7 +716,27 @@ fn leave_room(app: &Arc<App>, user: &db::User) {
                     }
                 }
             }
+            // The common pile is HELD by a seat (game::pile_index), so if the
+            // holder walks out the deck and the discard would walk out with
+            // them and leave the table with nothing to draw from. Hand the box
+            // to whoever is left, the way you would slide it across.
+            let carried = if crate::game::shared_pile(&room.game) {
+                let holder = crate::game::pile_index(&room, 0);
+                room.players
+                    .get(holder)
+                    .filter(|p| p.user_id == user.id)
+                    .map(|p| (p.library.clone(), p.graveyard.clone()))
+            } else {
+                None
+            };
             room.players.retain(|p| p.user_id != user.id);
+            if let Some((library, graveyard)) = carried {
+                let next = crate::game::pile_index(&room, 0);
+                if let Some(p) = room.players.get_mut(next) {
+                    p.library = library;
+                    p.graveyard = graveyard;
+                }
+            }
             // Their shared-zone holdings leave with them.
             room.stack.retain(|e| e.owner != user.id);
             room.pending_cmd.retain(|p| p.owner != user.id);
@@ -821,16 +841,43 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
     // format/game default). Cyberpunk keeps its Net/RAM slots at 0; Yu-Gi-Oh
     // duels start at 8000 LP.
     let starting_life = rooms::starting_life(&room.game, &room.format, &room.settings);
-    // Yu-Gi-Oh has no mulligans: seats start already "kept" so the first turn
-    // begins the moment the hands are dealt.
-    let mull_state = if room.game == "yugioh" { "kept" } else { "deciding" };
+    // Games without a mulligan rule (Yu-Gi-Oh, Mood Swings) start already
+    // "kept" so the first turn begins the moment the hands are dealt.
+    let mulls = crate::game::has_mulligans(&room.game);
+    let mull_state = if mulls { "deciding" } else { "kept" };
+    // A shared-pile game (Mood Swings) is played out of ONE box in the middle
+    // of the table. Every seat was dealt its own copy of that box, because the
+    // seating path has no other way to hand a deckless player cards - so fold
+    // them back into the seat that holds the pile and empty the rest. From here
+    // on every draw and every discard is routed to that seat (game::pile_index)
+    // and the opening hands below come off the same pile, so the box really is
+    // singleton: no card can be in two players' hands at once.
+    let pile = crate::game::pile_index(&room, 0);
+    let one_pile = crate::game::shared_pile(&room.game);
+    if one_pile {
+        for i in 0..room.players.len() {
+            if i != pile {
+                room.players[i].library.clear();
+                room.players[i].graveyard.clear();
+            }
+        }
+        for i in 0..room.players.len() {
+            let n = deal.min(room.players[pile].library.len());
+            let drawn: Vec<rooms::Card> = room.players[pile].library.drain(0..n).collect();
+            room.players[i].hand.extend(drawn);
+        }
+    }
     for p in room.players.iter_mut() {
         p.life = starting_life;
-        let n = deal.min(p.library.len());
-        let drawn: Vec<rooms::Card> = p.library.drain(0..n).collect();
-        p.hand.extend(drawn);
+        // Shared-pile tables dealt their hands off the common box above; the
+        // per-seat draw here would deal a second hand out of an empty library.
+        if !one_pile {
+            let n = deal.min(p.library.len());
+            let drawn: Vec<rooms::Card> = p.library.drain(0..n).collect();
+            p.hand.extend(drawn);
+        }
         // Every seat starts in the mulligan decision (freeform: no other action
-        // is gated on it) — except Yu-Gi-Oh, which skips the flow entirely.
+        // is gated on it) — except the games that skip the flow entirely.
         p.mulligan = Some(rooms::Mull { state: mull_state.to_string(), taken: 0 });
     }
     // Turn order anchor: host may force a random seat or a specific one; the
@@ -895,17 +942,17 @@ fn start_room(app: &Arc<App>, user: &db::User, tx: &Tx) {
     room.hist_clear();
     room.push_history(user.id.clone(), "Game started".to_string(), seq, None);
 
-    // Yu-Gi-Oh seats were dealt already "kept" (no mulligan flow): the first
-    // turn begins right now. A no-op for every other game, whose seats are
-    // still deciding (their keeps trigger it via MullKeep/Concede).
+    // Seats dealt already "kept" (no mulligan flow) start the first turn right
+    // now. A no-op for every other game, whose seats are still deciding (their
+    // keeps trigger it via MullKeep/Concede).
     let first_turn_logs = game::maybe_begin_first_turn(app, &mut room, started_now);
 
     rooms::touch(app, &mut room);
     room_send_states(app, &room);
-    let started_line = if room.game == "yugioh" {
-        format!("Game started: opening hands of {deal} dealt")
-    } else {
+    let started_line = if mulls {
         format!("Game started: opening hands of {deal} dealt; keep or mulligan")
+    } else {
+        format!("Game started: opening hands of {deal} dealt")
     };
     room_log(app, &room, seq, &started_line);
     for line in first_turn_logs {
@@ -1016,11 +1063,11 @@ fn pick_unused<'a>(
 /// caller's cue to leave the seat deckless rather than wedge it.
 fn quickplay_deal(room: &mut rooms::Room, user_id: &str, avoid: Option<&str>) -> bool {
     // Same guard bot_add carries, and for the same reason: decks_for only
-    // branches on yugioh, so ANY other game falls through to the Magic precons.
-    // At a Cyberpunk table that would deal 100 cards of the wrong card game.
-    // Checked here rather than at each call site so join, the settings flip and
-    // the reroll are all covered by one rule.
-    if room.game != "mtg" && room.game != "yugioh" {
+    // branches on the games with a pool of their own, so anything else falls
+    // through to the Magic precons. At a Cyberpunk table that would deal 100
+    // cards of the wrong card game. Checked here rather than at each call site
+    // so join, the settings flip and the reroll are all covered by one rule.
+    if !matches!(room.game.as_str(), "mtg" | "yugioh" | "moodswings") {
         return false;
     }
     let pool = crate::bot::decks_for(&room.game, &room.format);
@@ -1368,8 +1415,8 @@ fn bot_add(
         send_err(tx, "already_started", "the game has already started");
         return;
     }
-    if room.game != "mtg" && room.game != "yugioh" {
-        send_err(tx, "bad_game", "bots play Magic and Yu-Gi-Oh tables");
+    if !matches!(room.game.as_str(), "mtg" | "yugioh" | "moodswings") {
+        send_err(tx, "bad_game", "bots play Magic, Yu-Gi-Oh and Mood Swings tables");
         return;
     }
     let taken: Vec<usize> = room.players.iter().map(|p| p.seat).collect();
@@ -1378,12 +1425,16 @@ fn bot_add(
         return;
     };
     // A bot brings a deck the TABLE can actually play: a duel table gets a
-    // Yu-Gi-Oh deck, a Standard table a Standard deck, anything else the
-    // Commander precons. An explicit code still wins - the Bots settings tab
-    // and the playtests name decks.
+    // Yu-Gi-Oh deck, a Mood Swings table a box, a Standard table a Standard
+    // deck, anything else the Commander precons. An explicit code still wins -
+    // the Bots settings tab and the playtests name decks.
     let pool = crate::bot::decks_for(&room.game, &room.format);
-    let all: Vec<&crate::bot::BotDeck> =
-        crate::bot::data().decks.iter().chain(crate::bot::ygo_data().decks.iter()).collect();
+    let all: Vec<&crate::bot::BotDeck> = crate::bot::data()
+        .decks
+        .iter()
+        .chain(crate::bot::ygo_data().decks.iter())
+        .chain(crate::bot::mood_data().decks.iter())
+        .collect();
     let taken = taken_deck_codes(&room);
     let deck: &crate::bot::BotDeck = match deck_code.as_deref() {
         // Prefer a deck nobody at this table already has. Bots are seated one

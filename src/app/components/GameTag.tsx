@@ -1,5 +1,6 @@
 import { Pill, Tooltip } from '@glacier/react';
 import { getGame } from '../data/games.ts';
+import { useT } from '../i18n.ts';
 import { GameMark } from './GameMark.tsx';
 import './GameTag.css';
 
@@ -71,6 +72,45 @@ export function GameBadge({
       >
         <GameMark game={def.id} size={size} />
       </span>
+    </Tooltip>
+  );
+}
+
+/**
+ * How finished the game is - "Alpha" or "Pre-Release" - as a chip to sit beside
+ * its name wherever one is offered for selection.
+ *
+ * It is deliberately NOT painted in the game's accent like GameTag is: the
+ * accent says which game, and a warning that wears the same colour as the thing
+ * it is warning about reads as more branding. The stage tones (info for alpha,
+ * warning for pre-release) are the kit's, so the chip means the same thing here
+ * as an amber pill means anywhere else in the app.
+ *
+ * The tooltip carries the full sentence; the chip itself has room for one word.
+ */
+export function GameStageTag({
+  game,
+  size = 'sm',
+  className,
+}: {
+  game: string | undefined | null;
+  size?: 'sm' | 'md';
+  className?: string;
+}) {
+  const t = useT();
+  const stage = getGame(game).stage;
+  const alpha = stage === 'alpha';
+  return (
+    <Tooltip content={t(alpha ? 'gsAlphaHint' : 'gsPrereleaseHint')}>
+      <Pill
+        size={size}
+        variant="soft"
+        tone={alpha ? 'info' : 'warning'}
+        className={`gameStageTag${className ? ` ${className}` : ''}`}
+        data-stage={stage}
+      >
+        {t(alpha ? 'gsAlpha' : 'gsPrerelease')}
+      </Pill>
     </Tooltip>
   );
 }

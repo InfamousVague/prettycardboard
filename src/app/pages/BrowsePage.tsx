@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Heading, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
 import { useT, type MessageKey } from '../i18n.ts';
 import { useVisibleGames } from '../hooks/useVisibleGames.ts';
+import { GameSelect, gameLabel } from '../components/GameSelect.tsx';
+import { getGame } from '../data/games.ts';
 import {
   CATALOG,
   deckFamily,
@@ -21,6 +23,7 @@ import {
 } from '../data/cyberpunk.ts';
 import { yugiohImage, yugiohStarters } from '../data/yugioh.ts';
 import { yugiohDeckCatalog } from '../data/yugiohDecks.ts';
+import { BOX_SIZE, MOOD_CARDS, moodBox, moodImage, moodSlug } from '../data/moodswings.ts';
 import { artCrop, cardImage } from '../data/cards.ts';
 import { ColorIdentity, ManaSymbol } from '../components/Mana.tsx';
 import { BrowseCatalog, type BrowseDeck, type BrowseFacet } from '../components/BrowseCatalog.tsx';
@@ -36,6 +39,12 @@ import './browse.css';
  */
 
 const WUBRG = ['W', 'U', 'B', 'R', 'G'] as const;
+
+/** Group heading for the "by game" shelf, which only appears once more than
+ *  one catalog is on screen. */
+function gameGroup(id: string): string {
+  return gameLabel(getGame(id).name);
+}
 
 /** Split a Cyberpunk identity label ("Red / Green") into its colours. */
 function splitColors(color: string): string[] {
@@ -58,29 +67,39 @@ function ColorSwatch({ color }: { color: string }) {
 export function BrowsePage() {
   const t = useT();
   // The initial game can be preset by a discover shelf (Home → Cyberpunk
-  // starters); the choice is persisted so switching stays sticky.
+  // starters); the choice is persisted so switching stays sticky. Several games
+  // can be browsed at once, so the sticky value is a comma-joined list - a
+  // single id written by a shelf still reads back as a one-game selection.
   const games = useVisibleGames();
-  const [game, setGameState] = useState(() => sessionStorage.getItem('pc_browse_game') || 'mtg');
-  const setGame = (value: string) => {
-    sessionStorage.setItem('pc_browse_game', value);
-    setGameState(value);
+  const [picked, setPickedState] = useState<string[]>(
+    () => (sessionStorage.getItem('pc_browse_game') || 'mtg').split(',').filter(Boolean),
+  );
+  const setPicked = (value: string[]) => {
+    sessionStorage.setItem('pc_browse_game', value.join(','));
+    setPickedState(value);
   };
-  // If the sticky choice is a game this user cannot see (a WIP game with the
-  // dev toggle off, or a stale id), fall back to Magic so it never renders.
-  const gameVisible = games.some((g) => g.id === game);
+  // Drop ids this user cannot see (a WIP game with the dev toggle off, or a
+  // stale id). Clearing the picker means "everything", which is a better empty
+  // state than a page with no catalog on it.
+  const visible = picked.filter((id) => games.some((g) => g.id === id));
+  const active = visible.length > 0 ? visible : games.map((g) => g.id);
   useEffect(() => {
-    if (!gameVisible) setGame('mtg');
-  }, [game, gameVisible]);
+    if (visible.length !== picked.length) setPicked(visible);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picked.join(','), games.length]);
+  const on = (id: string) => active.includes(id);
+  const only = (id: string) => active.length === 1 && active[0] === id;
 
   // Where the decks come from: the precons that ship with the app, or what
   // people have published on Archidekt. Archidekt is a Magic site, so the
-  // switch only exists on Magic - and switching games drops back to precons
-  // rather than leaving a Yu-Gi-Oh player on a Magic deck search.
+  // switch only exists when Magic is the one game on screen - mixing a deck
+  // search into a multi-game catalog has nothing to merge it with.
   const [source, setSource] = useState<'precon' | 'community'>('precon');
-  const community = game === 'mtg' && source === 'community';
+  const community = only('mtg') && source === 'community';
   useEffect(() => {
-    if (game !== 'mtg') setSource('precon');
-  }, [game]);
+    if (!only('mtg')) setSource('precon');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active.join(',')]);
 
   const mtg: BrowseDeck[] = useMemo(
     () =>
@@ -104,7 +123,12 @@ export function BrowsePage() {
           // Duel narrows to blue duel decks rather than widening.
           facets: [...identity, deckFamily(deck.type)],
           kind: deck.type,
-          groups: { year: deck.date.slice(0, 4), set: deck.code, kind: deck.type ?? 'Deck' },
+          groups: {
+            year: deck.date.slice(0, 4),
+            set: deck.code,
+            kind: deck.type ?? 'Deck',
+            game: gameGroup('mtg'),
+          },
           sortDate: deck.date,
           cards: catalogDeckCards(deck),
           game: 'mtg',
@@ -133,7 +157,7 @@ export function BrowsePage() {
           cardId: deck.legend.id,
           cardName: deck.legend.displayName,
           facets: splitColors(deck.color),
-          groups: { color: deck.color },
+          groups: { color: deck.color, game: gameGroup('cyberpunk') },
           sortDate: '',
           cards: deck.cards,
           game: 'cyberpunk',
@@ -164,7 +188,7 @@ export function BrowsePage() {
         facets: ['Starter'],
         // The bundled starters carry no release date, so they need an explicit
         // Year bucket or that grouping renders them under a blank heading.
-        groups: { kind: 'Starter', year: t('brKindStarter') },
+        groups: { kind: 'Starter', year: t('brKindStarter'), game: gameGroup('yugioh') },
         sortDate: '',
         cards: deck.cards,
         game: 'yugioh',
@@ -190,7 +214,7 @@ export function BrowsePage() {
         cardName: coverName,
         kind: deck.kind,
         facets: [deck.kind],
-        groups: { kind: deck.kind, ...(year ? { year } : {}) },
+        groups: { kind: deck.kind, ...(year ? { year } : {}), game: gameGroup('yugioh') },
         sortDate: deck.date,
         cards: deck.cards.map((card) => ({
           scryfallId: card.id,
@@ -205,8 +229,55 @@ export function BrowsePage() {
     return [...starters, ...products];
   }, [t]);
 
+  /**
+   * Mood Swings has no deck products to browse - you do not build, and there
+   * is no second box to compare. What it does have is the set itself, so the
+   * catalog is the two honest ways to take it to a table: a randomized box (the
+   * actual product, 45 of the 133) and the complete run of cards. Falling
+   * through to Magic's precons here was the bug this fixes.
+   */
+  const mood: BrowseDeck[] = useMemo(() => {
+    const cover = moodImage(moodSlug('Love'));
+    const all = MOOD_CARDS.map((card) => ({
+      scryfallId: card.id,
+      name: card.name,
+      quantity: 1,
+      board: 'main' as const,
+    }));
+    const base = { cover, art: cover, cardId: moodSlug('Love'), cardName: 'Love', game: 'moodswings', format: 'standard', sortDate: '' };
+    return [
+      {
+        ...base,
+        id: 'msw-box',
+        name: t('brMoodBox'),
+        subtitle: t('brMoodBoxSub'),
+        metaText: `${BOX_SIZE} ${t('decksCards')}`,
+        kind: t('brMoodBox'),
+        facets: [],
+        groups: { kind: t('brMoodBox'), game: gameGroup('moodswings') },
+        cards: moodBox(),
+      },
+      {
+        ...base,
+        id: 'msw-set',
+        name: t('brMoodSet'),
+        subtitle: t('brMoodSetSub'),
+        metaText: `${all.length} ${t('decksCards')}`,
+        kind: t('brMoodSet'),
+        facets: [],
+        groups: { kind: t('brMoodSet'), game: gameGroup('moodswings') },
+        cards: all,
+      },
+    ];
+  }, [t]);
+
+  // With several catalogs on screen at once, two rows both labelled "Colors"
+  // read as one broken control - so each row says whose colours it is filtering.
+  const multi = active.length > 1;
+  const facetLabel = (base: string, gameId: string) => (multi ? `${gameGroup(gameId)} · ${base}` : base);
+
   const mtgFacet: BrowseFacet = {
-    label: t('brFilterColors'),
+    label: facetLabel(t('brFilterColors'), 'mtg'),
     options: WUBRG.map((color) => ({
       value: color,
       node: <ManaSymbol symbol={color} size="1.05em" />,
@@ -225,7 +296,7 @@ export function BrowsePage() {
     { value: 'other', key: 'brKindOther' },
   ];
   const mtgKindFacet: BrowseFacet = {
-    label: t('brFilterKind'),
+    label: facetLabel(t('brFilterKind'), 'mtg'),
     options: KINDS.map(({ value, key }) => ({
       value,
       node: t(key),
@@ -233,7 +304,7 @@ export function BrowsePage() {
     })),
   };
   const cyberFacet: BrowseFacet = {
-    label: t('brFilterColors'),
+    label: facetLabel(t('brFilterColors'), 'cyberpunk'),
     options: CYBERPUNK_COLORS.map((color) => ({
       value: color,
       node: <ColorSwatch color={color} />,
@@ -248,7 +319,7 @@ export function BrowsePage() {
     { value: 'Speed Duel', key: 'brKindSpeedDuel' },
   ];
   const ygoKindFacet: BrowseFacet = {
-    label: t('brFilterKind'),
+    label: facetLabel(t('brFilterKind'), 'yugioh'),
     options: YGO_KINDS.map(({ value, key }) => ({
       value,
       node: t(key),
@@ -256,35 +327,84 @@ export function BrowsePage() {
     })),
   };
 
+  // Only the picked games contribute. A game with nothing to browse contributes
+  // nothing at all rather than borrowing another game's catalog - which is what
+  // Mood Swings used to do, showing Magic precons under its own name.
+  const key = active.join(',');
+  const decks = useMemo(
+    () => [
+      ...(on('mtg') ? mtg : []),
+      ...(on('cyberpunk') ? cyber : []),
+      ...(on('yugioh') ? ygo : []),
+      ...(on('moodswings') ? mood : []),
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [key, mtg, cyber, ygo, mood],
+  );
+  const featuredIds = useMemo(
+    () => [
+      ...(on('mtg') ? featuredDecks().map((deck) => deck.id) : []),
+      ...(on('cyberpunk') ? cyberpunkStarters().map((starter) => starter.id) : []),
+      ...(on('yugioh') ? yugiohStarters().map((starter) => starter.id) : []),
+      ...(on('moodswings') ? ['msw-box'] : []),
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [key],
+  );
+  const facetRows: BrowseFacet[] = [
+    ...(on('mtg') ? [mtgFacet, mtgKindFacet] : []),
+    ...(on('cyberpunk') ? [cyberFacet] : []),
+    ...(on('yugioh') ? [ygoKindFacet] : []),
+  ];
+  // Group modes are whatever the picked catalogs can all be cut by. Year and
+  // kind survive a mixed selection; set and colour belong to one game each, so
+  // they only appear when that game is the one on screen.
+  const groupModes = [
+    ...(multi ? [{ id: 'game', label: t('playGame') }] : []),
+    ...(on('mtg') || on('yugioh') ? [{ id: 'year', label: t('brGroupYear') }] : []),
+    ...(on('mtg') || on('yugioh') || on('moodswings') ? [{ id: 'kind', label: t('brGroupKind') }] : []),
+    ...(only('cyberpunk') ? [{ id: 'color', label: t('brFilterColors') }] : []),
+    ...(only('mtg') ? [{ id: 'set', label: t('brGroupSet') }] : []),
+  ];
+
+  const title = community
+    ? t('brTitleCommunity')
+    : only('cyberpunk')
+      ? t('brTitleCyber')
+      : only('yugioh')
+        ? t('brTitleYugioh')
+        : only('moodswings')
+          ? t('brTitleMood')
+          : only('mtg')
+            ? t('brTitle')
+            : t('brTitleAll');
+  const lede = community
+    ? t('brLedeCommunity')
+    : only('cyberpunk')
+      ? t('brLedeCyber')
+      : only('yugioh')
+        ? t('brLedeYugioh')
+        : only('moodswings')
+          ? t('brLedeMood')
+          : only('mtg')
+            ? t('brLede')
+            : t('brLedeAll');
+
   return (
     <div className="page browsePage">
       <div className="browseHead">
-        <Heading level={1}>
-          {community
-            ? t('brTitleCommunity')
-            : game === 'cyberpunk'
-              ? t('brTitleCyber')
-              : game === 'yugioh'
-                ? t('brTitleYugioh')
-                : t('brTitle')}
-        </Heading>
+        <Heading level={1}>{title}</Heading>
         <Text size={Size.Large} tone={TextTone.Muted} className="lede">
-          {community
-            ? t('brLedeCommunity')
-            : game === 'cyberpunk'
-              ? t('brLedeCyber')
-              : game === 'yugioh'
-                ? t('brLedeYugioh')
-                : t('brLede')}
+          {lede}
         </Text>
         <div className="browseGameSwitch">
-          <SegmentedControl
+          <GameSelect
             aria-label={t('playGame')}
-            value={game}
-            onValueChange={setGame}
-            options={games.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') }))}
+            value={visible}
+            onValueChange={setPicked}
+            placeholder={t('brAllGames')}
           />
-          {game === 'mtg' && (
+          {only('mtg') && (
             <SegmentedControl
               aria-label={t('brSource')}
               value={source}
@@ -300,37 +420,13 @@ export function BrowsePage() {
 
       {community ? (
         <CommunityCatalog />
-      ) : game === 'cyberpunk' ? (
-        <BrowseCatalog
-          decks={cyber}
-          featuredIds={cyberpunkStarters().map((starter) => starter.id)}
-          facet={cyberFacet}
-          groupModes={[{ id: 'color', label: t('brFilterColors') }]}
-          searchPlaceholder={t('brSearch')}
-          emptyQuip={t('esUntapped')}
-        />
-      ) : game === 'yugioh' ? (
-        <BrowseCatalog
-          decks={ygo}
-          featuredIds={yugiohStarters().map((starter) => starter.id)}
-          facet={[ygoKindFacet]}
-          groupModes={[
-            { id: 'kind', label: t('brGroupKind') },
-            { id: 'year', label: t('brGroupYear') },
-          ]}
-          searchPlaceholder={t('brSearch')}
-          emptyQuip={t('esUntapped')}
-        />
       ) : (
         <BrowseCatalog
-          decks={mtg}
-          featuredIds={featuredDecks().map((deck) => deck.id)}
-          facet={[mtgFacet, mtgKindFacet]}
-          groupModes={[
-            { id: 'year', label: t('brGroupYear') },
-            { id: 'kind', label: t('brGroupKind') },
-            { id: 'set', label: t('brGroupSet') },
-          ]}
+          key={key}
+          decks={decks}
+          featuredIds={featuredIds}
+          facet={facetRows}
+          groupModes={groupModes}
           searchPlaceholder={t('brSearch')}
           emptyQuip={t('esUntapped')}
         />

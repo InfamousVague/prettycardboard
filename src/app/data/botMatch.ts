@@ -10,8 +10,9 @@ import type { RoomState } from '../net/types.ts';
  * developer Bots tab in Settings - one launcher, so the two can never drift
  * on the fiddly parts (store-driven joins, waiting for seats, cleanup).
  *
- * Bots play Magic and Yu-Gi-Oh tables (server rule), and each bot shuffles up
- * a random embedded deck suited to the table's game and format on its own.
+ * Bots play Magic, Yu-Gi-Oh and Mood Swings tables (server rule), and each bot
+ * shuffles up a random embedded deck suited to the table's game and format on
+ * its own.
  *
  * Throws Error('offline') without touching anything when the socket is down;
  * any later failure tears the half-built room down before rethrowing.
@@ -29,9 +30,11 @@ export interface BotMatchOpts {
   difficulty: BotDifficulty;
   style: BotStyle;
   format: 'commander' | 'standard';
-  /** Which card game the table plays. Yu-Gi-Oh has one format ('standard'),
-   *  and no enforcement - the rules engine is Magic-only. */
-  game?: 'mtg' | 'yugioh';
+  /** Which card game the table plays. Yu-Gi-Oh and Mood Swings each have one
+   *  format ('standard'), and no enforcement - the rules engine is Magic-only.
+   *  A Mood Swings bot brings a box of its own, since the engine has no shared
+   *  pile to draw from. */
+  game?: 'mtg' | 'yugioh' | 'moodswings';
   enforced: boolean;
   /** Take a chair myself; false = all-bot exhibition, spectated (auto-starts). */
   seat: boolean;
@@ -75,7 +78,7 @@ export async function launchBotMatch(opts: BotMatchOpts): Promise<void> {
   const seats = opts.seats ?? opts.bots + (opts.seat ? 1 : 0);
   const game = opts.game ?? 'mtg';
   const { roomId } = await createRoom(opts.name, seats, false, {
-    format: game === 'yugioh' ? 'standard' : opts.format,
+    format: game === 'mtg' ? opts.format : 'standard',
     game,
   });
   let settled = false;
@@ -99,8 +102,9 @@ export async function launchBotMatch(opts: BotMatchOpts): Promise<void> {
     // The state always carries the room's full settings; these are one-flag
     // changes on top of them. Enforcement is Magic-only (the rules engine is);
     // quickplay works wherever the server has a deck pool, which today is
-    // Magic and Yu-Gi-Oh - so it is not gated on the game here, and the server
-    // declines it for anything else rather than dealing the wrong card game.
+    // Magic, Yu-Gi-Oh and Mood Swings - so it is not gated on the game here,
+    // and the server declines it for anything else rather than dealing the
+    // wrong card game.
     const wantEnforced = opts.enforced && game === 'mtg';
     if ((wantEnforced || opts.quickplay) && first.settings) {
       send({

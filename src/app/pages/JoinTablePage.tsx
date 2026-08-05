@@ -29,7 +29,8 @@ import * as api from '../net/api.ts';
 import type { RoomInfo } from '../net/types.ts';
 import { clearPendingJoin } from '../data/pendingJoin.ts';
 import { getGame } from '../data/games.ts';
-import { GameTag } from '../components/GameTag.tsx';
+import { GameTag, GameStageTag } from '../components/GameTag.tsx';
+import { usePrereleaseGate } from '../components/PrereleaseGate.tsx';
 import { DEFAULT_PLAYMAT, playmatBackground } from '../data/playmats.ts';
 import './play.css';
 
@@ -42,6 +43,7 @@ const GAME_MATS: Record<string, string> = {
   mtg: 'arcane-study',
   cyberpunk: 'neon-megacity',
   yugioh: 'deep-field',
+  moodswings: 'mood-swings',
 };
 
 function matFor(game: string | undefined): string {
@@ -80,6 +82,9 @@ export function JoinTablePage({ code }: { code: string }) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'notfound'>('loading');
   const [deckId, setDeckId] = useState('');
   const [busy, setBusy] = useState(false);
+  // An invite can lead to any game, including one that is barely built; sitting
+  // down or watching says so first.
+  const { gate, dialog: prereleaseDialog, gating } = usePrereleaseGate();
 
   const chosenDeck = deckId || decks[0]?.id || '';
   const drafting = (room?.format ?? '').toLowerCase() === 'draft';
@@ -124,15 +129,19 @@ export function JoinTablePage({ code }: { code: string }) {
 
   const takeSeat = () => {
     if (!room) return;
-    setBusy(true);
-    join(room.roomId, drafting ? undefined : chosenDeck || undefined);
-    consume();
+    gate(room.game, () => {
+      setBusy(true);
+      join(room.roomId, drafting ? undefined : chosenDeck || undefined);
+      consume();
+    });
   };
 
   const watch = () => {
     if (!room) return;
-    spectate(room.roomId);
-    consume();
+    gate(room.game, () => {
+      spectate(room.roomId);
+      consume();
+    });
   };
 
   // Escape answers "not now". A modal that holds you until you find the ghost
@@ -140,12 +149,15 @@ export function JoinTablePage({ code }: { code: string }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      // The pre-release warning is on top and owns Escape; answering it must
+      // not also throw the invite away underneath.
+      if (gating) return;
       event.preventDefault();
       dismiss();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dismiss]);
+  }, [dismiss, gating]);
 
   return createPortal(
     <div
@@ -212,6 +224,7 @@ export function JoinTablePage({ code }: { code: string }) {
                   </span>
                   <div className="jtMeta">
                     <GameTag game={room.game} />
+                    <GameStageTag game={room.game} />
                     <span className="jtTag" data-tone={full ? 'warn' : undefined}>
                       <Users size={12} aria-hidden />
                       {room.players.length} / {room.seats}
@@ -301,6 +314,7 @@ export function JoinTablePage({ code }: { code: string }) {
           )}
         </div>
       </div>
+      {prereleaseDialog}
     </div>,
     document.body,
   );

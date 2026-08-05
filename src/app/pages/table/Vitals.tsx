@@ -12,6 +12,7 @@ import {
   Shuffle,
   Skull,
   Sparkles,
+  Star,
   Swords,
 } from '../../icons/backfilled.tsx';
 import { useT } from '../../i18n.ts';
@@ -29,11 +30,21 @@ import type { ManaColor, ManaPool, RoomState, TablePlayer } from '../../net/type
 function lifeMeta(me: TablePlayer, room: RoomState, fallbackLabel: string) {
   // Vitals are game-driven. MTG's `life`/`poison` slots are relabeled per the
   // registry: Cyberpunk shows Net (primary) + RAM (secondary), no poison-lethal;
-  // Yu-Gi-Oh shows LP only (no secondary resource) and steps in LP-sized bites.
+  // Yu-Gi-Oh shows LP only (no secondary resource) and steps in LP-sized bites;
+  // Mood Swings shows Rounds won + Score, both of which count UP.
   const cyber = room.game === 'cyberpunk';
   const yugioh = room.game === 'yugioh';
   const gdef = getGame(room.game);
-  const primaryLabel = gdef.resources.find((r) => r.primary)?.label ?? fallbackLabel;
+  const primary = gdef.resources.find((r) => r.primary);
+  const primaryLabel = primary?.label ?? fallbackLabel;
+  // Only Magic's dial goes uncaptioned: there the number IS the life total,
+  // sitting in a circle between a minus and a plus. Every other primary
+  // resource is not life and needs naming.
+  const named = (primary?.id ?? 'life') !== 'life';
+  // A resource that counts up toward a goal is never "running out", so it gets
+  // none of the pool grading below - Mood Swings opens on 0 rounds, which the
+  // life dial would otherwise paint as dead on turn one.
+  const countsUp = primary?.up === true;
   // Yu-Gi-Oh life moves in hundreds; a ±1 stepper would be 30 clicks per attack.
   const lifeStep = yugioh ? 100 : 1;
 
@@ -43,13 +54,21 @@ function lifeMeta(me: TablePlayer, room: RoomState, fallbackLabel: string) {
   // life at Standard's 20, and a rounding error at Yu-Gi-Oh's 8000. The
   // starting value is whatever the table was actually set to, falling back to
   // the game registry's own default for the format.
-  const primaryStart = gdef.resources.find((r) => r.primary)?.start ?? 20;
+  const primaryStart = primary?.start ?? 20;
   const startLife =
     room.settings?.startingLife ??
     (typeof primaryStart === 'function' ? primaryStart(room.format ?? '') : primaryStart);
   const lifeFrac = startLife > 0 ? me.life / startLife : 1;
-  const lifeState = me.life <= 0 ? 'out' : lifeFrac <= 0.25 ? 'critical' : lifeFrac <= 0.5 ? 'bloodied' : 'ok';
-  return { cyber, yugioh, primaryLabel, lifeStep, lifeState };
+  const lifeState = countsUp
+    ? 'ok'
+    : me.life <= 0
+      ? 'out'
+      : lifeFrac <= 0.25
+        ? 'critical'
+        : lifeFrac <= 0.5
+          ? 'bloodied'
+          : 'ok';
+  return { cyber, yugioh, primaryLabel, named, countsUp, lifeStep, lifeState };
 }
 
 /**
@@ -67,12 +86,18 @@ export function LifeCard({ me, room }: { me: TablePlayer; room: RoomState }) {
   const t = useT();
   const act = useGame((state) => state.act);
   const lifeRef = useRef<HTMLSpanElement>(null);
-  const { cyber, yugioh, primaryLabel, lifeStep, lifeState } = lifeMeta(me, room, t('tblLife'));
+  const { yugioh, primaryLabel, named, lifeStep, lifeState } = lifeMeta(me, room, t('tblLife'));
+  // The damage plate only earns its place when there is something behind it:
+  // commander damage at a Commander table, or a secondary resource. Yu-Gi-Oh
+  // has neither, and was opening an empty menu.
+  const secondary = getGame(room.game).resources.find((r) => !r.primary);
+  const hasCmd = formatFor(room.format).hasCommander;
+  const trackerLabel = hasCmd ? t('tblCmdDamage') : (secondary?.label ?? t('tblPoison'));
   return (
     // Chrome-free on purpose: inside the rail's vitals grid it dissolves
     // (display: contents), and the floating wrapper supplies the card look.
     <div className="lifeCard" data-game={room.game || 'mtg'}>
-      {(cyber || yugioh) && <div className="vitalCaption">{primaryLabel}</div>}
+      {named && <div className="vitalCaption">{primaryLabel}</div>}
       {/* The label rides with the number: on a board full of counters, a bare
           figure with two steppers does not say WHAT it counts. */}
       {/* Three slanted plates - step down, the total, step up - cut from the same
@@ -81,7 +106,16 @@ export function LifeCard({ me, room }: { me: TablePlayer; room: RoomState }) {
           one. Plain <button>s rather than kit IconButtons: the plates need the
           skew and the counter-skewed inner, and the kit's own hashed rules would
           have to be out-specified property by property to get there. */}
-      <div className="lifeBlock" data-state={lifeState}>
+      {/* How many characters the total actually needs. Yu-Gi-Oh opens on 8000
+          and Magic on 20, so the dial has to hold anything from one glyph to
+          five ("-1200"), and a size that suits "20" buries "8000". The CSS
+          shrinks the number only when the count demands it - see --pc-life-fit
+          in table.css - so Magic's dial is untouched. */}
+      <div
+        className="lifeBlock"
+        data-state={lifeState}
+        style={{ ['--pc-life-len' as string]: String(me.life).length }}
+      >
         <button
           type="button"
           className="lifeStep pcSlant"
@@ -102,9 +136,9 @@ export function LifeCard({ me, room }: { me: TablePlayer; room: RoomState }) {
             </span>
             {/* No "LIFE" caption on the Magic dial: the number IS the life
                 total, sitting in a circle between a minus and a plus, and the
-                word only crowded the disc. Cyberpunk and Yu-Gi-Oh keep their
-                caption - there the primary resource is not life and needs
-                naming (they render it above, via .vitalCaption). */}
+                word only crowded the disc. Every other game captions its
+                primary - Net, LP, Rounds - because there the resource is not
+                life and needs naming (rendered above, via .vitalCaption). */}
           </span>
         </span>
         <button
@@ -123,21 +157,23 @@ export function LifeCard({ me, room }: { me: TablePlayer; room: RoomState }) {
         {/* Damage taken hangs off the counter it eats. A fourth plate rather
             than a fourth row: commander damage and poison are worth a look a
             few times a game, not permanent height. */}
-        <Menu
-          aria-label={t('tblCmdDamage')}
-          placement="bottom-end"
-          trigger={
-            <button type="button" className="lifeStep pcSlant" aria-label={t('tblCmdDamage')}>
-              <span className="lifeStepInner">
-                <Swords size={15} />
-              </span>
-            </button>
-          }
-        >
-          <div className="lifeDmgMenu">
-            <DamageTracker me={me} room={room} />
-          </div>
-        </Menu>
+        {(hasCmd || secondary) && (
+          <Menu
+            aria-label={trackerLabel}
+            placement="bottom-end"
+            trigger={
+              <button type="button" className="lifeStep pcSlant" aria-label={trackerLabel}>
+                <span className="lifeStepInner">
+                  <Swords size={15} />
+                </span>
+              </button>
+            }
+          >
+            <div className="lifeDmgMenu">
+              <DamageTracker me={me} room={room} />
+            </div>
+          </Menu>
+        )}
       </div>
       {yugioh && (
         <div className="lifeQuick" role="group" aria-label={primaryLabel}>
@@ -180,7 +216,8 @@ export function QuickControls({ me, room }: { me: TablePlayer; room: RoomState }
   const [tokenOpen, setTokenOpen] = useState(false);
   const [tokenName, setTokenName] = useState('');
   const [tokenPT, setTokenPT] = useState('1/1');
-  const { cyber, yugioh } = lifeMeta(me, room, t('tblLife'));
+  const gdef = getGame(room.game);
+  const hasMana = gdef.stats.some((s) => s.id === 'mana');
   return (
     <>
       <div className="convenience">
@@ -199,19 +236,25 @@ export function QuickControls({ me, room }: { me: TablePlayer; room: RoomState }
             <Shuffle size={15} />
           </IconButton>
         </Tooltip>
-        <Tooltip content={t('tblToken')}>
-          <IconButton
-            size="sm"
-            variant={tokenOpen ? 'solid' : 'soft'}
-            aria-label={t('tblToken')}
-            // MTG opens the full token picker (search + deck tokens); the other
-            // games have no token catalogue, so they keep the plain name form
-            // (Yu-Gi-Oh's Sheep/Kuriboh tokens are freeform names + stats).
-            onClick={() => (cyber || yugioh ? setTokenOpen(!tokenOpen) : window.dispatchEvent(new Event('pc:create-token')))}
-          >
-            <Sparkles size={15} />
-          </IconButton>
-        </Tooltip>
+        {gdef.tokens && (
+          <Tooltip content={t('tblToken')}>
+            <IconButton
+              size="sm"
+              variant={tokenOpen ? 'solid' : 'soft'}
+              aria-label={t('tblToken')}
+              // MTG opens the full token picker (search + deck tokens); the other
+              // games have no token catalogue, so they keep the plain name form
+              // (Yu-Gi-Oh's Sheep/Kuriboh tokens are freeform names + stats).
+              onClick={() =>
+                gdef.tokens === 'freeform'
+                  ? setTokenOpen(!tokenOpen)
+                  : window.dispatchEvent(new Event('pc:create-token'))
+              }
+            >
+              <Sparkles size={15} />
+            </IconButton>
+          </Tooltip>
+        )}
         {/* Undo/redo/replay moved to the dedicated TimelineCard below vitals. */}
         <Menu
           aria-label={t('gpTableSettings')}
@@ -226,7 +269,7 @@ export function QuickControls({ me, room }: { me: TablePlayer; room: RoomState }
               That pill is gone (it appeared only once you banked mana, which
               made the card change height mid-turn), so the action lives here
               rather than being lost with it. MTG-only, like the pad itself. */}
-          {!cyber && !yugioh && (
+          {!hasMana ? null : (
             <MenuItem onSelect={() => act({ kind: 'mana.clear' })}>
               <Sparkles size={14} /> {t('tblClearMana')}
             </MenuItem>
@@ -295,19 +338,6 @@ export function QuickControls({ me, room }: { me: TablePlayer; room: RoomState }
  * sheet still renders LifeCard inline and gets the same cluster in one place.
  */
 export function Vitals({ me, room, hideLife }: { me: TablePlayer; room: RoomState; hideLife?: boolean }) {
-  const t = useT();
-  const act = useGame((state) => state.act);
-  // Commander damage I've taken from each opponent's commander (21 = lethal).
-  // Manual, like all damage now: steppers adjust cmdDamage[fromSeat].
-  const cmdFoes = formatFor(room.format).hasCommander
-    ? room.players.filter((p) => p.seat !== me.seat && !p.conceded)
-    : [];
-
-  const { cyber, yugioh } = lifeMeta(me, room, t('tblLife'));
-  const gdef = getGame(room.game);
-  const secondary = gdef.resources.find((r) => !r.primary);
-  const secondaryLabel = secondary?.label ?? t('tblPoison');
-
   return (
     <div className="myVitals" data-game={room.game || 'mtg'}>
       {!hideLife && <LifeCard me={me} room={room} />}
@@ -332,10 +362,14 @@ export function DamageTracker({ me, room }: { me: TablePlayer; room: RoomState }
   const cmdFoes = formatFor(room.format).hasCommander
     ? room.players.filter((p) => p.seat !== me.seat && !p.conceded)
     : [];
-  const { cyber } = lifeMeta(me, room, t('tblLife'));
   const gdef = getGame(room.game);
   const secondary = gdef.resources.find((r) => !r.primary);
   const secondaryLabel = secondary?.label ?? t('tblPoison');
+  // Poison is the only secondary that KILLS you at a number, and it is the only
+  // one worth a skull. Cyberpunk's RAM is a memory pool and Mood Swings' Score
+  // is a tally that counts up - flagging either as lethal at 10 would be the
+  // app inventing a rule.
+  const poison = secondary?.id === 'poison';
   // One row per commander, then the secondary resource, so several kinds of
   // damage read the same way.
   return (
@@ -372,9 +406,10 @@ export function DamageTracker({ me, room }: { me: TablePlayer; room: RoomState }
         })}
         {/* Games without a secondary resource (Yu-Gi-Oh) skip the row entirely. */}
         {secondary && (
-          <div className="dmgRow" data-lethal={(!cyber && me.poison >= 10) || undefined}>
+          <div className="dmgRow" data-lethal={(poison && me.poison >= 10) || undefined}>
             <span className="dmgLabel" title={secondaryLabel}>
-              {cyber ? <Cpu size={11} /> : <Skull size={11} />} {secondaryLabel}
+              {poison ? <Skull size={11} /> : secondary.id === 'ram' ? <Cpu size={11} /> : <Star size={11} />}{' '}
+              {secondaryLabel}
             </span>
             <IconButton
               size="sm"

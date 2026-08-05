@@ -489,6 +489,10 @@
   gap: var(--glacier-space-2);
   align-self: stretch;
   margin-block-end: var(--glacier-space-1);
+  /* Three chips (featured, game, stage) will not fit across a narrow plate;
+     wrapping keeps each one legible instead of crushing the game's name. */
+  flex-wrap: wrap;
+  row-gap: var(--glacier-space-1);
 }
 
 .pgModeIcon {
@@ -533,6 +537,19 @@
 /* The FEATURED chip claims the auto margin; the tag then only needs a gap. */
 .pgModeFeatTag + .pgModeGame {
   margin-inline-start: 0;
+}
+
+/* The release-stage stamp trails the game tag, so a plate says both which game
+   it opens and how finished that game is. It never claims the auto margin -
+   the game tag ahead of it already pushed the pair to the far end. */
+.pgModeStage {
+  margin-inline-start: 0;
+}
+
+/* With the stamp beside it the game tag gets less of the row to itself; its
+   name ellipses rather than shoving the stage off the plate. */
+.pgModeGame:has(+ .pgModeStage) {
+  max-inline-size: 48%;
 }
 
 /* BIG TYPE: the mode's name is the plate. */

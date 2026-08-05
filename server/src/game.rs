@@ -65,6 +65,43 @@ pub fn opening_hand(game: &str) -> usize {
     }
 }
 
+/// Whether a game mulligans its opening hand at all. Yu-Gi-Oh has no such rule,
+/// and Mood Swings deals five off a shared pile with nothing built to keep or
+/// throw back - so both skip the flow entirely and are dealt already "kept",
+/// which also means the first turn begins the moment the hands land.
+pub fn has_mulligans(game: &str) -> bool {
+    !matches!(game, "yugioh" | "moodswings")
+}
+
+/// Games played out of ONE pile in the middle of the table instead of a deck
+/// per seat. Mood Swings is a box of 45 that everyone draws from and discards
+/// to; nobody brings anything.
+pub fn shared_pile(game: &str) -> bool {
+    game == "moodswings"
+}
+
+/// The seat index that physically HOLDS the common pile - the lowest seat at
+/// the table, i.e. the player nearest the box.
+///
+/// The engine has no table-level zone (see PROTOCOL.md): every zone belongs to
+/// a seat. So one seat keeps the deck and the discard, and every action that
+/// touches them is routed here rather than to whoever performed it. That is
+/// also exactly how the game plays in paper - you reach across for the box.
+///
+/// Returns the actor's own index for every normal game, so the call sites read
+/// as "the pile this action works on" with no branch of their own.
+pub fn pile_index(room: &crate::rooms::Room, actor: usize) -> usize {
+    if !shared_pile(&room.game) {
+        return actor;
+    }
+    room.players
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, p)| p.seat)
+        .map(|(i, _)| i)
+        .unwrap_or(actor)
+}
+
 /// The opening-hand size in play: the host's override if set, else the game
 /// default (MTG 7, Cyberpunk 6).
 pub fn effective_hand_size(room: &crate::rooms::Room) -> usize {
@@ -1157,7 +1194,21 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                 }
                 let name = card.name.clone();
                 let card_val = serde_json::to_value(&card).unwrap();
-                let p = &mut room.players[pi];
+                // Shared-pile games (Mood Swings) keep the deck and the discard
+                // at ONE seat - the box in the middle of the table - so a card
+                // put into either lands on that pile rather than on the actor's
+                // own empty one. pile_index is the identity for every other
+                // game, so this is a no-op there.
+                let dest = match to {
+                    Zone::Library | Zone::Graveyard => pile_index(room, pi),
+                    _ => pi,
+                };
+                let shared = dest != pi;
+                // Wording follows the TABLE, not the bookkeeping: at a common-pile
+                // game even the seat that physically holds the box is putting a
+                // card "on the discard pile", never "into their graveyard".
+                let common = shared_pile(&room.game) && matches!(to, Zone::Library | Zone::Graveyard);
+                let p = &mut room.players[dest];
                 if to == Zone::Library {
                     let idx = index.unwrap_or(0);
                     let pos = if idx < 0 || idx as usize > p.library.len() {
@@ -1174,7 +1225,8 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                         _ => "into",
                     };
                     let origin = from.origin_of(to);
-                    log = format!("{username} puts {display}{origin} {place} their library");
+                    let pile = if common { "the deck" } else { "their library" };
+                    log = format!("{username} puts {display}{origin} {place} {pile}");
                 } else {
                     zone_list_mut(p, to).push(card);
                     for_actor["card"] = card_val.clone();
@@ -1225,6 +1277,9 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                                 ),
                                 None => format!("{username} discards {display}"),
                             },
+                            _ if common => {
+                                format!("{username} puts {display}{origin} on the discard pile")
+                            }
                             _ => format!("{username} puts {display}{origin} into their graveyard"),
                         },
                         Zone::Exile => format!("{username} exiles {display}{origin}"),
@@ -1242,7 +1297,7 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
                     snapshot,
                     ceased: false,
                 });
-                resync = was_hidden || to_hidden || promoted;
+                resync = was_hidden || to_hidden || promoted || shared;
                 // Enforced rooms: arriving on the battlefield applies enters
                 // replacements (tapped, counters) then fires ETB triggers,
                 // however it got there (cast, reanimated, fetched);
@@ -1718,9 +1773,12 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
         }
 
         Action::Draw { count } => {
+            // Shared-pile games draw off the table's one box, whoever asked.
+            let src = pile_index(room, pi);
+            let n = count.min(room.players[src].library.len());
+            let drawn: Vec<Card> = room.players[src].library.drain(0..n).collect();
+            room.players[src].peeked.clear();
             let p = &mut room.players[pi];
-            let n = count.min(p.library.len());
-            let drawn: Vec<Card> = p.library.drain(0..n).collect();
             p.cards_drawn += n as u64;
             p.hand_revealed = false; // any draw makes the hand private again
             p.peeked.clear();
@@ -1735,17 +1793,19 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
         }
 
         Action::LibraryPlay { x, y } => {
-            let p = &mut room.players[pi];
-            if p.library.is_empty() {
+            let src = pile_index(room, pi);
+            if room.players[src].library.is_empty() {
                 return Err(("empty_library", "no cards left in the library".to_string()));
             }
-            let mut card = p.library.remove(0);
+            let mut card = room.players[src].library.remove(0);
+            room.players[src].peeked.clear();
             card.x = x.clamp(0.0, 1.0);
             card.y = y.clamp(0.0, 1.0);
             card.face_down = false;
             card.tapped = false;
             card.attached_to = None;
             card.piled = false;
+            let p = &mut room.players[pi];
             p.peeked.clear();
             let name = card.name.clone();
             p.battlefield.push(card);
@@ -1837,10 +1897,16 @@ pub fn apply(app: &crate::App, room: &mut Room, actor_id: &str, action: Action) 
         }
 
         Action::Shuffle => {
-            let p = &mut room.players[pi];
+            let src = pile_index(room, pi);
+            let common = shared_pile(&room.game);
+            let p = &mut room.players[src];
             p.library.shuffle(&mut rand::rng());
             p.peeked.clear();
-            log = format!("{username} shuffles their library");
+            log = if common {
+                format!("{username} shuffles the deck")
+            } else {
+                format!("{username} shuffles their library")
+            };
         }
 
         Action::Mulligan => {

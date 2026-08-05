@@ -46,8 +46,8 @@
   appearance: none;
   position: relative;
   flex: none;
-  inline-size: 3.25rem;
-  block-size: 3.25rem;
+  inline-size: var(--pc-chat-ball, 3.25rem);
+  block-size: var(--pc-chat-ball, 3.25rem);
   border-radius: var(--glacier-radius-full);
   border: var(--glacier-hairline) solid var(--glacier-glass-border);
   background: var(--glacier-glass-regular);

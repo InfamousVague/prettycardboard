@@ -1,0 +1,10 @@
+/* A game option is its name plus its release-stage chip. Inline-flex so the
+   chip sits on the name's baseline row in both places the label is rendered -
+   the dropdown row and the selected tag - rather than wrapping under it in the
+   tag's tighter box. */
+.gameSelectOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  min-width: 0;
+}

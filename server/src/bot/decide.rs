@@ -29,6 +29,10 @@ pub(crate) fn decide(app: &App, room: &Room, uid: &str, mind: &mut BotMind, now:
     if room.game == "yugioh" {
         return ygo_decide(room, me, mind, now);
     }
+    // Nor is Mood Swings, which has even less: one card a turn and a number.
+    if room.game == "moodswings" {
+        return mood_decide(room, me, mind, now);
+    }
     let style = style_of(me);
     let mut say: Vec<String> = Vec::new();
 

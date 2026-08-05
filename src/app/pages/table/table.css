@@ -46,6 +46,10 @@
   /* The floating nav pill's resting height. Anything that shares its corner
      (the chat aside) stacks on top of it rather than under it. */
   --pc-nav-h: 2.75rem;
+  /* The chat ball's diameter. It lives here rather than in chatBall.css because
+     the chat panel opens ABOVE the ball and has to clear it - one number, two
+     files, instead of a literal in each that can drift apart. */
+  --pc-chat-ball: 3.25rem;
   /* How far the top strip reaches into the table: everything anchored under it
      (side rail, dock column, turn cues) hangs from this one measure. When the
      strip docks into the desktop title bar there is no strip to clear, so the
@@ -58,14 +62,25 @@
      different margin. Change the breathing room here, not in six places. */
   --pc-mat-gutter: var(--glacier-space-3);
 
+  /* THE MAT FRAME. One number, three consumers: .myBoard's padding, the staged
+     opponent frame's gutter, and the --pc-mat-edge-* measures every floating
+     layer anchors off. It was a literal space-4 in two of those rules and a
+     third copy inside the calc below, so trimming it meant editing three places
+     and hoping they agreed.
+
+     Trimmed from space-4 because the top strip ends with padding of its own:
+     the two stacked under the bar and read as a band of dead felt between the
+     chrome and the playmat, which is space the board could be using. Change the
+     framing here. */
+  --pc-mat-pad: var(--glacier-space-2);
+
   /* Where the playmat's own edge sits inside .table, MEASURED rather than
-     guessed: .myBoard carries space-4 of inline padding and .myField a space-1
-     margin, so the mat starts 26.3px in horizontally and space-1 down from the
-     top strip. An earlier pass assumed space-1 + a hairline for both and put
-     the life card 4px OUTSIDE the mat's border.
+     guessed: .myBoard carries --pc-mat-pad on all four sides and .myField a
+     space-1 margin inside that. An earlier pass assumed space-1 + a hairline
+     for both and put the life card 4px OUTSIDE the mat's border.
      Layers anchored to .table (the life card, the side rail, the chat ball)
      add these; layers already inside .myField - the control rails - must not. */
-  --pc-mat-edge-inline: calc(var(--glacier-space-4) + var(--glacier-space-1));
+  --pc-mat-edge-inline: calc(var(--pc-mat-pad) + var(--glacier-space-1));
   /* Was space-1 alone, because .myBoard only padded its inline sides. It pads
      all four now, so the mat's edge is the same distance in on every side and
      every layer anchored off these two follows it. Kept as two names rather
@@ -255,13 +270,6 @@
   max-inline-size: 26rem;
 }
 
-/* The name takes the slack inside the plate, which is what makes the sigil
-   fill the corner rather than shrink-wrapping its text. */
-.tableMeta > .turnPlate .turnPlateFace {
-  flex: 1 1 auto;
-  min-inline-size: 0;
-}
-
 .tableMeta > .turnPlate .turnPlateBody {
   flex: 1 1 auto;
   min-inline-size: 0;
@@ -419,186 +427,54 @@
   gap: var(--glacier-space-2);
 }
 
-/* The turn plate. Everything about it answers "whose turn, which turn, how
-   long" without anyone having to read a sentence: the active seat's colour on
-   the leading edge (the same hue that seat wears on the mat, its cursor and its
-   markers), the count big enough to catch, the name in the tracked caps the
-   rest of the app uses for a headline, and the clock in mono so its digits do
-   not jitter as they tick. */
 /* ---- the turn sigil -------------------------------------------------------
-   The one thing everyone at the table looks at constantly, so it is built as a
-   HUD chit rather than a text row: a notched slab with the active seat's colour
-   running through it, lit from the top-left.
+   The one thing everyone at the table looks at constantly: whose turn, which
+   turn, how long, answered without anyone having to read a sentence. A kit
+   Surface carrying a count Pill and two Texts.
 
-   FOUR LAYERS, back to front, and they are siblings rather than pseudo-elements
-   because there are more of them than the two ::before/::after one element can
-   carry - and because the sweep has to sit ABOVE the halftone and BELOW the
-   type, which a pseudo-element stacking order cannot express.
+   The active seat's colour is the only paint the app adds on top of the kit,
+   and it earns that: a four-player pod needs four legible states, which no kit
+   tone can carry. It arrives as one edge and a faint tint rather than a wash.
 
-     slab   the offset shadow plate that gives it thickness
-     dots   a halftone dissolve in the seat colour, dense at the leading edge
-     bevel  the lit top-left / shaded bottom-right edge pair
-     sweep  a specular that travels across, on your turn only
+   It used to be a notched slab with four stacked decorative layers - an offset
+   depth plate, a halftone dissolve, an inset bevel and a travelling specular.
+   All four are gone. The notch and the depth plate were the only cut corners
+   and the only fake Z-axis in the app, and the other two were there to dress
+   them; on a flat kit surface they had nothing left to sit on.
 
-   The halftone is not a hand-drawn asset: it is the exact output of Glacier's
-   halftoneSvg (origin 'right', 33x6 cells in a 220x40 box, seed 9), inlined here because
-   @glacier/logic is not vendored into this app. Regenerate with the same
-   options and it comes out byte-identical - the dissolve is a hash of each
-   cell, not a random number. */
+   The doubled class is the house override pattern: kit rules land at (0,1,0),
+   so `.turnPlate.turnPlate` at (0,2,0) is what reaches past them. */
 
-.turnPlate {
+.turnPlate.turnPlate {
   position: relative;
-  isolation: isolate;
-  display: inline-flex;
-  align-items: stretch;
-  gap: 0;
-  padding: 0;
-  white-space: nowrap;
-  /* NOT clipped. The notch lives on .turnPlateFace instead, because clip-path
-     clips every descendant - including the depth slab, whose entire point is
-     to stick out past the face. Clipping here flattened the plate. */
-  /* The notch. A clip-path rather than a border-radius: the cut corner is what
-     makes it read as stamped metal instead of a rounded pill, and it has to be
-     the same shape on every layer, which one value shared by them all gives. */
-  --pc-turn-notch: polygon(0 0, calc(100% - 0.55rem) 0, 100% 0.55rem, 100% 100%, 0.55rem 100%, 0 calc(100% - 0.55rem));
-}
-
-/* The face: notched, and the thing everything visible sits on. */
-.turnPlateFace {
-  position: relative;
-  isolation: isolate;
-  display: inline-flex;
-  align-items: stretch;
-  clip-path: var(--pc-turn-notch);
-  background: linear-gradient(160deg,
-    color-mix(in oklch, var(--glacier-surface) 92%, transparent),
-    color-mix(in oklch, var(--glacier-bg) 88%, transparent));
-}
-
-/* Thickness. Offset down and right, in the seat's colour, so the plate reads as
-   sitting ABOVE the felt rather than printed on it. Behind everything (z -2)
-   and inset on the two lit sides so it only shows where a shadow would. */
-.turnPlateSlab {
-  position: absolute;
-  /* Down and to the right of the face, which is what reads as thickness. It
-     can only do that because it is a sibling of the face rather than a child
-     of it - see the note on .turnPlate. */
-  inset: 0.2rem -0.22rem -0.22rem 0.2rem;
-  z-index: 0;
-  clip-path: var(--pc-turn-notch);
-  background: color-mix(in oklch, var(--pc-seat-color, var(--glacier-accent-solid)) 38%, oklch(0.08 0.02 265));
-  opacity: 0.55;
-}
-
-/* The halftone, in the seat's colour, dense at the TRAILING edge and dissolving
-   back toward the number. Right rather than left because the number cell is
-   opaque and sits over the leading edge - a left-dense field put its densest
-   dots where nothing could see them and left the visible band sitting directly
-   under the type. `mask-mode: luminance` because the SVG is opaque white on
-   opaque black - on the default `alpha` it would mask nothing and paint a flat
-   block of colour over the whole plate. */
-/* z-index 1, not -1. Behind the face's own background - which is ~90% opaque -
-   the halftone was all but invisible, and what little showed through read as a
-   smudge rather than as dots. Above the background and below the type is the
-   only place it can actually be seen. */
-/* Only the TRAILING portion of the plate, not the whole of it. Spanning the
-   full width, the halftone's densest column merged into a flat wash at the far
-   edge and the only thing reading as DOTS was the transition band drifting
-   somewhere near the middle - measured, not guessed: the mask itself was
-   correct (luminance, 100% 100%, exactly matching the face). Compressing the
-   whole ramp into the last 42% puts the visible field hard against the edge,
-   which is where it belongs. */
-.turnPlateDots {
-  position: absolute;
-  inset-block: 0;
-  inset-inline-end: 0;
-  inline-size: 42%;
-  z-index: 1;
-  background: var(--pc-seat-color, var(--glacier-accent-solid));
-  opacity: 0.34;
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20220%2040%22%20width%3D%22220%22%20height%3D%2240%22%3E%3Crect%20width%3D%22220%22%20height%3D%2240%22%20fill%3D%22%23000%22%2F%3E%3Cg%20fill%3D%22%23fff%22%3E%3Ccircle%20cx%3D%2210%22%20cy%3D%223.33%22%20r%3D%220.12%22%2F%3E%3Ccircle%20cx%3D%2223.33%22%20cy%3D%223.33%22%20r%3D%220.15%22%2F%3E%3Ccircle%20cx%3D%2236.67%22%20cy%3D%223.33%22%20r%3D%220.18%22%2F%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%223.33%22%20r%3D%220.22%22%2F%3E%3Ccircle%20cx%3D%2256.67%22%20cy%3D%223.33%22%20r%3D%220.23%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%223.33%22%20r%3D%220.31%22%2F%3E%3Ccircle%20cx%3D%22110%22%20cy%3D%223.33%22%20r%3D%220.35%22%2F%3E%3Ccircle%20cx%3D%22123.33%22%20cy%3D%223.33%22%20r%3D%220.38%22%2F%3E%3Ccircle%20cx%3D%22143.33%22%20cy%3D%223.33%22%20r%3D%220.42%22%2F%3E%3Ccircle%20cx%3D%22150%22%20cy%3D%223.33%22%20r%3D%220.43%22%2F%3E%3Ccircle%20cx%3D%22156.67%22%20cy%3D%223.33%22%20r%3D%220.45%22%2F%3E%3Ccircle%20cx%3D%22163.33%22%20cy%3D%223.33%22%20r%3D%220.46%22%2F%3E%3Ccircle%20cx%3D%22170%22%20cy%3D%223.33%22%20r%3D%220.47%22%2F%3E%3Ccircle%20cx%3D%22176.67%22%20cy%3D%223.33%22%20r%3D%220.49%22%2F%3E%3Ccircle%20cx%3D%22190%22%20cy%3D%223.33%22%20r%3D%220.51%22%2F%3E%3Ccircle%20cx%3D%22196.67%22%20cy%3D%223.33%22%20r%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22203.33%22%20cy%3D%223.33%22%20r%3D%220.53%22%2F%3E%3Ccircle%20cx%3D%22210%22%20cy%3D%223.33%22%20r%3D%220.54%22%2F%3E%3Ccircle%20cx%3D%22216.67%22%20cy%3D%223.33%22%20r%3D%220.55%22%2F%3E%3Ccircle%20cx%3D%2216.67%22%20cy%3D%2210%22%20r%3D%220.14%22%2F%3E%3Ccircle%20cx%3D%2236.67%22%20cy%3D%2210%22%20r%3D%220.18%22%2F%3E%3Ccircle%20cx%3D%2256.67%22%20cy%3D%2210%22%20r%3D%220.23%22%2F%3E%3Ccircle%20cx%3D%2270%22%20cy%3D%2210%22%20r%3D%220.26%22%2F%3E%3Ccircle%20cx%3D%2283.33%22%20cy%3D%2210%22%20r%3D%220.29%22%2F%3E%3Ccircle%20cx%3D%2296.67%22%20cy%3D%2210%22%20r%3D%220.32%22%2F%3E%3Ccircle%20cx%3D%22110%22%20cy%3D%2210%22%20r%3D%220.35%22%2F%3E%3Ccircle%20cx%3D%22150%22%20cy%3D%2210%22%20r%3D%220.43%22%2F%3E%3Ccircle%20cx%3D%22156.67%22%20cy%3D%2210%22%20r%3D%220.45%22%2F%3E%3Ccircle%20cx%3D%22163.33%22%20cy%3D%2210%22%20r%3D%220.46%22%2F%3E%3Ccircle%20cx%3D%22170%22%20cy%3D%2210%22%20r%3D%220.47%22%2F%3E%3Ccircle%20cx%3D%22176.67%22%20cy%3D%2210%22%20r%3D%220.49%22%2F%3E%3Ccircle%20cx%3D%22183.33%22%20cy%3D%2210%22%20r%3D%220.5%22%2F%3E%3Ccircle%20cx%3D%22190%22%20cy%3D%2210%22%20r%3D%220.51%22%2F%3E%3Ccircle%20cx%3D%22196.67%22%20cy%3D%2210%22%20r%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22203.33%22%20cy%3D%2210%22%20r%3D%220.53%22%2F%3E%3Ccircle%20cx%3D%22210%22%20cy%3D%2210%22%20r%3D%220.54%22%2F%3E%3Ccircle%20cx%3D%22216.67%22%20cy%3D%2210%22%20r%3D%220.55%22%2F%3E%3Ccircle%20cx%3D%2210%22%20cy%3D%2216.67%22%20r%3D%220.12%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2216.67%22%20r%3D%220.31%22%2F%3E%3Ccircle%20cx%3D%22103.33%22%20cy%3D%2216.67%22%20r%3D%220.34%22%2F%3E%3Ccircle%20cx%3D%22116.67%22%20cy%3D%2216.67%22%20r%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22130%22%20cy%3D%2216.67%22%20r%3D%220.39%22%2F%3E%3Ccircle%20cx%3D%22143.33%22%20cy%3D%2216.67%22%20r%3D%220.42%22%2F%3E%3Ccircle%20cx%3D%22150%22%20cy%3D%2216.67%22%20r%3D%220.43%22%2F%3E%3Ccircle%20cx%3D%22156.67%22%20cy%3D%2216.67%22%20r%3D%220.45%22%2F%3E%3Ccircle%20cx%3D%22163.33%22%20cy%3D%2216.67%22%20r%3D%220.46%22%2F%3E%3Ccircle%20cx%3D%22183.33%22%20cy%3D%2216.67%22%20r%3D%220.5%22%2F%3E%3Ccircle%20cx%3D%22190%22%20cy%3D%2216.67%22%20r%3D%220.51%22%2F%3E%3Ccircle%20cx%3D%22196.67%22%20cy%3D%2216.67%22%20r%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22210%22%20cy%3D%2216.67%22%20r%3D%220.54%22%2F%3E%3Ccircle%20cx%3D%22216.67%22%20cy%3D%2216.67%22%20r%3D%220.55%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2223.33%22%20r%3D%220.17%22%2F%3E%3Ccircle%20cx%3D%2236.67%22%20cy%3D%2223.33%22%20r%3D%220.18%22%2F%3E%3Ccircle%20cx%3D%2283.33%22%20cy%3D%2223.33%22%20r%3D%220.29%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2223.33%22%20r%3D%220.31%22%2F%3E%3Ccircle%20cx%3D%2296.67%22%20cy%3D%2223.33%22%20r%3D%220.32%22%2F%3E%3Ccircle%20cx%3D%22116.67%22%20cy%3D%2223.33%22%20r%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22123.33%22%20cy%3D%2223.33%22%20r%3D%220.38%22%2F%3E%3Ccircle%20cx%3D%22130%22%20cy%3D%2223.33%22%20r%3D%220.39%22%2F%3E%3Ccircle%20cx%3D%22143.33%22%20cy%3D%2223.33%22%20r%3D%220.42%22%2F%3E%3Ccircle%20cx%3D%22150%22%20cy%3D%2223.33%22%20r%3D%220.43%22%2F%3E%3Ccircle%20cx%3D%22156.67%22%20cy%3D%2223.33%22%20r%3D%220.45%22%2F%3E%3Ccircle%20cx%3D%22163.33%22%20cy%3D%2223.33%22%20r%3D%220.46%22%2F%3E%3Ccircle%20cx%3D%22176.67%22%20cy%3D%2223.33%22%20r%3D%220.49%22%2F%3E%3Ccircle%20cx%3D%22183.33%22%20cy%3D%2223.33%22%20r%3D%220.5%22%2F%3E%3Ccircle%20cx%3D%22190%22%20cy%3D%2223.33%22%20r%3D%220.51%22%2F%3E%3Ccircle%20cx%3D%22196.67%22%20cy%3D%2223.33%22%20r%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22203.33%22%20cy%3D%2223.33%22%20r%3D%220.53%22%2F%3E%3Ccircle%20cx%3D%22210%22%20cy%3D%2223.33%22%20r%3D%220.54%22%2F%3E%3Ccircle%20cx%3D%22216.67%22%20cy%3D%2223.33%22%20r%3D%220.55%22%2F%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2230%22%20r%3D%220.22%22%2F%3E%3Ccircle%20cx%3D%2256.67%22%20cy%3D%2230%22%20r%3D%220.23%22%2F%3E%3Ccircle%20cx%3D%2263.33%22%20cy%3D%2230%22%20r%3D%220.25%22%2F%3E%3Ccircle%20cx%3D%2276.67%22%20cy%3D%2230%22%20r%3D%220.28%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2230%22%20r%3D%220.31%22%2F%3E%3Ccircle%20cx%3D%2296.67%22%20cy%3D%2230%22%20r%3D%220.32%22%2F%3E%3Ccircle%20cx%3D%22103.33%22%20cy%3D%2230%22%20r%3D%220.34%22%2F%3E%3Ccircle%20cx%3D%22110%22%20cy%3D%2230%22%20r%3D%220.35%22%2F%3E%3Ccircle%20cx%3D%22116.67%22%20cy%3D%2230%22%20r%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22150%22%20cy%3D%2230%22%20r%3D%220.43%22%2F%3E%3Ccircle%20cx%3D%22156.67%22%20cy%3D%2230%22%20r%3D%220.45%22%2F%3E%3Ccircle%20cx%3D%22163.33%22%20cy%3D%2230%22%20r%3D%220.46%22%2F%3E%3Ccircle%20cx%3D%22170%22%20cy%3D%2230%22%20r%3D%220.47%22%2F%3E%3Ccircle%20cx%3D%22176.67%22%20cy%3D%2230%22%20r%3D%220.49%22%2F%3E%3Ccircle%20cx%3D%22183.33%22%20cy%3D%2230%22%20r%3D%220.5%22%2F%3E%3Ccircle%20cx%3D%22190%22%20cy%3D%2230%22%20r%3D%220.51%22%2F%3E%3Ccircle%20cx%3D%22196.67%22%20cy%3D%2230%22%20r%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22203.33%22%20cy%3D%2230%22%20r%3D%220.53%22%2F%3E%3Ccircle%20cx%3D%22210%22%20cy%3D%2230%22%20r%3D%220.54%22%2F%3E%3Ccircle%20cx%3D%22216.67%22%20cy%3D%2230%22%20r%3D%220.55%22%2F%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2236.67%22%20r%3D%220.22%22%2F%3E%3Ccircle%20cx%3D%2276.67%22%20cy%3D%2236.67%22%20r%3D%220.28%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2236.67%22%20r%3D%220.31%22%2F%3E%3Ccircle%20cx%3D%2296.67%22%20cy%3D%2236.67%22%20r%3D%220.32%22%2F%3E%3Ccircle%20cx%3D%22110%22%20cy%3D%2236.67%22%20r%3D%220.35%22%2F%3E%3Ccircle%20cx%3D%22116.67%22%20cy%3D%2236.67%22%20r%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22130%22%20cy%3D%2236.67%22%20r%3D%220.39%22%2F%3E%3Ccircle%20cx%3D%22136.67%22%20cy%3D%2236.67%22%20r%3D%220.41%22%2F%3E%3Ccircle%20cx%3D%22143.33%22%20cy%3D%2236.67%22%20r%3D%220.42%22%2F%3E%3Ccircle%20cx%3D%22156.67%22%20cy%3D%2236.67%22%20r%3D%220.45%22%2F%3E%3Ccircle%20cx%3D%22163.33%22%20cy%3D%2236.67%22%20r%3D%220.46%22%2F%3E%3Ccircle%20cx%3D%22176.67%22%20cy%3D%2236.67%22%20r%3D%220.49%22%2F%3E%3Ccircle%20cx%3D%22183.33%22%20cy%3D%2236.67%22%20r%3D%220.5%22%2F%3E%3Ccircle%20cx%3D%22190%22%20cy%3D%2236.67%22%20r%3D%220.51%22%2F%3E%3Ccircle%20cx%3D%22196.67%22%20cy%3D%2236.67%22%20r%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22203.33%22%20cy%3D%2236.67%22%20r%3D%220.53%22%2F%3E%3Ccircle%20cx%3D%22210%22%20cy%3D%2236.67%22%20r%3D%220.54%22%2F%3E%3Ccircle%20cx%3D%22216.67%22%20cy%3D%2236.67%22%20r%3D%220.55%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20220%2040%22%20width%3D%22220%22%20height%3D%2240%22%3E%3Crect%20width%3D%22220%22%20height%3D%2240%22%20fill%3D%22%23000%22%2F%3E%3Cg%20fill%3D%22%23fff%22%3E%3Ccircle%20cx%3D%2210%22%20cy%3D%223.33%22%20r%3D%220.12%22%2F%3E%3Ccircle%20cx%3D%2223.33%22%20cy%3D%223.33%22%20r%3D%220.15%22%2F%3E%3Ccircle%20cx%3D%2236.67%22%20cy%3D%223.33%22%20r%3D%220.18%22%2F%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%223.33%22%20r%3D%220.22%22%2F%3E%3Ccircle%20cx%3D%2256.67%22%20cy%3D%223.33%22%20r%3D%220.23%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%223.33%22%20r%3D%220.31%22%2F%3E%3Ccircle%20cx%3D%22110%22%20cy%3D%223.33%22%20r%3D%220.35%22%2F%3E%3Ccircle%20cx%3D%22123.33%22%20cy%3D%223.33%22%20r%3D%220.38%22%2F%3E%3Ccircle%20cx%3D%22143.33%22%20cy%3D%223.33%22%20r%3D%220.42%22%2F%3E%3Ccircle%20cx%3D%22150%22%20cy%3D%223.33%22%20r%3D%220.43%22%2F%3E%3Ccircle%20cx%3D%22156.67%22%20cy%3D%223.33%22%20r%3D%220.45%22%2F%3E%3Ccircle%20cx%3D%22163.33%22%20cy%3D%223.33%22%20r%3D%220.46%22%2F%3E%3Ccircle%20cx%3D%22170%22%20cy%3D%223.33%22%20r%3D%220.47%22%2F%3E%3Ccircle%20cx%3D%22176.67%22%20cy%3D%223.33%22%20r%3D%220.49%22%2F%3E%3Ccircle%20cx%3D%22190%22%20cy%3D%223.33%22%20r%3D%220.51%22%2F%3E%3Ccircle%20cx%3D%22196.67%22%20cy%3D%223.33%22%20r%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22203.33%22%20cy%3D%223.33%22%20r%3D%220.53%22%2F%3E%3Ccircle%20cx%3D%22210%22%20cy%3D%223.33%22%20r%3D%220.54%22%2F%3E%3Ccircle%20cx%3D%22216.67%22%20cy%3D%223.33%22%20r%3D%220.55%22%2F%3E%3Ccircle%20cx%3D%2216.67%22%20cy%3D%2210%22%20r%3D%220.14%22%2F%3E%3Ccircle%20cx%3D%2236.67%22%20cy%3D%2210%22%20r%3D%220.18%22%2F%3E%3Ccircle%20cx%3D%2256.67%22%20cy%3D%2210%22%20r%3D%220.23%22%2F%3E%3Ccircle%20cx%3D%2270%22%20cy%3D%2210%22%20r%3D%220.26%22%2F%3E%3Ccircle%20cx%3D%2283.33%22%20cy%3D%2210%22%20r%3D%220.29%22%2F%3E%3Ccircle%20cx%3D%2296.67%22%20cy%3D%2210%22%20r%3D%220.32%22%2F%3E%3Ccircle%20cx%3D%22110%22%20cy%3D%2210%22%20r%3D%220.35%22%2F%3E%3Ccircle%20cx%3D%22150%22%20cy%3D%2210%22%20r%3D%220.43%22%2F%3E%3Ccircle%20cx%3D%22156.67%22%20cy%3D%2210%22%20r%3D%220.45%22%2F%3E%3Ccircle%20cx%3D%22163.33%22%20cy%3D%2210%22%20r%3D%220.46%22%2F%3E%3Ccircle%20cx%3D%22170%22%20cy%3D%2210%22%20r%3D%220.47%22%2F%3E%3Ccircle%20cx%3D%22176.67%22%20cy%3D%2210%22%20r%3D%220.49%22%2F%3E%3Ccircle%20cx%3D%22183.33%22%20cy%3D%2210%22%20r%3D%220.5%22%2F%3E%3Ccircle%20cx%3D%22190%22%20cy%3D%2210%22%20r%3D%220.51%22%2F%3E%3Ccircle%20cx%3D%22196.67%22%20cy%3D%2210%22%20r%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22203.33%22%20cy%3D%2210%22%20r%3D%220.53%22%2F%3E%3Ccircle%20cx%3D%22210%22%20cy%3D%2210%22%20r%3D%220.54%22%2F%3E%3Ccircle%20cx%3D%22216.67%22%20cy%3D%2210%22%20r%3D%220.55%22%2F%3E%3Ccircle%20cx%3D%2210%22%20cy%3D%2216.67%22%20r%3D%220.12%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2216.67%22%20r%3D%220.31%22%2F%3E%3Ccircle%20cx%3D%22103.33%22%20cy%3D%2216.67%22%20r%3D%220.34%22%2F%3E%3Ccircle%20cx%3D%22116.67%22%20cy%3D%2216.67%22%20r%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22130%22%20cy%3D%2216.67%22%20r%3D%220.39%22%2F%3E%3Ccircle%20cx%3D%22143.33%22%20cy%3D%2216.67%22%20r%3D%220.42%22%2F%3E%3Ccircle%20cx%3D%22150%22%20cy%3D%2216.67%22%20r%3D%220.43%22%2F%3E%3Ccircle%20cx%3D%22156.67%22%20cy%3D%2216.67%22%20r%3D%220.45%22%2F%3E%3Ccircle%20cx%3D%22163.33%22%20cy%3D%2216.67%22%20r%3D%220.46%22%2F%3E%3Ccircle%20cx%3D%22183.33%22%20cy%3D%2216.67%22%20r%3D%220.5%22%2F%3E%3Ccircle%20cx%3D%22190%22%20cy%3D%2216.67%22%20r%3D%220.51%22%2F%3E%3Ccircle%20cx%3D%22196.67%22%20cy%3D%2216.67%22%20r%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22210%22%20cy%3D%2216.67%22%20r%3D%220.54%22%2F%3E%3Ccircle%20cx%3D%22216.67%22%20cy%3D%2216.67%22%20r%3D%220.55%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2223.33%22%20r%3D%220.17%22%2F%3E%3Ccircle%20cx%3D%2236.67%22%20cy%3D%2223.33%22%20r%3D%220.18%22%2F%3E%3Ccircle%20cx%3D%2283.33%22%20cy%3D%2223.33%22%20r%3D%220.29%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2223.33%22%20r%3D%220.31%22%2F%3E%3Ccircle%20cx%3D%2296.67%22%20cy%3D%2223.33%22%20r%3D%220.32%22%2F%3E%3Ccircle%20cx%3D%22116.67%22%20cy%3D%2223.33%22%20r%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22123.33%22%20cy%3D%2223.33%22%20r%3D%220.38%22%2F%3E%3Ccircle%20cx%3D%22130%22%20cy%3D%2223.33%22%20r%3D%220.39%22%2F%3E%3Ccircle%20cx%3D%22143.33%22%20cy%3D%2223.33%22%20r%3D%220.42%22%2F%3E%3Ccircle%20cx%3D%22150%22%20cy%3D%2223.33%22%20r%3D%220.43%22%2F%3E%3Ccircle%20cx%3D%22156.67%22%20cy%3D%2223.33%22%20r%3D%220.45%22%2F%3E%3Ccircle%20cx%3D%22163.33%22%20cy%3D%2223.33%22%20r%3D%220.46%22%2F%3E%3Ccircle%20cx%3D%22176.67%22%20cy%3D%2223.33%22%20r%3D%220.49%22%2F%3E%3Ccircle%20cx%3D%22183.33%22%20cy%3D%2223.33%22%20r%3D%220.5%22%2F%3E%3Ccircle%20cx%3D%22190%22%20cy%3D%2223.33%22%20r%3D%220.51%22%2F%3E%3Ccircle%20cx%3D%22196.67%22%20cy%3D%2223.33%22%20r%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22203.33%22%20cy%3D%2223.33%22%20r%3D%220.53%22%2F%3E%3Ccircle%20cx%3D%22210%22%20cy%3D%2223.33%22%20r%3D%220.54%22%2F%3E%3Ccircle%20cx%3D%22216.67%22%20cy%3D%2223.33%22%20r%3D%220.55%22%2F%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2230%22%20r%3D%220.22%22%2F%3E%3Ccircle%20cx%3D%2256.67%22%20cy%3D%2230%22%20r%3D%220.23%22%2F%3E%3Ccircle%20cx%3D%2263.33%22%20cy%3D%2230%22%20r%3D%220.25%22%2F%3E%3Ccircle%20cx%3D%2276.67%22%20cy%3D%2230%22%20r%3D%220.28%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2230%22%20r%3D%220.31%22%2F%3E%3Ccircle%20cx%3D%2296.67%22%20cy%3D%2230%22%20r%3D%220.32%22%2F%3E%3Ccircle%20cx%3D%22103.33%22%20cy%3D%2230%22%20r%3D%220.34%22%2F%3E%3Ccircle%20cx%3D%22110%22%20cy%3D%2230%22%20r%3D%220.35%22%2F%3E%3Ccircle%20cx%3D%22116.67%22%20cy%3D%2230%22%20r%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22150%22%20cy%3D%2230%22%20r%3D%220.43%22%2F%3E%3Ccircle%20cx%3D%22156.67%22%20cy%3D%2230%22%20r%3D%220.45%22%2F%3E%3Ccircle%20cx%3D%22163.33%22%20cy%3D%2230%22%20r%3D%220.46%22%2F%3E%3Ccircle%20cx%3D%22170%22%20cy%3D%2230%22%20r%3D%220.47%22%2F%3E%3Ccircle%20cx%3D%22176.67%22%20cy%3D%2230%22%20r%3D%220.49%22%2F%3E%3Ccircle%20cx%3D%22183.33%22%20cy%3D%2230%22%20r%3D%220.5%22%2F%3E%3Ccircle%20cx%3D%22190%22%20cy%3D%2230%22%20r%3D%220.51%22%2F%3E%3Ccircle%20cx%3D%22196.67%22%20cy%3D%2230%22%20r%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22203.33%22%20cy%3D%2230%22%20r%3D%220.53%22%2F%3E%3Ccircle%20cx%3D%22210%22%20cy%3D%2230%22%20r%3D%220.54%22%2F%3E%3Ccircle%20cx%3D%22216.67%22%20cy%3D%2230%22%20r%3D%220.55%22%2F%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2236.67%22%20r%3D%220.22%22%2F%3E%3Ccircle%20cx%3D%2276.67%22%20cy%3D%2236.67%22%20r%3D%220.28%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2236.67%22%20r%3D%220.31%22%2F%3E%3Ccircle%20cx%3D%2296.67%22%20cy%3D%2236.67%22%20r%3D%220.32%22%2F%3E%3Ccircle%20cx%3D%22110%22%20cy%3D%2236.67%22%20r%3D%220.35%22%2F%3E%3Ccircle%20cx%3D%22116.67%22%20cy%3D%2236.67%22%20r%3D%220.36%22%2F%3E%3Ccircle%20cx%3D%22130%22%20cy%3D%2236.67%22%20r%3D%220.39%22%2F%3E%3Ccircle%20cx%3D%22136.67%22%20cy%3D%2236.67%22%20r%3D%220.41%22%2F%3E%3Ccircle%20cx%3D%22143.33%22%20cy%3D%2236.67%22%20r%3D%220.42%22%2F%3E%3Ccircle%20cx%3D%22156.67%22%20cy%3D%2236.67%22%20r%3D%220.45%22%2F%3E%3Ccircle%20cx%3D%22163.33%22%20cy%3D%2236.67%22%20r%3D%220.46%22%2F%3E%3Ccircle%20cx%3D%22176.67%22%20cy%3D%2236.67%22%20r%3D%220.49%22%2F%3E%3Ccircle%20cx%3D%22183.33%22%20cy%3D%2236.67%22%20r%3D%220.5%22%2F%3E%3Ccircle%20cx%3D%22190%22%20cy%3D%2236.67%22%20r%3D%220.51%22%2F%3E%3Ccircle%20cx%3D%22196.67%22%20cy%3D%2236.67%22%20r%3D%220.52%22%2F%3E%3Ccircle%20cx%3D%22203.33%22%20cy%3D%2236.67%22%20r%3D%220.53%22%2F%3E%3Ccircle%20cx%3D%22210%22%20cy%3D%2236.67%22%20r%3D%220.54%22%2F%3E%3Ccircle%20cx%3D%22216.67%22%20cy%3D%2236.67%22%20r%3D%220.55%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
-  -webkit-mask-mode: luminance;
-  mask-mode: luminance;
-}
-
-/* Lit top-left, shaded bottom-right - one light, consistent with the slab's
-   offset. An inset box-shadow rather than borders, so it follows the clip. */
-.turnPlateBevel {
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  pointer-events: none;
-  clip-path: var(--pc-turn-notch);
-  box-shadow:
-    inset 1px 1px 0 color-mix(in oklch, white 14%, transparent),
-    inset -1px -1px 0 oklch(0.05 0.02 265 / 0.5),
-    inset 0 0 0 1px color-mix(in oklch, var(--pc-seat-color, var(--glacier-accent-solid)) 22%, transparent);
-}
-
-/* The travelling specular. Only on your turn: a light that sweeps whoever's
-   turn it is would make an opponent's turn look like it wants something. */
-.turnPlateSweep {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  opacity: 0;
-  background: linear-gradient(105deg,
-    transparent 35%,
-    color-mix(in oklch, white 22%, transparent) 50%,
-    transparent 65%);
-}
-
-.turnPlate[data-mine] .turnPlateSweep {
-  opacity: 1;
-  animation: turnSweep 3.6s var(--glacier-ease-out) infinite;
-}
-
-@keyframes turnSweep {
-  /* Parked off-screen for most of the cycle: the sweep is punctuation, and one
-     that ran continuously would read as a loading shimmer. */
-  0%, 62% { transform: translateX(-120%); }
-  92%, 100% { transform: translateX(120%); }
-}
-
-/* Your turn: the whole chit lifts into the seat's colour, and the leading edge
-   goes solid. Everything keyed off ONE custom property, so a four-player pod
-   gets four legible states rather than four shades of the app accent. */
-.turnPlate[data-mine] {
-  background: linear-gradient(160deg,
-    color-mix(in oklch, var(--pc-seat-color, var(--glacier-accent-solid)) 22%, var(--glacier-surface)),
-    color-mix(in oklch, var(--pc-seat-color, var(--glacier-accent-solid)) 8%, var(--glacier-bg)));
-}
-
-.turnPlate[data-mine] .turnPlateSlab { opacity: 0.85; }
-.turnPlate[data-mine] .turnPlateDots { opacity: 0.42; }
-
-/* The number's own cell: darker, notched off the body by a lit hairline, so the
-   count reads as a stamped chit rather than as the first word of a sentence. */
-.turnPlateChit {
-  position: relative;
-  z-index: 3;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-  padding: 0.2rem var(--glacier-space-3) 0.22rem;
-  background: oklch(0.09 0.02 265 / 0.42);
-  border-inline-end: 1px solid color-mix(in oklch, var(--pc-seat-color, var(--glacier-accent-solid)) 30%, transparent);
-  box-shadow: inset -1px 0 0 color-mix(in oklch, white 8%, transparent);
-}
-
-.turnPlateBody {
-  position: relative;
-  z-index: 3;
   display: inline-flex;
   align-items: center;
   gap: var(--glacier-space-3);
-  padding: 0 var(--glacier-space-3) 0 var(--glacier-space-3);
+  padding-block: var(--glacier-space-2);
+  padding-inline: var(--glacier-space-3);
+  white-space: nowrap;
+  /* The kit's Surface ships square; every other panel on the table is rounded,
+     and a hard 90-degree corner here read as the notch's replacement rather
+     than as its removal. */
+  border-radius: var(--glacier-radius-md);
+  border-inline-start: 3px solid
+    color-mix(in oklch, var(--pc-seat-color, var(--glacier-accent-solid)) 45%, transparent);
+}
+
+/* Your turn: the surface takes the seat's tint and the leading edge goes
+   solid. Everything keys off ONE custom property, so a four-player pod reads
+   as four seats rather than four shades of the app accent. */
+.turnPlate.turnPlate[data-mine] {
+  background: color-mix(in oklch, var(--pc-seat-color, var(--glacier-accent-solid)) 12%, var(--glacier-surface));
+  border-inline-start-color: var(--pc-seat-color, var(--glacier-accent-solid));
+}
+
+/* The count. The Pill supplies the plate; this only arranges the two type
+   sizes inside it, which no Pill prop expresses. */
+.turnPlateChit.turnPlateChit {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.32em;
 }
 
 .turnPlateWord {
@@ -606,62 +482,43 @@
   letter-spacing: 0.14em;
   font-size: 0.5rem;
   line-height: 1;
-  color: color-mix(in oklch, var(--pc-seat-color, var(--glacier-accent-solid)) 60%, var(--glacier-text-muted));
+  color: var(--glacier-text-muted);
 }
 
-/* The numeral carries the plate. Tabular so a two-digit turn does not shove the
-   name sideways every time the count rolls over. */
+/* Tabular, so a two-digit turn does not shove the name sideways every time the
+   count rolls over. */
 .turnPlateNum {
-  font-size: 1.15rem;
-  font-weight: var(--glacier-font-weight-bold);
   font-variant-numeric: tabular-nums;
-  line-height: 1.05;
+  font-weight: var(--glacier-font-weight-bold);
+  line-height: 1;
   color: var(--glacier-text);
-  text-shadow: 0 1px 0 oklch(0.05 0.02 265 / 0.6);
 }
 
 .turnPlate[data-mine] .turnPlateNum {
-  color: color-mix(in oklch, var(--pc-seat-color, var(--glacier-accent-solid)) 70%, white);
-  text-shadow:
-    0 1px 0 oklch(0.05 0.02 265 / 0.6),
-    0 0 14px color-mix(in oklch, var(--pc-seat-color, var(--glacier-accent-solid)) 55%, transparent);
+  color: color-mix(in oklch, var(--pc-seat-color, var(--glacier-accent-solid)) 70%, var(--glacier-text));
 }
 
-/* The halftone runs under this, so the type carries its own contrast rather
-   than the texture being moved off it - the open end of the plate is exactly
-   where the texture earns its keep. */
-/* The headline of the plate. Whose turn it is - or whose board you are
-   watching - is the question this whole sigil exists to answer, so it carries
-   the weight rather than sharing it with the turn count. */
-.turnPlateWho {
-  text-shadow: 0 1px 3px oklch(0.05 0.02 265 / 0.85);
+.turnPlateBody {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--glacier-space-3);
+  min-inline-size: 0;
+}
+
+/* The headline of the sigil. Whose turn it is - or whose board you are
+   watching - is the question the whole thing exists to answer, so it carries
+   the weight rather than sharing it with the count. */
+.turnPlateWho.turnPlateWho {
   max-inline-size: 16rem;
   overflow: hidden;
   text-overflow: ellipsis;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  font-size: var(--glacier-font-size-md);
-  font-weight: var(--glacier-font-weight-bold);
   line-height: 1.1;
 }
 
-.turnPlate[data-mine] .turnPlateWho {
-  color: color-mix(in oklch, var(--pc-seat-color, var(--glacier-accent-solid)) 75%, white);
-}
-
-/* Mono, so a ticking clock does not reflow the plate every second. */
-.turnPlateClock {
-  text-shadow: 0 1px 3px oklch(0.05 0.02 265 / 0.85);
-  font-family: var(--glacier-font-mono);
-  font-size: var(--glacier-font-size-xs);
-  font-variant-numeric: tabular-nums;
-  color: var(--glacier-text-muted);
-}
-
-/* A sweep that never stops is exactly what this setting is for. The colour,
-   the bevel and the halftone all stay - only the travelling light goes. */
-@media (prefers-reduced-motion: reduce) {
-  .turnPlate[data-mine] .turnPlateSweep { animation: none; opacity: 0.35; }
+.turnPlate[data-mine] .turnPlateWho.turnPlateWho {
+  color: color-mix(in oklch, var(--pc-seat-color, var(--glacier-accent-solid)) 70%, var(--glacier-text));
 }
 
 .endTurnWrap {
@@ -3348,9 +3205,19 @@
    outside and the label cannot be mistaken for a third button. */
 
 
+/* The number shrinks to fit its own digit count, and only then.
+   --pc-life-fit is how much width the glyphs may occupy (set on .lifeBlock,
+   where the dial's radius lives); --pc-life-len is the character count, set
+   inline by LifeCard. 0.62em is one tabular mono digit's advance, measured:
+   "20" renders 31px at 25.6px, i.e. 0.605em each, rounded up for margin.
+
+   The min() is what keeps this from being a redesign. Every context keeps its
+   own base size for short totals - Magic's "20" is bit-identical - and the
+   derived value only wins once the digits genuinely will not fit. Yu-Gi-Oh's
+   8000 is four glyphs where the dial was drawn for two. */
 .lifeBig {
   font-family: var(--glacier-font-mono);
-  font-size: 2.6rem;
+  font-size: min(2.6rem, calc(var(--pc-life-fit, 99rem) / (var(--pc-life-len, 2) * 0.62)));
   font-weight: var(--glacier-font-weight-bold);
   line-height: 1;
   min-width: 2ch;
@@ -3538,6 +3405,11 @@
   --pc-dial-cut: calc(var(--pc-dial-r) + var(--pc-dial-halo));
   /* How far the circle's centre sits beyond the plate edge. R - depth. */
   --pc-dial-push: calc(var(--pc-dial-cut) - var(--pc-dial-bite));
+  /* How much of the disc the number may span. Not the full diameter: a line of
+     text crosses the circle as a horizontal band, and the widest chord it can
+     use without its corners clipping the curve is a little short of the
+     diameter. 0.86 leaves the ring visibly clear at the 3 and 9 o'clock. */
+  --pc-life-fit: calc(var(--pc-dial-r) * 2 * 0.86);
 }
 
 /* The disc itself: a fixed circle rather than a stretched plate, riding above
@@ -3569,6 +3441,10 @@
 .lifeBlock .lifeTotalInner {
   transform: none;
   justify-content: center;
+  /* The generic 0.6rem gutter costs a circle 19px of a 50px width, which left
+     a four-digit total nothing to occupy but the padding it would then be
+     clipped against. The disc's own curve is the margin here. */
+  padding-inline: 0.15rem;
 }
 
 /* The bite. A radial mask centred on the disc's centre punches a transparent
@@ -4452,32 +4328,58 @@
   justify-items: center;
 }
 
-/* ---- the chat aside (opened from the nav row's chat toggle) ---- */
+/* ---- the chat aside (opened from the chat ball in the bottom corner) ---- */
 
-/* The FLOATING form. Same fixed slide-over recipe as .libSidebar, one slot
-   narrower so both can coexist without a full eclipse - which is also the whole
-   reason the docked form exists: making one panel thinner is not "view both",
-   it is "eclipse slightly less". Docked, the panel leaves this layer entirely
-   for the .tableDock column above, and every declaration here is overridden by
-   .pcPanel[data-dock='dock'] in components/panels.css.
-   LobbyChat fills it (data-variant=table). Its floor clears the nav pill it is
-   opened from: the two share this corner, and a chat that ran to the bottom
-   edge would sit behind the pill (z 140) with its composer half-covered. */
-/* A third of the window, floating. 33vw is the number asked for and it drives
-   the size; the clamp only catches the two ends - a narrow window where a third
-   is too little to read a line of chat in, and an ultrawide one where a third
-   is an absurd amount of screen for a text column. */
+/* The FLOATING form. It opens FROM the ball, so it stands where the ball
+   stands: bottom-leading corner, rising out of it - not on the far trailing
+   edge the way it did when its door was a button in the nav row. A panel that
+   appears on the opposite side of the screen from the control that summoned it
+   reads as a different, unrelated thing appearing.
+
+   ABSOLUTE, not fixed: `.table` is the positioned ancestor and the mat-edge
+   measures are relative to it, which is the only way this can line up with the
+   ball (chatBall.css makes the same choice, for the same reason). Fixed would
+   anchor to the viewport - app rail included - and the two would sit on
+   different vertical lines.
+
+   Docked, the panel leaves this layer entirely for the .tableDock column and
+   every declaration here is overridden by .pcPanel[data-dock='dock'] in
+   components/panels.css. LobbyChat fills it (data-variant=table). */
+/* A third of the window wide, floating. 33vw is the number asked for and it
+   drives the size; the clamp only catches the two ends - a narrow window where
+   a third is too little to read a line of chat in, and an ultrawide one where a
+   third is an absurd amount of screen for a text column. */
 .chatAside {
-  position: fixed;
-  inset-block: 4.4rem
-    calc(var(--pc-nav-h, 2.75rem) + var(--glacier-space-3) + var(--glacier-space-2) + var(--pc-safe-b, 0px));
-  inset-inline-end: var(--glacier-space-3);
+  position: absolute;
+  /* Floor: clear of the ball itself (diameter + the same gap the bubble stack
+     leaves above it) so the ball stays visible and clickable to close what it
+     opened. Ceiling: under the top strip, like every other floating layer. */
+  inset-block: calc(var(--pc-strip-clear) + var(--pc-mat-edge-block) + var(--pc-mat-gutter))
+    calc(
+      var(--pc-mat-edge-block) + var(--pc-mat-gutter) + var(--pc-chat-ball) + var(--glacier-space-2) +
+        env(safe-area-inset-bottom, 0px)
+    );
+  /* The ball's own inline inset, to the pixel - they share an edge. */
+  inset-inline-start: calc(var(--pc-mat-edge-inline) + var(--pc-mat-gutter) + env(safe-area-inset-left, 0px));
   inline-size: clamp(18rem, 33vw, 40rem);
   max-inline-size: 92vw;
   z-index: 58;
   display: flex;
   flex-direction: column;
-  animation: libSidebarIn 220ms var(--pc-settle);
+  animation: chatAsideIn 220ms var(--pc-settle);
+}
+
+/* Rises out of the ball rather than sliding in off an edge - libSidebarIn's
+   +16px on X is a trailing-edge gesture and would read backwards here. */
+@keyframes chatAsideIn {
+  from {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .chatAside .lobbyChat {
@@ -4608,6 +4510,10 @@
 @media (orientation: landscape) {
   :root[data-phone='on'] .libSidebar,
   :root[data-phone='on'] .chatAside[data-dock='float'] {
+    /* The chat aside is absolute (anchored to the ball) everywhere else; as a
+       phone side sheet it is a viewport thing again, and --pc-vh only means
+       anything against the viewport. */
+    position: fixed;
     inset-block: 0 auto;
     /* start:auto end:0 - the trailing edge in both writing directions. */
     inset-inline: auto 0;
@@ -4855,6 +4761,9 @@
 
 /* ---- trigger prompts (enforced rooms, rules pass A) ---- */
 
+/* Shared by the floating prompt rails that remain - CounterPrompt, and the
+   discard/sacrifice prompt bodies. TriggerPrompts itself is a Modal now and
+   uses only .triggerPromptBody / .triggerPromptActions below. */
 .triggerPrompts {
   position: fixed;
   bottom: 23%;
@@ -4885,10 +4794,29 @@
   min-width: 0;
 }
 
+/* The trigger prompt is a kit Modal: the card it names is the question, so the
+   answer belongs in front of the player rather than in a stack of floating
+   cards over the board the trigger is asking about. */
+.triggerPromptBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glacier-space-2);
+  min-width: 0;
+}
+
 .triggerPromptActions {
   display: flex;
   gap: 0.35rem;
   flex-shrink: 0;
+}
+
+/* The modal's footer row. Its own class rather than .triggerPromptActions,
+   which three floating prompts still share and size for a 320px card. */
+.triggerModalActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--glacier-space-2);
 }
 
 /* An owed discard: centered so the hand strip reads at full size. */
@@ -5431,7 +5359,7 @@
   /* Inline only, deliberately: the block gutter is carried by the staged
      frame's own margin just below, so the two halves of the inset stay in the
      one place the comment there explains. */
-  padding: 0 var(--glacier-space-4);
+  padding: 0 var(--pc-mat-pad);
 }
 
 .stageArea .seatFrame[data-stage] {
@@ -5471,7 +5399,7 @@
    the vitals stay exactly where they were; only .myField, which is in flow,
    gives up the room. */
 .table:not([data-mobile]) .tableMain > .myBoard {
-  padding: var(--glacier-space-4);
+  padding: var(--pc-mat-pad);
 }
 
 .myBoard[data-strip-only] {
@@ -9533,8 +9461,11 @@ button.loyaltyBadge:hover {
 /* Smaller on the mat than in the sheet. The 2.6rem total is right in a bottom
    sheet the player is looking straight at; floated over the battlefield it was
    a third of the mat's width, so the card competed with the cards. */
+/* The floating dial's own base size. It has to repeat the fit term or it would
+   simply re-pin the size this rule is meant to cap - the digit count does not
+   care which surface the dial is on. */
 .lifeFloat .lifeBig {
-  font-size: 1.6rem;
+  font-size: min(1.6rem, calc(var(--pc-life-fit, 99rem) / (var(--pc-life-len, 2) * 0.62)));
   text-shadow: 0 2px 10px color-mix(in oklch, var(--glacier-accent-solid) 45%, transparent);
 }
 

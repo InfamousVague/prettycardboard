@@ -39,7 +39,7 @@ import { handSlinky, paintSlinky, restFocus, slinkyOffsets } from '../../compone
 import type { CardInst, MatPos, MatZone, RoomState, TablePlayer, Zone } from '../../net/types.ts';
 import { selectCardScale, useTableUi } from './tableUi.ts';
 import { AnchoredMenu } from './menuAnchor.tsx';
-import { AttackBadge, BlockCluster, CounterBadges, DEFAULT_MAT_LAYOUT, MAT_ZONES, ZonePiles, groupAttachments, splitPile, CardMark } from './bits.tsx';
+import { AttackBadge, BlockCluster, CounterBadges, DEFAULT_MAT_LAYOUT, MAT_ZONES, TABLE_PILE_LAYOUT, ZonePiles, groupAttachments, splitPile, CardMark } from './bits.tsx';
 import {
   CARD_SCALE_MAX,
   CARD_SCALE_MIN,
@@ -64,7 +64,7 @@ import { canDeclareAttacker, discountedGeneric, enforcedRoom, handPlayability, h
 import { LoyaltyBadge } from './LoyaltyBadge.tsx';
 import { oracleFacts } from '../../data/printedPt.ts';
 import { SETTLE_EASE, dragTilt, flightAnchor, juicePulse, prefersReducedMotion, restTilt, setFlightAnchor, ambientDelay } from './juice.ts';
-import { zoneLabel } from '../../data/games.ts';
+import { pileHolder, seatPlaymat, zoneLabel } from '../../data/games.ts';
 import { playmatBackground } from '../../data/playmats.ts';
 import { usePreference } from '../../hooks/usePreference.ts';
 import { useMobileLayout } from '../../hooks/useIsPhone.ts';
@@ -201,6 +201,10 @@ export function MyBoard({
   usePrintedPtVersion();
   const boardMode = useTableUi((state) => state.boardMode);
   const cardScale = useTableUi(selectCardScale);
+  // My mat, unless the game pins one for the whole table (Mood Swings is played
+  // on a printed sheet, and everyone has to be reading the same one).
+  const myMat = seatPlaymat(room.game, me.playmat);
+  const matBackground = myMat ? playmatBackground(myMat) : undefined;
   // Phones dock the zone piles into a swipe-out drawer instead of the strip.
   const mobile = useMobileLayout();
   // The +/- buttons step whichever ladder is in play - the phone's own three
@@ -1532,6 +1536,36 @@ export function MyBoard({
     />
   );
 
+  // THE TABLE'S OWN PILES. Mood Swings is played out of one box: a single deck
+  // everybody draws from and a single discard everybody adds to (registry:
+  // GameZoneDef.table). The server has no table-level zone, so it keeps both at
+  // the lowest seat and routes every draw and discard there (game::pile_index);
+  // the client reads that seat and draws them ONCE, in the middle of the mat,
+  // where the box sits in paper. Every seat sees the same two piles and the
+  // same counts, and every seat can draw. Games with no table zones render
+  // nothing here - ZonePiles' table scope comes out empty.
+  const pileSeat = pileHolder(room.game, room.players);
+  const tablePilesEl = pileSeat ? (
+    <div className="matZones">
+      <ZonePiles
+        room={room}
+        player={pileSeat}
+        scope="table"
+        // `mine` is what turns a pile from a readout into a control, and the
+        // common pile is everyone's to use - it is not a claim of ownership.
+        mine
+        canAct
+        layout={TABLE_PILE_LAYOUT}
+        dropHint={dropPile}
+        // No dragging cards off the common piles and no card menus on them:
+        // both act on the actor's OWN zones server-side, so from any other seat
+        // they would fail on a card that seat does not hold. Click to draw and
+        // click to look through the discard are the whole vocabulary.
+        dragSuppressed={() => justDragged.current || heldFired.current}
+      />
+    </div>
+  ) : null;
+
   return (
     <div
       ref={boardRef}
@@ -1673,7 +1707,7 @@ export function MyBoard({
            the mat they are over, so a viewer places them on the SAME mat in
            their own layout rather than somewhere in their table. */
         data-mat-seat={me.seat}
-        style={me.playmat ? { ['--pc-board-mat' as string]: playmatBackground(me.playmat) } : undefined}
+        style={matBackground ? { ['--pc-board-mat' as string]: matBackground } : undefined}
         data-mode={boardMode}
         data-game={room.game || 'mtg'}
         data-lanes={(boardMode === 'rows' && drag != null) || undefined}
@@ -2050,6 +2084,11 @@ export function MyBoard({
           sit in printed cells of the same grid the cards snap to. */}
       {(cyber || matActive) && !hideField && <div className="matZones">{zonePilesEl}</div>}
 
+      {/* The common deck and discard, in the middle of the mat. Their own
+          overlay rather than a slot in the one above: they belong to the TABLE,
+          and that layer is whatever THIS seat is doing. */}
+      {!hideField && tablePilesEl}
+
       {/* Real polyhedral WebGL dice roll over the mat — Cyberpunk's Fixer dice and
           Magic's sidebar dice both land here on the server-chosen value. Falls
           back to a CSS cube if WebGL is unavailable. */}
@@ -2065,8 +2104,13 @@ export function MyBoard({
       {/* bottom strip: zones | hand | vitals */}
       <div className="myStrip">
         {/* Yu-Gi-Oh joins Magic here only when its field is hidden (strip-only
-            mode), where there is no printed grid to sit in. */}
-        {(mtg || (room.game === 'yugioh' && !ygoField)) && !matActive && (!mobile || hideField) && zonePilesEl}
+            mode), where there is no printed grid to sit in. Mood Swings joins
+            them for the one slot it keeps per seat (Hurt Feelings) - its deck
+            and discard are the table's and sit on the mat. */}
+        {(mtg || room.game === 'moodswings' || (room.game === 'yugioh' && !ygoField)) &&
+          !matActive &&
+          (!mobile || hideField) &&
+          zonePilesEl}
 
         {/* .myHand is a non-transforming frame; only the inner .myFan slides
             (rest/peek/hidden), so the tab below can centre on the hand and stay

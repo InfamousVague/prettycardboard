@@ -19,7 +19,7 @@ import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
 import { cardImage } from '../../data/cards.ts';
 import { isFoilInst } from '../../data/foil.ts';
-import { zoneLabel } from '../../data/games.ts';
+import { getGame, zoneIsTable, zoneLabel, zoneUsed } from '../../data/games.ts';
 import { GameCard } from '../../components/GameCard.tsx';
 import { useCardPopup } from '../../components/CardPopup.tsx';
 import type { CardInst, CardMarkState, CombatState, MatPos, MatZone, RoomState, TablePlayer, Zone } from '../../net/types.ts';
@@ -149,10 +149,11 @@ const COUNTER_PRESETS = ['+1/+1', '-1/-1', 'loyalty', 'defense', 'lore', 'charge
 function CounterManager({ card, onSet }: { card: CardInst; onSet: (counter: string, value: number) => void }) {
   const t = useT();
   const [name, setName] = useState('');
-  // Only Magic has this counter vocabulary; Cyberpunk and Yu-Gi-Oh get the
-  // stat pair and the free-text field only.
+  // Only Magic has this counter vocabulary (loyalty, lore, oil...); every other
+  // game gets the stat pair and the free-text field only. Tested as "is this
+  // Magic" rather than a list of the games we remembered to exclude.
   const counterGame = useGame((state) => state.room?.game) ?? 'mtg';
-  const mtg = counterGame !== 'cyberpunk' && counterGame !== 'yugioh';
+  const mtg = counterGame === 'mtg';
   const presets = mtg ? COUNTER_PRESETS : COUNTER_PRESETS.slice(0, 2);
   const entries = Object.entries(card.counters)
     .filter(([, count]) => count > 0)
@@ -438,12 +439,21 @@ export const DEFAULT_MAT_LAYOUT: Record<MatZone, MatPos> = {
   command: { x: 0.3, y: 0.84 },
 };
 
+/** Where the TABLE's own piles sit (GameZoneDef.table): the middle of the mat,
+ * because that is where the box sits in paper - one deck and one discard,
+ * within reach of every seat rather than parked on somebody's rail. */
+export const TABLE_PILE_LAYOUT: Partial<Record<MatZone, MatPos>> = {
+  library: { x: 0.44, y: 0.5 },
+  graveyard: { x: 0.56, y: 0.5 },
+};
+
 export function ZonePiles({
   room,
   player,
   mine,
   big,
   mat,
+  scope = 'seat',
   canAct,
   onMenu,
   onHover,
@@ -464,6 +474,11 @@ export function ZonePiles({
   /** Cyberpunk mat mode: each pile is tagged (data-zone) so CSS can place it in
    * the mat quadrants (Deck/Trash right rail, Legends/Eddies bottom tray). */
   mat?: boolean;
+  /** Which half of the registry's zones to draw. `seat` (the default) is the
+   * player's own rail; `table` is the common pile a shared-deck game keeps in
+   * the middle of the mat. The two never overlap - every slot is one or the
+   * other - so a game with no table zones renders exactly as it always did. */
+  scope?: 'seat' | 'table';
   /** Seated, started, not spectating - gates every affordance. */
   canAct?: boolean;
   onMenu?: (event: ReactPointerEvent | React.MouseEvent, iid: string, zone: Zone) => void;
@@ -502,11 +517,27 @@ export function ZonePiles({
   const mobile = useMobileLayout();
   const cyber = gameId === 'cyberpunk';
   const yugioh = gameId === 'yugioh';
-  const nonMtg = cyber || yugioh;
+  // MTG is the only game whose rail labels are TRANSLATED (they are the app's
+  // own strings); every other game names its slots in the registry, so the test
+  // is "is this Magic", not a list of the games we happened to think of. That
+  // list was `cyberpunk || yugioh`, which left Mood Swings - a game with no
+  // library, no graveyard and no command zone - captioned Library / Graveyard /
+  // Exile / Command on every board and every mini preview.
+  const nonMtg = (gameId ?? 'mtg') !== 'mtg';
   const libLabel = nonMtg ? zoneLabel(gameId, 'library') : t('tblLibrary');
   const graveLabel = nonMtg ? zoneLabel(gameId, 'graveyard') : t('tblGraveyard');
   const exileLabel = nonMtg ? zoneLabel(gameId, 'exile') : t('tblExile');
   const cmdLabel = nonMtg ? zoneLabel(gameId, 'command') : t('tblCommand');
+  // A slot the game never fills is not rendered at all: an empty pile captioned
+  // with a zone that does not exist in the rules is worse than no pile. And a
+  // slot belongs to exactly one scope - the seat's rail or the table's middle -
+  // so the common deck and discard are drawn once rather than once per player.
+  const shows = (slot: Zone) =>
+    zoneUsed(gameId, slot) && zoneIsTable(gameId, slot) === (scope === 'table');
+  const hasLibrary = shows('library');
+  const hasGrave = shows('graveyard');
+  const hasExile = shows('exile');
+  const hasCommand = shows('command');
 
   const graveTop = player.graveyard[player.graveyard.length - 1];
   const exileTop = player.exile[player.exile.length - 1];
@@ -583,10 +614,12 @@ export function ZonePiles({
       className="zonePiles"
       data-mine={mine || undefined}
       data-mat={mat || undefined}
+      data-scope={scope === 'table' ? 'table' : undefined}
       data-custom={custom || undefined}
       data-editing={editing || undefined}
     >
       {/* library: mine opens the actions menu, theirs is a plain pile */}
+      {hasLibrary && (
       <div {...slotProps('library', slotName.library)}>
       {interactive ? (
         <>
@@ -636,6 +669,11 @@ export function ZonePiles({
             }
           >
             <MenuItem onSelect={drawOne}>{`${t('tblDraw')} 1`}</MenuItem>
+            {/* Look/dig/reveal are a SEAT's own library. The table's common
+                pile has none of them: the server keeps it at one seat, so a
+                peek asked for by anyone else would search an empty deck - and
+                Mood Swings, the only game with a common pile, never digs. */}
+            {scope === 'seat' && (
             <MenuSub label={t('gpPeek')}>
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((count) => (
                 <MenuItem
@@ -649,6 +687,8 @@ export function ZonePiles({
                 </MenuItem>
               ))}
             </MenuSub>
+            )}
+            {scope === 'seat' && (
             <MenuItem
               onSelect={() => {
                 setLibIntent('search');
@@ -657,6 +697,8 @@ export function ZonePiles({
             >
               {t('gpSearchLib')}
             </MenuItem>
+            )}
+            {scope === 'seat' && (
             <MenuSub label={t('gpRevealTop')}>
               {[1, 2, 3, 4, 5].map((count) => (
                 <MenuItem key={count} onSelect={() => act({ kind: 'library.reveal', count })}>
@@ -664,6 +706,7 @@ export function ZonePiles({
                 </MenuItem>
               ))}
             </MenuSub>
+            )}
             {/* Enforced rooms: the server digs until a nonland with mana
                 value below N, stacks it free to cast, bottoms the rest. */}
             {enforced && (
@@ -677,7 +720,9 @@ export function ZonePiles({
             )}
             <MenuItem onSelect={() => setConfirmShuffle(true)}>{t('tblShuffle')}</MenuItem>
             {/* Yu-Gi-Oh has no mulligans — hide the action, not just the flow. */}
-            {!yugioh && <MenuItem onSelect={() => act({ kind: 'mulligan' })}>{t('tblMulligan')}</MenuItem>}
+            {getGame(gameId).mulligans && (
+              <MenuItem onSelect={() => act({ kind: 'mulligan' })}>{t('tblMulligan')}</MenuItem>
+            )}
           </Menu>
           <AlertDialog
             open={confirmShuffle}
@@ -703,8 +748,10 @@ export function ZonePiles({
         libraryPile
       )}
       </div>
+      )}
 
       {/* graveyard */}
+      {hasGrave && (
       <div {...slotProps('graveyard', slotName.graveyard)}>
       <button
         type="button"
@@ -749,8 +796,10 @@ export function ZonePiles({
         </span>
       </button>
       </div>
+      )}
 
       {/* exile */}
+      {hasExile && (
       <div {...slotProps('exile', slotName.exile)}>
       <button
         type="button"
@@ -794,10 +843,11 @@ export function ZonePiles({
         </span>
       </button>
       </div>
+      )}
 
       {/* command zone — for Yu-Gi-Oh this is the Extra Deck: a stacked pile
           with a viewer (like the graveyard), not the side-by-side row. */}
-      {yugioh ? (
+      {!hasCommand ? null : yugioh ? (
         <div {...slotProps('command', slotName.command)}>
           <button
             type="button"

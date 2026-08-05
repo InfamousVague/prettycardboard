@@ -15,6 +15,7 @@ when you replace one of these:
 | `mtg.svg` | the planeswalker symbol, copied from the bundled Scryfall symbology (`public/symbols/PW.svg`) |
 | `yugioh.svg` | authored here — the Millennium Eye |
 | `cyberpunk.svg` | authored here — Cyberpunk TCG is our own WIP game |
+| `moodswings.svg` | authored here — a face whose mouth is the swing (half smile, half frown) |
 
 To use official brand art instead, drop it in under the same filename. Note that
 publisher logos are trademarks: Wizards' Fan Content Policy and Konami's terms

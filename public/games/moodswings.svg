@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="currentColor">
+  <!-- Mood Swings: a face whose mouth IS the swing - one half up, one half
+       down. Filled paths only (no strokes): GameMark renders this as a CSS
+       mask, so the silhouette is all that survives and the accent paints it. -->
+  <!-- the face, as a ring (even-odd punches the hole) -->
+  <path fill-rule="evenodd" d="M50 4a46 46 0 1 0 0 92 46 46 0 1 0 0-92Zm0 9.5a36.5 36.5 0 1 1 0 73 36.5 36.5 0 1 1 0-73Z"/>
+  <!-- eyes -->
+  <circle cx="36" cy="40" r="6.5"/>
+  <circle cx="64" cy="40" r="6.5"/>
+  <!-- the mood itself: a wave, half smile and half frown. The two dots round
+       off the band's ends, which a filled path alone leaves cut square. -->
+  <path d="M26 60c8-12 16-12 24 0s16 12 24 0v7.5c-8 12-16 12-24 0s-16-12-24 0Z"/>
+  <circle cx="26" cy="63.75" r="3.75"/>
+  <circle cx="74" cy="63.75" r="3.75"/>
+</svg>

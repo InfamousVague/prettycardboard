@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { cardImage, isAltArtId } from './cards.ts';
 import { isYugiohId } from './yugioh.ts';
+import { isMoodId } from './moodswings.ts';
 
 /**
  * Double-faced card resolution. The server only tracks a `transformed` flag per
@@ -124,8 +125,10 @@ export function loadFaces(scryfallId: string): Promise<FaceInfo> {
   const cached = cache.get(scryfallId);
   if (cached) return Promise.resolve(cached);
   // Yu-Gi-Oh cards have no second face, and their passcodes mean nothing to
-  // Scryfall — answer without the doomed network round-trip.
-  if (isYugiohId(scryfallId)) {
+  // Scryfall — answer without the doomed network round-trip. Mood Swings ids
+  // (msw-…) are the same story: single-faced, and Scryfall has never heard of
+  // them.
+  if (isYugiohId(scryfallId) || isMoodId(scryfallId)) {
     cache.set(scryfallId, NOT_DFC);
     return Promise.resolve(NOT_DFC);
   }

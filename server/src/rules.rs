@@ -1372,6 +1372,9 @@ fn push_trigger(
         text: trigger.text.clone(),
         // Freeform: the server records and never judges, so even a trigger
         // the engine COULD perform is offered as a reminder to acknowledge.
+        // (A freeform trigger that lands on a bot is NOT auto-applied here:
+        // the bot charges its own life for it on its next tick, and doing both
+        // would take the life twice.)
         auto: engine_runs && trigger.auto(),
         deadline: crate::now_ms() + crate::game::TRIGGER_CHOICE_MS,
     });

@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { Button, EmptyState, Heading, SegmentedControl, Size, Text, TextTone } from '@glacier/react';
+import { Button, EmptyState, Heading, Size, Text, TextTone } from '@glacier/react';
 import {
   Download,
   PlayingCardDeck,
@@ -20,6 +20,7 @@ import { useVisibleGames } from '../hooks/useVisibleGames.ts';
 import { usePhoneViewport } from '../hooks/useIsPhone.ts';
 import type { DeckSummary, MyDeckStats } from '../net/types.ts';
 import { GameCard } from '../components/GameCard.tsx';
+import { GameSelect } from '../components/GameSelect.tsx';
 import { GameTag } from '../components/GameTag.tsx';
 import { DeckEditor } from './deckbuilder/DeckEditor.tsx';
 import { ImportDialog } from './deckbuilder/ImportDialog.tsx';
@@ -56,9 +57,11 @@ function DeckLibrary() {
   // WIP games' decks are hidden entirely unless the dev toggle is on.
   const games = useVisibleGames();
   const decks = allDecks.filter((deck) => games.some((g) => g.id === (deck.game || 'mtg')));
-  // Which game's decks to show. 'all' spans every game.
-  const [gameFilter, setGameFilter] = useState('all');
-  const shown = gameFilter === 'all' ? decks : decks.filter((deck) => (deck.game || 'mtg') === gameFilter);
+  // Which games' decks to show. An empty picker spans every game, so the
+  // library opens on everything rather than on nothing.
+  const [gameFilter, setGameFilter] = useState<string[]>([]);
+  const shown =
+    gameFilter.length === 0 ? decks : decks.filter((deck) => gameFilter.includes(deck.game || 'mtg'));
 
   useEffect(() => {
     refreshDecks().catch(() => {
@@ -101,13 +104,11 @@ function DeckLibrary() {
 
       {decks.length > 0 && (
         <div className="decksFilter">
-          <SegmentedControl
+          <GameSelect
             value={gameFilter}
             onValueChange={setGameFilter}
-            options={[
-              { value: 'all', label: t('decksAllGames') },
-              ...games.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') })),
-            ]}
+            placeholder={t('decksAllGames')}
+            aria-label={t('decksAllGames')}
           />
         </div>
       )}

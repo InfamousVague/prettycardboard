@@ -53,6 +53,7 @@ import * as api from '../net/api.ts';
 import * as ws from '../net/ws.ts';
 import type { MyDeckStats, MyRoom, UserStats } from '../net/types.ts';
 import { artCrop } from '../data/cards.ts';
+import { bringsOwnDeck } from '../data/games.ts';
 import { bracketKey } from '../data/brackets.ts';
 import { rankFor, winRate } from '../data/ranks.ts';
 import { divisionFor, RANK_META, RATING_SEED } from '../data/rankTiers.ts';
@@ -69,7 +70,9 @@ import { launchBotMatch } from '../data/botMatch.ts';
 import { useShowcaseId } from '../data/showcase.ts';
 import { usePreference } from '../hooks/usePreference.ts';
 import { DeckStack } from '../components/DeckStack.tsx';
-import { GameTag } from '../components/GameTag.tsx';
+import { GameTag, GameStageTag } from '../components/GameTag.tsx';
+import { GameSelect } from '../components/GameSelect.tsx';
+import { usePrereleaseGate } from '../components/PrereleaseGate.tsx';
 import { CardRowSkeleton, EmptyFan } from '../components/Skeletons.tsx';
 // The Play-now cards wear the Play page's mode plate (.pgMode), and those
 // rules live in play.css - which only PlayPage imported, so on Home the class
@@ -145,13 +148,27 @@ function fmtTurn(ms: number): string {
   return m > 0 ? `${m}m ${String(s % 60).padStart(2, '0')}s` : `${s}s`;
 }
 
-/** One baseline for every shelf header: title on the left, view-all on the right. */
-function SectionHead({ title, onViewAll, viewAllLabel }: { title: string; onViewAll?: () => void; viewAllLabel?: string }) {
+/** One baseline for every shelf header: title on the left, view-all on the right.
+ *  A shelf that is all one game's content can pass that game, and the header
+ *  wears its release-stage stamp - said once for the shelf rather than repeated
+ *  on every banner in it. */
+function SectionHead({
+  title,
+  game,
+  onViewAll,
+  viewAllLabel,
+}: {
+  title: string;
+  game?: string;
+  onViewAll?: () => void;
+  viewAllLabel?: string;
+}) {
   return (
     <div className="homeSectionHead">
       <Heading level={2} noMargin>
         {title}
       </Heading>
+      {game && <GameStageTag game={game} />}
       {onViewAll && viewAllLabel && (
         <Button size="sm" variant="ghost" onClick={onViewAll}>
           {viewAllLabel}
@@ -664,16 +681,18 @@ function TableSetup({ order }: { order: number }) {
   const t = useT();
   const { toast } = useToast();
   const decks = useApp((state) => state.decks);
+  const refreshDecks = useApp((state) => state.refreshDecks);
   const join = useGame((state) => state.join);
 
   const [tableName, setTableName] = useState('');
   const [seats, setSeats] = useState('4');
-  const games = useVisibleGames();
   const [game, setGame] = useState('mtg');
   const [deckId, setDeckId] = useState('');
   const [busy, setBusy] = useState(false);
   /** Which Play-now card is opening a table, so only that one spins. */
   const [homeQuick, setHomeQuick] = useState<string | null>(null);
+  // Hosting a pre-release game says so before the table opens.
+  const { gate, dialog: prereleaseDialog } = usePrereleaseGate();
   /**
    * Straight into a game. The roulettes let the TABLE deal every seat, which
    * is why they work on a brand-new account; the format cards shuffle up one
@@ -724,17 +743,30 @@ function TableSetup({ order }: { order: number }) {
   const chosenDeck = (deckId && gameDecks.some((deck) => deck.id === deckId) ? deckId : gameDecks[0]?.id) || '';
   const chosen = decks.find((deck) => deck.id === chosenDeck);
   const chosenArt = chosen ? deckSummaryArt(chosen) : '';
+  // Games played out of one shared pile (Mood Swings) have no deck to pick and
+  // nothing to bring, so the field is not asked for at all.
+  const bringsDeck = bringsOwnDeck(game);
 
   const create = async () => {
     setBusy(true);
     try {
+      let deck = chosenDeck;
+      // Mood Swings is a box, not a deck you built: if there is none on the
+      // account yet, roll one on the way to the table rather than refusing to
+      // open a table for a game that never asked for a deck.
+      if (!bringsDeck && !deck) {
+        const { moodBox } = await import('../data/moodswings.ts');
+        const box = await api.createDeck('Mood Swings Box', 'standard', moodBox(), null, 'moodswings', 'graph-paper');
+        deck = box.id;
+        await refreshDecks();
+      }
       const room = await api.createRoom(
         tableName || `${t('playTitle')} - ${new Date().toLocaleTimeString()}`,
         Number(seats),
         undefined,
         { game },
       );
-      join(room.roomId, chosenDeck || undefined);
+      join(room.roomId, deck || undefined);
     } catch {
       toast({ tone: 'danger', message: t('obOffline') });
     } finally {
@@ -795,39 +827,48 @@ function TableSetup({ order }: { order: number }) {
               <Swords size={14} aria-hidden />
               {t('playNewTable')}
               <GameTag game={game} />
+              <GameStageTag game={game} />
             </span>
 
             <div className="qpField">
               <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="qpLabel">
                 {t('playGame')}
               </Text>
-              <SegmentedControl
+              <GameSelect
+                single
                 fullWidth
-                value={game}
-                onValueChange={setGame}
-                options={games.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') }))}
+                value={[game]}
+                onValueChange={(picked) => setGame(picked[0] ?? game)}
                 aria-label={t('playGame')}
               />
             </div>
 
-            <div className="qpField">
-              <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="qpLabel">
-                {t('playPickDeck')}
-              </Text>
-              <div className="qpDeckRow">
-                {chosenArt && (
-                  <span className="qpDeckThumb" style={{ backgroundImage: `url(${chosenArt})` }} aria-hidden />
-                )}
-                <Select
-                  fullWidth
-                  value={chosenDeck}
-                  onValueChange={setDeckId}
-                  options={gameDecks.map((deck) => ({ value: deck.id, label: deck.name }))}
-                  placeholder={gameDecks.length === 0 ? t('playNoDecksForGame') : t('playPickDeck')}
-                  aria-label={t('playPickDeck')}
-                />
+            {bringsDeck ? (
+              <div className="qpField">
+                <Text as="span" size={Size.XSmall} tone={TextTone.Muted} className="qpLabel">
+                  {t('playPickDeck')}
+                </Text>
+                <div className="qpDeckRow">
+                  {chosenArt && (
+                    <span className="qpDeckThumb" style={{ backgroundImage: `url(${chosenArt})` }} aria-hidden />
+                  )}
+                  <Select
+                    fullWidth
+                    value={chosenDeck}
+                    onValueChange={setDeckId}
+                    options={gameDecks.map((deck) => ({ value: deck.id, label: deck.name }))}
+                    placeholder={gameDecks.length === 0 ? t('playNoDecksForGame') : t('playPickDeck')}
+                    aria-label={t('playPickDeck')}
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="qpField">
+                <Text as="span" size={Size.XSmall} tone={TextTone.Subtle} className="qpLabel">
+                  {t('playNoDeckNeeded')}
+                </Text>
+              </div>
+            )}
 
             <div className="qpRow">
               <div className="qpField">
@@ -849,7 +890,13 @@ function TableSetup({ order }: { order: number }) {
               </div>
             </div>
 
-            <Button size="lg" onClick={create} loading={busy} disabled={decks.length === 0} className="qpAction">
+            <Button
+              size="lg"
+              onClick={() => gate(game, () => void create())}
+              loading={busy}
+              disabled={bringsDeck && decks.length === 0}
+              className="qpAction"
+            >
               <Swords size={17} />
               {t('playCreate')}
             </Button>
@@ -859,6 +906,7 @@ function TableSetup({ order }: { order: number }) {
         {/* Join-by-code moved up into the hero band's menu - one join entry on
             the page, not two. */}
       </div>
+      {prereleaseDialog}
     </Section>
   );
 }
@@ -1059,7 +1107,7 @@ function YugiohStarters({ order }: { order: number }) {
   if (starters.length === 0) return null;
   return (
     <Section order={order}>
-      <SectionHead title={t('hmYugiohStarters')} onViewAll={goBrowse} viewAllLabel={t('hmViewAll')} />
+      <SectionHead title={t('hmYugiohStarters')} game="yugioh" onViewAll={goBrowse} viewAllLabel={t('hmViewAll')} />
       <Carousel className="homeCarousel" gap="var(--glacier-space-4)" aria-label={t('hmYugiohStarters')}>
         {starters.map((starter) => {
           const coverName = starter.cards.find((card) => card.scryfallId === starter.cover)?.name ?? starter.name;
@@ -1092,7 +1140,7 @@ function CyberpunkStarters({ order }: { order: number }) {
   if (starters.length === 0) return null;
   return (
     <Section order={order}>
-      <SectionHead title={t('hmCyberStarters')} onViewAll={goBrowse} viewAllLabel={t('hmViewAll')} />
+      <SectionHead title={t('hmCyberStarters')} game="cyberpunk" onViewAll={goBrowse} viewAllLabel={t('hmViewAll')} />
       <Carousel className="homeCarousel" gap="var(--glacier-space-4)" aria-label={t('hmCyberStarters')}>
         {starters.map((starter) => (
           <ShelfBanner

@@ -1884,13 +1884,12 @@
   }
 }
 
-/* Game filter row above the deck grid; it rises in after the band. On narrow
-   viewports the four game options scroll inside their own row rather than
-   running past the page edge. */
+/* Game filter above the deck grid; it rises in after the band. It is a
+   MultiSelect, so the row must NOT scroll or clip - an overflow container here
+   cut the dropdown off at the row's own edge. */
 .decksFilter {
   margin-block-end: 1rem;
-  max-inline-size: 100%;
-  overflow-x: auto;
+  max-inline-size: min(100%, 32rem);
   animation: dkRise var(--glacier-duration-normal) var(--glacier-ease-out) backwards;
   animation-delay: 120ms;
 }

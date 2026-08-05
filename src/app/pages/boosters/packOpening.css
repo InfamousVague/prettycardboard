@@ -580,7 +580,12 @@
   .poFans {
     grid-auto-flow: column;
     grid-auto-columns: minmax(0, 1fr);
-    align-items: center;
+    /* Bottom-aligned, not centred. The two fans are different heights (the
+       feature cards are larger, and the arc is sized off the card), so
+       centring each one in its own column left the two labels on different
+       lines - 88px apart, measured. Sitting them on a common baseline is also
+       just how two hands laid on a table read. */
+    align-items: end;
     gap: clamp(var(--glacier-space-4), 4vw, var(--glacier-space-10));
   }
 }
@@ -595,24 +600,48 @@
 }
 
 /* The arc reserves its own height: the cards inside are absolutely placed, so
-   without this the fans collapse onto each other and onto their labels. The
-   extra 34% is the room the rotation sweeps into above the pivot. */
+   without this the fans collapse onto each other and onto their labels. */
 .poFanArc {
   position: relative;
   width: 100%;
-  /* Room for the whole sweep: the deep pivot radius (see transform-origin on
-     .poFanCard) lifts the outer cards well above the centre one. */
-  height: calc(var(--po-card-h) * 1.55);
+  /* The size the pivot is measured against. The sweep has to fit the COLUMN
+     the fan was given, and a card sized in vh knows nothing about that - so
+     the arc becomes the container and .poFanCard pivots in cqw. */
+  container-type: inline-size;
+  /* Each fan owns its own depth. The cards carry z-index: <their index>, so
+     without a stacking context per arc the two fans' indices compete in one
+     context and a bulk card can paint in front of a highlight. Latent now
+     that the arcs no longer overlap, but it is the kind of thing that comes
+     back the moment the spread is retuned. */
+  isolation: isolate;
+  /* Room for the sweep. 1.32 rather than the old 1.55: with the pivot pulled
+     in (below) the outer cards no longer swing far above the centre one, and
+     the surplus was showing up as a band of empty screen above the fan. */
+  height: calc(var(--po-card-h) * 1.32);
 }
 
+/* Card size has TWO bounds. --po-card-w is the wish, in viewport height, and
+   --po-cap is the ceiling, as a percentage of the fan's own column (applied in
+   cqw down on .poFanCard, which is inside the container).
+
+   The cap is the half of this that was missing. A card sized only in vh
+   saturates at its rem ceiling on a tall window and then knows nothing about
+   how much width it has: at 1280x1080 the feature card asked for 320px inside
+   a 593px column - 54% of the column for ONE of eight cards - and no amount of
+   pivot tuning can make that fit. The pivot decides how far apart the cards
+   sit; the cap decides whether they were ever going to fit at all. */
 .poFan[data-feature] {
   /* Was clamp(5.5rem, 18vh, 10.5rem), back when both fans shared the height. */
   --po-card-w: clamp(9rem, 30vh, 20rem);
+  --po-cap: 27;
 }
 
 .poFan:not([data-feature]) {
   /* Was clamp(3.5rem, 11vh, 7.25rem). */
   --po-card-w: clamp(6rem, 20vh, 14rem);
+  /* Lower than the feature fan's, so the two keep their size relationship once
+     BOTH are capped - a single shared cap would render them identical. */
+  --po-cap: 19;
 }
 
 .poFanArc {
@@ -621,16 +650,35 @@
 
 .poFanCard {
   position: absolute;
-  /* Anchored near the bottom centre of the arc; the sweep rises into the space
-     reserved above. The small lift leaves room for the outermost cards, whose
-     corners swing below the baseline as they rotate. */
-  inset-block-end: 1.4rem;
+  /* Anchored near the bottom centre of the arc. The clearance is what the
+     outermost cards need: rotating about a pivot BELOW them drops their centre
+     by radius*(1-cos(spread/2)), and their bounding box grows taller than the
+     card besides, so both together hang under the resting baseline. */
+  inset-block-end: 14cqw;
   inset-inline-start: 50%;
-  width: var(--po-card-w);
-  margin-inline-start: calc(var(--po-card-w) / -2);
-  /* Pivot below the card, so a rotation sweeps it into an arc like a held
-     hand rather than spinning it in place. */
-  transform-origin: 50% 320%;
+  width: min(var(--po-card-w), calc(var(--po-cap) * 1cqw));
+  margin-inline-start: calc(min(var(--po-card-w), calc(var(--po-cap) * 1cqw)) / -2);
+  /* Pivot below the card, so a rotation sweeps it into an arc like a held hand
+     rather than spinning it in place.
+
+     Measured against the ARC's width, not the card's height. The outermost
+     card's centre travels radius*sin(spread/2) sideways, so a radius in card
+     heights is a sweep that knows nothing about the space it has to sweep in.
+     That was survivable while the two fans were stacked and each had the whole
+     window; side by side each fan gets half of it, and the card sizes were
+     roughly doubled at the same time (see the "Was clamp(...)" notes above).
+     Radius scales with card height, width available was halved - so at 320%
+     the feature fan painted 1332px of cards into a 593px column and the two
+     arcs ran straight through each other.
+
+     43cqw, with the card capped above: the two together have to satisfy
+     pivot*sin(s/2) + cap*(cos(s/2) + 1.393*sin(s/2))/2 <= 50% of the column.
+     Radius alone can buy the fit, but only by collapsing the arc onto itself -
+     at 28cqw with an uncapped card the cards sat 44px apart behind a 320px
+     face, which is 14% of each card visible: it fit, and it was a clump. Give
+     the cap the width and the pivot can stay deep enough to actually separate
+     them (42% of the feature card, 59% of a bulk one, measured). */
+  transform-origin: 50% calc(50% + 43cqw);
   cursor: default;
   /* `rotate`/`translate` above hold the stack-to-arc pose; the entrance
      animates `transform`, so the two compose instead of overwriting each

@@ -298,6 +298,40 @@
   white-space: nowrap;
 }
 
+/* Mood Swings prints values in square boxes: [6][1] is the numeral 61, so each
+   box is its own chip, sized square like the print rather than the wide
+   Cyberpunk rules token it borrows its shape from. */
+.cpMoodBox {
+  min-width: 1.5em;
+  padding: 0.03em 0.25em;
+  border-radius: 0.28rem;
+  text-align: center;
+  background: color-mix(in srgb, #e8e8ef 14%, transparent);
+  border-color: color-mix(in srgb, #e8e8ef 34%, transparent);
+  color: #f1f1f7;
+}
+/* The frame colour, echoed on the type line. Colours carry no rules meaning of
+   their own, but half the set's text asks about them - so make it readable. */
+.cpMoodType {
+  text-transform: capitalize;
+  color: var(--pc-mood-accent, inherit);
+}
+.cpMoodType[data-color='white'] {
+  --pc-mood-accent: #f4efdc;
+}
+.cpMoodType[data-color='blue'] {
+  --pc-mood-accent: #6fb6e8;
+}
+.cpMoodType[data-color='black'] {
+  --pc-mood-accent: #b2a4c4;
+}
+.cpMoodType[data-color='red'] {
+  --pc-mood-accent: #e2465b;
+}
+.cpMoodType[data-color='green'] {
+  --pc-mood-accent: #3fca7a;
+}
+
 /* ---- keyword glossary chips ----
    Each glossary-known keyword on the inspected card, with its plain-language
    one-liner. Stacked, quiet, and skimmable - rules help without rules text. */

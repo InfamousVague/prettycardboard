@@ -27,6 +27,7 @@ import {
   Dices,
   Eye,
   Flag,
+  LogOut,
   Landmark,
   Play,
   PlayingCard,
@@ -47,10 +48,11 @@ import { useGame } from '../state/gameStore.ts';
 import * as api from '../net/api.ts';
 import * as ws from '../net/ws.ts';
 import type { MatchRow, MyRoom } from '../net/types.ts';
-import { useVisibleGames } from '../hooks/useVisibleGames.ts';
 import { FORMATS, formatFor } from '../data/formats.ts';
-import { getGame, type GameId } from '../data/games.ts';
-import { GameTag, GameBadge } from '../components/GameTag.tsx';
+import { bringsOwnDeck, getGame, type GameId } from '../data/games.ts';
+import { GameTag, GameBadge, GameStageTag } from '../components/GameTag.tsx';
+import { GameSelect } from '../components/GameSelect.tsx';
+import { usePrereleaseGate } from '../components/PrereleaseGate.tsx';
 import { fmtDuration, relativeWhen } from '../components/MatchHistory.tsx';
 import { deckSummaryArt } from '../data/deckCover.ts';
 import { DEFAULT_PLAYMAT, playmatBackground } from '../data/playmats.ts';
@@ -266,7 +268,6 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
   const [seats, setSeats] = useState('4');
   const [persistent, setPersistent] = useState(true);
   const [format, setFormat] = useState('commander');
-  const games = useVisibleGames();
   const [game, setGame] = useState('mtg');
   const [deckId, setDeckId] = useState<string>('');
   const [code, setCode] = useState('');
@@ -274,11 +275,15 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
   const [rooms, setRooms] = useState<MyRoom[] | null>(null);
   const [history, setHistory] = useState<MatchRow[] | null>(null);
   const [confirmClose, setConfirmClose] = useState<MyRoom | null>(null);
+  const [confirmLeave, setConfirmLeave] = useState<MyRoom | null>(null);
+  const [leaving, setLeaving] = useState(false);
   const [closing, setClosing] = useState(false);
   /** Which mode plate is opening a table, so only that one spins. */
   const [quickBusy, setQuickBusy] = useState<string | null>(null);
   /** Which roulette is being dealt, same rule: only that plate spins. */
   const [spinning, setSpinning] = useState<string | null>(null);
+  // Nothing on this page opens a pre-release table without saying so first.
+  const { gate, dialog: prereleaseDialog } = usePrereleaseGate();
 
   /**
    * Roulette: create the table, let the TABLE deal every seat a deck, and go -
@@ -331,6 +336,9 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
   // A draft table is the one kind you sit down at with nothing: the deck is the
   // point of the evening, not the price of admission.
   const drafting = game === 'mtg' && format === 'draft';
+  // Mood Swings is the other: one box is the table's whole deck, so the form
+  // has no deck question to ask and hosting is never blocked on owning one.
+  const bringsDeck = bringsOwnDeck(game);
 
   // A quick start ignores the form entirely, so it picks from its OWN game's
   // decks - a Yu-Gi-Oh plate wants a Yu-Gi-Oh deck whatever the form says.
@@ -454,7 +462,9 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
       // used to dead-end anyone joining a Yu-Gi-Oh duel from an MTG picker.
       const forRoom = decks.filter((deck) => (deck.game || 'mtg') === (room.game || 'mtg'));
       const deck = forRoom.some((d) => d.id === chosenDeck) ? chosenDeck : forRoom[0]?.id;
-      join(room.roomId, deck || undefined);
+      // Which game the code leads to is only knowable once the room is in
+      // hand, so the warning lands here rather than on the button.
+      gate(room.game, () => join(room.roomId, deck || undefined));
     } catch {
       toast({ tone: 'danger', message: t('playCodeBad') });
     } finally {
@@ -473,6 +483,27 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
       toast({ tone: 'danger', message: t('obOffline') });
     } finally {
       setClosing(false);
+    }
+  };
+
+  const leaveTable = async () => {
+    if (!confirmLeave) return;
+    setLeaving(true);
+    try {
+      await api.leaveRoomSeat(confirmLeave.roomId);
+      setConfirmLeave(null);
+      await refreshRooms();
+    } catch (error) {
+      // The one refusal worth spelling out: the server will not vacate a seat
+      // in a live game, because walking out mid-match has to be recorded as a
+      // concession and that belongs at the table.
+      const code = (error as { code?: string } | null)?.code;
+      toast({
+        tone: 'danger',
+        message: code === 'in_progress' ? t('plLeaveLive') : t('obOffline'),
+      });
+    } finally {
+      setLeaving(false);
     }
   };
 
@@ -581,6 +612,7 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
                     {dealing ? <Spinner size="sm" /> : <Dices size={24} />}
                   </span>
                   <GameTag game="mtg" className="pgModeGame" />
+                  <GameStageTag game="mtg" className="pgModeStage" />
                 </span>
                 <span className="pgModeName">{t(preset.title)}</span>
                 <span className="pgModeBlurb">{t(preset.blurb)}</span>
@@ -662,7 +694,7 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
                 // for and leave the player seated at the wrong one.
                 disabled={blocked || busy || quickBusy !== null || spinning !== null}
                 title={blocked ? t('plQuickNeedDeck') : undefined}
-                onClick={() => void create(preset)}
+                onClick={() => gate(preset.game, () => void create(preset))}
               >
                 <span className="pgModeTop">
                   <span className="pgModeIcon" aria-hidden>
@@ -672,6 +704,7 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
                   {/* Which game this table opens under - the strip is no
                       longer all Magic, so every plate says. */}
                   <GameTag game={preset.game} className="pgModeGame" />
+                  <GameStageTag game={preset.game} className="pgModeStage" />
                 </span>
                 <span className="pgModeName">
                   {presetName(preset)}
@@ -723,6 +756,7 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
               {t('playNewTable')}
             </Heading>
             <GameTag game={game} />
+            <GameStageTag game={game} />
           </div>
           <div className="control">
             <Text as="span" size={Size.Small} tone={TextTone.Muted}>
@@ -734,12 +768,12 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
             <Text as="span" size={Size.Small} tone={TextTone.Muted}>
               {t('playGame')}
             </Text>
-            <SegmentedControl
+            <GameSelect
+              single
               fullWidth
               aria-label={t('playGame')}
-              value={game}
-              onValueChange={setGame}
-              options={games.map((g) => ({ value: g.id, label: g.name.replace('Magic: The Gathering', 'Magic') }))}
+              value={[game]}
+              onValueChange={(picked) => setGame(picked[0] ?? game)}
             />
           </div>
           {game === 'mtg' && (
@@ -784,16 +818,22 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
                 {t('playDraftLede')}
               </Text>
             </div>
+          ) : !bringsDeck ? (
+            <div className="control">
+              <Text size={Size.XSmall} tone={TextTone.Subtle}>
+                {t('playNoDeckNeeded')}
+              </Text>
+            </div>
           ) : (
             <DeckPicker value={chosenDeck} onChange={setDeckId} game={game} />
           )}
           <Button
-            onClick={() => void create()}
+            onClick={() => gate(game, () => void create())}
             loading={busy}
             // A launch already in flight owns the socket: this one would join a
             // different room mid-sequence and the in-flight sends would land on
             // whichever table won the race.
-            disabled={(!drafting && gameDecks.length === 0) || quickBusy !== null || spinning !== null}
+            disabled={(drafting || !bringsDeck ? false : gameDecks.length === 0) || quickBusy !== null || spinning !== null}
           >
             {drafting ? t('playCreateDraft') : t('playCreate')}
           </Button>
@@ -949,13 +989,31 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
                     >
                       <Play size={18} /> {t('plResume')}
                     </Button>
-                    {room.players[0]?.userId === identity?.userId && (
+                    {/* One destructive exit per card, and which one depends on
+                        whose table it is. The host ends it for everyone; a
+                        guest gives up their own seat, which is the thing that
+                        had no control at all - the table's own Leave button
+                        only marks you offline on a persistent table, so an
+                        unwanted lobby stayed in this list for good.
+
+                        The test was room.players[0], i.e. seat order, which is
+                        not ownership: it put End on the wrong card and hid it
+                        on the right one. rooms_mine returns host now. */}
+                    {room.host === identity?.userId ? (
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => setConfirmClose(room)}
                       >
                         <Flag size={14} /> {t('plEndMatch')}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setConfirmLeave(room)}
+                      >
+                        <LogOut size={14} /> {t('plLeaveTable')}
                       </Button>
                     )}
                   </div>
@@ -1055,6 +1113,20 @@ export function PlayPage({ mode = 'tables' }: { mode?: 'new' | 'tables' }) {
         onAction={() => void closeTable()}
         cancelLabel={t('dbCancel')}
       />
+
+      <AlertDialog
+        open={confirmLeave !== null}
+        onClose={() => setConfirmLeave(null)}
+        title={t('plLeaveTable')}
+        description={t('plLeaveTableDesc')}
+        tone="danger"
+        actionLabel={t('plLeaveTable')}
+        actionLoading={leaving}
+        onAction={() => void leaveTable()}
+        cancelLabel={t('dbCancel')}
+      />
+
+      {prereleaseDialog}
     </div>
   );
 }

@@ -264,9 +264,21 @@
   margin-block-start: var(--glacier-space-5);
 }
 
-/* Game switcher (MTG | Cyberpunk) under the Browse header. */
+/* Game picker (a MultiSelect: browse several catalogs at once) under the
+   Browse header, with the Magic-only precon/community switch beside it. It is
+   capped rather than full-bleed - a select stretched to the page width reads as
+   a search bar, and there are only ever a handful of games in it. */
 .browseGameSwitch {
   margin-top: 0.85rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--glacier-space-3);
+}
+
+.browseGameSwitch > :first-child {
+  flex: 1 1 18rem;
+  max-inline-size: 32rem;
 }
 
 /* Year/set jump row. Every viewport now: the contextual sidebar that used to

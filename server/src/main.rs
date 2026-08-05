@@ -299,6 +299,10 @@ async fn main() {
         .route("/api/matches/{id}/salt", post(api::match_salt))
         .route("/api/matches/{id}/stats", get(api::match_stats))
         .route("/api/rooms/{code}", get(api::room_get).delete(api::room_delete))
+        // Your own seat, as opposed to the whole table above. Same {code} param
+        // name as its sibling on purpose: the router rejects two different
+        // names in the same path position.
+        .route("/api/rooms/{code}/seat", delete(api::room_leave_seat))
         .route(
             "/api/playmat",
             post(api::playmat_upload).layer(axum::extract::DefaultBodyLimit::max(api::MAT_MAX_BYTES)),

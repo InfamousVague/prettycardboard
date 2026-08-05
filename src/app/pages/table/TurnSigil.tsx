@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
+import { Pill, Size, Surface, Text, TextTone } from '@glacier/react';
 import { useT } from '../../i18n.ts';
 import { seatColor } from './seatColors.ts';
 import type { RoomState, TablePlayer } from '../../net/types.ts';
 
 /**
- * Whose turn it is, as a lit HUD sigil: a notched slab with the active seat's
- * colour running through it, lit from the top-left, with a specular that sweeps
- * across on your turn and only on your turn.
+ * Whose turn it is: a kit Surface carrying a turn-count Pill, the active
+ * player's name and the turn clock. The active seat's colour tints the surface
+ * and the name, which is the one thing no kit tone can express - a four-player
+ * pod needs four legible states, not four shades of the app accent.
+ *
+ * Built from kit primitives (Surface / Pill / Text) rather than a hand-rolled
+ * plate. It used to be a notched slab with a depth layer, an inset bevel, a
+ * halftone field and a travelling specular - five stacked layers producing a
+ * stamped-metal look that no other surface in the app shared.
  *
  * LEADS THE TOP STRIP. This is the thing everyone at the table looks at
  * constantly - far more often than the room code or the spectating pill it used
@@ -42,39 +49,29 @@ export function TurnSigil({ room, me }: { room: RoomState; me: TablePlayer | und
   const clock = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
 
   return (
-    <div
+    <Surface
+      level={2}
       className="turnPlate"
       data-mine={myTurn || undefined}
       style={{ ['--pc-seat-color' as string]: seatColor(room.activeSeat ?? 0) }}
     >
-      {/* The stack, back to front. Siblings rather than pseudo-elements because
-          there are more layers than the two ::before/::after one element can
-          carry, and because the sweep has to sit ABOVE the halftone and BELOW
-          the type, which pseudo-element order cannot express.
-
-          The slab is OUTSIDE the face on purpose. clip-path clips every
-          descendant, so a depth plate nested inside the notched face would have
-          its whole offset clipped away and the plate would look flat. The face
-          carries the notch; the slab carries the thickness. */}
-      <span className="turnPlateSlab" aria-hidden />
-      <span className="turnPlateFace">
-        <span className="turnPlateDots" aria-hidden />
-        <span className="turnPlateSweep" aria-hidden />
-        <span className="turnPlateBevel" aria-hidden />
-
-        {/* The turn number gets its own notched cell, so the count reads as a
-            stamped chit rather than as the first word of a sentence. */}
-        <span className="turnPlateChit">
-          <span className="turnPlateWord">{t('gpTurnOf')}</span>
-          <b className="turnPlateNum">{room.turnNumber ?? 1}</b>
-        </span>
-        <span className="turnPlateBody">
-          {activePlayer && (
-            <span className="turnPlateWho">{myTurn ? t('tblYourTurn') : activePlayer.username}</span>
-          )}
-          <span className="turnPlateClock">{clock}</span>
-        </span>
+      {/* The count as its own unit, so it reads as a label on the turn rather
+          than as the first word of the sentence the name finishes. */}
+      <Pill size="sm" variant="soft" className="turnPlateChit">
+        <span className="turnPlateWord">{t('gpTurnOf')}</span>
+        <b className="turnPlateNum">{room.turnNumber ?? 1}</b>
+      </Pill>
+      <span className="turnPlateBody">
+        {activePlayer && (
+          <Text as="span" size={Size.Medium} weight="bold" className="turnPlateWho">
+            {myTurn ? t('tblYourTurn') : activePlayer.username}
+          </Text>
+        )}
+        {/* Mono, so a ticking clock does not reflow the plate every second. */}
+        <Text as="span" size={Size.XSmall} mono tone={TextTone.Muted} className="turnPlateClock">
+          {clock}
+        </Text>
       </span>
-    </div>
+    </Surface>
   );
 }

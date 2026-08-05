@@ -34,7 +34,7 @@ import { useEdgeColor } from '../../data/edgeColor.ts';
 import { usePreference } from '../../hooks/usePreference.ts';
 import { primePrintedPT, usePrintedPtVersion } from '../../data/printedPt.ts';
 import { faceImage, useFacesVersion } from '../../data/faces.ts';
-import { getGame, zoneLabel } from '../../data/games.ts';
+import { getGame, seatPlaymat, zoneLabel } from '../../data/games.ts';
 import { ManaPoolReadout } from '../../components/Mana.tsx';
 
 /**
@@ -114,6 +114,9 @@ export function SeatFrame({
   // table-wide (viewer's) back. The pile-edge colour is sampled from it too.
   const seatBackSrc = cardBackUrl(effectiveCardBack(player.cardBack ?? undefined, room.game));
   const seatBackEdge = useEdgeColor(seatBackSrc);
+  // ...and their board wears the game's own sheet where it has one, so every
+  // seat at a Mood Swings table is read against the same printed layout.
+  const seatMat = seatPlaymat(room.game, player.playmat);
   const lifeLabel = gdef.resources.find((r) => r.primary)?.label ?? t('tblLife');
   const secLabel = gdef.resources.find((r) => !r.primary)?.label ?? t('tblPoison');
   const isActiveSeat = room.started && room.activeSeat === player.seat;
@@ -298,7 +301,7 @@ export function SeatFrame({
       style={{
         ['--pc-card-back' as string]: `url("${seatBackSrc}")`,
         ['--pc-card-back-edge' as string]: seatBackEdge,
-        ...(player.playmat ? { ['--pc-board-mat' as string]: playmatBackground(player.playmat) } : {}),
+        ...(seatMat ? { ['--pc-board-mat' as string]: playmatBackground(seatMat) } : {}),
       }}
     >
       {iAmDefender && stage && (

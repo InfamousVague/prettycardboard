@@ -396,7 +396,7 @@ fn deck_summary(row: &db::DeckRow) -> Value {
     // CDN URL from one yields a guaranteed 404 that the client cannot recover from,
     // because a truthy coverImageUrl short-circuits its own alt-art resolution. Leave
     // it null exactly like Cyberpunk does and let the client resolve coverCardId.
-    let cover = if row.game == "cyberpunk" || row.game == "yugioh" {
+    let cover = if matches!(row.game.as_str(), "cyberpunk" | "yugioh" | "moodswings") {
         // Non-Scryfall ids: the client resolves art from coverCardId + game.
         None
     } else {
@@ -860,6 +860,11 @@ pub async fn rooms_mine(
                 "code": room.code,
                 "name": room.name,
                 "seats": room.seats,
+                // Who actually runs the table. Without it the client had to
+                // guess "host == players[0]", which is seat order, not
+                // ownership - so the End-table control showed up on the wrong
+                // card and hid on the right one.
+                "host": room.host,
                 "persistent": room.persistent,
                 "started": room.started,
                 "game": room.game,
@@ -1031,6 +1036,84 @@ pub async fn room_delete(
         return err(StatusCode::FORBIDDEN, "forbidden", "only the host can end the table");
     }
     rooms::delete_room(&app, &id);
+    StatusCode::NO_CONTENT.into_response()
+}
+
+/// DELETE /api/rooms/{code}/seat: give up your OWN seat at a table.
+///
+/// The exit that did not exist. `leave_room` treats a persistent table as a
+/// SAVED table - leaving is "step away", so the seat is kept and only marked
+/// offline - and `room_delete` is host-only. Between them, a guest at a
+/// persistent lobby had no way out at all: nothing removed them from
+/// `players`, and `rooms_mine` lists on `players` membership alone, so the
+/// table sat in their "Your tables" until the host ended it or the 30-day
+/// sweeper did.
+///
+/// Deliberately refuses a started, unfinished match. Vacating a seat mid-game
+/// is a much heavier operation - it has to settle the match so the leaver's
+/// loss and everyone's rating still land, which is precisely what conceding at
+/// the table already does. This is the lobby exit, not a second concede.
+pub async fn room_leave_seat(
+    State(app): State<Arc<App>>,
+    Extension(user): Extension<db::User>,
+    Path(id): Path<String>,
+) -> Response {
+    let emptied;
+    {
+        let Some(mut room) = app.rooms.get_mut(&id) else {
+            return err(StatusCode::NOT_FOUND, "not_found", "no such room");
+        };
+        let seated = room.players.iter().any(|p| p.user_id == user.id);
+        let watching = room.spectators.iter().any(|s| s.user_id == user.id);
+        if !seated && !watching {
+            return err(StatusCode::NOT_FOUND, "not_found", "you are not at this table");
+        }
+        if seated && room.started && room.match_result.is_none() {
+            return err(
+                StatusCode::CONFLICT,
+                "in_progress",
+                "open the table and concede to leave a game in progress",
+            );
+        }
+        room.spectators.retain(|s| s.user_id != user.id);
+        room.players.retain(|p| p.user_id != user.id);
+        // Their holdings in the shared zones leave with them.
+        room.stack.retain(|e| e.owner != user.id);
+        room.pending_cmd.retain(|p| p.owner != user.id);
+        if room.host == user.id {
+            // Hand the lobby on rather than orphaning it: a table whose host
+            // has gone can never be ended by anyone. A human first - a bot
+            // cannot run a lobby (no start, no settings, no kicks).
+            if let Some(next) =
+                room.players.iter().find(|p| !p.is_bot).or_else(|| room.players.first())
+            {
+                room.host = next.user_id.clone();
+            }
+        }
+        emptied = room.players.iter().all(|p| p.is_bot);
+        room.seq += 1;
+        let seq = room.seq;
+        rooms::touch(&app, &mut room);
+        // Everyone still seated sees the seat go. The leaver is skipped: a
+        // fresh state would pull their own client back into a room they just
+        // walked out of.
+        crate::ws::room_send_states_except(&app, &room, Some(&user.id));
+        crate::ws::room_log(&app, &room, seq, &format!("{} leaves the table", user.username));
+    }
+    // The guard is dropped before anything below touches app.rooms again:
+    // delete_room removes from the same map, and calling it while this one is
+    // alive deadlocks the shard.
+
+    // Only clear the pointer if it still names THIS room. user_rooms is
+    // one-per-user, and the caller may have a different table open right now.
+    app.user_rooms.remove_if(&user.id, |_, r| r.room_id == id);
+
+    if emptied {
+        // Nobody human left to come back to it. Leaving it to the sweeper would
+        // keep an invisible room alive - and the touch above just pushed that
+        // expiry out by another 30 days.
+        rooms::delete_room(&app, &id);
+    }
     StatusCode::NO_CONTENT.into_response()
 }
 

@@ -134,13 +134,20 @@ pub fn auto_turn_begin(room: &mut Room, seat: usize) -> (Vec<String>, usize) {
     // untaps and draws by hand. ENFORCED tables run both for everyone, Arena
     // style - the rules forbid manual untapping there, so the engine owes it.
     let enforced = crate::rules::enforced(room);
-    // Yu-Gi-Oh has no untap step: a rotated card is in Defense Position, and
-    // straightening the board every turn would silently stand every set
-    // monster up into Attack Position.
-    let rotation_is_position = room.game == "yugioh";
-    let Some(p) = room.players.iter_mut().find(|p| p.seat == seat) else {
+    // Some games have no untap step, because rotation is a STATE there rather
+    // than a spent resource: sideways is Defense Position in Yu-Gi-Oh and
+    // SUPPRESSED in Mood Swings. Straightening the board every turn would
+    // silently stand every set monster up into Attack Position, and quietly
+    // un-suppress a mood back to its printed value mid-round.
+    let rotation_is_position = matches!(room.game.as_str(), "yugioh" | "moodswings");
+    let Some(pi) = room.players.iter().position(|p| p.seat == seat) else {
         return (Vec::new(), 0);
     };
+    // A game with one common pile (Mood Swings) draws off the table's box, not
+    // off this seat - whose own library is empty there by design. Identity for
+    // every other game, so nothing else changes.
+    let src = crate::game::pile_index(room, pi);
+    let p = &mut room.players[pi];
     let do_untap = (p.auto_untap || enforced) && !rotation_is_position;
     // The starting player's very first turn skips its draw (standard / 2-player).
     let do_draw = (p.auto_draw || enforced) && !skip;
@@ -151,16 +158,20 @@ pub fn auto_turn_begin(room: &mut Room, seat: usize) -> (Vec<String>, usize) {
         }
     }
 
-    let drew = if do_draw && !p.library.is_empty() {
-        let card = p.library.remove(0);
+    let taken = if do_draw && !room.players[src].library.is_empty() {
+        room.players[src].peeked.clear();
+        Some(room.players[src].library.remove(0))
+    } else {
+        None
+    };
+    let drew = taken.is_some();
+    let p = &mut room.players[pi];
+    if let Some(card) = taken {
         p.hand.push(card);
         p.cards_drawn += 1;
         p.hand_revealed = false;
         p.peeked.clear();
-        true
-    } else {
-        false
-    };
+    }
     let empty = do_draw && !drew; // wanted to draw but the library was empty
 
     let logs = if do_untap && drew {

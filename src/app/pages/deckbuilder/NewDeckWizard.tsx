@@ -11,7 +11,7 @@ import { usePreference } from '../../hooks/usePreference.ts';
 import { cyberpunkCatalog, cyberpunkImage } from '../../data/cyberpunk.ts';
 import { yugiohImage, yugiohStarters } from '../../data/yugioh.ts';
 import { moodBox, moodImage, moodSlug } from '../../data/moodswings.ts';
-import { GameBadge } from '../../components/GameTag.tsx';
+import { GameBadge, GameStageTag } from '../../components/GameTag.tsx';
 import type { DeckCard } from '../../net/types.ts';
 import './newDeckWizard.css';
 
@@ -77,6 +77,9 @@ export function NewDeckWizard({ open, onClose }: { open: boolean; onClose: () =>
                 <GameBadge game={g.id} />
                 <span className="ndwGameName">{g.name}</span>
                 <span className="ndwGameTagline">{g.tagline}</span>
+                {/* How finished the game is, before an evening goes into a
+                    deck for it. */}
+                <GameStageTag game={g.id} className="ndwGameStage" />
               </button>
             ))}
           </div>
@@ -88,6 +91,7 @@ export function NewDeckWizard({ open, onClose }: { open: boolean; onClose: () =>
               <ArrowLeft size={14} /> {chosen.name}
             </button>
           )}
+          {chosen.stage !== 'alpha' && <GameStageTag game={chosen.id} />}
           <div className="ndwKinds" aria-busy={busy || undefined}>
             {activeGame === 'cyberpunk'
               ? [

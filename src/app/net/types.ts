@@ -243,6 +243,8 @@ export interface MyRoom {
   code: string;
   name: string;
   seats: number;
+  /** Whose table it is. Only the host can end it for everyone. */
+  host: string;
   persistent: boolean;
   started: boolean;
   game?: string;

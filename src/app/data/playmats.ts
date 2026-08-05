@@ -55,6 +55,11 @@ const IMAGE_PLAYMATS: Playmat[] = [
   { id: 'navy-dotted', name: 'Navy Dotted', theme: 'generic' },
   { id: 'slate-plus', name: 'Slate Plus', theme: 'generic' },
   { id: 'tan-dotted', name: 'Tan Dotted', theme: 'generic' },
+  // The Mood Swings board itself. Unlike every other mat here this one is not
+  // just an option in the picker: the game pins it for the whole table (see
+  // GameDef.playmat), because Mood Swings is played on one shared layout and a
+  // seat wearing its own felt would be reading a different board.
+  { id: 'mood-swings', name: 'Mood Swings', theme: 'moodswings' },
 ];
 
 /**

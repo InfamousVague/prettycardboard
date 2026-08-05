@@ -1,9 +1,16 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Heading, Size, Spinner, Text, TextTone } from '@glacier/react';
-import { CircleDollarSign, Coins, Cpu, Layers, Link2, Palette, Shield, Star, Swords } from '../icons/backfilled.tsx';
+import { CircleDollarSign, Coins, Cpu, Hash, Layers, Link2, Palette, Repeat, Shield, Star, Swords } from '../icons/backfilled.tsx';
 import { useT } from '../i18n.ts';
 import { keywordsFromText, knownKeywords } from '../data/keywords.ts';
 import { cyberpunkCard, type CyberpunkCard } from '../data/cyberpunk.ts';
+import {
+  isMoodId,
+  moodCard,
+  moodMarker,
+  type MoodCard,
+  type MoodMarker,
+} from '../data/moodswings.ts';
 import {
   isYugiohId,
   loadYugiohCatalog,
@@ -281,6 +288,105 @@ export function YugiohDetails({ card }: { card: YugiohCard }) {
   );
 }
 
+/**
+ * A Mood Swings card's details, straight out of the bundled 133-card catalog —
+ * no network, ever (Scryfall has never heard of an `msw-` id, so these cards
+ * used to open as a title and nothing else).
+ *
+ * Printed value boxes are the set's own notation: `[6][1]` is the numeral 61,
+ * not a six and a one, so each box renders as its own chip exactly as it is
+ * printed, in the value line and inside the rules text alike.
+ */
+function ValueBoxes({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(\[[^\]]+\])/g).map((part, index) =>
+        /^\[[^\]]+\]$/.test(part) ? (
+          <span key={index} className="cpToken cpMoodBox">
+            {part.slice(1, -1)}
+          </span>
+        ) : (
+          <span key={index}>{part}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+export function MoodDetails({ card }: { card: MoodCard }) {
+  const t = useT();
+  const typeLine = [card.color, card.rarity].filter(Boolean).join(' · ');
+  return (
+    <>
+      {typeLine && (
+        <Text size={Size.Small} tone={TextTone.Muted} className="cpTypeLine cpMoodType" data-color={card.color}>
+          {typeLine}
+        </Text>
+      )}
+      <div className="cpCyberStats">
+        <span className="cpStat">
+          <span className="cpStatIcon" aria-hidden>
+            <Hash size={12} />
+          </span>
+          <span className="cpStatLabel">{t('cpValue')}</span>
+          <span className="cpStatVal">{card.values[0] ?? 0}</span>
+        </span>
+        {/* A third of the set swaps to a second value under a condition; the
+            rules text below says when. */}
+        {card.values.length > 1 && (
+          <span className="cpStat">
+            <span className="cpStatIcon" aria-hidden>
+              <Repeat size={12} />
+            </span>
+            <span className="cpStatLabel">{t('cpAltValue')}</span>
+            <span className="cpStatVal">{card.values.slice(1).join(' / ')}</span>
+          </span>
+        )}
+      </div>
+      {card.text && (
+        <div className="cpRules">
+          {card.text.split('\n').map((line, index) => (
+            <p key={index} className="cpRuleLine">
+              <ValueBoxes text={line} />
+            </p>
+          ))}
+        </div>
+      )}
+      <div className="cpFooter">
+        <span className="cpMeta">
+          <Layers size={11} aria-hidden /> {t('cpMoodSet')}
+        </span>
+      </div>
+    </>
+  );
+}
+
+/** A Mood Swings marker (Hurt Feelings): reminder line, then its rules text. */
+export function MoodMarkerDetails({ marker }: { marker: MoodMarker }) {
+  const t = useT();
+  return (
+    <>
+      <Text size={Size.Small} tone={TextTone.Muted} className="cpTypeLine">
+        {t('cpMoodMarker')}
+      </Text>
+      {marker.reminder && (
+        <Text size={Size.Small} tone={TextTone.Subtle} className="cpFlavor">
+          {marker.reminder}
+        </Text>
+      )}
+      {marker.text && (
+        <div className="cpRules">
+          {marker.text.split('\n').map((line, index) => (
+            <p key={index} className="cpRuleLine">
+              <ValueBoxes text={line} />
+            </p>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 /** Rules text with inline {W}{U}{T} symbols rendered as the real glyphs. */
 function OracleText({ text }: { text: string }) {
   const paragraphs = text.split('\n');
@@ -343,6 +449,11 @@ export function CardDetailsBody({
   // lazily-fetched catalog, never Scryfall.
   const cyber = scryfallId ? cyberpunkCard(scryfallId) : undefined;
   const isYgo = !!scryfallId && isYugiohId(scryfallId);
+  // Mood Swings ships its whole 133-card catalog with the app, markers included
+  // - resolve both here and never let an `msw-` id near Scryfall.
+  const isMood = !!scryfallId && isMoodId(scryfallId);
+  const mood = isMood ? moodCard(scryfallId) : undefined;
+  const marker = isMood && !mood ? moodMarker(scryfallId) : undefined;
   const [ygo, setYgo] = useState<YugiohCard | undefined>(scryfallId ? yugiohCard(scryfallId) : undefined);
   const [details, setDetails] = useState<CardDetails | null>(
     scryfallId ? (DETAILS.get(scryfallId) ?? null) : null,
@@ -370,7 +481,7 @@ export function CardDetailsBody({
   useEffect(() => {
     setDetails(scryfallId ? (DETAILS.get(scryfallId) ?? null) : null);
     setFailed(false);
-    if (!scryfallId || cyber || isYgo) return;
+    if (!scryfallId || cyber || isYgo || isMood) return;
     if (DETAILS.get(scryfallId)) return;
     let cancelled = false;
     fetchDetails(scryfallId)
@@ -383,7 +494,7 @@ export function CardDetailsBody({
     return () => {
       cancelled = true;
     };
-  }, [scryfallId, cyber, isYgo]);
+  }, [scryfallId, cyber, isYgo, isMood]);
 
   const costSymbols = parseCost(details?.manaCost);
 
@@ -393,10 +504,16 @@ export function CardDetailsBody({
         <Heading level={headingLevel} noMargin>
           {name}
         </Heading>
-        {!cyber && !isYgo && costSymbols.length > 0 && <ManaCost cost={details?.manaCost} size="1.05rem" />}
+        {!cyber && !isYgo && !isMood && costSymbols.length > 0 && (
+          <ManaCost cost={details?.manaCost} size="1.05rem" />
+        )}
       </div>
       {cyber ? (
         <CyberpunkDetails card={cyber} />
+      ) : mood ? (
+        <MoodDetails card={mood} />
+      ) : marker ? (
+        <MoodMarkerDetails marker={marker} />
       ) : ygo ? (
         <YugiohDetails card={ygo} />
       ) : isYgo ? (
@@ -422,7 +539,7 @@ export function CardDetailsBody({
           )}
           {details?.oracleText ? (
             <OracleText text={details.oracleText} />
-          ) : failed || compact ? null : scryfallId ? (
+          ) : failed || compact || isMood ? null : scryfallId ? (
             <div className="cpLoading">
               <Spinner size="sm" aria-label={t('cpLoading')} />
               <Text size={Size.Small} tone={TextTone.Subtle}>

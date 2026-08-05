@@ -161,6 +161,25 @@ pub(crate) fn ygo_reflect_line(amount: i64) -> String {
     }
 }
 
+// -------------------------------------------------------------- mood talk
+
+// Mood Swings has no creatures, no attacks and no life total - a turn is one
+// card and a number - so the talk is about the mood itself.
+
+pub(crate) fn mood_play_line(name: &str, value: i64) -> String {
+    match rand::random_range(0..4) {
+        0 => format!("I'm feeling {name}. That's a {value}."),
+        1 => format!("{name} - {value}."),
+        2 => format!("Playing {name} for {value}."),
+        _ => format!("{name}. Beat a {value}."),
+    }
+}
+
+/// Sweeping last round's mood into the discard at the start of a new one.
+pub(crate) fn mood_clear_line() -> String {
+    pick(&["That mood has passed.", "Clearing last round.", "New round, new feelings."]).to_string()
+}
+
 /// Life a draw cost (positive `lost`) or paid (negative), announced so the
 /// table can see the bot doing its own bookkeeping rather than drifting.
 pub(crate) fn draw_tax_line(lost: i64, life_after: i64) -> String {

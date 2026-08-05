@@ -150,7 +150,11 @@ export function BrowseCatalog({
     }
     const byGroup = new Map<string, BrowseDeck[]>();
     for (const deck of matched) {
-      const key = deck.groups[groupMode] ?? '';
+      // Group modes are unioned across the picked games, so a deck can be shown
+      // under a cut its own catalog does not have (a dateless Cyberpunk deck
+      // while grouping by year). It falls back to its game rather than piling
+      // up under a blank heading.
+      const key = deck.groups[groupMode] || deck.groups.game || '';
       const list = byGroup.get(key);
       if (list) list.push(deck);
       else byGroup.set(key, [deck]);

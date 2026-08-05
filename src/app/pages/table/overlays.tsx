@@ -20,6 +20,7 @@ import {
   Sparkles,
 } from '../../icons/backfilled.tsx';
 import { send } from '../../net/ws.ts';
+import { classifyEventLine } from './eventLines.ts';
 import { matchesTargetKind, stackTargetKinds, targetsPlayers } from './enforce.ts';
 import { useT } from '../../i18n.ts';
 import { useGame } from '../../state/gameStore.ts';
@@ -827,66 +828,55 @@ export function TriggerPrompts({ room, me }: { room: RoomState; me: TablePlayer 
     chimeCount.current = mine.length;
   }, [mine.length]);
   if (!me || mine.length === 0) return null;
+  // One at a time, oldest first. The queue used to stack as floating cards,
+  // which meant a chain of triggers papered over the board they were asking
+  // about; a modal answers one question, then shows the next.
+  const p = mine[0];
+  if (!p) return null;
+  const answer = (apply: boolean) => act({ kind: 'trigger.answer', id: p.id, apply });
   return (
-    <div className="triggerPrompts">
-      <AnimatePresence>
-        {mine.map((p) => (
-          <motion.div
-            key={p.id}
-            className="triggerPrompt"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 12 }}
-          >
-            <div className="triggerPromptText">
-              {/* What set it off, above what fired. The prompt used to name only
-                  the source, which is the harder half to guess: with six things
-                  on the board a player knows what Bronze Guardian does, not
-                  which of the three permanents they just played woke it up. */}
-              {p.cause && (
-                <Text size={Size.XSmall} tone={TextTone.Subtle}>
-                  {t('gpTriggeredBy').replace('{card}', p.cause)}
-                </Text>
-              )}
-              <Text size={Size.Small} weight="semibold">
-                {p.sourceName}
-              </Text>
-              <Text size={Size.XSmall} tone={TextTone.Subtle}>
-                {p.text}
-              </Text>
-            </div>
-            <div className="triggerPromptActions">
-              {p.auto ? (
-                <>
-                  <Button
-                    size="sm"
-                    variant="soft"
-                    onClick={() => act({ kind: 'trigger.answer', id: p.id, apply: true })}
-                  >
-                    {t('gpTriggerApply')}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => act({ kind: 'trigger.answer', id: p.id, apply: false })}
-                  >
-                    {t('gpTriggerSkip')}
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="soft"
-                  onClick={() => act({ kind: 'trigger.answer', id: p.id, apply: true })}
-                >
-                  {t('gpTriggerOk')}
-                </Button>
-              )}
-            </div>
-          </motion.div>
-        ))}
-      </AnimatePresence>
-    </div>
+    <Modal
+      open
+      // Escape and the overlay mean the same as the dismissing button below:
+      // Skip for an auto trigger (the engine does nothing), and for a manual
+      // one the acknowledgment, which is the only answer it has - its text was
+      // already performed by hand.
+      onClose={() => answer(!p.auto)}
+      size="sm"
+      title={p.sourceName}
+      // What set it off. The prompt used to name only the source, which is the
+      // harder half to guess: with six things on the board a player knows what
+      // Bronze Guardian does, not which of the three permanents they just
+      // played woke it up.
+      description={p.cause ? t('gpTriggeredBy').replace('{card}', p.cause) : undefined}
+      footer={
+        <div className="triggerModalActions">
+          {p.auto ? (
+            <>
+              <Button variant="ghost" onClick={() => answer(false)}>
+                {t('gpTriggerSkip')}
+              </Button>
+              <Button variant="solid" onClick={() => answer(true)}>
+                {t('gpTriggerApply')}
+              </Button>
+            </>
+          ) : (
+            <Button variant="solid" onClick={() => answer(true)}>
+              {t('gpTriggerOk')}
+            </Button>
+          )}
+        </div>
+      }
+    >
+      <div className="triggerPromptBody">
+        <Text size={Size.Small}>{p.text}</Text>
+        {mine.length > 1 && (
+          <Text size={Size.XSmall} tone={TextTone.Subtle}>
+            {t('gpTriggerQueued').replace('{n}', String(mine.length - 1))}
+          </Text>
+        )}
+      </div>
+    </Modal>
   );
 }
 
@@ -1099,6 +1089,13 @@ export function RollBanner() {
     const last = log[log.length - 1];
     if (!last || last.seq <= lastSeen.current) return;
     lastSeen.current = last.seq;
+    // A trigger line carries the ability's whole oracle text, and oracle text
+    // says things like "that player loses 2 life" - which ROLLISH matches. The
+    // banner then blew a five-line ability up into a full-round pill across the
+    // mat. Triggers belong to the transcript and to TriggerPrompts; the shared
+    // classifier already marks them, so this asks it rather than growing a
+    // second list of trigger phrasings to keep in sync.
+    if (classifyEventLine(last.text)?.chatOnly) return;
     if (!ROLLISH.test(last.text)) return;
     window.clearTimeout(pending.current);
     if (DICE_RESULT.test(last.text)) {

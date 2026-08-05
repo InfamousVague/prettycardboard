@@ -154,6 +154,40 @@ export const messages = {
   playGame: { en: 'Game', es: 'Juego', fr: 'Jeu', ar: 'اللعبة' },
   playFormat: { en: 'Format', es: 'Formato', fr: 'Format', ar: 'الصيغة' },
 
+  // Release stage — how finished a game is, printed wherever one is offered.
+  gsAlpha: { en: 'Alpha', es: 'Alfa', fr: 'Alpha', ar: 'ألفا' },
+  gsPrerelease: { en: 'Pre-Release', es: 'Preestreno', fr: 'Préversion', ar: 'إصدار مبكر' },
+  gsAlphaHint: {
+    en: 'Alpha — playable end to end, but still rough in places.',
+    es: 'Alfa: jugable de principio a fin, pero aún con asperezas.',
+    fr: 'Alpha — jouable de bout en bout, mais encore brut par endroits.',
+    ar: 'ألفا — قابلة للعب من البداية إلى النهاية، لكنها ما زالت خشنة في بعض المواضع.',
+  },
+  gsPrereleaseHint: {
+    en: 'Pre-Release — unfinished; expect missing rules and rough edges.',
+    es: 'Preestreno: sin terminar; espera reglas ausentes y detalles sin pulir.',
+    fr: 'Préversion — inachevé ; attendez-vous à des règles manquantes et des imperfections.',
+    ar: 'إصدار مبكر — غير مكتمل؛ توقّع قواعد ناقصة وحوافّ خشنة.',
+  },
+  gsWarnTitle: {
+    en: 'This game is still pre-release',
+    es: 'Este juego sigue en preestreno',
+    fr: 'Ce jeu est encore en préversion',
+    ar: 'هذه اللعبة ما زالت في إصدار مبكر',
+  },
+  gsWarnBody: {
+    en: 'is an unfinished feature. Rules are not enforced, pieces may be missing, and it might not behave as you expect. Play it as a sandbox, not a finished game.',
+    es: 'es una función sin terminar. Las reglas no se aplican, puede faltar contenido y quizá no funcione como esperas. Úsalo como un espacio de pruebas, no como un juego acabado.',
+    fr: 'est une fonctionnalité inachevée. Les règles ne sont pas appliquées, des éléments peuvent manquer et le comportement peut surprendre. À utiliser comme un bac à sable, pas comme un jeu fini.',
+    ar: 'ميزة غير مكتملة. القواعد غير مُطبَّقة، وقد تنقص عناصر، وقد لا تعمل كما تتوقّع. العبها كساحة تجريب لا كلعبة مكتملة.',
+  },
+  gsWarnGo: {
+    en: 'Play anyway',
+    es: 'Jugar de todos modos',
+    fr: 'Jouer quand même',
+    ar: 'العب على أي حال',
+  },
+
   // Mobile layout
   tblRotateTitle: {
     en: 'Rotate your phone',
@@ -2596,6 +2630,10 @@ export const messages = {
   cpCost: { en: 'Cost', es: 'Coste', fr: 'Coût', ar: 'التكلفة' },
   cpPower: { en: 'Power', es: 'Poder', fr: 'Puissance', ar: 'القوة' },
   cpRam: { en: 'RAM', es: 'RAM', fr: 'RAM', ar: 'RAM' },
+  cpValue: { en: 'Value', es: 'Valor', fr: 'Valeur', ar: 'القيمة' },
+  cpAltValue: { en: 'Or', es: 'O', fr: 'Ou', ar: 'أو' },
+  cpMoodSet: { en: 'Mood Swings', es: 'Mood Swings', fr: 'Mood Swings', ar: 'Mood Swings' },
+  cpMoodMarker: { en: 'Marker', es: 'Marcador', fr: 'Marqueur', ar: 'علامة' },
   dbLegends: { en: 'Legends', es: 'Leyendas', fr: 'Légendes', ar: 'الأساطير' },
   dbRamBudget: { en: 'RAM budget', es: 'Presupuesto RAM', fr: 'Budget RAM', ar: 'ميزانية RAM' },
   dbColors: { en: 'Colors', es: 'Colores', fr: 'Couleurs', ar: 'الألوان' },
@@ -2639,6 +2677,38 @@ export const messages = {
   brLedeYugioh: { en: 'Every official Starter and Structure Deck ever boxed, ready to pick up and play — add one to your library and hit the table.', es: 'Todos los mazos oficiales Starter y Structure jamás publicados, listos para jugar: añade uno a tu biblioteca y siéntate a la mesa.', fr: 'Tous les decks officiels Starter et Structure jamais édités, prêts à jouer — ajoutez-en un à votre bibliothèque et passez à table.', ar: 'كل مجموعات Starter وStructure الرسمية التي صدرت يومًا، جاهزة للعب — أضِف واحدة إلى مكتبتك واجلس إلى الطاولة.' },
   brKindStructure: { en: 'Structure', es: 'Estructura', fr: 'Structure', ar: 'هيكلية' },
   brKindSpeedDuel: { en: 'Speed Duel', es: 'Speed Duel', fr: 'Speed Duel', ar: 'سبيد ديول' },
+  // Mood Swings browse. The set is not a deckbuilding game, so its "catalog"
+  // is the two ways you can take the 133 cards to a table.
+  brTitleMood: { en: 'Browse Mood Swings', es: 'Explorar Mood Swings', fr: 'Parcourir Mood Swings', ar: 'تصفح Mood Swings' },
+  brLedeMood: {
+    en: 'One set, 133 moods, nothing to build. Take a randomized box of 45 the way it is sold, or the whole run of cards.',
+    es: 'Un set, 133 estados de ánimo, nada que construir. Llévate una caja aleatoria de 45 tal como se vende, o la colección completa.',
+    fr: 'Un set, 133 humeurs, rien à construire. Prenez une boîte aléatoire de 45 comme elle est vendue, ou la série complète.',
+    ar: 'مجموعة واحدة، ١٣٣ مزاجًا، ولا شيء لبنائه. خذ علبة عشوائية من ٤٥ كما تُباع، أو المجموعة الكاملة.',
+  },
+  brMoodBox: { en: 'Mood Swings box', es: 'Caja de Mood Swings', fr: 'Boîte Mood Swings', ar: 'علبة Mood Swings' },
+  brMoodBoxSub: {
+    en: '45 of the 133, drawn fresh',
+    es: '45 de las 133, al azar',
+    fr: '45 des 133, tirées à neuf',
+    ar: '٤٥ من ١٣٣، تُسحب من جديد',
+  },
+  brMoodSet: { en: 'Complete set', es: 'Set completo', fr: 'Set complet', ar: 'المجموعة الكاملة' },
+  brMoodSetSub: {
+    en: 'Every mood in the set',
+    es: 'Todos los estados de ánimo del set',
+    fr: 'Toutes les humeurs du set',
+    ar: 'كل الأمزجة في المجموعة',
+  },
+  // Heading + lede when several games are being browsed side by side.
+  brTitleAll: { en: 'Browse decks', es: 'Explorar mazos', fr: 'Parcourir les decks', ar: 'تصفح المجموعات' },
+  brLedeAll: {
+    en: 'Every catalog you have picked, side by side. Add anything to your library with one click.',
+    es: 'Todos los catálogos que elijas, uno junto a otro. Añade lo que quieras a tu biblioteca con un clic.',
+    fr: 'Tous les catalogues choisis, côte à côte. Ajoutez ce que vous voulez à votre bibliothèque en un clic.',
+    ar: 'كل الفهارس التي اخترتها جنبًا إلى جنب. أضِف أي شيء إلى مكتبتك بنقرة واحدة.',
+  },
+  brAllGames: { en: 'All games', es: 'Todos los juegos', fr: 'Tous les jeux', ar: 'كل الألعاب' },
   cpEddiable: { en: 'Eddiable', es: 'Convertible', fr: 'Convertible', ar: 'قابل للتحويل' },
   cpClose: { en: 'Close', es: 'Cerrar', fr: 'Fermer', ar: 'إغلاق' },
   cpFixer: { en: 'Fixer', es: 'Fixer', fr: 'Fixer', ar: 'الوسيط' },
@@ -2720,6 +2790,24 @@ export const messages = {
     es: 'Termina la partida y detiene a la IA. La mesa se cierra para todos.',
     fr: 'Termine la partie et arrête l\'IA. La table se ferme pour tout le monde.',
     ar: 'إنهاء اللعبة وإيقاف الذكاء الاصطناعي. تُغلق الطاولة للجميع.',
+  },
+  plLeaveTable: {
+    en: 'Leave table',
+    es: 'Salir de la mesa',
+    fr: 'Quitter la table',
+    ar: 'مغادرة الطاولة',
+  },
+  plLeaveTableDesc: {
+    en: 'Give up your seat for good. The table stays open for everyone else, and it leaves your list.',
+    es: 'Cede tu asiento definitivamente. La mesa sigue abierta para los demás y desaparece de tu lista.',
+    fr: 'Abandonnez votre place définitivement. La table reste ouverte pour les autres et quitte votre liste.',
+    ar: 'تخلَّ عن مقعدك نهائيًا. تبقى الطاولة مفتوحة للآخرين وتختفي من قائمتك.',
+  },
+  plLeaveLive: {
+    en: 'That game is in progress. Open the table and concede to leave it.',
+    es: 'Esa partida está en curso. Abre la mesa y ríndete para salir.',
+    fr: 'Cette partie est en cours. Ouvrez la table et concédez pour la quitter.',
+    ar: 'تلك اللعبة جارية. افتح الطاولة واستسلم لمغادرتها.',
   },
   plTurn: { en: 'Turn', es: 'Turno', fr: 'Tour', ar: 'الدور' },
   plTableClosed: {
@@ -3006,6 +3094,12 @@ export const messages = {
   gpCascadeFor: { en: 'Cascade for…', es: 'Cascada por…', fr: 'Cascade pour…', ar: 'تتالي لـ…' },
   gpTriggerSkip: { en: 'Skip', es: 'Omitir', fr: 'Ignorer', ar: 'تخطي' },
   gpTriggerOk: { en: 'Got it', es: 'Entendido', fr: 'Compris', ar: 'فهمت' },
+  gpTriggerQueued: {
+    en: '{n} more waiting',
+    es: '{n} más en espera',
+    fr: '{n} autres en attente',
+    ar: '{n} في الانتظار',
+  },
   gpDiscardN: { en: 'Discard', es: 'Descarta', fr: 'Défaussez', ar: 'ارمِ' },
   gpInResponseTo: { en: 'in response to', es: 'en respuesta a', fr: 'en réponse à', ar: 'ردًا على' },
   gpDiscardConfirm: { en: 'Discard these', es: 'Descartar estas', fr: 'Défausser celles-ci', ar: 'ارمِ هذه' },
@@ -3484,30 +3578,6 @@ export const messages = {
     fr: 'Battle Royal',
     ar: 'باتل رويال',
   },
-  plQuickBlurbYgoDuel: {
-    en: 'The classic duel: 8000 Life Points, Main and Extra Deck, first to zero loses.',
-    es: 'El duelo clásico: 8000 puntos de vida, Deck Principal y Extra; el primero en llegar a cero pierde.',
-    fr: 'Le duel classique : 8000 points de vie, Deck Principal et Extra ; le premier à zéro perd.',
-    ar: 'المبارزة الكلاسيكية: 8000 نقطة حياة، مجموعة رئيسية وإضافية؛ من يبلغ الصفر أولًا يخسر.',
-  },
-  plQuickBlurbYgoBattleRoyal: {
-    en: 'Four duelists at one table and every hand against you. Last one standing wins.',
-    es: 'Cuatro duelistas en una mesa y todas las manos en tu contra. Gana el último en pie.',
-    fr: 'Quatre duellistes à une table et toutes les mains contre vous. Le dernier debout gagne.',
-    ar: 'أربعة مبارزين على طاولة واحدة والجميع ضدك. الصامد الأخير هو الفائز.',
-  },
-  playDraftLede: {
-    en: 'No deck needed — the table drafts one together, then plays with it.',
-    es: 'No hace falta mazo: la mesa draftea uno y juega con él.',
-    fr: 'Aucun deck requis — la table en drafte un, puis y joue.',
-    ar: 'لا حاجة لمجموعة — تدرافت الطاولة واحدة ثم تلعب بها.',
-  },
-  playCreateDraft: {
-    en: 'Create draft table',
-    es: 'Crear mesa de draft',
-    fr: 'Créer une table de draft',
-    ar: 'أنشئ طاولة درافت',
-  },
   // Mood Swings plates. The game's own name is untranslated everywhere it
   // appears, so the plates are named for the shape of the table instead.
   plQuickMoodDuel: {
@@ -3533,6 +3603,37 @@ export const messages = {
     es: 'Cuatro jugadores con un mazo compartido: quien pierda la ronda recibe Hurt Feelings.',
     fr: 'Quatre joueurs, un deck partagé — et le perdant de chaque manche récolte Hurt Feelings.',
     ar: 'أربعة لاعبون من مجموعة واحدة مشتركة، وخاسر كل جولة ينال Hurt Feelings.',
+  },
+  plQuickBlurbYgoDuel: {
+    en: 'The classic duel: 8000 Life Points, Main and Extra Deck, first to zero loses.',
+    es: 'El duelo clásico: 8000 puntos de vida, Deck Principal y Extra; el primero en llegar a cero pierde.',
+    fr: 'Le duel classique : 8000 points de vie, Deck Principal et Extra ; le premier à zéro perd.',
+    ar: 'المبارزة الكلاسيكية: 8000 نقطة حياة، مجموعة رئيسية وإضافية؛ من يبلغ الصفر أولًا يخسر.',
+  },
+  plQuickBlurbYgoBattleRoyal: {
+    en: 'Four duelists at one table and every hand against you. Last one standing wins.',
+    es: 'Cuatro duelistas en una mesa y todas las manos en tu contra. Gana el último en pie.',
+    fr: 'Quatre duellistes à une table et toutes les mains contre vous. Le dernier debout gagne.',
+    ar: 'أربعة مبارزين على طاولة واحدة والجميع ضدك. الصامد الأخير هو الفائز.',
+  },
+  playDraftLede: {
+    en: 'No deck needed — the table drafts one together, then plays with it.',
+    es: 'No hace falta mazo: la mesa draftea uno y juega con él.',
+    fr: 'Aucun deck requis — la table en drafte un, puis y joue.',
+    ar: 'لا حاجة لمجموعة — تدرافت الطاولة واحدة ثم تلعب بها.',
+  },
+  // Shown in place of the deck picker for games played out of one shared pile.
+  playNoDeckNeeded: {
+    en: 'No deck needed — everyone plays out of one box, and the table brings it.',
+    es: 'No hace falta mazo: todos juegan de una misma caja, y la mesa la pone.',
+    fr: 'Aucun deck requis — tout le monde joue dans une seule boîte, fournie par la table.',
+    ar: 'لا حاجة لمجموعة — الجميع يلعب من علبة واحدة، والطاولة توفّرها.',
+  },
+  playCreateDraft: {
+    en: 'Create draft table',
+    es: 'Crear mesa de draft',
+    fr: 'Créer une table de draft',
+    ar: 'أنشئ طاولة درافت',
   },
   dfBuildClockHint: {
     en: 'When it runs out, anyone still building gets a deck assembled from their pool.',

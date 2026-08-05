@@ -245,6 +245,18 @@ export function closeRoom(id: string): Promise<void> {
   return request('DELETE', `/api/rooms/${encodeURIComponent(id)}`);
 }
 
+/**
+ * Give up your own seat, without needing to be at the table or to be its host.
+ *
+ * Distinct from the table's own Leave button, which on a persistent table only
+ * marks you offline - the seat stays yours so you can resume, which is what
+ * kept an unwanted table in "Your tables" for good. Rejects with `in_progress`
+ * on a game that has started and not finished; concede at the table instead.
+ */
+export function leaveRoomSeat(id: string): Promise<void> {
+  return request('DELETE', `/api/rooms/${encodeURIComponent(id)}/seat`);
+}
+
 // --- import proxy ---
 
 /**

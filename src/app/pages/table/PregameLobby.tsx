@@ -60,7 +60,7 @@ import { GameTag } from '../../components/GameTag.tsx';
 import { GameCard } from '../../components/GameCard.tsx';
 import { SaltPile } from '../../components/SaltPile.tsx';
 import { playmatBackground } from '../../data/playmats.ts';
-import { getGame, resolveCardImage } from '../../data/games.ts';
+import { getGame, resolveCardImage, seatPlaymat } from '../../data/games.ts';
 import { formatFor } from '../../data/formats.ts';
 import type { GameSettings, RoomState, TablePlayer, UserStats } from '../../net/types.ts';
 
@@ -198,10 +198,10 @@ export function PregameLobby({
   const summary: { label: string; value: string }[] = [
     ...(cyber ? [] : [{ label: t('setStartLife'), value: String(settings.startingLife ?? lifeDefault) }]),
     { label: t('setStartHand'), value: String(settings.startingHand ?? handDefault) },
-    // Yu-Gi-Oh has no mulligans — the rows would only invite confusion.
-    ...(yugioh
-      ? []
-      : [
+    // Games with no mulligan rule (Yu-Gi-Oh, Mood Swings) never see the flow —
+    // the rows would only invite confusion.
+    ...(getGame(game).mulligans
+      ? [
           {
             label: t('setMullRule'),
             value: settings.mulliganRule === 'vancouver' ? t('setMullVancouver') : t('setMullLondon'),
@@ -214,7 +214,8 @@ export function PregameLobby({
                 ? t('setDefault')
                 : String(settings.freeMulligans),
           },
-        ]),
+        ]
+      : []),
     { label: t('setFirstPlayer'), value: firstLabel },
     { label: t('setSkipDraw'), value: skipDrawLabel },
     ...(game === 'mtg'
@@ -661,7 +662,7 @@ export function PregameLobby({
                 />
               </Popover>
             </li>
-          ) : isHost && !spectating && (game === 'mtg' || game === 'yugioh') ? (
+          ) : isHost && !spectating && (game === 'mtg' || game === 'yugioh' || game === 'moodswings') ? (
             // The host's empty seat offers both fills from one control: a friend
             // via the share link, or one of the server's AI opponents.
             <li key={seat}>
@@ -824,6 +825,8 @@ export function PregameLobby({
  */
 function StageTile({ room, player, you }: { room: RoomState; player: TablePlayer; you?: boolean }) {
   const t = useT();
+  // Their felt - or the game's own sheet, where it pins one for the table.
+  const seatMat = seatPlaymat(room.game, player.playmat);
   return (
     <article
       className="pregameStageTile"
@@ -835,8 +838,8 @@ function StageTile({ room, player, you }: { room: RoomState; player: TablePlayer
         className="pregameArt"
         data-empty={!player.deckMeta?.cover || undefined}
         style={
-          player.playmat
-            ? ({ ['--pc-seat-mat' as string]: playmatBackground(player.playmat) } as CSSProperties)
+          seatMat
+            ? ({ ['--pc-seat-mat' as string]: playmatBackground(seatMat) } as CSSProperties)
             : undefined
         }
       >
